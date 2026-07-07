@@ -128,6 +128,175 @@ export function buildDualRewardsPayoutPersistValue(
   };
 }
 
+/** Row update after dual-rewards wallet credit (CPM and/or milestone). */
+export function buildDualRewardsSubmissionPayUpdatePayload(params: {
+  /** Cumulative paid CPM + milestone cents (stored in `dual_rewards_payout`). */
+  split: { cpm_cents: number; milestone_cents: number };
+  updatedBy: string;
+  customRemarks?: string | null;
+}): Record<string, unknown> {
+  const cpmCents = Math.max(0, Math.round(params.split.cpm_cents));
+  const milestoneCents = Math.max(0, Math.round(params.split.milestone_cents));
+  const totalCents = cpmCents + milestoneCents;
+  if (totalCents <= 0) {
+    return {};
+  }
+
+  return {
+    dual_rewards_payout: buildDualRewardsPayoutPersistValue(
+      { cpm_cents: cpmCents, milestone_cents: milestoneCents },
+      {
+        updatedBy: params.updatedBy,
+        customRemarks: params.customRemarks ?? null,
+      },
+    ),
+    paid: true,
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    earnings: totalCents,
+  };
+}
+
+export type DualRewardsPaidComponentSnapshot = {
+  cpmCents: number;
+  milestoneCents: number;
+};
+
+type DualRewardsOptimisticFilterQuery = {
+  filter: (
+    column: string,
+    operator: string,
+    value: string,
+  ) => DualRewardsOptimisticFilterQuery;
+  is: (column: string, value: null) => DualRewardsOptimisticFilterQuery;
+  eq: (column: string, value: boolean) => DualRewardsOptimisticFilterQuery;
+  neq: (column: string, value: boolean) => DualRewardsOptimisticFilterQuery;
+};
+
+/**
+ * Compare-and-swap guards for dual-rewards submission row updates (bulk / concurrent pay).
+ * When `dual_rewards_payout` JSON exists, match current cpm/milestone cents; otherwise
+ * use legacy `paid` / `bonus_paid` flags like standard bulk payment.
+ */
+/**
+ * After a pool-budget commit, `dual_rewards_payout` in the DB already reflects
+ * `targetAfter` while the in-memory submission snapshot is still stale. Guards
+ * must compare against the committed row state, not the pre-commit snapshot.
+ */
+export function buildDualRewardsPayUpdateGuardContext(
+  snapshot: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    bonus_paid?: boolean | null;
+  },
+  paidComponents: DualRewardsPaidComponentSnapshot,
+  targetAfter: { cpm_cents: number; milestone_cents: number },
+  poolCommitted: boolean,
+): {
+  snapshot: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    bonus_paid?: boolean | null;
+  };
+  paidComponents: DualRewardsPaidComponentSnapshot;
+} {
+  if (!poolCommitted) {
+    return { snapshot, paidComponents };
+  }
+  const cpmCents = Math.max(0, Math.round(targetAfter.cpm_cents));
+  const milestoneCents = Math.max(0, Math.round(targetAfter.milestone_cents));
+  return {
+    snapshot: {
+      ...snapshot,
+      dual_rewards_payout: { cpm_cents: cpmCents, milestone_cents: milestoneCents },
+    },
+    paidComponents: { cpmCents, milestoneCents },
+  };
+}
+
+export function applyDualRewardsPayUpdateOptimisticGuards<
+  Q extends DualRewardsOptimisticFilterQuery,
+>(
+  query: Q,
+  snapshot: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    bonus_paid?: boolean | null;
+  },
+  paidComponents: DualRewardsPaidComponentSnapshot,
+  paying: { cpm_cents: number; milestone_cents: number },
+): Q {
+  const dual = parseDualRewardsPayoutJson(snapshot.dual_rewards_payout);
+  if (dual) {
+    return query
+      .filter(
+        "dual_rewards_payout->>cpm_cents",
+        "eq",
+        String(paidComponents.cpmCents),
+      )
+      .filter(
+        "dual_rewards_payout->>milestone_cents",
+        "eq",
+        String(paidComponents.milestoneCents),
+      ) as Q;
+  }
+
+  let guarded = query.is("dual_rewards_payout", null);
+  if (paying.cpm_cents > 0 && paidComponents.cpmCents === 0) {
+    guarded = guarded.neq("paid", true);
+  }
+  if (paying.milestone_cents > 0 && paidComponents.milestoneCents === 0) {
+    if (paying.cpm_cents === 0) {
+      guarded = guarded.eq("paid", true);
+    }
+    guarded = guarded.neq("bonus_paid", true);
+  }
+  return guarded as Q;
+}
+
+/** Restore submission row to pre-bulk-pay component state after a rolled-back wallet credit. */
+export function buildDualRewardsBulkRollbackRevertPayload(
+  priorComponents: DualRewardsPaidComponentSnapshot,
+  item: { cpm_cents: number; milestone_cents: number },
+): Record<string, unknown> {
+  const nextCpm = Math.max(0, priorComponents.cpmCents);
+  const nextMs = Math.max(0, priorComponents.milestoneCents);
+
+  if (nextCpm === 0 && nextMs === 0) {
+    return {
+      dual_rewards_payout: null,
+      status: "verified",
+      paid: false,
+      paid_at: null,
+      earnings: null,
+      bonus_paid: false,
+      bonus_paid_at: null,
+      bonus_amount: null,
+    };
+  }
+
+  const revertPayload: Record<string, unknown> = {
+    dual_rewards_payout: buildDualRewardsPayoutPersistValue(
+      { cpm_cents: nextCpm, milestone_cents: nextMs },
+      { updatedBy: "system", customRemarks: null },
+    ),
+    earnings: nextCpm + nextMs,
+    paid: true,
+    status: "paid",
+    paid_at: new Date().toISOString(),
+  };
+  if (nextMs > 0) {
+    revertPayload.bonus_paid = true;
+    revertPayload.bonus_amount = nextMs;
+    revertPayload.bonus_paid_at = new Date().toISOString();
+  } else {
+    revertPayload.bonus_paid = false;
+    revertPayload.bonus_amount = null;
+    revertPayload.bonus_paid_at = null;
+  }
+  return revertPayload;
+}
+
 /**
  * Infer legacy scope string for getDualGrantedBreakdown / UI branching.
  * Prefers `dual_rewards_payout` JSON, then legacy text column, then metadata tag.
@@ -180,20 +349,49 @@ export function getDualPayoutScopeFromSubmission(
   return null;
 }
 
+export type DualRemainingPayableOptions = {
+  /**
+   * Wallet ledger net (reward − reversal refund) for this submission. When zero
+   * after a refund, stale `dual_rewards_payout` pool reservations must not block
+   * re-pay. When positive, caps remaining so we do not double-credit.
+   */
+  walletNetCents?: number | null;
+};
+
 /** Remaining payable per component after prior dual-rewards payouts. */
 export function getDualRemainingPayableCents(
   component: DualRewardPayoutScope,
   cpmExpectedCents: number,
   milestoneExpectedCents: number,
   dualPayoutRaw: unknown,
+  options?: DualRemainingPayableOptions,
 ): {
   cpmRemaining: number;
   milestoneRemaining: number;
   totalRemaining: number;
 } {
   const prev = parseDualRewardsPayoutJson(dualPayoutRaw);
-  const prevCpm = Math.max(0, prev?.cpm_cents ?? 0);
-  const prevMs = Math.max(0, prev?.milestone_cents ?? 0);
+  let prevCpm = Math.max(0, prev?.cpm_cents ?? 0);
+  let prevMs = Math.max(0, prev?.milestone_cents ?? 0);
+
+  if (options?.walletNetCents != null) {
+    const walletNet = Math.max(0, Math.round(Number(options.walletNetCents) || 0));
+    if (walletNet <= 0) {
+      // Refunded or never credited — ignore stale pool reservation on the row.
+      prevCpm = 0;
+      prevMs = 0;
+    } else {
+      const split = splitDualReversalRefundFromPayout(
+        dualPayoutRaw,
+        walletNet,
+        prevCpm,
+        prevMs,
+      );
+      prevCpm = Math.max(prevCpm, split.cpmCents);
+      prevMs = Math.max(prevMs, split.milestoneCents);
+    }
+  }
+
   const cpmRemaining = Math.max(
     0,
     Math.round(Number(cpmExpectedCents) || 0) - prevCpm,
@@ -270,6 +468,214 @@ export function dualRewardsPayoutForMilestoneTotal(
   return {
     cpm_cents: cpm,
     milestone_cents: milestone,
+  };
+}
+
+export type MilestoneBonusPaidTrackCents = {
+  views?: number | null;
+  reels?: number | null;
+};
+
+/** Paid most-verified views/reels bonus cents stored on `milestone_bonus_paid`. */
+export function getMostVerifiedBonusPaidCentsFromSubmission(sub: {
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+}): { viewsCents: number; reelsCents: number; totalCents: number } {
+  const mbp =
+    sub?.milestone_bonus_paid ??
+    sub?.metadata?.milestone_bonus_paid;
+  if (!mbp || typeof mbp !== "object") {
+    return { viewsCents: 0, reelsCents: 0, totalCents: 0 };
+  }
+  const viewsCents = Math.max(0, Math.round(Number(mbp.views) || 0));
+  const reelsCents = Math.max(0, Math.round(Number(mbp.reels) || 0));
+  return { viewsCents, reelsCents, totalCents: viewsCents + reelsCents };
+}
+
+/**
+ * Milestone ladder cents already paid — excludes most-verified views/reels bonus
+ * (those have dedicated UI columns and must not inflate "Reward Granted (Milestone)").
+ */
+export function getMilestoneLadderGrantedCentsFromSubmission(sub: {
+  bonus_paid?: boolean | null;
+  bonus_amount?: number | null;
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  dual_rewards_payout?: unknown;
+}): number {
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
+  const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (dual) {
+    return Math.max(0, Math.round(dual.milestone_cents) - mv.totalCents);
+  }
+  if (sub.bonus_paid === true) {
+    const bonus = Math.max(0, Math.round(Number(sub.bonus_amount) || 0));
+    if (mv.totalCents > 0) {
+      return Math.max(0, bonus - mv.totalCents);
+    }
+    return bonus;
+  }
+  return 0;
+}
+
+export type DualRewardGrantedDisplayBreakdown = {
+  totalCents: number;
+  cpmCents: number;
+  milestoneCents: number;
+  isPaid: boolean;
+};
+
+/** Paid CPM cents from `dual_rewards_payout` JSON, or legacy `earnings` when only CPM was paid. */
+export function getCpmGrantedCentsFromSubmission(sub: {
+  paid?: boolean | null;
+  status?: string | null;
+  earnings?: number | null;
+  dual_rewards_payout?: unknown;
+}): number {
+  const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (dual) {
+    return Math.max(0, Math.round(dual.cpm_cents));
+  }
+  const hasMainPaid =
+    String(sub.status || "").toLowerCase() === "paid" || sub.paid === true;
+  if (hasMainPaid) {
+    return Math.max(0, Math.round(Number(sub.earnings) || 0));
+  }
+  return 0;
+}
+
+/**
+ * Reward Granted column breakdown when `dual_rewards_payout` is stored.
+ * Excludes most-verified views/reels bonus (separate UI columns).
+ */
+export function tryDualRewardGrantedBreakdownFromStoredPayout(sub: {
+  paid?: boolean | null;
+  status?: string | null;
+  earnings?: number | null;
+  bonus_paid?: boolean | null;
+  dual_rewards_payout?: unknown;
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+}): DualRewardGrantedDisplayBreakdown | null {
+  const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (!dual) return null;
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
+  if (dual.cpm_cents <= 0 && dual.milestone_cents <= 0 && mv.totalCents <= 0) {
+    return null;
+  }
+  const cpmCents = getCpmGrantedCentsFromSubmission(sub);
+  const milestoneCents = getMilestoneLadderGrantedCentsFromSubmission(sub);
+  const isPaid =
+    cpmCents > 0 ||
+    milestoneCents > 0 ||
+    mv.totalCents > 0 ||
+    String(sub.status || "").toLowerCase() === "paid" ||
+    sub.paid === true ||
+    sub.bonus_paid === true;
+  return {
+    totalCents: cpmCents + milestoneCents,
+    cpmCents,
+    milestoneCents,
+    isPaid,
+  };
+}
+
+/** Remove most-verified bonus cents so legacy paid-total splits stay in CPM/milestone columns only. */
+export function excludeMostVerifiedBonusFromPaidTotalCents(
+  paidTotalCents: number,
+  sub: {
+    milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+    metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  },
+): number {
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
+  return Math.max(0, Math.round(Number(paidTotalCents) || 0) - mv.totalCents);
+}
+
+export type SubmissionPaidReversalInput = {
+  earnings?: number | null;
+  paid?: boolean | null;
+  paid_at?: string | null;
+  bonus_paid?: boolean | null;
+  bonus_paid_at?: string | null;
+  bonus_amount?: number | null;
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  dual_rewards_payout?: unknown;
+};
+
+export type SubmissionReversalAmounts = {
+  mainCents: number;
+  bonusCents: number;
+  bonusReversals: { bonusType: string; amount: number }[];
+};
+
+/**
+ * Build submission row fields after paid → verified/pending/rejected reversal.
+ * Preserves most-verified views/reels bonus (`milestone_bonus_paid`) unless those
+ * tracks were explicitly reversed in `bonusReversals`.
+ */
+export function buildSubmissionPaidReversalUpdate(
+  row: SubmissionPaidReversalInput,
+  reversal: SubmissionReversalAmounts,
+): Record<string, unknown> {
+  const mvPrev = getMostVerifiedBonusPaidCentsFromSubmission(row);
+  const sumMvReversal = (track: "views" | "reels") =>
+    reversal.bonusReversals
+      .filter((b) => b.bonusType === `milestone_most_verified_${track}`)
+      .reduce((sum, b) => sum + Math.max(0, Math.round(Number(b.amount) || 0)), 0);
+
+  const mvViewsReversed = sumMvReversal("views");
+  const mvReelsReversed = sumMvReversal("reels");
+  const nextMv = {
+    views: Math.max(0, mvPrev.viewsCents - mvViewsReversed),
+    reels: Math.max(0, mvPrev.reelsCents - mvReelsReversed),
+  };
+  const nextMvTotal = nextMv.views + nextMv.reels;
+
+  const prevCpm = getCpmGrantedCentsFromSubmission(row);
+  const prevLadder = getMilestoneLadderGrantedCentsFromSubmission(row);
+
+  const mainReversal = Math.max(0, Math.round(Number(reversal.mainCents) || 0));
+  const bonusReversal = Math.max(0, Math.round(Number(reversal.bonusCents) || 0));
+
+  const cpmReversed =
+    mainReversal > 0 ? Math.min(mainReversal, prevCpm) : prevCpm;
+  const ladderReversed =
+    bonusReversal > 0 ? Math.min(bonusReversal, prevLadder) : prevLadder;
+
+  const nextCpm = Math.max(0, prevCpm - cpmReversed);
+  const nextLadder = Math.max(0, prevLadder - ladderReversed);
+  const nextBonusAmount = nextLadder + nextMvTotal;
+  const stillPaid = nextCpm > 0;
+  const stillBonusPaid = nextBonusAmount > 0;
+
+  const hadExplicitMilestoneBonusPaid =
+    (row.milestone_bonus_paid != null &&
+      typeof row.milestone_bonus_paid === "object") ||
+    (row.metadata?.milestone_bonus_paid != null &&
+      typeof row.metadata.milestone_bonus_paid === "object");
+
+  let dual_rewards_payout: Record<string, unknown> | null = null;
+  const nextMilestoneTotal = nextLadder + nextMvTotal;
+  if (nextCpm > 0 || nextMilestoneTotal > 0) {
+    dual_rewards_payout = dualRewardsPayoutForMilestoneTotal(
+      row.dual_rewards_payout,
+      nextCpm,
+      nextMilestoneTotal,
+    );
+  }
+
+  return {
+    earnings: stillPaid ? nextCpm : null,
+    paid: stillPaid,
+    paid_at: stillPaid ? row.paid_at ?? null : null,
+    bonus_paid: stillBonusPaid,
+    bonus_paid_at: stillBonusPaid ? row.bonus_paid_at ?? null : null,
+    bonus_amount: stillBonusPaid ? nextBonusAmount : null,
+    milestone_bonus_paid:
+      hadExplicitMilestoneBonusPaid || nextMvTotal > 0 ? nextMv : null,
+    dual_rewards_payout,
   };
 }
 

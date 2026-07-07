@@ -14,7 +14,12 @@ import {
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
-import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
+import {
+  buildContestPayoutIdempotencyPayload,
+  creditWithWalletShortfallRetry,
+  loadContestPayoutLedgerBundle,
+} from "@/lib/contest-payout-idempotency";
+import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
@@ -130,13 +135,47 @@ export async function POST(request: NextRequest) {
     }
 
     if (contest.contest_type === "dual_rewards") {
-      return NextResponse.json(
-        {
-          error:
-            "Dual rewards contests use per-submission payout (CPM and milestone components). Use the contest submissions UI or verify-submission API instead of bulk payment.",
+      const dualResult = await executeDualRewardsBulkPayment({
+        supabaseAdmin,
+        adminUserId: user.id,
+        contest,
+        contestId: contest_id,
+        creatorId: creator_id,
+        submissionIds: submission_ids,
+        paymentType: payment_type,
+      });
+
+      if (!dualResult.ok) {
+        const errorBody: Record<string, unknown> = { error: dualResult.error };
+        if (
+          dualResult.details != null &&
+          typeof dualResult.details === "object" &&
+          !Array.isArray(dualResult.details)
+        ) {
+          Object.assign(errorBody, dualResult.details);
+        } else if (dualResult.details !== undefined) {
+          errorBody.details = dualResult.details;
+        }
+        return NextResponse.json(errorBody, { status: dualResult.status });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully paid ${dualResult.appliedCount} submissions`,
+        data: {
+          total_amount: dualResult.totalAmount,
+          total_cpm: dualResult.totalCpm,
+          total_milestone: dualResult.totalMilestone,
+          paid_count: dualResult.appliedCount,
+          applied_count: dualResult.appliedCount,
+          requested_count: dualResult.requestedCount,
+          skipped_count: dualResult.skippedCount,
+          breakdown: dualResult.breakdown,
+          transaction_id: dualResult.transactionId,
+          payout_idempotent_retry: dualResult.alreadyApplied,
+          payout_operation_key: dualResult.payoutOperationKey,
         },
-        { status: 400 },
-      );
+      });
     }
 
     // Filter to verified (or legacy "approved") submissions — same notion as verify-submission / UI.
@@ -213,10 +252,8 @@ export async function POST(request: NextRequest) {
             platform: sub.platform,
             other_stats: sub.other_stats,
           }));
-          milestonePayoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
-            records,
-            milestones,
-          );
+          milestonePayoutBySubmissionId =
+            buildMilestoneSubmissionPayoutCentsMap(records, milestones);
         }
       }
     }
@@ -252,11 +289,11 @@ export async function POST(request: NextRequest) {
       // Calculate current bonus spending
       const { data: bonusSpendingData, error: bonusSpendErr } =
         await fetchContestSubmissionsAllPages(
-        supabaseAdmin,
-        contest_id,
-        "bonus_amount",
-        { bonusPaid: true, order: { column: "created_at", ascending: true } },
-      );
+          supabaseAdmin,
+          contest_id,
+          "bonus_amount",
+          { bonusPaid: true, order: { column: "created_at", ascending: true } },
+        );
 
       if (bonusSpendErr) {
         return NextResponse.json(
@@ -325,6 +362,21 @@ export async function POST(request: NextRequest) {
     // Calculate earnings for each submission
     let runningTotal = 0;
     const breakdown: any[] = [];
+    const isMilestoneContest = contest.contest_type === "milestone";
+    const breakdownMainAmount = (item: {
+      cpm_amount?: number;
+      milestone_cents?: number;
+    }) =>
+      isMilestoneContest
+        ? Math.round(Number(item.milestone_cents) || 0)
+        : Math.round(Number(item.cpm_amount) || 0);
+    const breakdownBonusAmount = (item: {
+      bonus_amount?: number;
+      bonus_cents?: number;
+    }) =>
+      isMilestoneContest
+        ? Math.round(Number(item.bonus_cents) || 0)
+        : Math.round(Number(item.bonus_amount) || 0);
     let totalCPM = 0;
     let totalBonus = 0;
     let paidCount = 0;
@@ -334,11 +386,11 @@ export async function POST(request: NextRequest) {
 
     const { data: bonusSpendingData, error: bonusSpendErr2 } =
       await fetchContestSubmissionsAllPages(
-      supabaseAdmin,
-      contest_id,
-      "bonus_amount",
-      { bonusPaid: true, order: { column: "created_at", ascending: true } },
-    );
+        supabaseAdmin,
+        contest_id,
+        "bonus_amount",
+        { bonusPaid: true, order: { column: "created_at", ascending: true } },
+      );
     if (bonusSpendErr2) {
       return NextResponse.json(
         {
@@ -360,11 +412,11 @@ export async function POST(request: NextRequest) {
       // separators, which yields an empty result and silently breaks the bonus map.
       const { data: contestEligibleSubs, error: contestEligibleErr } =
         await fetchContestSubmissionsAllPages(
-        supabaseAdmin,
-        contest_id,
-        "id, created_at, status, paid",
-        { order: { column: "created_at", ascending: true } },
-      );
+          supabaseAdmin,
+          contest_id,
+          "id, created_at, status, paid",
+          { order: { column: "created_at", ascending: true } },
+        );
       if (contestEligibleErr) {
         return NextResponse.json(
           {
@@ -387,15 +439,15 @@ export async function POST(request: NextRequest) {
     // Check how much has already been paid to this creator
     const { data: previousSubmissions, error: previousSubsErr } =
       await fetchContestSubmissionsAllPages(
-      supabaseAdmin,
-      contest_id,
-      "earnings, paid",
-      {
-        creatorId: creator_id,
-        paid: true,
-        order: { column: "created_at", ascending: true },
-      },
-    );
+        supabaseAdmin,
+        contest_id,
+        "earnings, paid",
+        {
+          creatorId: creator_id,
+          paid: true,
+          order: { column: "created_at", ascending: true },
+        },
+      );
     if (previousSubsErr) {
       return NextResponse.json(
         {
@@ -436,7 +488,8 @@ export async function POST(request: NextRequest) {
 
           // If earnings not stored, calculate dynamically for CPM contests
           if (!submissionEarnings && contest.contest_type === "cpm") {
-            const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
+            const cpmConfig = (contest.contest_based_details as any)
+              ?.cpm_contest;
             if (cpmConfig?.cpm_rate_usd) {
               let effectiveViews = sub.views || 0;
 
@@ -480,10 +533,13 @@ export async function POST(request: NextRequest) {
         }
 
         // Apply contest-level adjustment to CPM (reward) if configured
-        const adjustedSubmissionEarnings = adjustRewardCents(submissionEarnings, {
-          shouldAdjustReward,
-          percentage: payoutAdjustment.percentage,
-        });
+        const adjustedSubmissionEarnings = adjustRewardCents(
+          submissionEarnings,
+          {
+            shouldAdjustReward,
+            percentage: payoutAdjustment.percentage,
+          },
+        );
 
         totalCPM += adjustedSubmissionEarnings;
       }
@@ -498,26 +554,31 @@ export async function POST(request: NextRequest) {
             (bonusReasonCounts.not_expected || 0) + 1;
           submissionBonus = 0;
         } else {
-        const bonusLimit =
-          contest.contest_type === "leaderboard"
-            ? totalBudget
-            : contest.contest_type === "cpm"
-              ? flatFeeBonusCap
+          const bonusLimit =
+            contest.contest_type === "leaderboard"
+              ? totalBudget
+              : contest.contest_type === "cpm"
+                ? flatFeeBonusCap
+                : null;
+          const remainingBudget =
+            bonusLimit != null
+              ? Math.max(0, bonusLimit - runningBonusSpent)
               : null;
-        const remainingBudget =
-          bonusLimit != null ? Math.max(0, bonusLimit - runningBonusSpent) : null;
-        const bonusAllocation = allocateFlatFeeBonusCents(
-          flatFeeBonus,
-          remainingBudget,
-        );
-        submissionBonus = bonusAllocation.amount;
-        bonusReasonCounts[bonusAllocation.reason] =
-          (bonusReasonCounts[bonusAllocation.reason] || 0) + 1;
-        submissionBonus = Math.min(submissionBonus, expectedBonusForSubmission);
-        if (submissionBonus > 0) {
-          runningBonusSpent += submissionBonus;
-          totalBonus += submissionBonus;
-        }
+          const bonusAllocation = allocateFlatFeeBonusCents(
+            flatFeeBonus,
+            remainingBudget,
+          );
+          submissionBonus = bonusAllocation.amount;
+          bonusReasonCounts[bonusAllocation.reason] =
+            (bonusReasonCounts[bonusAllocation.reason] || 0) + 1;
+          submissionBonus = Math.min(
+            submissionBonus,
+            expectedBonusForSubmission,
+          );
+          if (submissionBonus > 0) {
+            runningBonusSpent += submissionBonus;
+            totalBonus += submissionBonus;
+          }
         }
       }
 
@@ -539,15 +600,27 @@ export async function POST(request: NextRequest) {
           : 0;
 
       if (finalCpmAmount > 0 || finalBonusAmount > 0) {
-        breakdown.push({
-          submission_id: sub.id,
-          video_title: sub.video_title || "Untitled",
-          cpm_amount: finalCpmAmount,
-          bonus_amount: finalBonusAmount,
-          original_cpm_amount: submissionEarnings,
-          original_bonus_amount: submissionBonus,
-          created_at: sub.created_at,
-        });
+        if (isMilestoneContest) {
+          breakdown.push({
+            submission_id: sub.id,
+            video_title: sub.video_title || "Untitled",
+            milestone_cents: finalCpmAmount,
+            bonus_cents: finalBonusAmount,
+            original_milestone_cents: submissionEarnings,
+            original_bonus_cents: submissionBonus,
+            created_at: sub.created_at,
+          });
+        } else {
+          breakdown.push({
+            submission_id: sub.id,
+            video_title: sub.video_title || "Untitled",
+            cpm_amount: finalCpmAmount,
+            bonus_amount: finalBonusAmount,
+            original_cpm_amount: submissionEarnings,
+            original_bonus_amount: submissionBonus,
+            created_at: sub.created_at,
+          });
+        }
         paidCount++;
       } else {
         skippedCount++;
@@ -556,11 +629,11 @@ export async function POST(request: NextRequest) {
 
     // Use breakdown totals so credited amount matches adjusted values (not raw totalBonus)
     const totalAmount = breakdown.reduce(
-      (sum, b) => sum + b.cpm_amount + b.bonus_amount,
+      (sum, b) => sum + breakdownMainAmount(b) + breakdownBonusAmount(b),
       0,
     );
-    const totalCPMPaid = breakdown.reduce((s, b) => s + b.cpm_amount, 0);
-    const totalBonusPaid = breakdown.reduce((s, b) => s + b.bonus_amount, 0);
+    const totalMainPaid = breakdown.reduce((s, b) => s + breakdownMainAmount(b), 0);
+    const totalBonusPaid = breakdown.reduce((s, b) => s + breakdownBonusAmount(b), 0);
 
     if (totalAmount === 0) {
       const milestoneHint =
@@ -596,9 +669,7 @@ export async function POST(request: NextRequest) {
 
         const reasonParts: string[] = [];
         if (alreadyBonusPaid > 0) {
-          reasonParts.push(
-            `${alreadyBonusPaid} already had bonus paid`,
-          );
+          reasonParts.push(`${alreadyBonusPaid} already had bonus paid`);
         }
         if (notExpected > 0) {
           reasonParts.push(
@@ -606,9 +677,7 @@ export async function POST(request: NextRequest) {
           );
         }
         if (capExhausted > 0) {
-          reasonParts.push(
-            `${capExhausted} hit the bonus cap at runtime`,
-          );
+          reasonParts.push(`${capExhausted} hit the bonus cap at runtime`);
         }
         if (partialZero > 0) {
           reasonParts.push(
@@ -657,26 +726,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { count: contestRefundCount, errorMessage: refundCountErr } =
-      await countRefundsForCreatorContest(
-        supabaseAdmin,
-        creator_id,
-        contest_id,
-      );
-    if (refundCountErr) {
+    const ledgerBundle = await loadContestPayoutLedgerBundle(
+      supabaseAdmin,
+      creator_id,
+      contest_id,
+    );
+    if ("errorMessage" in ledgerBundle) {
       console.error(
-        "[bulk-payment] failed to count contest refunds for idempotency:",
-        refundCountErr,
+        "[bulk-payment] failed to read payout ledger for idempotency:",
+        ledgerBundle.errorMessage,
       );
       return NextResponse.json(
         {
           error:
-            "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
-          details: refundCountErr,
+            "Cannot verify payout ledger for safe payout (idempotency). Try again or contact support.",
+          details: ledgerBundle.errorMessage,
         },
         { status: 500 },
       );
     }
+    const { state: payoutLedgerState, walletNetCents: contestWalletNetBeforePay } =
+      ledgerBundle;
 
     // Build idempotency from immutable request intent rather than computed payout breakdown.
     // This keeps retries stable even if a prior attempt partially updated submission rows.
@@ -685,41 +755,59 @@ export async function POST(request: NextRequest) {
         submission_ids.map((value: unknown) => String(value)).filter(Boolean),
       ),
     ).sort((a, b) => a.localeCompare(b));
-    const operationSeed = JSON.stringify({
-      contest_id,
-      creator_id,
-      payment_type,
-      requested_submission_ids: requestedSubmissionIds,
-      payout_adjustment_percentage: payoutAdjustment.percentage,
-      payout_adjustment_mode: payoutAdjustment.mode ?? null,
-      contest_refund_count_at_payout: contestRefundCount,
-    });
+    const operationSeed = JSON.stringify(
+      buildContestPayoutIdempotencyPayload(
+        {
+          contest_id,
+          creator_id,
+          payment_type,
+          requested_submission_ids: requestedSubmissionIds,
+          payout_adjustment_percentage: payoutAdjustment.percentage,
+          payout_adjustment_mode: payoutAdjustment.mode ?? null,
+        },
+        payoutLedgerState,
+      ),
+    );
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
       .update(operationSeed)
       .digest("hex")
       .slice(0, 48)}`;
 
-    const creditResult = await creditCreatorWithdrawableBalance(
-      creator_id,
-      totalAmount,
-      `Bulk payment for ${paidCount} submissions in contest: ${
-        contest.title || "Contest"
-      }`,
-      {
-        idempotencyKey: bulkPayIdempotencyKey,
-        remarks: `Bulk payment: ${payment_type}`,
-        metadata: {
-          contest_id: contest_id,
-          payment_type: payment_type,
-          submission_count: paidCount,
-          breakdown: breakdown,
-          total_cpm: totalCPMPaid,
-          total_bonus: totalBonusPaid,
-          cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
-          bonus_reason_counts: bonusReasonCounts,
-        },
-      },
-    );
+    const creditResult = await creditWithWalletShortfallRetry({
+      payableCents: totalAmount,
+      walletNetBeforePay: contestWalletNetBeforePay,
+      baseIdempotencyKey: bulkPayIdempotencyKey,
+      ledger: payoutLedgerState,
+      credit: (idempotencyKey) =>
+        creditCreatorWithdrawableBalance(
+          creator_id,
+          totalAmount,
+          `Bulk payment for ${paidCount} submissions in contest: ${
+            contest.title || "Contest"
+          }`,
+          {
+            idempotencyKey,
+            remarks: `Bulk payment: ${payment_type}`,
+            metadata: {
+              contest_id: contest_id,
+              payment_type: payment_type,
+              submission_count: paidCount,
+              breakdown: breakdown,
+              ...(isMilestoneContest
+                ? {
+                    total_milestone: totalMainPaid,
+                    total_bonus: totalBonusPaid,
+                  }
+                : {
+                    total_cpm: totalMainPaid,
+                    total_bonus: totalBonusPaid,
+                  }),
+              cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+              bonus_reason_counts: bonusReasonCounts,
+            },
+          },
+        ),
+    });
 
     if (!creditResult.success) {
       return NextResponse.json(
@@ -731,8 +819,8 @@ export async function POST(request: NextRequest) {
     // Update all submissions with earnings and payment status
     const submissionUpdates = breakdown.map((item) => ({
       id: item.submission_id,
-      cpm_amount: item.cpm_amount,
-      bonus_amount: item.bonus_amount,
+      cpm_amount: breakdownMainAmount(item),
+      bonus_amount: breakdownBonusAmount(item),
       paid: payment_type !== "bonus" ? true : undefined,
       paid_at: payment_type !== "bonus" ? new Date().toISOString() : undefined,
       bonus_paid:
@@ -855,10 +943,9 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error:
-            creditResult.alreadyApplied
-              ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
-              : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+          error: creditResult.alreadyApplied
+            ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
+            : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
           updateFailures,
           transaction_id: creditResult.transactionId,
           already_applied_idempotent: Boolean(creditResult.alreadyApplied),
@@ -896,7 +983,9 @@ export async function POST(request: NextRequest) {
       message: `Successfully paid ${paidCount} submissions`,
       data: {
         total_amount: totalAmount,
-        total_cpm: totalCPMPaid,
+        ...(isMilestoneContest
+          ? { total_milestone: totalMainPaid }
+          : { total_cpm: totalMainPaid }),
         total_bonus: totalBonusPaid,
         paid_count: paidCount,
         skipped_count: skippedCount,

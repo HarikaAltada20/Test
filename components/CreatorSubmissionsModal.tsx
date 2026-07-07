@@ -67,9 +67,13 @@ import {
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
+  excludeMostVerifiedBonusFromPaidTotalCents,
+  getCpmGrantedCentsFromSubmission,
   getDualPayoutScopeFromSubmission,
   getDualRemainingPayableCents,
+  getMilestoneLadderGrantedCentsFromSubmission,
   parseDualRewardsPayoutJson,
+  tryDualRewardGrantedBreakdownFromStoredPayout,
 } from "@/lib/dual-rewards-payout";
 import {
   formatDualBulkPaymentToastDescription,
@@ -78,6 +82,12 @@ import {
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
+import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
+import {
+  postContestStatusLocksSubmissionModeration,
+  submissionModerationUiAllowed,
+  SUBMISSION_MODERATION_LOCKED_MESSAGE,
+} from "@/lib/post-contest-moderation-lock";
 import { SubmissionQualityScoreCell } from "@/components/SubmissionQualityScoreCell";
 import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
@@ -384,6 +394,15 @@ export function CreatorSubmissionsModal({
   };
 
   const handleBulkAction = async (action: "verify" | "reject" | "pending") => {
+    if (postContestStatusLocksSubmissionModeration(contest?.post_contest_status)) {
+      toast({
+        title: "Action blocked",
+        description: SUBMISSION_MODERATION_LOCKED_MESSAGE,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
       const selectedSubs = submissions.filter((s) =>
@@ -538,6 +557,55 @@ export function CreatorSubmissionsModal({
       const isDual = contest.contest_type === "dual_rewards";
 
       if (isDual) {
+        if (isBulkTransaction) {
+          try {
+            const response = await fetch("/api/admin/bulk-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                submission_ids: sortedSubs.map((s) => s.id),
+                payment_type: type,
+                contest_id: contest.id,
+                creator_id: creator.id,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+              toast({
+                title: "Bulk payment failed",
+                description: result.error || "Unknown error",
+                variant: "destructive",
+              });
+              return;
+            }
+            setSelectedSubmissions(new Set());
+            const dualBulkToast = getBulkPaymentToastMeta(
+              result.data?.paid_count ?? 0,
+              result.data?.skipped_count ?? 0,
+            );
+            toast({
+              title: dualBulkToast.title,
+              description: formatDualBulkPaymentToastDescription({
+                successCount: result.data?.paid_count ?? 0,
+                skippedCount: result.data?.skipped_count ?? 0,
+                totalCpmCents: result.data?.total_cpm ?? 0,
+                totalMilestoneCents: result.data?.total_milestone ?? 0,
+              }),
+              variant: dualBulkToast.variant,
+            });
+            setTimeout(() => window.location.reload(), 700);
+          } catch (error) {
+            console.error("Dual bulk payment error:", error);
+            toast({
+              title: "Bulk payment failed",
+              description:
+                error instanceof Error ? error.message : "Unknown error",
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+
         let successCount = 0;
         let skippedCount = 0;
         let totalCpmCents = 0;
@@ -1162,6 +1230,14 @@ export function CreatorSubmissionsModal({
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
   const isVideoContest = contest?.contest_format !== "text_image";
   const canEditQualityScore = isVideoContest;
+  const showBulkModerationActions = submissionModerationUiAllowed(
+    contest?.post_contest_status,
+    { forBulkBar: true },
+  );
+  const showRowModerationActions = (submission: (typeof submissions)[number]) =>
+    submissionModerationUiAllowed(contest?.post_contest_status, {
+      isPaidRow: submissionIsPaidRow(submission),
+    });
   const qualityEditFirstSubmission = qualityEditSubmissionIds[0]
     ? submissions.find((s) => s.id === qualityEditSubmissionIds[0]) ?? null
     : null;
@@ -1804,8 +1880,7 @@ export function CreatorSubmissionsModal({
                     </Button>
                   </div>
 
-                  {contest?.post_contest_status !== "verification_complete" &&
-                    contest?.post_contest_status !== "payments_processed" && (
+                  {showBulkModerationActions && (
                       <>
                         <Button
                           size="sm"
@@ -1870,7 +1945,7 @@ export function CreatorSubmissionsModal({
                     )}
 
                   {contest?.post_contest_status === "verification_complete" &&
-                    contest?.post_contest_status !== "payments_processed" &&
+                    contest?.post_contest_status !== "payouts_processed" &&
                     isAdminView &&
                     !isTwitterLeaderboardContest && (
                       <>
@@ -3069,16 +3144,33 @@ export function CreatorSubmissionsModal({
                       let milestoneGrantedForDual = 0;
                       let cpmGrantedForDual = 0;
                       if (contest?.contest_type === "dual_rewards") {
-                        if (dualPaidComponent === "milestone") {
-                          milestoneGrantedForDual = totalGrantedForDual;
+                        const fromStoredPayout =
+                          tryDualRewardGrantedBreakdownFromStoredPayout(
+                            submission as any,
+                          );
+                        if (fromStoredPayout) {
+                          cpmGrantedForDual = fromStoredPayout.cpmCents;
+                          milestoneGrantedForDual =
+                            fromStoredPayout.milestoneCents;
+                        } else if (dualPaidComponent === "milestone") {
+                          milestoneGrantedForDual = getMilestoneLadderGrantedCentsFromSubmission(
+                            submission as any,
+                          );
                         } else if (dualPaidComponent === "cpm") {
-                          cpmGrantedForDual = totalGrantedForDual;
+                          cpmGrantedForDual = getCpmGrantedCentsFromSubmission(
+                            submission as any,
+                          );
                         } else if (
                           dualPaidComponent === "both" ||
                           (isDualPaid && !dualPaidComponent)
                         ) {
+                          const paidTotalExMv =
+                            excludeMostVerifiedBonusFromPaidTotalCents(
+                              totalGrantedForDual,
+                              submission as any,
+                            );
                           const sp = splitDualPaidTotalByExpectedWeights(
-                            totalGrantedForDual,
+                            paidTotalExMv,
                             adjustedCpmExpectedForDual,
                             adjustedMilestoneExpectedForDual,
                             {
@@ -4521,10 +4613,7 @@ export function CreatorSubmissionsModal({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                {contest?.post_contest_status !==
-                                  "verification_complete" &&
-                                  contest?.post_contest_status !==
-                                    "payments_processed" && (
+                                {showRowModerationActions(submission) && (
                                     <>
                                       {/* For Twitter tweets, check moderation_status; for others, check status */}
                                       {!isSubmissionVerified && (
@@ -4688,7 +4777,7 @@ export function CreatorSubmissionsModal({
                                 {contest?.post_contest_status ===
                                   "verification_complete" &&
                                   contest?.post_contest_status !==
-                                    "payments_processed" &&
+                                    "payouts_processed" &&
                                   isAdminView && (
                                     <>
                                       <DropdownMenuSeparator />

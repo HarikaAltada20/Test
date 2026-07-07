@@ -10,7 +10,7 @@ Treat migrations + app as **one release**. Do not leave production in a mixed st
 
 | Step | Action | If skipped |
 | ---- | ------ | ---------- |
-| 1 | Run migrations 1→9 to completion on the target environment | App crashes or verify/gate logic is inconsistent |
+| 1 | Run migrations 1→10 to completion on the target environment | App crashes or verify/gate/payout logic is inconsistent |
 | 2 | Deploy app **immediately** after migrations succeed | Verify API may 400; triggers/columns missing |
 | 3 | Run smoke tests below before routing traffic | Gate drift or broken verify flows go unnoticed |
 
@@ -38,8 +38,35 @@ Run in filename order (do not skip or reorder):
 | 7   | `20260705_explicit_quality_metrics_only.sql`                   | Explicit-only quality aggregates + verified quality_score DB enforcement   |
 | 8   | `20260706_quality_gates_new_creators.sql`                    | Quality gates for new creators (default 1/1); skip backfill-only legacy    |
 | 9   | `20260707_gate_checks_profile_cache_only.sql`                | Submit gates use cached profile metrics; clears any old placeholder scores |
+| 10  | `20260708_payouts_processed_submission_moderation_lock.sql`  | DB triggers block moderation/payout field edits after `payouts_processed` |
 
 Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Plan a short maintenance window on large databases for migrations 5–7 if needed.
+
+## Payout moderation lock (migration 10)
+
+Migration `20260708_payouts_processed_submission_moderation_lock.sql` adds `BEFORE UPDATE` triggers on:
+
+- `public.submissions`
+- `public.twitter_campaign_tweets`
+- `public.twitter_campaign_leaderboard`
+
+They block status/moderation and payout-field changes when `contests.post_contest_status = payouts_processed`.
+
+**Must ship with the app release** that uses `lib/post-contest-moderation-lock.ts` and dual-rewards payout idempotency changes.
+
+| Deploy order | Risk if wrong |
+| ------------ | ------------- |
+| Migration 10 **then** app immediately | Correct |
+| App without migration 10 | API/UI locks only; DB still allows illegal updates |
+| Migration 10 without app | Triggers may reject updates admins expect until new UI/API is live |
+
+**Smoke tests (staging):**
+
+- Contest in `payouts_processed`: verify/reject/pending blocked in UI and API (400)
+- Paid-row reversal on `verification_complete` still works before finalization
+- Dual-rewards bulk pay + pay→refund→re-pay on a test contest
+
+**Payout reconciliation:** If dual bulk pay logs `CRITICAL: wallet rollback failed`, compare `money_transactions` (reward vs reversal refund) to `submissions.dual_rewards_payout` for the listed `submission_id`s and `payout_operation_key` in the error payload. Debit creator wallet manually if credit succeeded but row updates could not be rolled back.
 
 ## Legacy quality scores
 
@@ -64,7 +91,7 @@ Trust/quality profile updates after verify are handled by DB triggers (`submissi
 
 ## Deploy steps
 
-1. **Staging:** run migrations 1→9, then deploy app in the same window.
+1. **Staging:** run migrations 1→10, then deploy app in the same window.
 2. **Smoke test:**
    - Verify/reject a submission → creator trust + quality update on profile
    - Verify without `qualityScore` in API body → **400**
@@ -74,7 +101,7 @@ Trust/quality profile updates after verify are handled by DB triggers (`submissi
    - Legacy creator with unscored verified submissions → quality gates skipped until first verify score
    - Creator with explicit scores → avg/best excludes backfilled rows only
    - Re-check eligibility after another admin verify/reject (submit error mentions refresh if DB gate fires)
-3. **Production:** run migrations 1→9, then deploy app immediately after.
+3. **Production:** run migrations 1→10, then deploy app immediately after.
 4. **Post-deploy:** sample creators for trust % changes; monitor submission insert errors.
 
 ## Ops: metrics reconciliation

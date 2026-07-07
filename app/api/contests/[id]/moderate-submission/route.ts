@@ -8,6 +8,10 @@ import {
 } from "@/lib/payment-utils";
 import { syncTwitterLeaderboardFromTweets } from "@/lib/twitter/sync-twitter-leaderboard-from-tweets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import {
+  postContestStatusLocksSubmissionModeration,
+  SUBMISSION_MODERATION_LOCKED_MESSAGE,
+} from "@/lib/post-contest-moderation-lock";
 
 /**
  * POST /api/contests/[id]/moderate-submission
@@ -67,7 +71,7 @@ export async function POST(
     // Get contest to verify ownership and type (for CPM reversal)
     let contestQuery = supabase
       .from("contests")
-      .select("id, advertiser_id, platform, contest_type, title")
+      .select("id, advertiser_id, platform, contest_type, title, post_contest_status")
       .eq("id", contestId);
 
     if (!isAdmin) {
@@ -80,6 +84,16 @@ export async function POST(
       return NextResponse.json(
         { error: "Contest not found or access denied" },
         { status: 404 }
+      );
+    }
+
+    if (
+      postContestStatusLocksSubmissionModeration(contest.post_contest_status) &&
+      (action === "approve" || action === "reject" || action === "pending")
+    ) {
+      return NextResponse.json(
+        { error: SUBMISSION_MODERATION_LOCKED_MESSAGE },
+        { status: 400 },
       );
     }
 
