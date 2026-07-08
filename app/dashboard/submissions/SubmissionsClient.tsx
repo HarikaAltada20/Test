@@ -54,6 +54,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { SubmissionQualityScoreDisplay } from "@/components/SubmissionQualityScoreCell";
+import { parseQualityScore } from "@/lib/quality-score";
 
 // Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -97,6 +99,21 @@ type PlatformFilter = "all" | "youtube" | "instagram" | "tiktok" | "twitter" | "
 type ViewMode = "all" | "contest";
 type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low";
 type DateFilter = "all" | "today" | "3days" | "1week" | "1month" | "1year" | "custom";
+
+type SubmissionQualityFields = SubmissionWithContest & {
+  quality_score?: number | null;
+  quality_score_backfilled?: boolean | null;
+};
+
+function getExplicitSubmissionQualityScore(
+  submission: SubmissionWithContest,
+): number | null {
+  const row = submission as SubmissionQualityFields;
+  if (row.quality_score_backfilled === true) return null;
+  const status = String(row.status || "").toLowerCase();
+  if (status !== "verified" && status !== "paid") return null;
+  return parseQualityScore(row.quality_score);
+}
 
 /**
  * Smart Lock Action Buttons - Enterprise Interaction
@@ -1315,6 +1332,7 @@ export default function SubmissionsClient({
     }
     const bonusColor = (bonusLabel === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
     const showBonusRow = !isMilestoneContest && bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
+    const explicitQualityScore = getExplicitSubmissionQualityScore(submission);
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
@@ -1578,6 +1596,14 @@ export default function SubmissionsClient({
                   </span>
                 )}
               </div>
+            )}
+            {explicitQualityScore !== null && (
+              <SubmissionQualityScoreDisplay
+                qualityScore={explicitQualityScore}
+                isDark={isDark}
+                variant="inline"
+                className="mt-1"
+              />
             )}
           </div>
 
@@ -2674,6 +2700,7 @@ export default function SubmissionsClient({
               else bonusLabelModal = "Estimated Bonus";
               const showBonusRowModal = !isMilestoneContestModal && bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
               const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
+              const explicitQualityScoreModal = getExplicitSubmissionQualityScore(submission);
 
               let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
               if (isRejectedModal) {
@@ -2842,7 +2869,19 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 4: Earnings grid ── */}
-                  <div className={cn("px-4 py-3 grid gap-3 border-b", isRejectedModal || !showBonusRowModal ? "grid-cols-1" : "grid-cols-2", isDark ? "border-slate-700" : "border-slate-100")}>
+                  <div className={cn(
+                    "px-4 py-3 grid gap-3 border-b",
+                    isRejectedModal
+                      ? "grid-cols-1"
+                      : explicitQualityScoreModal !== null
+                        ? showBonusRowModal
+                          ? "grid-cols-1 sm:grid-cols-3"
+                          : "grid-cols-1 sm:grid-cols-2"
+                        : !showBonusRowModal
+                          ? "grid-cols-1"
+                          : "grid-cols-2",
+                    isDark ? "border-slate-700" : "border-slate-100"
+                  )}>
                     <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
                       <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                         {earningsDisplay?.label || "Estimated Earnings"}
@@ -2897,6 +2936,13 @@ export default function SubmissionsClient({
                           </p>
                         )}
                       </div>
+                    )}
+                    {explicitQualityScoreModal !== null && (
+                      <SubmissionQualityScoreDisplay
+                        qualityScore={explicitQualityScoreModal}
+                        isDark={isDark}
+                        variant="tile"
+                      />
                     )}
                   </div>
 
