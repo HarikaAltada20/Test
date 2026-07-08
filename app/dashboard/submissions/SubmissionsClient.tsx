@@ -34,7 +34,7 @@ import {
   EnhancedTabsList as TabsList,
   EnhancedTabsTrigger as TabsTrigger,
 } from "@/components/ui/enhanced-tabs";
-import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check, ListOrdered, Gift, CheckCheck, Loader2 } from "lucide-react";
+import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check, ListOrdered, Gift, CheckCheck, Loader2, ShieldCheck, Star, Hash } from "lucide-react";
 import Image from "next/image";
 import React from "react";
 import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
@@ -56,6 +56,11 @@ import {
 } from "@/components/ui/dialog";
 import { SubmissionQualityScoreDisplay } from "@/components/SubmissionQualityScoreCell";
 import { parseQualityScore } from "@/lib/quality-score";
+import {
+  formatQualityScoreDisplay,
+  formatQualitySumDisplay,
+  formatTrustScoreDisplay,
+} from "@/lib/creator-profile-stats";
 
 // Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -81,6 +86,13 @@ const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
 interface SubmissionsClientProps {
   initialSubmissions: SubmissionWithContest[];
   fetchError?: string;
+  creatorStats?: {
+    trustScorePct: number | null;
+    trustNumber: number | null;
+    avgQualityScore: number | null;
+    bestQualityScore: number | null;
+    totalQualityScore: number | null;
+  };
 }
 
 type ContestTypeFilter =
@@ -97,13 +109,21 @@ type StatusFilter =
   | "paid";
 type PlatformFilter = "all" | "youtube" | "instagram" | "tiktok" | "twitter" | "other";
 type ViewMode = "all" | "contest";
-type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low";
+type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low" | "quality_high" | "quality_low";
+type QualityScoreFilter = "all" | "unscored" | "1" | "2" | "3";
 type DateFilter = "all" | "today" | "3days" | "1week" | "1month" | "1year" | "custom";
 
 type SubmissionQualityFields = SubmissionWithContest & {
   quality_score?: number | null;
   quality_score_backfilled?: boolean | null;
 };
+
+function formatTrustNumberDisplay(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value >= 0 ? `+${value}` : String(value);
+}
 
 function getExplicitSubmissionQualityScore(
   submission: SubmissionWithContest,
@@ -113,6 +133,40 @@ function getExplicitSubmissionQualityScore(
   const status = String(row.status || "").toLowerCase();
   if (status !== "verified" && status !== "paid") return null;
   return parseQualityScore(row.quality_score);
+}
+
+function compareSubmissionQualityScores(
+  a: SubmissionWithContest,
+  b: SubmissionWithContest,
+  direction: "high" | "low",
+): number {
+  const scoreA = getExplicitSubmissionQualityScore(a);
+  const scoreB = getExplicitSubmissionQualityScore(b);
+  if (scoreA === null && scoreB === null) return 0;
+  if (scoreA === null) return 1;
+  if (scoreB === null) return -1;
+  return direction === "high" ? scoreB - scoreA : scoreA - scoreB;
+}
+
+function matchesQualityScoreFilter(
+  submission: SubmissionWithContest,
+  filter: QualityScoreFilter,
+): boolean {
+  const score = getExplicitSubmissionQualityScore(submission);
+  switch (filter) {
+    case "all":
+      return true;
+    case "unscored":
+      return score === null;
+    case "1":
+      return score === 1;
+    case "2":
+      return score === 2;
+    case "3":
+      return score === 3;
+    default:
+      return true;
+  }
 }
 
 /**
@@ -265,6 +319,7 @@ const SubmissionActionButtons = ({
 export default function SubmissionsClient({
   initialSubmissions,
   fetchError,
+  creatorStats,
 }: SubmissionsClientProps) {
   const [allSubmissions, setAllSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
@@ -283,6 +338,7 @@ export default function SubmissionsClient({
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [qualityScoreFilter, setQualityScoreFilter] = useState<QualityScoreFilter>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState("");
@@ -809,7 +865,7 @@ export default function SubmissionsClient({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter]);
+  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter, qualityScoreFilter]);
 
   const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
@@ -1018,6 +1074,12 @@ export default function SubmissionsClient({
       }
     }
 
+    if (qualityScoreFilter !== "all") {
+      submissions = submissions.filter((sub) =>
+        matchesQualityScoreFilter(sub, qualityScoreFilter),
+      );
+    }
+
     // Sort submissions
     submissions.sort((a, b) => {
       if (sortOrder === "normal" || sortOrder === "newest") {
@@ -1042,6 +1104,12 @@ export default function SubmissionsClient({
         const earningsB = getSubmissionEarningsAmount(b);
         return earningsA - earningsB;
       }
+      if (sortOrder === "quality_high") {
+        return compareSubmissionQualityScores(a, b, "high");
+      }
+      if (sortOrder === "quality_low") {
+        return compareSubmissionQualityScores(a, b, "low");
+      }
       if (sortOrder === "submissions_high" || sortOrder === "submissions_low") {
         // Fallback to newest for individual submissions view
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -1050,7 +1118,7 @@ export default function SubmissionsClient({
     });
 
     setFilteredSubmissions(submissions);
-  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter]);
+  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilter]);
 
   const groupedContests = useMemo(() => {
     const groups: Record<string, {
@@ -2058,8 +2126,46 @@ export default function SubmissionsClient({
       </div>
 
       {/* Quick Stats Summary — wider cards, consistent height and alignment */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-3 md:gap-4 items-stretch">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4 items-stretch">
         {[
+          {
+            label: "Trust %",
+            value:
+              creatorStats?.trustScorePct != null
+                ? formatTrustScoreDisplay(creatorStats.trustScorePct)
+                : "—",
+            sub: "",
+            icon: ShieldCheck,
+            color: "text-emerald-500",
+          },
+          {
+            label: "Trust Score",
+            value: formatTrustNumberDisplay(creatorStats?.trustNumber),
+            sub: "",
+            icon: Hash,
+            color: "text-[#7F39EC]",
+          },
+          {
+            label: "Avg Quality Score",
+            value: formatQualityScoreDisplay(creatorStats?.avgQualityScore),
+            sub: "",
+            icon: Star,
+            color: "text-amber-500",
+          },
+          {
+            label: "Best Quality Score",
+            value: formatQualityScoreDisplay(creatorStats?.bestQualityScore),
+            sub: "",
+            icon: Star,
+            color: "text-orange-500",
+          },
+          {
+            label: "Total Quality Score",
+            value: formatQualitySumDisplay(creatorStats?.totalQualityScore),
+            sub: "",
+            icon: Star,
+            color: "text-rose-500",
+          },
           { label: "Submitted to", value: stats.contests, sub: "Campaigns", icon: Trophy, color: "text-blue-500" },
           { label: "Total Views", value: stats.views.toLocaleString(), sub: "", icon: TrendingUp, color: "text-indigo-500" },
           { label: "Cash Earned", value: `$${centsToDollars(stats.earnings).toFixed(2)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
@@ -2355,12 +2461,33 @@ export default function SubmissionsClient({
             <SelectItem isDark={isDark} value="views_low">Lowest to Highest Views</SelectItem>
             <SelectItem isDark={isDark} value="earnings_high">Most Earnings</SelectItem>
             <SelectItem isDark={isDark} value="earnings_low">Lowest Earnings</SelectItem>
+            <SelectItem isDark={isDark} value="quality_high">Highest Quality Score</SelectItem>
+            <SelectItem isDark={isDark} value="quality_low">Lowest Quality Score</SelectItem>
             {viewMode === "contest" && (
               <>
                 <SelectItem isDark={isDark} value="submissions_high">Most Submissions</SelectItem>
                 <SelectItem isDark={isDark} value="submissions_low">Least Submissions</SelectItem>
               </>
             )}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={qualityScoreFilter}
+          onValueChange={(v) => setQualityScoreFilter(v as QualityScoreFilter)}
+        >
+          <SelectTrigger className={cn(
+            "w-full lg:w-[200px] h-10 rounded-lg transition-none shadow-none",
+            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
+          )}>
+            <SelectValue placeholder="Quality Score" />
+          </SelectTrigger>
+          <SelectContent isDark={isDark}>
+            <SelectItem isDark={isDark} value="all">All Quality Scores</SelectItem>
+            <SelectItem isDark={isDark} value="3">Score 3/3</SelectItem>
+            <SelectItem isDark={isDark} value="2">Score 2/3</SelectItem>
+            <SelectItem isDark={isDark} value="1">Score 1/3</SelectItem>
+            <SelectItem isDark={isDark} value="unscored">No Quality Score</SelectItem>
           </SelectContent>
         </Select>
 

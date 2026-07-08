@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import SubmissionsClient from "./SubmissionsClient";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { SubmissionWithContest } from "@/types/supabase";
+import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 
 export default async function SubmissionsPage() {
   const supabase = await createClient();
@@ -44,7 +45,17 @@ export default async function SubmissionsPage() {
     console.error("Error fetching submissions:", submissionsError.message);
     return (
       // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
-      <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />
+      <SubmissionsClient
+        initialSubmissions={[]}
+        fetchError={submissionsError.message}
+        creatorStats={{
+          trustScorePct: null,
+          trustNumber: null,
+          avgQualityScore: null,
+          bestQualityScore: null,
+          totalQualityScore: null,
+        }}
+      />
       // </RouteGuard>
     );
   }
@@ -109,10 +120,28 @@ export default async function SubmissionsPage() {
       : 'Date N/A'
   }));
 
+  const { data: creatorProfile } = await supabase
+    .from("creator_profiles")
+    .select(
+      "trust_score_metrics, avg_quality_score, best_quality_score, quality_score_sum, total_money_won, total_views, has_explicit_quality_scores",
+    )
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const profileStats = getCreatorStatsFromProfile(creatorProfile);
+  const creatorStats = {
+    trustScorePct: profileStats.trustMetrics.trust_score,
+    trustNumber: profileStats.trustMetrics.trust_number,
+    avgQualityScore: profileStats.qualityMetrics.avg_quality_score,
+    bestQualityScore: profileStats.qualityMetrics.best_quality_score,
+    totalQualityScore: profileStats.qualityMetrics.quality_score_sum,
+  };
+
   return (
     // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
     <SubmissionsClient
       initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
+      creatorStats={creatorStats}
     />
     // </RouteGuard>
   );
