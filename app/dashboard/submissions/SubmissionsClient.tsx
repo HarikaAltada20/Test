@@ -55,7 +55,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { SubmissionQualityScoreDisplay } from "@/components/SubmissionQualityScoreCell";
-import { parseQualityScore } from "@/lib/quality-score";
+import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
 import {
   formatQualityScoreDisplay,
   formatQualitySumDisplay,
@@ -110,7 +110,6 @@ type StatusFilter =
 type PlatformFilter = "all" | "youtube" | "instagram" | "tiktok" | "twitter" | "other";
 type ViewMode = "all" | "contest";
 type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low" | "quality_high" | "quality_low";
-type QualityScoreFilter = "all" | "unscored" | "1" | "2" | "3";
 type DateFilter = "all" | "today" | "3days" | "1week" | "1month" | "1year" | "custom";
 
 type SubmissionQualityFields = SubmissionWithContest & {
@@ -148,25 +147,16 @@ function compareSubmissionQualityScores(
   return direction === "high" ? scoreB - scoreA : scoreA - scoreB;
 }
 
-function matchesQualityScoreFilter(
+function matchesQualityScoreFilters(
   submission: SubmissionWithContest,
-  filter: QualityScoreFilter,
+  filters: Array<QualityScore | "unscored">,
 ): boolean {
+  if (filters.length === 0) return true;
   const score = getExplicitSubmissionQualityScore(submission);
-  switch (filter) {
-    case "all":
-      return true;
-    case "unscored":
-      return score === null;
-    case "1":
-      return score === 1;
-    case "2":
-      return score === 2;
-    case "3":
-      return score === 3;
-    default:
-      return true;
-  }
+  return filters.some((filterValue) => {
+    if (filterValue === "unscored") return score === null;
+    return score === filterValue;
+  });
 }
 
 /**
@@ -338,7 +328,9 @@ export default function SubmissionsClient({
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
-  const [qualityScoreFilter, setQualityScoreFilter] = useState<QualityScoreFilter>("all");
+  const [qualityScoreFilters, setQualityScoreFilters] = useState<
+    Array<QualityScore | "unscored">
+  >([]);
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState("");
@@ -865,7 +857,21 @@ export default function SubmissionsClient({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter, qualityScoreFilter]);
+  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter, qualityScoreFilters]);
+
+  const qualityScoreFilterButtonLabel = useMemo(() => {
+    if (qualityScoreFilters.length === 0) return "All Quality Scores";
+    const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
+      { value: 3, label: "Score 3/3" },
+      { value: 2, label: "Score 2/3" },
+      { value: 1, label: "Score 1/3" },
+      { value: "unscored", label: "No Quality Score" },
+    ];
+    const ordered = labels
+      .filter((l) => qualityScoreFilters.includes(l.value))
+      .map((l) => l.label);
+    return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
+  }, [qualityScoreFilters]);
 
   const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
@@ -1074,9 +1080,9 @@ export default function SubmissionsClient({
       }
     }
 
-    if (qualityScoreFilter !== "all") {
+    if (qualityScoreFilters.length > 0) {
       submissions = submissions.filter((sub) =>
-        matchesQualityScoreFilter(sub, qualityScoreFilter),
+        matchesQualityScoreFilters(sub, qualityScoreFilters),
       );
     }
 
@@ -1118,7 +1124,7 @@ export default function SubmissionsClient({
     });
 
     setFilteredSubmissions(submissions);
-  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilter]);
+  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters]);
 
   const groupedContests = useMemo(() => {
     const groups: Record<string, {
@@ -2472,24 +2478,115 @@ export default function SubmissionsClient({
           </SelectContent>
         </Select>
 
-        <Select
-          value={qualityScoreFilter}
-          onValueChange={(v) => setQualityScoreFilter(v as QualityScoreFilter)}
-        >
-          <SelectTrigger className={cn(
-            "w-full lg:w-[200px] h-10 rounded-lg transition-none shadow-none",
-            isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
-          )}>
-            <SelectValue placeholder="Quality Score" />
-          </SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">All Quality Scores</SelectItem>
-            <SelectItem isDark={isDark} value="3">Score 3/3</SelectItem>
-            <SelectItem isDark={isDark} value="2">Score 2/3</SelectItem>
-            <SelectItem isDark={isDark} value="1">Score 1/3</SelectItem>
-            <SelectItem isDark={isDark} value="unscored">No Quality Score</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full lg:w-[200px] h-10 rounded-lg justify-start text-left font-semibold text-sm border-slate-200 dark:border-slate-700 shadow-none",
+                isDark
+                  ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800"
+                  : "bg-white text-slate-900 hover:bg-slate-50",
+              )}
+            >
+              <Star className="mr-2 h-4 w-4 shrink-0 text-[#7F39EC]" />
+              <span className="truncate font-semibold text-sm">
+                {qualityScoreFilterButtonLabel}
+              </span>
+              <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            className={cn(
+              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+              isDark ? "bg-[#0f172a]" : "bg-white",
+            )}
+            align="start"
+          >
+            <div className="flex flex-col gap-1">
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                )}
+                onClick={() => setQualityScoreFilters([])}
+              >
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                    qualityScoreFilters.length === 0
+                      ? "bg-[#4211a1] border-[#4211a1]"
+                      : isDark
+                        ? "border-slate-700 bg-slate-900"
+                        : "border-slate-300 bg-white",
+                  )}
+                >
+                  {qualityScoreFilters.length === 0 && (
+                    <Check className="w-3 h-3 text-white" strokeWidth={4} />
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-semibold",
+                    isDark ? "text-slate-300" : "text-slate-700",
+                  )}
+                >
+                  All Quality Scores
+                </span>
+              </div>
+
+              {(
+                [
+                  { value: 3, label: "Score 3/3" },
+                  { value: 2, label: "Score 2/3" },
+                  { value: 1, label: "Score 1/3" },
+                  { value: "unscored", label: "No Quality Score" },
+                ] as Array<{ value: QualityScore | "unscored"; label: string }>
+              ).map((opt) => {
+                const checked = qualityScoreFilters.includes(opt.value);
+                return (
+                  <div
+                    key={String(opt.value)}
+                    className={cn(
+                      "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                      isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                    )}
+                    onClick={() => {
+                      setQualityScoreFilters((prev) =>
+                        prev.includes(opt.value)
+                          ? prev.filter((v) => v !== opt.value)
+                          : [...prev, opt.value],
+                      );
+                    }}
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                        checked
+                          ? "bg-[#4211a1] border-[#4211a1]"
+                          : isDark
+                            ? "border-slate-700 bg-slate-900"
+                            : "border-slate-300 bg-white",
+                      )}
+                    >
+                      {checked && (
+                        <Check className="w-3 h-3 text-white" strokeWidth={4} />
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "text-sm font-semibold",
+                        isDark ? "text-slate-300" : "text-slate-700",
+                      )}
+                    >
+                      {opt.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         <div className="flex items-center gap-2">
           <Select

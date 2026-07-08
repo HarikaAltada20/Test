@@ -48,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -192,6 +193,7 @@ import {
   ArrowLeft,
   Calendar,
   ChevronDown,
+  ChevronRight,
   Clock,
   Copy,
   CreditCard,
@@ -2019,6 +2021,12 @@ export default function ContestDetailClient({
     "all" | "eligible" | "not_eligible"
   >("all");
 
+  // Multi-select Quality Score filter (S1/S2/S3 + "unscored") for submissions + analytics.
+  // Empty array means "All Quality Scores".
+  const [qualityScoreFilters, setQualityScoreFilters] = useState<
+    Array<QualityScore | "unscored">
+  >([]);
+
   type SortOption =
     | "views_desc"
     | "views_asc"
@@ -2258,9 +2266,47 @@ export default function ContestDetailClient({
       : submission.status;
   };
 
+  function getExplicitSubmissionQualityScoreForFiltering(
+    submission: Submission,
+  ): QualityScore | null {
+    // Only treat explicit quality scores as "scored" for filtering.
+    // This matches the SubmissionsClient behavior:
+    // - ignore backfilled quality scores
+    // - score is only meaningful for verified/paid rows
+    const normalizedStatus = String(getStatus(submission)).toLowerCase();
+    if (normalizedStatus !== "verified" && normalizedStatus !== "paid") return null;
+    if ((submission as any).quality_score_backfilled === true) return null;
+    return parseQualityScore((submission as any).quality_score);
+  }
+
+  const qualityFilteredSubmissions = useMemo(() => {
+    if (qualityScoreFilters.length === 0) return currentSubmissions;
+    return currentSubmissions.filter((submission) => {
+      const score = getExplicitSubmissionQualityScoreForFiltering(submission);
+      return qualityScoreFilters.some((filterValue) => {
+        if (filterValue === "unscored") return score === null;
+        return score === filterValue;
+      });
+    });
+  }, [currentSubmissions, qualityScoreFilters]);
+
+  const qualityScoreFilterButtonLabel = useMemo(() => {
+    if (qualityScoreFilters.length === 0) return "All Quality Scores";
+    const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
+      { value: 3, label: "Score 3/3" },
+      { value: 2, label: "Score 2/3" },
+      { value: 1, label: "Score 1/3" },
+      { value: "unscored", label: "No Quality Score" },
+    ];
+    const ordered = labels
+      .filter((l) => qualityScoreFilters.includes(l.value))
+      .map((l) => l.label);
+    return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
+  }, [qualityScoreFilters]);
+
   // Filter submissions based on active status tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
-  const filteredSubmissions = currentSubmissions.filter((submission) => {
+  const filteredSubmissions = qualityFilteredSubmissions.filter((submission) => {
     const status = getStatus(submission);
     const isTwitterTweet = (submission as any).is_twitter_tweet === true;
 
@@ -2744,7 +2790,7 @@ export default function ContestDetailClient({
 
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
-  const filteredAnalyticsSubmissions = currentSubmissions.filter(
+  const filteredAnalyticsSubmissions = qualityFilteredSubmissions.filter(
     (submission) => {
       const status = getStatus(submission);
 
@@ -2785,10 +2831,10 @@ export default function ContestDetailClient({
   const analyticsTabCounts = useMemo(
     () =>
       getAnalyticsTabCounts(
-        currentSubmissions as ContestAnalyticsExportSubmission[],
+        qualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
         (submission) => getStatus(submission as Submission),
       ),
-    [currentSubmissions],
+    [qualityFilteredSubmissions],
   );
 
   const showsAnalyticsExpectedRewardMetrics =
@@ -4260,13 +4306,13 @@ export default function ContestDetailClient({
     currentSubmissions,
   ]);
 
-  /** Full creator submission list for modal (not status-filtered group rows). */
+  /** Creator submission list for modal (respects quality filter; not status-filtered group rows). */
   const creatorModalSubmissions = useMemo(() => {
     if (!selectedCreatorForModal) return [];
-    return (currentSubmissions || []).filter(
+    return (qualityFilteredSubmissions || []).filter(
       (s: any) => s.creator_id === selectedCreatorForModal,
     );
-  }, [selectedCreatorForModal, currentSubmissions]);
+  }, [selectedCreatorForModal, qualityFilteredSubmissions]);
 
   // Creator ranking for Twitter leaderboard campaigns (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
@@ -4909,7 +4955,7 @@ export default function ContestDetailClient({
   useEffect(() => {
     setCurrentPage(1);
     setCreatorWisePage(1);
-  }, [activeStatusTab, viewMode, sortOption]);
+  }, [activeStatusTab, viewMode, sortOption, qualityScoreFilters]);
 
   // Aggregate financial totals for the currently selected status tab (from filtered creator groups)
   const statusFilterFinancialTotals = useMemo(() => {
@@ -8461,8 +8507,8 @@ export default function ContestDetailClient({
         contestType: currentContest?.contest_type,
         postContestStatus: currentContest?.post_contest_status,
         durationDays,
-        totalSubmissionCount: currentSubmissions.length,
-        approvedCount: currentSubmissions.filter((s) => {
+        totalSubmissionCount: qualityFilteredSubmissions.length,
+        approvedCount: qualityFilteredSubmissions.filter((s) => {
           const status = getStatus(s);
           return status === "verified" || status === "paid";
         }).length,
@@ -8477,7 +8523,7 @@ export default function ContestDetailClient({
               ?.total_prize,
           ) || 0,
         allSubmissions:
-          currentSubmissions as ContestAnalyticsExportSubmission[],
+          qualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
         getStatus: (submission) => getStatus(submission as Submission),
         getSubmissionExpectedCents: (submission) =>
           getSubmissionAnalyticsExpectedCents(submission as Submission),
@@ -8493,7 +8539,7 @@ export default function ContestDetailClient({
       currentContest?.platform,
       currentContest?.contest_based_details,
       currentContest?.post_contest_status,
-      currentSubmissions,
+      qualityFilteredSubmissions,
       durationDays,
       isTwitterTextImageContest,
       isTwitterPlatform,
@@ -16385,7 +16431,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {currentSubmissions.length}
+                              {qualityFilteredSubmissions.length}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -16413,7 +16459,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               {
-                                currentSubmissions.filter(
+                                qualityFilteredSubmissions.filter(
                                   (s) => getStatus(s) !== "rejected",
                                 ).length
                               }
@@ -16445,7 +16491,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               {
-                                currentSubmissions.filter((s) => {
+                                qualityFilteredSubmissions.filter((s) => {
                                   const status = getStatus(s);
                                   return (
                                     status === "verified" || status === "paid"
@@ -16479,7 +16525,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               {
-                                currentSubmissions.filter((s) => {
+                                qualityFilteredSubmissions.filter((s) => {
                                   const status = getStatus(s);
                                   return status === "pending";
                                 }).length
@@ -16511,7 +16557,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               {
-                                currentSubmissions.filter((s) => {
+                                qualityFilteredSubmissions.filter((s) => {
                                   const status = getStatus(s);
                                   return status === "verified";
                                 }).length
@@ -16543,7 +16589,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               {
-                                currentSubmissions.filter(
+                                qualityFilteredSubmissions.filter(
                                   (s) => getStatus(s) === "rejected",
                                 ).length
                               }
@@ -16574,7 +16620,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               {
-                                currentSubmissions.filter((s) => {
+                                qualityFilteredSubmissions.filter((s) => {
                                   const status = getStatus(s);
                                   return status === "paid";
                                 }).length
@@ -16959,6 +17005,113 @@ export default function ContestDetailClient({
                               </SelectContent>
                             </Select>
                           </div>
+                          {/* Multi-select Quality Score filter */}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "h-12 w-full sm:w-[220px] rounded-xl justify-start text-left font-semibold text-sm shadow-none",
+                                  isDark
+                                    ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
+                                    : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
+                                )}
+                              >
+                                <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                                <span className="truncate text-sm font-semibold">
+                                  {qualityScoreFilterButtonLabel}
+                                </span>
+                                <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className={cn(
+                                "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+                                isDark ? "bg-[#0f172a]" : "bg-white",
+                              )}
+                              align="start"
+                            >
+                              <div className="flex flex-col gap-1">
+                                <div
+                                  className={cn(
+                                    "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                                  )}
+                                  onClick={() => setQualityScoreFilters([])}
+                                >
+                                  <div
+                                    className={cn(
+                                      "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                      qualityScoreFilters.length === 0
+                                        ? "bg-[#4211a1] border-[#4211a1]"
+                                        : isDark
+                                          ? "border-slate-700 bg-slate-900"
+                                          : "border-slate-300 bg-white",
+                                    )}
+                                  >
+                                    {qualityScoreFilters.length === 0 && (
+                                      <CheckCheck className="w-3 h-3 text-white" strokeWidth={3} />
+                                    )}
+                                  </div>
+                                  <span className={cn(
+                                    "text-[13px] font-medium",
+                                    isDark ? "text-slate-300" : "text-slate-600",
+                                  )}>
+                                    All Quality Scores
+                                  </span>
+                                </div>
+
+                                {(
+                                  [
+                                    { value: 3, label: "Score 3/3" },
+                                    { value: 2, label: "Score 2/3" },
+                                    { value: 1, label: "Score 1/3" },
+                                    { value: "unscored", label: "No Quality Score" },
+                                  ] as Array<{ value: QualityScore | "unscored"; label: string }>
+                                ).map((opt) => {
+                                  const checked = qualityScoreFilters.includes(opt.value);
+                                  return (
+                                    <div
+                                      key={String(opt.value)}
+                                      className={cn(
+                                        "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                        isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                                      )}
+                                      onClick={() => {
+                                        setQualityScoreFilters((prev) =>
+                                          prev.includes(opt.value)
+                                            ? prev.filter((v) => v !== opt.value)
+                                            : [...prev, opt.value],
+                                        );
+                                      }}
+                                    >
+                                      <div
+                                        className={cn(
+                                          "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                          checked
+                                            ? "bg-[#4211a1] border-[#4211a1]"
+                                            : isDark
+                                              ? "border-slate-700 bg-slate-900"
+                                              : "border-slate-300 bg-white",
+                                        )}
+                                      >
+                                        {checked && (
+                                          <CheckCheck className="w-3 h-3 text-white" strokeWidth={3} />
+                                        )}
+                                      </div>
+                                      <span className={cn(
+                                        "text-[13px] font-medium",
+                                        isDark ? "text-slate-300" : "text-slate-600",
+                                      )}>
+                                        {opt.label}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                           {/* YouTube only: customize table columns */}
                           {currentContest.platform
                             ?.toLowerCase()
@@ -24411,31 +24564,160 @@ export default function ContestDetailClient({
               <CardHeader>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <CardTitle className="shrink-0">Campaign Analytics</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentSubmissions.length === 0}
-                    className={cn(
-                      "gap-2 shrink-0",
-                      isDark
-                        ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                        : "border-slate-300 text-slate-700 hover:bg-slate-50",
-                    )}
-                    onClick={() => setAnalyticsExportDialogOpen(true)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download report
-                  </Button>
-                  <ContestAnalyticsExportDialog
-                    open={analyticsExportDialogOpen}
-                    onOpenChange={setAnalyticsExportDialogOpen}
-                    contestTitle={currentContest?.title || "Campaign"}
-                    tabCounts={analyticsTabCounts}
-                    getSnapshotsForTabs={getAnalyticsSnapshotsForTabs}
-                    isDark={isDark}
-                    activeTab={activeAnalyticsTab}
-                    {...reportExportDialogProps}
-                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    {/* Quality Score filter (multi-select) */}
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn(
+                            "h-9 w-full sm:w-[200px] rounded-lg justify-start text-left font-semibold text-sm shadow-none",
+                            isDark
+                              ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
+                              : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
+                          )}
+                        >
+                          <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                          <span className="truncate font-semibold text-sm">
+                            {qualityScoreFilterButtonLabel}
+                          </span>
+                          <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className={cn(
+                          "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+                          isDark ? "bg-[#0f172a]" : "bg-white",
+                        )}
+                        align="end"
+                      >
+                        <div className="flex flex-col gap-1">
+                          <div
+                            className={cn(
+                              "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                              isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                            )}
+                            onClick={() => setQualityScoreFilters([])}
+                          >
+                            <div
+                              className={cn(
+                                "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                qualityScoreFilters.length === 0
+                                  ? "bg-[#4211a1] border-[#4211a1]"
+                                  : isDark
+                                    ? "border-slate-700 bg-slate-900"
+                                    : "border-slate-300 bg-white",
+                              )}
+                            >
+                              {qualityScoreFilters.length === 0 && (
+                                <CheckCheck
+                                  className="w-3 h-3 text-white"
+                                  strokeWidth={3}
+                                />
+                              )}
+                            </div>
+                            <span
+                              className={cn(
+                                "text-sm font-semibold",
+                                isDark ? "text-slate-300" : "text-slate-700",
+                              )}
+                            >
+                              All Quality Scores
+                            </span>
+                          </div>
+
+                          {(
+                            [
+                              { value: 3, label: "Score 3/3" },
+                              { value: 2, label: "Score 2/3" },
+                              { value: 1, label: "Score 1/3" },
+                              {
+                                value: "unscored",
+                                label: "No Quality Score",
+                              },
+                            ] as Array<{
+                              value: QualityScore | "unscored";
+                              label: string;
+                            }>
+                          ).map((opt) => {
+                            const checked = qualityScoreFilters.includes(
+                              opt.value,
+                            );
+                            return (
+                              <div
+                                key={String(opt.value)}
+                                className={cn(
+                                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                  isDark
+                                    ? "hover:bg-slate-800"
+                                    : "hover:bg-slate-50",
+                                )}
+                                onClick={() => {
+                                  setQualityScoreFilters((prev) =>
+                                    prev.includes(opt.value)
+                                      ? prev.filter((v) => v !== opt.value)
+                                      : [...prev, opt.value],
+                                  );
+                                }}
+                              >
+                                <div
+                                  className={cn(
+                                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                    checked
+                                      ? "bg-[#4211a1] border-[#4211a1]"
+                                      : isDark
+                                        ? "border-slate-700 bg-slate-900"
+                                        : "border-slate-300 bg-white",
+                                  )}
+                                >
+                                  {checked && (
+                                    <CheckCheck
+                                      className="w-3 h-3 text-white"
+                                      strokeWidth={3}
+                                    />
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark ? "text-slate-300" : "text-slate-700",
+                                  )}
+                                >
+                                  {opt.label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={qualityFilteredSubmissions.length === 0}
+                      className={cn(
+                        "gap-2 shrink-0",
+                        isDark
+                          ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                          : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                      )}
+                      onClick={() => setAnalyticsExportDialogOpen(true)}
+                    >
+                      <Download className="h-4 w-4" />
+                      Download report
+                    </Button>
+                    <ContestAnalyticsExportDialog
+                      open={analyticsExportDialogOpen}
+                      onOpenChange={setAnalyticsExportDialogOpen}
+                      contestTitle={currentContest?.title || "Campaign"}
+                      tabCounts={analyticsTabCounts}
+                      getSnapshotsForTabs={getAnalyticsSnapshotsForTabs}
+                      isDark={isDark}
+                      activeTab={activeAnalyticsTab}
+                      {...reportExportDialogProps}
+                    />
+                  </div>
                 </div>
                 {/* Analytics Filter Tabs */}
                 <div className="mt-4">
@@ -24456,7 +24738,7 @@ export default function ContestDetailClient({
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
-                        All ({currentSubmissions?.length || 0})
+                        All ({qualityFilteredSubmissions.length || 0})
                       </TabsTrigger>
                       <TabsTrigger
                         value="not_rejected"
@@ -24468,7 +24750,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Not Rejected (
-                        {currentSubmissions?.filter(
+                        {qualityFilteredSubmissions.filter(
                           (s) => getStatus(s) !== "rejected",
                         ).length || 0}
                         )
@@ -24483,8 +24765,8 @@ export default function ContestDetailClient({
                         )}
                       >
                         Verified (
-                        {currentSubmissions?.filter(
-                          (s) => s.status === "verified",
+                        {qualityFilteredSubmissions.filter(
+                          (s) => getStatus(s) === "verified",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -24498,8 +24780,9 @@ export default function ContestDetailClient({
                         )}
                       >
                         Paid (
-                        {currentSubmissions?.filter((s) => s.status === "paid")
-                          .length || 0}
+                        {qualityFilteredSubmissions.filter(
+                          (s) => getStatus(s) === "paid",
+                        ).length || 0}
                         )
                       </TabsTrigger>
                       <TabsTrigger
@@ -24512,8 +24795,8 @@ export default function ContestDetailClient({
                         )}
                       >
                         Pending (
-                        {currentSubmissions?.filter(
-                          (s) => s.status === "pending",
+                        {qualityFilteredSubmissions.filter(
+                          (s) => getStatus(s) === "pending",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -24527,8 +24810,8 @@ export default function ContestDetailClient({
                         )}
                       >
                         Rejected (
-                        {currentSubmissions?.filter(
-                          (s) => s.status === "rejected",
+                        {qualityFilteredSubmissions.filter(
+                          (s) => getStatus(s) === "rejected",
                         ).length || 0}
                         )
                       </TabsTrigger>
@@ -24542,8 +24825,10 @@ export default function ContestDetailClient({
                         )}
                       >
                         Verified/Paid (
-                        {currentSubmissions?.filter(
-                          (s) => s.status === "verified" || s.status === "paid",
+                        {qualityFilteredSubmissions.filter(
+                          (s) =>
+                            getStatus(s) === "verified" ||
+                            getStatus(s) === "paid",
                         ).length || 0}
                         )
                       </TabsTrigger>
