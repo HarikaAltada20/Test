@@ -2054,6 +2054,13 @@ export default function ContestDetailClient({
     setSortOption(isTwitterTextImageContest ? "points_desc" : "views_desc");
   }, [currentContest?.id, isTwitterTextImageContest]);
 
+  // Quality score filtering only applies to video campaigns (not Twitter/X text-image).
+  useEffect(() => {
+    if (!showNormalViewQualityScoreColumn) {
+      setQualityScoreFilters([]);
+    }
+  }, [showNormalViewQualityScoreColumn, currentContest?.id]);
+
   // Creator-wise view + optional inline video playback (Detailed View checkbox)
   const [viewMode, setViewMode] = useState<"normal" | "creator-wise">("normal");
   const [detailedViewEnabled, setDetailedViewEnabled] = useState(false);
@@ -17005,7 +17012,8 @@ export default function ContestDetailClient({
                               </SelectContent>
                             </Select>
                           </div>
-                          {/* Multi-select Quality Score filter */}
+                          {/* Multi-select Quality Score filter (video campaigns only) */}
+                          {showNormalViewQualityScoreColumn && (
                           <Popover>
                             <PopoverTrigger asChild>
                               <Button
@@ -17112,6 +17120,7 @@ export default function ContestDetailClient({
                               </div>
                             </PopoverContent>
                           </Popover>
+                          )}
                           {/* YouTube only: customize table columns */}
                           {currentContest.platform
                             ?.toLowerCase()
@@ -24565,7 +24574,8 @@ export default function ContestDetailClient({
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <CardTitle className="shrink-0">Campaign Analytics</CardTitle>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                    {/* Quality Score filter (multi-select) */}
+                    {/* Quality Score filter (multi-select, video campaigns only) */}
+                    {showNormalViewQualityScoreColumn && (
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
@@ -24692,6 +24702,7 @@ export default function ContestDetailClient({
                         </div>
                       </PopoverContent>
                     </Popover>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
