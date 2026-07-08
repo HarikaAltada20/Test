@@ -159,6 +159,42 @@ function matchesQualityScoreFilters(
   });
 }
 
+function isVideoCampaignSubmission(submission: SubmissionWithContest): boolean {
+  const contest = submission.contests;
+  const platform = (contest?.platform || submission.platform || "").toLowerCase();
+  const isTwitterTextImage =
+    (platform === "twitter" || platform === "x") &&
+    (contest as { contest_format?: string | null } | null)?.contest_format ===
+      "text_image";
+  return !isTwitterTextImage;
+}
+
+function getBestExplicitQualityScoreInGroup(
+  submissions: SubmissionWithContest[],
+): number | null {
+  let best: number | null = null;
+  for (const sub of submissions) {
+    const score = getExplicitSubmissionQualityScore(sub);
+    if (score !== null && (best === null || score > best)) {
+      best = score;
+    }
+  }
+  return best;
+}
+
+function compareGroupQualityScores(
+  a: SubmissionWithContest[],
+  b: SubmissionWithContest[],
+  direction: "high" | "low",
+): number {
+  const scoreA = getBestExplicitQualityScoreInGroup(a);
+  const scoreB = getBestExplicitQualityScoreInGroup(b);
+  if (scoreA === null && scoreB === null) return 0;
+  if (scoreA === null) return 1;
+  if (scoreB === null) return -1;
+  return direction === "high" ? scoreB - scoreA : scoreA - scoreB;
+}
+
 /**
  * Smart Lock Action Buttons - Enterprise Interaction
  * - Expands on hover (160px)
@@ -873,6 +909,17 @@ export default function SubmissionsClient({
     return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
   }, [qualityScoreFilters]);
 
+  const showQualityScoreFilter = useMemo(
+    () => allSubmissions.some(isVideoCampaignSubmission),
+    [allSubmissions],
+  );
+
+  useEffect(() => {
+    if (!showQualityScoreFilter) {
+      setQualityScoreFilters([]);
+    }
+  }, [showQualityScoreFilter]);
+
   const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
   const filterDisplayInfo: Record<
@@ -1200,6 +1247,10 @@ export default function SubmissionsClient({
           return b.totalViews - a.totalViews;
         case "views_low":
           return a.totalViews - b.totalViews;
+        case "quality_high":
+          return compareGroupQualityScores(a.submissions, b.submissions, "high");
+        case "quality_low":
+          return compareGroupQualityScores(a.submissions, b.submissions, "low");
         case "oldest": {
           const earliestA = Math.min(...a.submissions.map((s) => new Date(s.created_at).getTime()));
           const earliestB = Math.min(...b.submissions.map((s) => new Date(s.created_at).getTime()));
@@ -2478,6 +2529,7 @@ export default function SubmissionsClient({
           </SelectContent>
         </Select>
 
+        {showQualityScoreFilter && (
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -2587,6 +2639,7 @@ export default function SubmissionsClient({
             </div>
           </PopoverContent>
         </Popover>
+        )}
 
         <div className="flex items-center gap-2">
           <Select

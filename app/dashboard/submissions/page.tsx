@@ -71,7 +71,7 @@ export default async function SubmissionsPage() {
       // 1. Fetch Contest basic data
       const { data: fetchedContests, error: contestsError } = await supabase
         .from("contests")
-        .select("id, title, contest_type, contest_based_details, bonus_details, end_date, post_contest_status, thumbnail_url, platform, advertiser_id")
+        .select("id, title, contest_type, contest_format, contest_based_details, bonus_details, end_date, post_contest_status, thumbnail_url, platform, advertiser_id")
         .in("id", contestIds);
 
       if (contestsError) {
@@ -123,7 +123,7 @@ export default async function SubmissionsPage() {
   const { data: creatorProfile } = await supabase
     .from("creator_profiles")
     .select(
-      "trust_score_metrics, avg_quality_score, best_quality_score, quality_score_sum, total_money_won, total_views, has_explicit_quality_scores",
+      "trust_score_metrics, avg_quality_score, best_quality_score, quality_score_sum, total_money_won, total_views",
     )
     .eq("id", user.id)
     .maybeSingle();

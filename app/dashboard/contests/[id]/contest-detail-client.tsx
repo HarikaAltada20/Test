@@ -2311,6 +2311,21 @@ export default function ContestDetailClient({
     return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
   }, [qualityScoreFilters]);
 
+  const displayTabs = useMemo(
+    () => [
+      { id: "overview", label: "Overview" },
+      {
+        id: "submissions",
+        label: `Submissions (${qualityFilteredSubmissions.length})`,
+      },
+      ...(contest?.platform?.toLowerCase() === "twitter"
+        ? [{ id: "twitter-feed", label: "Twitter Feed" }]
+        : []),
+      { id: "analytics", label: "Analytics" },
+    ],
+    [qualityFilteredSubmissions.length, contest?.platform],
+  );
+
   // Filter submissions based on active status tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
   const filteredSubmissions = qualityFilteredSubmissions.filter((submission) => {
@@ -4963,6 +4978,11 @@ export default function ContestDetailClient({
     setCurrentPage(1);
     setCreatorWisePage(1);
   }, [activeStatusTab, viewMode, sortOption, qualityScoreFilters]);
+
+  // Drop hidden bulk selections when the quality filter changes
+  useEffect(() => {
+    setNormalViewSelectedSubmissions(new Set());
+  }, [qualityScoreFilters]);
 
   // Aggregate financial totals for the currently selected status tab (from filtered creator groups)
   const statusFilterFinancialTotals = useMemo(() => {
@@ -11105,7 +11125,7 @@ export default function ContestDetailClient({
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList> */}
       <EnhancedTabs
-        tabs={tabs}
+        tabs={displayTabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         className="mt-12 mb-6"
@@ -26120,7 +26140,7 @@ export default function ContestDetailClient({
                       >
                         <p className="text-lg font-medium">Total Submissions</p>
                         <p className="text-xl font-bold">
-                          {currentSubmissions?.length || 0}
+                          {qualityFilteredSubmissions.length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
@@ -26155,10 +26175,10 @@ export default function ContestDetailClient({
                         <p className="text-lg font-medium">Approved Content</p>
                         <p className="text-xl font-bold">
                           {" "}
-                          {currentSubmissions?.filter(
-                            (s) =>
-                              s.status === "verified" || s.status === "paid",
-                          ).length || 0}
+                          {qualityFilteredSubmissions.filter((s) => {
+                            const status = getStatus(s);
+                            return status === "verified" || status === "paid";
+                          }).length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
