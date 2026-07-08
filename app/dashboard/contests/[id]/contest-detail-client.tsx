@@ -2021,11 +2021,13 @@ export default function ContestDetailClient({
     "all" | "eligible" | "not_eligible"
   >("all");
 
-  // Multi-select Quality Score filter (S1/S2/S3 + "unscored") for submissions + analytics.
-  // Empty array means "All Quality Scores".
-  const [qualityScoreFilters, setQualityScoreFilters] = useState<
-    Array<QualityScore | "unscored">
-  >([]);
+  // Multi-select Quality Score filter (S1/S2/S3 + "unscored").
+  // Keep Submissions vs Analytics filters separate so changing one doesn't
+  // implicitly filter the other tab.
+  const [submissionQualityScoreFilters, setSubmissionQualityScoreFilters] =
+    useState<Array<QualityScore | "unscored">>([]);
+  const [analyticsQualityScoreFilters, setAnalyticsQualityScoreFilters] =
+    useState<Array<QualityScore | "unscored">>([]);
 
   type SortOption =
     | "views_desc"
@@ -2057,7 +2059,8 @@ export default function ContestDetailClient({
   // Quality score filtering only applies to video campaigns (not Twitter/X text-image).
   useEffect(() => {
     if (!showNormalViewQualityScoreColumn) {
-      setQualityScoreFilters([]);
+      setSubmissionQualityScoreFilters([]);
+      setAnalyticsQualityScoreFilters([]);
     }
   }, [showNormalViewQualityScoreColumn, currentContest?.id]);
 
@@ -2287,18 +2290,18 @@ export default function ContestDetailClient({
   }
 
   const qualityFilteredSubmissions = useMemo(() => {
-    if (qualityScoreFilters.length === 0) return currentSubmissions;
+    if (submissionQualityScoreFilters.length === 0) return currentSubmissions;
     return currentSubmissions.filter((submission) => {
       const score = getExplicitSubmissionQualityScoreForFiltering(submission);
-      return qualityScoreFilters.some((filterValue) => {
+      return submissionQualityScoreFilters.some((filterValue) => {
         if (filterValue === "unscored") return score === null;
         return score === filterValue;
       });
     });
-  }, [currentSubmissions, qualityScoreFilters]);
+  }, [currentSubmissions, submissionQualityScoreFilters]);
 
-  const qualityScoreFilterButtonLabel = useMemo(() => {
-    if (qualityScoreFilters.length === 0) return "All Quality Scores";
+  const submissionQualityScoreFilterButtonLabel = useMemo(() => {
+    if (submissionQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
       { value: 3, label: "Score 3/3" },
       { value: 2, label: "Score 2/3" },
@@ -2306,10 +2309,35 @@ export default function ContestDetailClient({
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
-      .filter((l) => qualityScoreFilters.includes(l.value))
+      .filter((l) => submissionQualityScoreFilters.includes(l.value))
       .map((l) => l.label);
     return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
-  }, [qualityScoreFilters]);
+  }, [submissionQualityScoreFilters]);
+
+  const analyticsQualityFilteredSubmissions = useMemo(() => {
+    if (analyticsQualityScoreFilters.length === 0) return currentSubmissions;
+    return currentSubmissions.filter((submission) => {
+      const score = getExplicitSubmissionQualityScoreForFiltering(submission);
+      return analyticsQualityScoreFilters.some((filterValue) => {
+        if (filterValue === "unscored") return score === null;
+        return score === filterValue;
+      });
+    });
+  }, [currentSubmissions, analyticsQualityScoreFilters]);
+
+  const analyticsQualityScoreFilterButtonLabel = useMemo(() => {
+    if (analyticsQualityScoreFilters.length === 0) return "All Quality Scores";
+    const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
+      { value: 3, label: "Score 3/3" },
+      { value: 2, label: "Score 2/3" },
+      { value: 1, label: "Score 1/3" },
+      { value: "unscored", label: "No Quality Score" },
+    ];
+    const ordered = labels
+      .filter((l) => analyticsQualityScoreFilters.includes(l.value))
+      .map((l) => l.label);
+    return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
+  }, [analyticsQualityScoreFilters]);
 
   const displayTabs = useMemo(
     () => [
@@ -2812,8 +2840,8 @@ export default function ContestDetailClient({
 
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
-  const filteredAnalyticsSubmissions = qualityFilteredSubmissions.filter(
-    (submission) => {
+  const filteredAnalyticsSubmissions =
+    analyticsQualityFilteredSubmissions.filter((submission) => {
       const status = getStatus(submission);
 
       if (activeAnalyticsTab === "all") return true;
@@ -2822,8 +2850,7 @@ export default function ContestDetailClient({
         return status === "verified" || status === "paid";
       }
       return status === activeAnalyticsTab;
-    },
-  );
+    });
 
   const analyticsTopSubmissionBars = useMemo(
     () =>
@@ -2853,10 +2880,10 @@ export default function ContestDetailClient({
   const analyticsTabCounts = useMemo(
     () =>
       getAnalyticsTabCounts(
-        qualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
+        analyticsQualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
         (submission) => getStatus(submission as Submission),
       ),
-    [qualityFilteredSubmissions],
+    [analyticsQualityFilteredSubmissions],
   );
 
   const showsAnalyticsExpectedRewardMetrics =
@@ -4977,12 +5004,12 @@ export default function ContestDetailClient({
   useEffect(() => {
     setCurrentPage(1);
     setCreatorWisePage(1);
-  }, [activeStatusTab, viewMode, sortOption, qualityScoreFilters]);
+  }, [activeStatusTab, viewMode, sortOption, submissionQualityScoreFilters]);
 
   // Drop hidden bulk selections when the quality filter changes
   useEffect(() => {
     setNormalViewSelectedSubmissions(new Set());
-  }, [qualityScoreFilters]);
+  }, [submissionQualityScoreFilters]);
 
   // Aggregate financial totals for the currently selected status tab (from filtered creator groups)
   const statusFilterFinancialTotals = useMemo(() => {
@@ -8534,8 +8561,8 @@ export default function ContestDetailClient({
         contestType: currentContest?.contest_type,
         postContestStatus: currentContest?.post_contest_status,
         durationDays,
-        totalSubmissionCount: qualityFilteredSubmissions.length,
-        approvedCount: qualityFilteredSubmissions.filter((s) => {
+        totalSubmissionCount: analyticsQualityFilteredSubmissions.length,
+        approvedCount: analyticsQualityFilteredSubmissions.filter((s) => {
           const status = getStatus(s);
           return status === "verified" || status === "paid";
         }).length,
@@ -8550,7 +8577,7 @@ export default function ContestDetailClient({
               ?.total_prize,
           ) || 0,
         allSubmissions:
-          qualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
+          analyticsQualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
         getStatus: (submission) => getStatus(submission as Submission),
         getSubmissionExpectedCents: (submission) =>
           getSubmissionAnalyticsExpectedCents(submission as Submission),
@@ -8566,7 +8593,7 @@ export default function ContestDetailClient({
       currentContest?.platform,
       currentContest?.contest_based_details,
       currentContest?.post_contest_status,
-      qualityFilteredSubmissions,
+      analyticsQualityFilteredSubmissions,
       durationDays,
       isTwitterTextImageContest,
       isTwitterPlatform,
@@ -17048,7 +17075,7 @@ export default function ContestDetailClient({
                               >
                                 <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
                                 <span className="truncate text-sm font-semibold">
-                                  {qualityScoreFilterButtonLabel}
+                                  {submissionQualityScoreFilterButtonLabel}
                                 </span>
                                 <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
                               </Button>
@@ -17066,19 +17093,21 @@ export default function ContestDetailClient({
                                     "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
                                     isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
                                   )}
-                                  onClick={() => setQualityScoreFilters([])}
+                                  onClick={() =>
+                                    setSubmissionQualityScoreFilters([])
+                                  }
                                 >
                                   <div
                                     className={cn(
                                       "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                      qualityScoreFilters.length === 0
+                                      submissionQualityScoreFilters.length === 0
                                         ? "bg-[#4211a1] border-[#4211a1]"
                                         : isDark
                                           ? "border-slate-700 bg-slate-900"
                                           : "border-slate-300 bg-white",
                                     )}
                                   >
-                                    {qualityScoreFilters.length === 0 && (
+                                    {submissionQualityScoreFilters.length === 0 && (
                                       <CheckCheck className="w-3 h-3 text-white" strokeWidth={3} />
                                     )}
                                   </div>
@@ -17098,7 +17127,7 @@ export default function ContestDetailClient({
                                     { value: "unscored", label: "No Quality Score" },
                                   ] as Array<{ value: QualityScore | "unscored"; label: string }>
                                 ).map((opt) => {
-                                  const checked = qualityScoreFilters.includes(opt.value);
+                                  const checked = submissionQualityScoreFilters.includes(opt.value);
                                   return (
                                     <div
                                       key={String(opt.value)}
@@ -17107,7 +17136,7 @@ export default function ContestDetailClient({
                                         isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
                                       )}
                                       onClick={() => {
-                                        setQualityScoreFilters((prev) =>
+                                        setSubmissionQualityScoreFilters((prev) =>
                                           prev.includes(opt.value)
                                             ? prev.filter((v) => v !== opt.value)
                                             : [...prev, opt.value],
@@ -24610,7 +24639,7 @@ export default function ContestDetailClient({
                         >
                           <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
                           <span className="truncate font-semibold text-sm">
-                            {qualityScoreFilterButtonLabel}
+                            {analyticsQualityScoreFilterButtonLabel}
                           </span>
                           <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
                         </Button>
@@ -24628,19 +24657,21 @@ export default function ContestDetailClient({
                               "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
                               isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
                             )}
-                            onClick={() => setQualityScoreFilters([])}
+                            onClick={() =>
+                              setAnalyticsQualityScoreFilters([])
+                            }
                           >
                             <div
                               className={cn(
                                 "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                qualityScoreFilters.length === 0
+                                analyticsQualityScoreFilters.length === 0
                                   ? "bg-[#4211a1] border-[#4211a1]"
                                   : isDark
                                     ? "border-slate-700 bg-slate-900"
                                     : "border-slate-300 bg-white",
                               )}
                             >
-                              {qualityScoreFilters.length === 0 && (
+                              {analyticsQualityScoreFilters.length === 0 && (
                                 <CheckCheck
                                   className="w-3 h-3 text-white"
                                   strokeWidth={3}
@@ -24671,7 +24702,7 @@ export default function ContestDetailClient({
                               label: string;
                             }>
                           ).map((opt) => {
-                            const checked = qualityScoreFilters.includes(
+                            const checked = analyticsQualityScoreFilters.includes(
                               opt.value,
                             );
                             return (
@@ -24684,7 +24715,7 @@ export default function ContestDetailClient({
                                     : "hover:bg-slate-50",
                                 )}
                                 onClick={() => {
-                                  setQualityScoreFilters((prev) =>
+                                  setAnalyticsQualityScoreFilters((prev) =>
                                     prev.includes(opt.value)
                                       ? prev.filter((v) => v !== opt.value)
                                       : [...prev, opt.value],
@@ -24726,7 +24757,7 @@ export default function ContestDetailClient({
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={qualityFilteredSubmissions.length === 0}
+                      disabled={analyticsQualityFilteredSubmissions.length === 0}
                       className={cn(
                         "gap-2 shrink-0",
                         isDark
@@ -24769,7 +24800,7 @@ export default function ContestDetailClient({
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
-                        All ({qualityFilteredSubmissions.length || 0})
+                        All ({analyticsQualityFilteredSubmissions.length || 0})
                       </TabsTrigger>
                       <TabsTrigger
                         value="not_rejected"
@@ -24781,7 +24812,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Not Rejected (
-                        {qualityFilteredSubmissions.filter(
+                        {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) !== "rejected",
                         ).length || 0}
                         )
@@ -24796,7 +24827,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Verified (
-                        {qualityFilteredSubmissions.filter(
+                        {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "verified",
                         ).length || 0}
                         )
@@ -24811,7 +24842,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Paid (
-                        {qualityFilteredSubmissions.filter(
+                        {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "paid",
                         ).length || 0}
                         )
@@ -24826,7 +24857,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Pending (
-                        {qualityFilteredSubmissions.filter(
+                        {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "pending",
                         ).length || 0}
                         )
@@ -24841,7 +24872,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Rejected (
-                        {qualityFilteredSubmissions.filter(
+                        {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "rejected",
                         ).length || 0}
                         )
@@ -24856,7 +24887,7 @@ export default function ContestDetailClient({
                         )}
                       >
                         Verified/Paid (
-                        {qualityFilteredSubmissions.filter(
+                        {analyticsQualityFilteredSubmissions.filter(
                           (s) =>
                             getStatus(s) === "verified" ||
                             getStatus(s) === "paid",
@@ -26140,7 +26171,7 @@ export default function ContestDetailClient({
                       >
                         <p className="text-lg font-medium">Total Submissions</p>
                         <p className="text-xl font-bold">
-                          {qualityFilteredSubmissions.length || 0}
+                          {analyticsQualityFilteredSubmissions.length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
@@ -26175,7 +26206,7 @@ export default function ContestDetailClient({
                         <p className="text-lg font-medium">Approved Content</p>
                         <p className="text-xl font-bold">
                           {" "}
-                          {qualityFilteredSubmissions.filter((s) => {
+                          {analyticsQualityFilteredSubmissions.filter((s) => {
                             const status = getStatus(s);
                             return status === "verified" || status === "paid";
                           }).length || 0}

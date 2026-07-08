@@ -351,6 +351,10 @@ export default function SubmissionsClient({
     useState<SubmissionWithContest[]>(initialSubmissions);
   const [filteredSubmissions, setFilteredSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
+  // Used for analytics/statistics cards. Intentionally ignores Quality Score filter
+  // so selecting a Quality Score in the Submissions table doesn't filter analytics.
+  const [analyticsFilteredSubmissions, setAnalyticsFilteredSubmissions] =
+    useState<SubmissionWithContest[]>(initialSubmissions);
 
   const [contestTypeFilter, setContestTypeFilter] = useState<string[]>([
     "leaderboard",
@@ -951,6 +955,7 @@ export default function SubmissionsClient({
   useEffect(() => {
     setAllSubmissions(initialSubmissions);
     setFilteredSubmissions(initialSubmissions);
+    setAnalyticsFilteredSubmissions(initialSubmissions);
   }, [initialSubmissions]);
 
 
@@ -1127,6 +1132,10 @@ export default function SubmissionsClient({
       }
     }
 
+    // Analytics should reflect the same filters (status/search/date/type/platform)
+    // but NOT be affected by the Quality Score filter used in the Submissions list.
+    const submissionsForAnalytics = [...submissions];
+
     if (qualityScoreFilters.length > 0) {
       submissions = submissions.filter((sub) =>
         matchesQualityScoreFilters(sub, qualityScoreFilters),
@@ -1170,6 +1179,7 @@ export default function SubmissionsClient({
       return 0;
     });
 
+    setAnalyticsFilteredSubmissions(submissionsForAnalytics);
     setFilteredSubmissions(submissions);
   }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters]);
 
@@ -1268,12 +1278,17 @@ export default function SubmissionsClient({
   }, [filteredSubmissions, sortOrder]);
 
   const stats = useMemo(() => {
-    const contests = new Set(filteredSubmissions.map(s => s.contest_id).filter(Boolean));
-    const totalViews = filteredSubmissions.reduce((sum, s) => sum + (s.views || 0), 0);
+    const contests = new Set(
+      analyticsFilteredSubmissions.map((s) => s.contest_id).filter(Boolean),
+    );
+    const totalViews = analyticsFilteredSubmissions.reduce(
+      (sum, s) => sum + (s.views || 0),
+      0,
+    );
 
     // Cash Earned: only submissions with status "paid"; use submission.earnings (cents).
     // post_contest_status may be verification_complete or payouts_processed — both allowed.
-    const totalEarnings = filteredSubmissions.reduce((sum, s) => {
+    const totalEarnings = analyticsFilteredSubmissions.reduce((sum, s) => {
       const subStatus = (s.status as string || "").toLowerCase();
       if (subStatus !== "paid") return sum;
       return sum + (Number((s as any).earnings) || 0);
@@ -1281,7 +1296,7 @@ export default function SubmissionsClient({
 
     // Bonus Earned: only submissions with status "paid"; use submission.bonus_amount (cents).
     // post_contest_status may be verification_complete or payouts_processed — both allowed.
-    const totalBonus = filteredSubmissions.reduce((sum, s) => {
+    const totalBonus = analyticsFilteredSubmissions.reduce((sum, s) => {
       const subStatus = (s.status as string || "").toLowerCase();
       if (subStatus !== "paid") return sum;
       return sum + (Number((s as any).bonus_amount) || 0);
@@ -1289,7 +1304,7 @@ export default function SubmissionsClient({
 
     // Estimated earnings: for submissions NOT paid and NOT in payouts_processed contests.
     // EXCLUDES rejected and paid — only pending/verified (not yet paid) count as "estimated".
-    const estimatedEarnings = filteredSubmissions.reduce((sum, s) => {
+    const estimatedEarnings = analyticsFilteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
       const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
@@ -1310,7 +1325,7 @@ export default function SubmissionsClient({
 
     // Estimated bonus: for submissions NOT paid and NOT in payouts_processed contests.
     // EXCLUDES paid — only pending/verified (not yet paid) count as "estimated".
-    const estimatedBonus = filteredSubmissions.reduce((sum, s) => {
+    const estimatedBonus = analyticsFilteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
       const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
@@ -1330,7 +1345,7 @@ export default function SubmissionsClient({
       estimatedEarnings,
       estimatedBonus,
     };
-  }, [filteredSubmissions]);
+  }, [analyticsFilteredSubmissions]);
 
 
 
