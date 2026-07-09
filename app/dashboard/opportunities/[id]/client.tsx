@@ -4492,7 +4492,7 @@ export function ContestClientPage({
                               </h3>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-3">
+                            <div className="grid grid-cols-1 gap-3 min-w-0">
                               {(
                                 contest.contest_based_details.milestone_contest
                                   .milestones || []
@@ -4502,78 +4502,87 @@ export function ContestClientPage({
                                   <div
                                     key={`${milestone.order}-${index}`}
                                     className={cn(
-                                      "rounded-lg border p-4 flex items-center justify-between",
+                                      "rounded-lg border p-4 min-w-0",
                                       isDark
                                         ? "bg-[#170337] border-gray-600"
                                         : "bg-slate-50 border-slate-200",
                                     )}
                                   >
-                                    <div>
-                                      <div
-                                        className={cn(
-                                          "text-xs font-semibold uppercase tracking-wide",
-                                          isDark
-                                            ? "text-purple-300"
-                                            : "text-purple-700",
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+                                      <div className="min-w-0 flex-1">
+                                        <div
+                                          className={cn(
+                                            "text-xs font-semibold uppercase tracking-wide",
+                                            isDark
+                                              ? "text-purple-300"
+                                              : "text-purple-700",
+                                          )}
+                                        >
+                                          Milestone {index + 1}
+                                        </div>
+                                        <div
+                                          className={cn(
+                                            "text-lg sm:text-xl font-bold break-words",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-slate-900",
+                                          )}
+                                        >
+                                          {milestone.target_views?.toLocaleString?.() ||
+                                            0}{" "}
+                                          Views
+                                        </div>
+                                        {milestone.winner_limit != null && (
+                                          (() => {
+                                            const reachedCount = milestoneDerivedData.winnerCountsByMilestone?.get(
+                                              `${Number(milestone.order || 0)}:${Number(milestone.target_views || 0)}`,
+                                            ) || 0;
+                                            const isFull = reachedCount >= Number(milestone.winner_limit);
+                                            return (
+                                              <div
+                                                className={cn(
+                                                  "text-xs mt-1 font-semibold",
+                                                  isFull
+                                                    ? "text-red-500 dark:text-red-400"
+                                                    : "text-green-600 dark:text-green-400",
+                                                )}
+                                              >
+                                                Winner limit: {reachedCount} / {milestone.winner_limit}
+                                              </div>
+                                            );
+                                          })()
                                         )}
-                                      >
-                                        Milestone {index + 1}
                                       </div>
                                       <div
                                         className={cn(
-                                          "text-lg font-bold",
+                                          "flex items-center justify-between sm:block sm:text-right shrink-0 w-full sm:w-auto border-t pt-3 sm:border-t-0 sm:pt-0",
                                           isDark
-                                            ? "text-white"
-                                            : "text-slate-900",
+                                            ? "border-gray-600"
+                                            : "border-slate-200",
                                         )}
                                       >
-                                        {milestone.target_views?.toLocaleString?.() ||
-                                          0}{" "}
-                                        Views
-                                      </div>
-                                      {milestone.winner_limit != null && (
-                                        (() => {
-                                          const reachedCount = milestoneDerivedData.winnerCountsByMilestone?.get(
-                                            `${Number(milestone.order || 0)}:${Number(milestone.target_views || 0)}`,
-                                          ) || 0;
-                                          const isFull = reachedCount >= Number(milestone.winner_limit);
-                                          return (
-                                            <div
-                                              className={cn(
-                                                "text-xs mt-1 font-semibold",
-                                                isFull
-                                                  ? "text-red-500 dark:text-red-400"
-                                                  : "text-green-600 dark:text-green-400",
-                                              )}
-                                            >
-                                              Winner limit: {reachedCount} / {milestone.winner_limit}
-                                            </div>
-                                          );
-                                        })()
-                                      )}
-                                    </div>
-                                    <div className="text-right">
-                                      <div
-                                        className={cn(
-                                          "text-xs",
-                                          isDark
-                                            ? "text-gray-300"
-                                            : "text-slate-500",
-                                        )}
-                                      >
-                                        Payout
-                                      </div>
-                                      <div
-                                        className={cn(
-                                          "text-xl font-bold",
-                                          isDark
-                                            ? "text-green-400"
-                                            : "text-green-700",
-                                        )}
-                                      >
-                                        {formatMoney(
-                                          milestone.payout_cents || 0,
-                                        )}
+                                        <div
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-slate-500",
+                                          )}
+                                        >
+                                          Payout
+                                        </div>
+                                        <div
+                                          className={cn(
+                                            "text-lg sm:text-xl font-bold",
+                                            isDark
+                                              ? "text-green-400"
+                                              : "text-green-700",
+                                          )}
+                                        >
+                                          {formatMoney(
+                                            milestone.payout_cents || 0,
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   </div>

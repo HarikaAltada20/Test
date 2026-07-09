@@ -11191,7 +11191,7 @@ export default function ContestDetailClient({
             </div>
             <div
               className={cn(
-                "p-4 bg-white rounded-b-xl shadow-xl",
+                "p-4 bg-white rounded-b-xl shadow-xl min-w-0 overflow-x-hidden",
                 isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
@@ -11796,7 +11796,7 @@ export default function ContestDetailClient({
                           </Badge> */}
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 gap-4 min-w-0">
                           {(
                             currentContest.contest_based_details
                               .milestone_contest.milestones || []
@@ -11806,7 +11806,7 @@ export default function ContestDetailClient({
                               <div
                                 key={index}
                                 className={cn(
-                                  "relative overflow-hidden rounded-xl border transition-all duration-300 group",
+                                  "relative overflow-hidden rounded-xl border transition-all duration-300 group min-w-0",
                                   isDark
                                     ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
                                     : "bg-white border-gray-200 hover:border-purple-400 font-bold",
@@ -11815,92 +11815,101 @@ export default function ContestDetailClient({
                                 {/* Glassmorphism background effect */}
                                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                                <CardContent className="p-5 flex items-center justify-between relative z-10">
-                                  <div className="flex items-center gap-5">
-                                    <div
-                                      className={cn(
-                                        "w-12 h-12 flex items-center justify-center rounded-2xl shadow-inner",
-                                        isDark
-                                          ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
-                                          : "bg-purple-50 text-purple-600 border border-purple-100",
-                                      )}
-                                    >
-                                      <Zap className="h-6 w-6" />
-                                    </div>
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <p
-                                          className={cn(
-                                            "text-sm font-semibold uppercase tracking-wider",
-                                            isDark
-                                              ? "text-purple-400"
-                                              : "text-purple-600",
-                                          )}
-                                        >
-                                          Milestone {index + 1}
-                                        </p>
-                                        {milestone.winner_limit &&
-                                          (() => {
-                                            const reachedCount =
-                                              milestoneSubmissionAssignments.winnerCountsByMilestone?.get(
-                                                Number(milestone.target_views),
-                                              ) || 0;
-                                            const isFull =
-                                              reachedCount >=
-                                              milestone.winner_limit;
-                                            return (
-                                              <Badge
-                                                variant="secondary"
-                                                className={cn(
-                                                  "text-[10px] h-4 px-1.5",
-                                                  isFull
-                                                    ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-500/30"
-                                                    : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30",
-                                                )}
-                                              >
-                                                Limit: {reachedCount} /{" "}
-                                                {milestone.winner_limit}
-                                              </Badge>
-                                            );
-                                          })()}
-                                      </div>
-                                      <p
+                                <CardContent className="p-4 sm:p-5 relative z-10">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+                                    <div className="flex items-start gap-3 sm:gap-5 min-w-0 flex-1">
+                                      <div
                                         className={cn(
-                                          "text-2xl font-black",
+                                          "w-10 h-10 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center rounded-2xl shadow-inner",
                                           isDark
-                                            ? "text-white"
-                                            : "text-gray-900",
+                                            ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
+                                            : "bg-purple-50 text-purple-600 border border-purple-100",
                                         )}
                                       >
-                                        {milestone.target_views.toLocaleString()}{" "}
-                                        <span className="text-sm font-medium opacity-70">
-                                          Views
-                                        </span>
+                                        <Zap className="h-5 w-5 sm:h-6 sm:w-6" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
+                                          <p
+                                            className={cn(
+                                              "text-xs sm:text-sm font-semibold uppercase tracking-wider",
+                                              isDark
+                                                ? "text-purple-400"
+                                                : "text-purple-600",
+                                            )}
+                                          >
+                                            Milestone {index + 1}
+                                          </p>
+                                          {milestone.winner_limit &&
+                                            (() => {
+                                              const reachedCount =
+                                                milestoneSubmissionAssignments.winnerCountsByMilestone?.get(
+                                                  Number(milestone.target_views),
+                                                ) || 0;
+                                              const isFull =
+                                                reachedCount >=
+                                                milestone.winner_limit;
+                                              return (
+                                                <Badge
+                                                  variant="secondary"
+                                                  className={cn(
+                                                    "text-[10px] h-4 px-1.5 shrink-0",
+                                                    isFull
+                                                      ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-500/30"
+                                                      : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30",
+                                                  )}
+                                                >
+                                                  Limit: {reachedCount} /{" "}
+                                                  {milestone.winner_limit}
+                                                </Badge>
+                                              );
+                                            })()}
+                                        </div>
+                                        <p
+                                          className={cn(
+                                            "text-xl sm:text-2xl font-black break-words",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-900",
+                                          )}
+                                        >
+                                          {milestone.target_views.toLocaleString()}{" "}
+                                          <span className="text-sm font-medium opacity-70">
+                                            Views
+                                          </span>
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div
+                                      className={cn(
+                                        "flex items-center justify-between sm:block sm:text-right shrink-0 w-full sm:w-auto border-t pt-3 sm:border-t-0 sm:pt-0",
+                                        isDark
+                                          ? "border-gray-600"
+                                          : "border-gray-200",
+                                      )}
+                                    >
+                                      <p
+                                        className={cn(
+                                          "text-xs font-medium sm:mb-1",
+                                          isDark
+                                            ? "text-gray-400"
+                                            : "text-gray-500",
+                                        )}
+                                      >
+                                        Payout
+                                      </p>
+                                      <p
+                                        className={cn(
+                                          "text-xl sm:text-2xl font-bold",
+                                          isDark
+                                            ? "text-green-400"
+                                            : "text-green-600",
+                                        )}
+                                      >
+                                        {formatMoney(milestone.payout_cents)}
                                       </p>
                                     </div>
-                                  </div>
-
-                                  <div className="text-right">
-                                    <p
-                                      className={cn(
-                                        "text-xs font-medium mb-1",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-500",
-                                      )}
-                                    >
-                                      Payout
-                                    </p>
-                                    <p
-                                      className={cn(
-                                        "text-2xl font-bold",
-                                        isDark
-                                          ? "text-green-400"
-                                          : "text-green-600",
-                                      )}
-                                    >
-                                      {formatMoney(milestone.payout_cents)}
-                                    </p>
                                   </div>
                                 </CardContent>
                               </div>
@@ -27540,10 +27549,10 @@ export default function ContestDetailClient({
                     return (
                       <div>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-                          <div>
+                          <div className="min-w-0">
                             <h3
                               className={cn(
-                                "font-medium",
+                                "font-medium text-sm sm:text-base",
                                 isDark ? "text-white" : "text-gray-900",
                               )}
                             >
@@ -27565,7 +27574,7 @@ export default function ContestDetailClient({
                           </div>
                           <div
                             className={cn(
-                              "inline-flex rounded-lg border p-1 self-start",
+                              "flex w-full sm:w-auto rounded-lg border p-1 sm:self-start",
                               isDark
                                 ? "border-white/20 bg-white/5"
                                 : "border-gray-200 bg-gray-50",
@@ -27577,7 +27586,7 @@ export default function ContestDetailClient({
                                 setViewsDistributionMode("submission")
                               }
                               className={cn(
-                                "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
+                                "flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
                                 viewsDistributionMode === "submission"
                                   ? isDark
                                     ? "bg-[#4A00BE] text-white"
@@ -27595,7 +27604,7 @@ export default function ContestDetailClient({
                                 setViewsDistributionMode("creator")
                               }
                               className={cn(
-                                "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
+                                "flex-1 sm:flex-none px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
                                 viewsDistributionMode === "creator"
                                   ? isDark
                                     ? "bg-[#4A00BE] text-white"
@@ -27611,14 +27620,14 @@ export default function ContestDetailClient({
                         </div>
                         <div
                           className={cn(
-                            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6",
+                            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 sm:p-6",
                             isDark
                               ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
                               : "bg-white",
                           )}
                         >
                           {activeItems.length > 0 ? (
-                            <div className="space-y-4">
+                            <div className="space-y-3 sm:space-y-4">
                               {activeItems.map((item) => {
                                 const percentage =
                                   item.shareOfTop10Combined ?? 0;
@@ -27626,11 +27635,11 @@ export default function ContestDetailClient({
                                 return (
                                   <div
                                     key={item.id}
-                                    className="flex items-center space-x-4"
+                                    className="flex items-start gap-2 sm:gap-4"
                                   >
                                     <div
                                       className={cn(
-                                        "w-8 text-sm font-medium",
+                                        "w-7 sm:w-8 shrink-0 pt-0.5 text-xs sm:text-sm font-medium",
                                         isDark
                                           ? "text-white/70"
                                           : "text-gray-600",
@@ -27638,9 +27647,9 @@ export default function ContestDetailClient({
                                     >
                                       #{item.rank}
                                     </div>
-                                    <div className="flex-1">
-                                      <div className="flex justify-between text-sm mb-1 gap-3">
-                                        <div className="min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3 text-sm mb-1.5 sm:mb-1">
+                                        <div className="min-w-0 flex-1">
                                           <span
                                             className={cn(
                                               "block truncate",
@@ -27666,7 +27675,7 @@ export default function ContestDetailClient({
                                         </div>
                                         <span
                                           className={cn(
-                                            "font-medium shrink-0 text-right",
+                                            "font-medium shrink-0 text-xs sm:text-sm sm:text-right",
                                             isDark
                                               ? "text-white"
                                               : "text-gray-900",
