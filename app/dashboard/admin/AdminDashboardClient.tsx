@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,6 +16,7 @@ import {
   FileText,
   RefreshCw,
   Loader2,
+  Users,
 } from "lucide-react";
 import {
   Tooltip,
@@ -30,9 +31,15 @@ import {
 } from "@/components/ui/chart";
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
-import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import {
+  filterAndFillGrowthByRange,
+  formatGrowthDayLabel,
+  getDateStrInTz,
+  getGrowthDayKey,
+} from "@/lib/admin-date-range";
+import { formatCurrencyFromCents, formatCompactCount } from "@/lib/currency-utils";
 import { Button } from "@/components/ui/button";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ComponentType } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import {
   Select,
@@ -83,6 +90,7 @@ interface AdminDashboardClientProps {
   pendingSubmissions: number;
   rejectedSubmissions: number;
   paidSubmissions: number;
+  uniqueCreators: number;
   totalUsers: number;
   totalCreators: number;
   totalBrands: number;
@@ -136,7 +144,124 @@ interface AdminDashboardClientProps {
       admins: number;
     }[];
   };
+  submissionGrowth: StatusGrowthSeries;
+  viewsGrowth: StatusGrowthSeries;
+  contestGrowth: CountGrowthSeries;
+  submissionCreatorDates: {
+    created_at: string;
+    creator_id: string | null;
+  }[];
 }
+
+type StatusGrowthPoint = {
+  label: string;
+  all: number;
+  verified: number;
+  pending: number;
+  rejected: number;
+  paid: number;
+};
+
+type StatusGrowthSeries = {
+  byDay: StatusGrowthPoint[];
+  byWeek: StatusGrowthPoint[];
+  byMonth: StatusGrowthPoint[];
+  byYear: StatusGrowthPoint[];
+  byDayFull: (StatusGrowthPoint & { date: string })[];
+};
+
+type CountGrowthPoint = { label: string; all: number };
+
+type CountGrowthSeries = {
+  byDay: CountGrowthPoint[];
+  byWeek: CountGrowthPoint[];
+  byMonth: CountGrowthPoint[];
+  byYear: CountGrowthPoint[];
+  byDayFull: (CountGrowthPoint & { date: string })[];
+};
+
+type StatusFilter = "all" | "verified" | "pending" | "rejected" | "paid";
+
+const STATUS_SERIES = [
+  { key: "all", label: "All", colorLight: "#7C3AED", colorDark: "#A78BFA" },
+  {
+    key: "verified",
+    label: "Verified",
+    colorLight: "#059669",
+    colorDark: "#34D399",
+  },
+  {
+    key: "pending",
+    label: "Pending",
+    colorLight: "#D97706",
+    colorDark: "#FBBF24",
+  },
+  {
+    key: "rejected",
+    label: "Rejected",
+    colorLight: "#DC2626",
+    colorDark: "#F87171",
+  },
+  { key: "paid", label: "Paid", colorLight: "#2563EB", colorDark: "#60A5FA" },
+] as const;
+
+function toStatusCumulative(data: StatusGrowthPoint[]): StatusGrowthPoint[] {
+  let sumAll = 0;
+  let sumVerified = 0;
+  let sumPending = 0;
+  let sumRejected = 0;
+  let sumPaid = 0;
+  return data.map((d) => {
+    sumAll += d.all;
+    sumVerified += d.verified;
+    sumPending += d.pending;
+    sumRejected += d.rejected;
+    sumPaid += d.paid;
+    return {
+      label: d.label,
+      all: sumAll,
+      verified: sumVerified,
+      pending: sumPending,
+      rejected: sumRejected,
+      paid: sumPaid,
+    };
+  });
+}
+
+type GrowthMetricTab = "users" | "submissions" | "views";
+
+const GROWTH_METRIC_CONFIG: Record<
+  GrowthMetricTab,
+  {
+    dailyTitle: string;
+    cumulativeTitle: string;
+    dailyTabLabel: string;
+    cumulativeTabLabel: string;
+    allFilterLabel: string;
+  }
+> = {
+  users: {
+    dailyTitle: "Daily signup growth",
+    cumulativeTitle: "Users growth",
+    dailyTabLabel: "Daily signup growth",
+    cumulativeTabLabel: "Users growth",
+    allFilterLabel: "All Users",
+  },
+  submissions: {
+    dailyTitle: "Daily submission growth",
+    cumulativeTitle: "Submissions growth",
+    dailyTabLabel: "Daily submission growth",
+    cumulativeTabLabel: "Submissions growth",
+    allFilterLabel: "All Submissions",
+  },
+  views: {
+    dailyTitle: "Daily views growth",
+    cumulativeTitle: "Views growth",
+    dailyTabLabel: "Daily views growth",
+    cumulativeTabLabel: "Views growth",
+    allFilterLabel: "All Views",
+  },
+};
 
 const readIsDarkFromDom = () => {
   const modeElement = document.querySelector("[data-mode]");
@@ -147,6 +272,129 @@ const readIsDarkFromDom = () => {
   const themeElement = document.documentElement;
   return themeElement.getAttribute("data-theme") === "dark";
 };
+
+type SummaryMetricCardProps = {
+  title: string;
+  value: number;
+  subtitle: string;
+  tooltip?: string;
+  icon: ComponentType<{ className?: string }>;
+  isDark: boolean | null;
+};
+
+function sumUserGrowthPoints(points: {
+  all: number;
+  creators: number;
+  brands: number;
+  admins: number;
+}[]) {
+  return points.reduce(
+    (acc, p) => ({
+      all: acc.all + p.all,
+      creators: acc.creators + p.creators,
+      brands: acc.brands + p.brands,
+      admins: acc.admins + p.admins,
+    }),
+    { all: 0, creators: 0, brands: 0, admins: 0 },
+  );
+}
+
+function sumStatusGrowthPoints(points: StatusGrowthPoint[]) {
+  return points.reduce(
+    (acc, p) => ({
+      all: acc.all + p.all,
+      verified: acc.verified + p.verified,
+      pending: acc.pending + p.pending,
+      rejected: acc.rejected + p.rejected,
+      paid: acc.paid + p.paid,
+    }),
+    { all: 0, verified: 0, pending: 0, rejected: 0, paid: 0 },
+  );
+}
+
+function sumCountGrowthPoints(points: CountGrowthPoint[]) {
+  return points.reduce((sum, p) => sum + p.all, 0);
+}
+
+function countUniqueCreatorsInRange(
+  records: { created_at: string; creator_id: string | null }[],
+  from: Date,
+  to: Date,
+) {
+  const fromStr = getDateStrInTz(from);
+  const toStr = getDateStrInTz(to);
+  const ids = new Set<string>();
+  for (const record of records) {
+    if (!record.creator_id) continue;
+    const dayKey = getGrowthDayKey(record.created_at);
+    if (dayKey >= fromStr && dayKey <= toStr) ids.add(record.creator_id);
+  }
+  return ids.size;
+}
+
+function SummaryMetricCard({
+  title,
+  value,
+  subtitle,
+  tooltip,
+  icon: Icon,
+  isDark,
+}: SummaryMetricCardProps) {
+  return (
+    <div
+      className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+        isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+      }`}
+    >
+      <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+        <div className="flex items-center gap-2">
+          <h1
+            className={`text-md font-medium ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            {title}
+          </h1>
+          {tooltip ? (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info
+                    className={`h-3.5 w-3.5 cursor-help ${
+                      isDark
+                        ? "text-gray-400 hover:text-gray-300"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>{tooltip}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </div>
+        <div
+          className={`w-10 h-10 flex items-center justify-center rounded-full ${
+            isDark
+              ? "bg-[#FFFFFF36] text-white"
+              : "bg-[#D8C3FF] text-[#4A00BE]"
+          }`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <CardContent>
+        <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+        <p
+          className={`text-sm mt-2 ${
+            isDark ? "text-gray-300" : "text-gray-600"
+          }`}
+        >
+          {subtitle}
+        </p>
+      </CardContent>
+    </div>
+  );
+}
 
 export default function AdminDashboardClient({
   totalContests,
@@ -170,6 +418,7 @@ export default function AdminDashboardClient({
   pendingSubmissions,
   rejectedSubmissions,
   paidSubmissions,
+  uniqueCreators,
   totalUsers,
   totalCreators,
   totalBrands,
@@ -182,13 +431,23 @@ export default function AdminDashboardClient({
   totalMoneyInDraftNotPaid,
   contestTypeFilter,
   userGrowth,
+  submissionGrowth,
+  viewsGrowth,
+  contestGrowth,
+  submissionCreatorDates,
 }: AdminDashboardClientProps) {
   // Get theme from parent layout
   const [isDark, setIsDark] = useState<boolean | null>(null);
+  const [growthMetricTab, setGrowthMetricTab] =
+    useState<GrowthMetricTab>("users");
   const [growthMode, setGrowthMode] = useState<"daily" | "cumulative">("daily");
   const [userTypeFilter, setUserTypeFilter] = useState<
     "all" | "creators" | "brands" | "admins"
   >("all");
+  const [submissionStatusFilter, setSubmissionStatusFilter] =
+    useState<StatusFilter>("all");
+  const [viewsStatusFilter, setViewsStatusFilter] =
+    useState<StatusFilter>("all");
 
   const now = new Date();
   const defaultRangeEnd = new Date(now);
@@ -232,7 +491,7 @@ export default function AdminDashboardClient({
           `${platformPass} submission${platformPass === 1 ? "" : "s"} checked (platform-aware pass)`,
         ]
           .filter(Boolean)
-          .join(" · "),
+          .join(" Â· "),
       });
       setSyncAllViewsDialogOpen(false);
     } catch (error: unknown) {
@@ -274,26 +533,180 @@ export default function AdminDashboardClient({
     });
   };
 
-  function getUTCDateStr(date: Date): string {
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(date.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
-  const fromStr = getUTCDateStr(dateRange.from);
-  const toStr = getUTCDateStr(dateRange.to);
-  const filteredByDayFull = userGrowth.byDayFull.filter(
-    (p) => p.date >= fromStr && p.date <= toStr,
-  );
-
   const isLast12MonthsPreset = dateRangePresetLabel === "Last 12 Months";
 
-  const rawChartData: GrowthPoint[] = isLast12MonthsPreset
+  const rawUsersChartData: GrowthPoint[] = isLast12MonthsPreset
     ? userGrowth.byMonth.slice(-12)
-    : (filteredByDayFull as GrowthPoint[]);
-  const chartData =
-    growthMode === "cumulative" ? toCumulative(rawChartData) : rawChartData;
+    : filterAndFillGrowthByRange(
+        userGrowth.byDayFull as (GrowthPoint & { date: string })[],
+        dateRange.from,
+        dateRange.to,
+        (dateKey) => ({
+          label: formatGrowthDayLabel(dateKey),
+          date: dateKey,
+          all: 0,
+          creators: 0,
+          brands: 0,
+          admins: 0,
+        }),
+      );
+  const usersChartData =
+    growthMode === "cumulative"
+      ? toCumulative(rawUsersChartData)
+      : rawUsersChartData;
+
+  const activeStatusGrowth =
+    growthMetricTab === "submissions" ? submissionGrowth : viewsGrowth;
+  const activeStatusFilter =
+    growthMetricTab === "submissions"
+      ? submissionStatusFilter
+      : viewsStatusFilter;
+  const rawStatusChartData: StatusGrowthPoint[] = isLast12MonthsPreset
+    ? activeStatusGrowth.byMonth.slice(-12)
+    : filterAndFillGrowthByRange(
+        activeStatusGrowth.byDayFull,
+        dateRange.from,
+        dateRange.to,
+        (dateKey) => ({
+          label: formatGrowthDayLabel(dateKey),
+          date: dateKey,
+          all: 0,
+          verified: 0,
+          pending: 0,
+          rejected: 0,
+          paid: 0,
+        }),
+      );
+  const statusChartData =
+    growthMode === "cumulative"
+      ? toStatusCumulative(rawStatusChartData)
+      : rawStatusChartData;
+
+  const overviewMetrics = useMemo(() => {
+    const usersInRange: {
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[] = isLast12MonthsPreset
+      ? userGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          userGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+            creators: 0,
+            brands: 0,
+            admins: 0,
+          }),
+        );
+
+    const submissionsInRange: StatusGrowthPoint[] = isLast12MonthsPreset
+      ? submissionGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          submissionGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+            verified: 0,
+            pending: 0,
+            rejected: 0,
+            paid: 0,
+          }),
+        );
+
+    const viewsInRange: StatusGrowthPoint[] = isLast12MonthsPreset
+      ? viewsGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          viewsGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+            verified: 0,
+            pending: 0,
+            rejected: 0,
+            paid: 0,
+          }),
+        );
+
+    const contestsInRange: CountGrowthPoint[] = isLast12MonthsPreset
+      ? contestGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          contestGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+          }),
+        );
+
+    const userTotals = sumUserGrowthPoints(usersInRange);
+    const submissionTotals = sumStatusGrowthPoints(submissionsInRange);
+    const viewTotals = sumStatusGrowthPoints(viewsInRange);
+
+    return {
+      campaigns: sumCountGrowthPoints(contestsInRange),
+      users: userTotals.all,
+      creators: userTotals.creators,
+      brands: userTotals.brands,
+      submissions: submissionTotals,
+      views: viewTotals,
+      uniqueCreators: countUniqueCreatorsInRange(
+        submissionCreatorDates,
+        dateRange.from,
+        dateRange.to,
+      ),
+    };
+  }, [
+    contestGrowth,
+    dateRange.from,
+    dateRange.to,
+    isLast12MonthsPreset,
+    submissionCreatorDates,
+    submissionGrowth,
+    userGrowth,
+    viewsGrowth,
+  ]);
+
+  const overviewPeriodLabel = dateRangePresetLabel || "selected period";
+
+  const metricConfig = GROWTH_METRIC_CONFIG[growthMetricTab];
+  const sectionTitle =
+    growthMode === "daily"
+      ? metricConfig.dailyTitle
+      : metricConfig.cumulativeTitle;
+
+  const growthTabButtonClass = (active: boolean) =>
+    `px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+      active
+        ? isDark
+          ? "bg-[#4A00BE] text-white"
+          : "bg-primary text-primary-foreground"
+        : isDark
+          ? "text-gray-300 hover:bg-white/10"
+          : "text-muted-foreground hover:bg-muted"
+    }`;
+
+  const isStatusSeriesVisible = (key: string) =>
+    activeStatusFilter === "all" || activeStatusFilter === key;
+
+  const statusChartConfig = Object.fromEntries(
+    STATUS_SERIES.map((s) => [
+      s.key,
+      { label: s.label, color: isDark ? s.colorDark : s.colorLight },
+    ]),
+  );
 
   // Resolve theme before first paint to avoid flash between modes
   useLayoutEffect(() => {
@@ -389,7 +802,7 @@ export default function AdminDashboardClient({
                 {isSyncingAllCreatorViews ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Syncing…
+                    Syncingâ€¦
                   </>
                 ) : (
                   "Sync now"
@@ -400,226 +813,168 @@ export default function AdminDashboardClient({
         </AlertDialog>
       </div>
 
-      {/* Top Summary */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Total Contests */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+      {/* Platform Overview */}
+      <div className="mt-8 space-y-4 w-full min-w-0">
+        <h2
+          className={`text-xl font-bold shrink-0 ${
+            isDark ? "text-white" : "text-gray-900"
           }`}
         >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Campaigns
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Includes all campaigns (draft + published)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Trophy className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All campaigns on platform
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Users */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Users
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>All registered users</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <User className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalUsers.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Creators + Brands
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Creators */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Creators
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>Users with role creator</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <User className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalCreators.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Creators
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Brands */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Brands
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>Users with role advertiser</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Building className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalBrands.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Brands
-            </p>
-          </CardContent>
+          Platform Overview
+        </h2>
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {growthMetricTab === "users" ? (
+            <>
+              <SummaryMetricCard
+                title="Total Campaigns"
+                value={overviewMetrics.campaigns}
+                subtitle={`Created in ${overviewPeriodLabel}`}
+                tooltip="Campaigns created in the selected date range"
+                icon={Trophy}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Users"
+                value={overviewMetrics.users}
+                subtitle={`Signed up in ${overviewPeriodLabel}`}
+                tooltip="Users registered in the selected date range"
+                icon={User}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Creators"
+                value={overviewMetrics.creators}
+                subtitle={`Signed up in ${overviewPeriodLabel}`}
+                tooltip="Creators registered in the selected date range"
+                icon={User}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Brands"
+                value={overviewMetrics.brands}
+                subtitle={`Signed up in ${overviewPeriodLabel}`}
+                tooltip="Brands registered in the selected date range"
+                icon={Building}
+                isDark={isDark}
+              />
+            </>
+          ) : null}
+          {growthMetricTab === "submissions" ? (
+            <>
+              <SummaryMetricCard
+                title="Total Campaigns"
+                value={overviewMetrics.campaigns}
+                subtitle={`Created in ${overviewPeriodLabel}`}
+                tooltip="Campaigns created in the selected date range"
+                icon={Trophy}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Submissions"
+                value={overviewMetrics.submissions.all}
+                subtitle={`Submitted in ${overviewPeriodLabel}`}
+                tooltip="Submissions created in the selected date range"
+                icon={Video}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified Submissions"
+                value={overviewMetrics.submissions.verified}
+                subtitle={`Verified in ${overviewPeriodLabel}`}
+                tooltip="Verified submissions in the selected date range"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Pending Submissions"
+                value={overviewMetrics.submissions.pending}
+                subtitle={`Pending in ${overviewPeriodLabel}`}
+                tooltip="Pending submissions in the selected date range"
+                icon={Eye}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Rejected Submissions"
+                value={overviewMetrics.submissions.rejected}
+                subtitle={`Rejected in ${overviewPeriodLabel}`}
+                tooltip="Rejected submissions in the selected date range"
+                icon={XCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Paid Submissions"
+                value={overviewMetrics.submissions.paid}
+                subtitle={`Paid in ${overviewPeriodLabel}`}
+                tooltip="Paid submissions in the selected date range"
+                icon={DollarSign}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Unique Creators"
+                value={overviewMetrics.uniqueCreators}
+                subtitle={`Submitted in ${overviewPeriodLabel}`}
+                tooltip="Distinct creators who submitted in the selected date range"
+                icon={Users}
+                isDark={isDark}
+              />
+            </>
+          ) : null}
+          {growthMetricTab === "views" ? (
+            <>
+              <SummaryMetricCard
+                title="Total Campaigns"
+                value={overviewMetrics.campaigns}
+                subtitle={`Created in ${overviewPeriodLabel}`}
+                tooltip="Campaigns created in the selected date range"
+                icon={Trophy}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified Views"
+                value={overviewMetrics.views.verified}
+                subtitle={`Verified in ${overviewPeriodLabel}`}
+                tooltip="Views from verified submissions created in the selected date range"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Pending Views"
+                value={overviewMetrics.views.pending}
+                subtitle={`Pending in ${overviewPeriodLabel}`}
+                tooltip="Views from pending submissions created in the selected date range"
+                icon={Eye}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Rejected Views"
+                value={overviewMetrics.views.rejected}
+                subtitle={`Rejected in ${overviewPeriodLabel}`}
+                tooltip="Views from rejected submissions created in the selected date range"
+                icon={XCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Paid Views"
+                value={overviewMetrics.views.paid}
+                subtitle={`Paid in ${overviewPeriodLabel}`}
+                tooltip="Views from paid submissions created in the selected date range"
+                icon={DollarSign}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Views"
+                value={overviewMetrics.views.all}
+                subtitle={`Submitted in ${overviewPeriodLabel}`}
+                tooltip="All views from submissions created in the selected date range"
+                icon={Video}
+                isDark={isDark}
+              />
+            </>
+          ) : null}
         </div>
       </div>
 
-      {/* Users Growth Chart */}
+      {/* Platform Growth Chart */}
       <div className="mt-8 space-y-4 w-full min-w-0 overflow-visible">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h2
@@ -627,10 +982,9 @@ export default function AdminDashboardClient({
               isDark ? "text-white" : "text-gray-900"
             }`}
           >
-            {growthMode === "daily" ? "Daily signup growth" : "Users growth"}
+            {sectionTitle}
           </h2>
           <div className="flex flex-wrap items-center gap-3 min-w-0 flex-shrink">
-            {/* Column 1: Date range picker */}
             <div className="flex items-center shrink-0">
               <AdminDateRangePicker
                 isDark={isDark}
@@ -642,43 +996,91 @@ export default function AdminDashboardClient({
                 }}
               />
             </div>
-            {/* Column 2: User type */}
             <div className="flex items-center shrink-0">
-              <Select
-                value={userTypeFilter}
-                onValueChange={(v: "all" | "creators" | "brands" | "admins") =>
-                  setUserTypeFilter(v)
-                }
-              >
-                <SelectTrigger
-                  className={`min-w-[140px] h-9 text-sm ${
-                    isDark ? "border-white/20 bg-white/5 text-white" : ""
-                  }`}
-                >
-                  <SelectValue placeholder="User type" />
-                </SelectTrigger>
-                <SelectContent
-                  className={isDark ? "border-white/20 bg-[#170337]" : ""}
-                >
-                  <SelectItem value="all">All Users</SelectItem>
-                  <SelectItem value="creators">Creators</SelectItem>
-                  <SelectItem value="brands">Advertisers</SelectItem>
-                  <SelectItem value="admins">Admins</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {(
+                  [
+                    { value: "users" as const, label: "Users" },
+                    { value: "submissions" as const, label: "Submissions" },
+                    { value: "views" as const, label: "Views" },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setGrowthMetricTab(value)}
+                    className={growthTabButtonClass(growthMetricTab === value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            {/* Column 3: Daily signups vs Cumulative growth */}
+            <div className="flex items-center shrink-0">
+              {growthMetricTab === "users" ? (
+                <Select
+                  value={userTypeFilter}
+                  onValueChange={(
+                    v: "all" | "creators" | "brands" | "admins",
+                  ) => setUserTypeFilter(v)}
+                >
+                  <SelectTrigger
+                    className={`min-w-[140px] h-9 text-sm ${
+                      isDark ? "border-white/20 bg-white/5 text-white" : ""
+                    }`}
+                  >
+                    <SelectValue placeholder="User type" />
+                  </SelectTrigger>
+                  <SelectContent
+                    className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                  >
+                    <SelectItem value="all">All Users</SelectItem>
+                    <SelectItem value="creators">Creators</SelectItem>
+                    <SelectItem value="brands">Advertisers</SelectItem>
+                    <SelectItem value="admins">Admins</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select
+                  value={activeStatusFilter}
+                  onValueChange={(v: StatusFilter) =>
+                    growthMetricTab === "submissions"
+                      ? setSubmissionStatusFilter(v)
+                      : setViewsStatusFilter(v)
+                  }
+                >
+                  <SelectTrigger
+                    className={`min-w-[160px] h-9 text-sm ${
+                      isDark ? "border-white/20 bg-white/5 text-white" : ""
+                    }`}
+                  >
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent
+                    className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                  >
+                    <SelectItem value="all">
+                      {metricConfig.allFilterLabel}
+                    </SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             <div className="flex items-center shrink-0">
               <div className="flex rounded-lg border border-border overflow-hidden">
                 {(
                   [
                     {
                       value: "daily" as const,
-                      label: "Daily signup growth",
+                      label: metricConfig.dailyTabLabel,
                     },
                     {
                       value: "cumulative" as const,
-                      label: "Users growth",
+                      label: metricConfig.cumulativeTabLabel,
                     },
                   ] as const
                 ).map(({ value, label }) => (
@@ -686,15 +1088,7 @@ export default function AdminDashboardClient({
                     key={value}
                     type="button"
                     onClick={() => setGrowthMode(value)}
-                    className={`px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                      growthMode === value
-                        ? isDark
-                          ? "bg-[#4A00BE] text-white"
-                          : "bg-primary text-primary-foreground"
-                        : isDark
-                          ? "text-gray-300 hover:bg-white/10"
-                          : "text-muted-foreground hover:bg-muted"
-                    }`}
+                    className={growthTabButtonClass(growthMode === value)}
                   >
                     {label}
                   </button>
@@ -708,170 +1102,279 @@ export default function AdminDashboardClient({
             isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <ChartContainer
-            config={{
-              all: {
-                label: "All Users",
-                color: isDark ? "#A78BFA" : "#7C3AED",
-              },
-              creators: {
-                label: "Creators",
-                color: isDark ? "#34D399" : "#059669",
-              },
-              brands: {
-                label: "Advertisers",
-                color: isDark ? "#FBBF24" : "#D97706",
-              },
-              admins: {
-                label: "Admins",
-                color: isDark ? "#F87171" : "#DC2626",
-              },
-            }}
-            className="h-[320px] w-full min-w-0"
-          >
-            <LineChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                className={isDark ? "stroke-white/10" : "stroke-border"}
-              />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#6B7280" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#6B7280" }}
-                tickLine={false}
-                axisLine={false}
-                allowDecimals={false}
-              />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Line
-                type="monotone"
-                dataKey="all"
-                stroke="var(--color-all)"
-                strokeWidth={2}
-                dot={userTypeFilter === "all" ? { r: 2 } : false}
-                strokeOpacity={userTypeFilter === "all" ? 1 : 0}
-                hide={userTypeFilter !== "all"}
-                name="All Users"
-              />
-              <Line
-                type="monotone"
-                dataKey="creators"
-                stroke="var(--color-creators)"
-                strokeWidth={2}
-                dot={
-                  userTypeFilter === "all" || userTypeFilter === "creators"
-                    ? { r: 2 }
-                    : false
-                }
-                strokeOpacity={
-                  userTypeFilter === "all" || userTypeFilter === "creators"
-                    ? 1
-                    : 0
-                }
-                hide={userTypeFilter !== "all" && userTypeFilter !== "creators"}
-                name="Creators"
-              />
-              <Line
-                type="monotone"
-                dataKey="brands"
-                stroke="var(--color-brands)"
-                strokeWidth={2}
-                dot={
-                  userTypeFilter === "all" || userTypeFilter === "brands"
-                    ? { r: 2 }
-                    : false
-                }
-                strokeOpacity={
-                  userTypeFilter === "all" || userTypeFilter === "brands"
-                    ? 1
-                    : 0
-                }
-                hide={userTypeFilter !== "all" && userTypeFilter !== "brands"}
-                name="Advertisers"
-              />
-              <Line
-                type="monotone"
-                dataKey="admins"
-                stroke="var(--color-admins)"
-                strokeWidth={2}
-                dot={
-                  userTypeFilter === "all" || userTypeFilter === "admins"
-                    ? { r: 2 }
-                    : false
-                }
-                strokeOpacity={
-                  userTypeFilter === "all" || userTypeFilter === "admins"
-                    ? 1
-                    : 0
-                }
-                hide={userTypeFilter !== "all" && userTypeFilter !== "admins"}
-                name="Admins"
-              />
-            </LineChart>
-          </ChartContainer>
-          <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
-            {userTypeFilter === "all" && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
+          {growthMetricTab === "users" ? (
+            <>
+              <ChartContainer
+                config={{
+                  all: {
+                    label: "All Users",
+                    color: isDark ? "#A78BFA" : "#7C3AED",
+                  },
+                  creators: {
+                    label: "Creators",
+                    color: isDark ? "#34D399" : "#059669",
+                  },
+                  brands: {
+                    label: "Advertisers",
+                    color: isDark ? "#FBBF24" : "#D97706",
+                  },
+                  admins: {
+                    label: "Admins",
+                    color: isDark ? "#F87171" : "#DC2626",
+                  },
+                }}
+                className="h-[320px] w-full min-w-0"
               >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{
-                    backgroundColor: isDark ? "#A78BFA" : "#7C3AED",
-                  }}
-                />
-                All Users
-              </span>
-            )}
-            {(userTypeFilter === "all" || userTypeFilter === "creators") && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
+                <LineChart
+                  data={usersChartData}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className={isDark ? "stroke-white/10" : "stroke-border"}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={{
+                      fontSize: 11,
+                      fill: isDark ? "#9CA3AF" : "#6B7280",
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    width={44}
+                    tick={{
+                      fontSize: 11,
+                      fill: isDark ? "#9CA3AF" : "#6B7280",
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(value) =>
+                      formatCompactCount(Number(value))
+                    }
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line
+                    type="monotone"
+                    dataKey="all"
+                    stroke="var(--color-all)"
+                    strokeWidth={2}
+                    dot={userTypeFilter === "all" ? { r: 2 } : false}
+                    strokeOpacity={userTypeFilter === "all" ? 1 : 0}
+                    hide={userTypeFilter !== "all"}
+                    name="All Users"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="creators"
+                    stroke="var(--color-creators)"
+                    strokeWidth={2}
+                    dot={
+                      userTypeFilter === "all" ||
+                      userTypeFilter === "creators"
+                        ? { r: 2 }
+                        : false
+                    }
+                    strokeOpacity={
+                      userTypeFilter === "all" ||
+                      userTypeFilter === "creators"
+                        ? 1
+                        : 0
+                    }
+                    hide={
+                      userTypeFilter !== "all" &&
+                      userTypeFilter !== "creators"
+                    }
+                    name="Creators"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="brands"
+                    stroke="var(--color-brands)"
+                    strokeWidth={2}
+                    dot={
+                      userTypeFilter === "all" || userTypeFilter === "brands"
+                        ? { r: 2 }
+                        : false
+                    }
+                    strokeOpacity={
+                      userTypeFilter === "all" || userTypeFilter === "brands"
+                        ? 1
+                        : 0
+                    }
+                    hide={
+                      userTypeFilter !== "all" && userTypeFilter !== "brands"
+                    }
+                    name="Advertisers"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="admins"
+                    stroke="var(--color-admins)"
+                    strokeWidth={2}
+                    dot={
+                      userTypeFilter === "all" || userTypeFilter === "admins"
+                        ? { r: 2 }
+                        : false
+                    }
+                    strokeOpacity={
+                      userTypeFilter === "all" || userTypeFilter === "admins"
+                        ? 1
+                        : 0
+                    }
+                    hide={
+                      userTypeFilter !== "all" && userTypeFilter !== "admins"
+                    }
+                    name="Admins"
+                  />
+                </LineChart>
+              </ChartContainer>
+              <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
+                {userTypeFilter === "all" && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#A78BFA" : "#7C3AED",
+                      }}
+                    />
+                    All Users
+                  </span>
+                )}
+                {(userTypeFilter === "all" ||
+                  userTypeFilter === "creators") && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#34D399" : "#059669",
+                      }}
+                    />
+                    Creators
+                  </span>
+                )}
+                {(userTypeFilter === "all" || userTypeFilter === "brands") && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#FBBF24" : "#D97706",
+                      }}
+                    />
+                    Advertisers
+                  </span>
+                )}
+                {(userTypeFilter === "all" || userTypeFilter === "admins") && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#F87171" : "#DC2626",
+                      }}
+                    />
+                    Admins
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <ChartContainer
+                config={statusChartConfig}
+                className="h-[320px] w-full min-w-0"
               >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: isDark ? "#34D399" : "#059669" }}
-                />
-                Creators
-              </span>
-            )}
-            {(userTypeFilter === "all" || userTypeFilter === "brands") && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
-              >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: isDark ? "#FBBF24" : "#D97706" }}
-                />
-                Advertisers
-              </span>
-            )}
-            {(userTypeFilter === "all" || userTypeFilter === "admins") && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
-              >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: isDark ? "#F87171" : "#DC2626" }}
-                />
-                Admins
-              </span>
-            )}
-          </div>
+                <LineChart
+                  data={statusChartData}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className={isDark ? "stroke-white/10" : "stroke-border"}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={{
+                      fontSize: 11,
+                      fill: isDark ? "#9CA3AF" : "#6B7280",
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    width={44}
+                    tick={{
+                      fontSize: 11,
+                      fill: isDark ? "#9CA3AF" : "#6B7280",
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(value) =>
+                      formatCompactCount(Number(value))
+                    }
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  {STATUS_SERIES.map((series) => (
+                    <Line
+                      key={series.key}
+                      type="monotone"
+                      dataKey={series.key}
+                      stroke={`var(--color-${series.key})`}
+                      strokeWidth={2}
+                      dot={
+                        isStatusSeriesVisible(series.key) ? { r: 2 } : false
+                      }
+                      strokeOpacity={
+                        isStatusSeriesVisible(series.key) ? 1 : 0
+                      }
+                      hide={!isStatusSeriesVisible(series.key)}
+                      name={series.label}
+                    />
+                  ))}
+                </LineChart>
+              </ChartContainer>
+              <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
+                {STATUS_SERIES.filter((series) =>
+                  isStatusSeriesVisible(series.key),
+                ).map((series) => (
+                  <span
+                    key={series.key}
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark
+                          ? series.colorDark
+                          : series.colorLight,
+                      }}
+                    />
+                    {series.key === "all" ? "All" : series.label}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1374,7 +1877,6 @@ export default function AdminDashboardClient({
         </div>
       </div>
 
-
       {/* Submissions Metrics */}
       <div className="mt-8 mb-4">
         <h2
@@ -1386,192 +1888,57 @@ export default function AdminDashboardClient({
         </h2>
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Verified Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <CheckCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {verifiedSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Verified
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Pending Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {pendingSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Rejected Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <XCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {rejectedSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Rejected
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Paid Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {paidSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Paid
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Total Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Video className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All submissions
-            </p>
-          </CardContent>
-        </div>
+        <SummaryMetricCard
+          title="Verified Submissions"
+          value={verifiedSubmissions}
+          subtitle="Verified"
+          tooltip="Submissions marked as verified"
+          icon={CheckCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Pending Submissions"
+          value={pendingSubmissions}
+          subtitle="Pending"
+          tooltip="Submissions awaiting review"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Rejected Submissions"
+          value={rejectedSubmissions}
+          subtitle="Rejected"
+          tooltip="Submissions marked as rejected"
+          icon={XCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Paid Submissions"
+          value={paidSubmissions}
+          subtitle="Paid"
+          tooltip="Submissions that have been paid out"
+          icon={DollarSign}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Submissions"
+          value={totalSubmissions}
+          subtitle="All submissions"
+          tooltip="All submissions across campaigns"
+          icon={Video}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Unique Creators"
+          value={uniqueCreators}
+          subtitle="Creators with submissions"
+          tooltip="Distinct creators who have submitted"
+          icon={Users}
+          isDark={isDark}
+        />
       </div>
 
+      {/* Views Metrics */}
       <div className="mt-8 mb-4">
         <h2
           className={`text-xl font-bold mb-4 ${
@@ -1582,337 +1949,54 @@ export default function AdminDashboardClient({
         </h2>
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Expected Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Expected Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Pending + Verified + Paid views
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalExpectedViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending + Verified
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Verified Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Verified Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Views from submissions marked as verified
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <CheckCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalVerifiedViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Verified
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Pending Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Pending Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Views from submissions marked as pending
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalPendingViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Rejected Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Rejected Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>From rejected entries</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <XCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalRejectedViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              From rejected entries
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Paid Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Paid Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>From paid entries</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalPaidViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              From paid entries
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    All views across all submissions
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Video className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All views
-            </p>
-          </CardContent>
-        </div>
+        <SummaryMetricCard
+          title="Expected Views"
+          value={totalExpectedViews}
+          subtitle="Pending + Verified"
+          tooltip="Pending + Verified views"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Verified Views"
+          value={totalVerifiedViews}
+          subtitle="Verified"
+          tooltip="Views from submissions marked as verified"
+          icon={CheckCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Pending Views"
+          value={totalPendingViews}
+          subtitle="Pending"
+          tooltip="Views from submissions marked as pending"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Rejected Views"
+          value={totalRejectedViews}
+          subtitle="From rejected entries"
+          tooltip="Views from rejected submissions"
+          icon={XCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Paid Views"
+          value={totalPaidViews}
+          subtitle="From paid entries"
+          tooltip="Views from paid submissions"
+          icon={DollarSign}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Views"
+          value={totalViews}
+          subtitle="All views"
+          tooltip="All views across all submissions"
+          icon={Video}
+          isDark={isDark}
+        />
       </div>
 
       {/* Admin actions */}
