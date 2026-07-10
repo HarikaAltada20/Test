@@ -79,3 +79,27 @@ export function formatErrorWithCurrency(errorMessage: string): string {
   // Return original message if no formatting needed
   return errorMessage;
 }
+
+/** Compact axis/count label: 1500 → 1.5K, 35000000 → 35M */
+export function formatCompactCount(value: number): string {
+  const n = Math.max(0, value);
+  if (n >= 1_000_000_000) {
+    const billions = n / 1_000_000_000;
+    return billions >= 10
+      ? `${Math.round(billions)}B`
+      : `${billions.toFixed(1).replace(/\.0$/, "")}B`;
+  }
+  if (n >= 1_000_000) {
+    const millions = n / 1_000_000;
+    return millions >= 10
+      ? `${Math.round(millions)}M`
+      : `${millions.toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (n >= 1_000) {
+    const thousands = n / 1_000;
+    return thousands >= 10
+      ? `${Math.round(thousands)}K`
+      : `${thousands.toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return n.toLocaleString();
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { subDays, subMonths, format } from "date-fns";
+import { subDays, format } from "date-fns";
 import { Calendar as CalendarIcon, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,88 +20,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  ADMIN_GROWTH_TIMEZONE,
+  type AdminGrowthTimezone,
+  dayRangeFromKeys,
+  getDateStrInTz,
+  getLastNDaysRange,
+  getMonthsAgoRange,
+  getTimeStrInTz,
+  parseTime12To24,
+  setTimeInTz,
+} from "@/lib/admin-date-range";
 
 export type AdminDateRangeValue = { from: Date; to: Date };
 
 export type AdminDateRangePickerProps = {
   isDark: boolean;
-  /** Current range (controlled). */
   value: AdminDateRangeValue;
-  /** Label shown on trigger (e.g. "Last 30 Days"). */
   presetLabel: string;
-  /** Called when user applies a preset or clicks Apply on custom range. */
   onChange: (next: AdminDateRangeValue, presetLabel: string) => void;
   triggerClassName?: string;
   align?: "start" | "center" | "end";
-  /** Days in the past users may select (default 730). */
   maxHistoryDays?: number;
 };
 
-const KOLKATA_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
-
-function getDateStrInTz(date: Date, tz: "utc" | "local"): string {
-  if (tz === "utc") {
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(date.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  const kolkata = new Date(date.getTime() + KOLKATA_OFFSET_MS);
-  const y = kolkata.getUTCFullYear();
-  const mo = String(kolkata.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(kolkata.getUTCDate()).padStart(2, "0");
-  return `${y}-${mo}-${day}`;
-}
-
-function getTimeStrInTz(date: Date, tz: "utc" | "local"): string {
-  if (tz === "utc") {
-    const h = date.getUTCHours();
-    const m = date.getUTCMinutes();
-    const ampm = h >= 12 ? "PM" : "AM";
-    const h12 = h % 12 || 12;
-    return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-  }
-  const kolkata = new Date(date.getTime() + KOLKATA_OFFSET_MS);
-  const h = kolkata.getUTCHours();
-  const m = kolkata.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
-function parseTime12To24(timeStr: string): { h: number; m: number } | null {
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return null;
-  let h = parseInt(match[1], 10);
-  const m = parseInt(match[2], 10);
-  const ampm = match[3].toUpperCase();
-  if (ampm === "PM" && h !== 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-  return { h, m };
-}
-
-function setTimeInTz(
-  existing: Date,
-  dateStr: string,
-  timeStr: string,
-  tz: "utc" | "local",
-): Date | null {
-  const parsed = parseTime12To24(timeStr);
-  if (!parsed) return null;
-  const [y, mo, d] = dateStr.split("-").map(Number);
-  if (!y || !mo || !d) return null;
-  if (tz === "utc") {
-    return new Date(Date.UTC(y, mo - 1, d, parsed.h, parsed.m, 0, 0));
-  }
-  const localKolkata = new Date(
-    Date.UTC(y, mo - 1, d, parsed.h, parsed.m, 0, 0),
-  );
-  return new Date(localKolkata.getTime() - KOLKATA_OFFSET_MS);
-}
-
 /**
- * Presets + custom calendar + timezone controls, matching admin dashboard UX.
+ * Presets + custom calendar + timezone controls for admin dashboard date filtering.
  */
 export function AdminDateRangePicker({
   isDark,
@@ -118,7 +62,9 @@ export function AdminDateRangePicker({
   const [calendarRange, setCalendarRange] = useState<
     { from?: Date; to?: Date } | undefined
   >(undefined);
-  const [rangeTimezone, setRangeTimezone] = useState<"utc" | "local">("local");
+  const [rangeTimezone, setRangeTimezone] = useState<AdminGrowthTimezone>(
+    ADMIN_GROWTH_TIMEZONE,
+  );
   const [startTimeInput, setStartTimeInput] = useState<string | null>(null);
   const [endTimeInput, setEndTimeInput] = useState<string | null>(null);
 
@@ -166,19 +112,19 @@ export function AdminDateRangePicker({
               [
                 {
                   label: "Last 7 Days",
-                  get: () => ({ from: subDays(now, 6), to: now }),
+                  get: () => getLastNDaysRange(7, rangeTimezone),
                 },
                 {
                   label: "Last 30 Days",
-                  get: () => ({ from: subDays(now, 29), to: now }),
+                  get: () => getLastNDaysRange(30, rangeTimezone),
                 },
                 {
                   label: "Last 3 Months",
-                  get: () => ({ from: subMonths(now, 3), to: now }),
+                  get: () => getMonthsAgoRange(3, rangeTimezone),
                 },
                 {
                   label: "Last 12 Months",
-                  get: () => ({ from: subMonths(now, 12), to: now }),
+                  get: () => getMonthsAgoRange(12, rangeTimezone),
                 },
               ] as const
             ).map(({ label: presetLabelItem, get }) => (
@@ -198,8 +144,7 @@ export function AdminDateRangePicker({
                       : "",
                 )}
                 onClick={() => {
-                  const { from, to } = get();
-                  const next = { from, to };
+                  const next = get();
                   setInternalRange(next);
                   onChange(next, presetLabelItem);
                   setOpen(false);
@@ -232,9 +177,7 @@ export function AdminDateRangePicker({
               }
               onSelect={(range) => {
                 setCalendarRange(
-                  range
-                    ? { from: range.from, to: range.to }
-                    : undefined,
+                  range ? { from: range.from, to: range.to } : undefined,
                 );
                 if (range?.from && range?.to) {
                   const next = { from: range.from, to: range.to };
@@ -424,7 +367,7 @@ export function AdminDateRangePicker({
               </Label>
               <Select
                 value={rangeTimezone}
-                onValueChange={(v: "utc" | "local") => {
+                onValueChange={(v: AdminGrowthTimezone) => {
                   setRangeTimezone(v);
                   setStartTimeInput(null);
                   setEndTimeInput(null);
@@ -452,8 +395,21 @@ export function AdminDateRangePicker({
                 type="button"
                 className="w-full"
                 onClick={() => {
-                  const appliedLabel = `${format(internalRange.from, "MMM d, yyyy")} – ${format(internalRange.to, "MMM d, yyyy")}`;
-                  onChange(internalRange, appliedLabel);
+                  const fromDateStr = getDateStrInTz(
+                    internalRange.from,
+                    rangeTimezone,
+                  );
+                  const toDateStr = getDateStrInTz(
+                    internalRange.to,
+                    rangeTimezone,
+                  );
+                  const next = dayRangeFromKeys(
+                    fromDateStr,
+                    toDateStr,
+                    rangeTimezone,
+                  );
+                  const appliedLabel = `${format(next.from, "MMM d, yyyy")} \u2013 ${format(next.to, "MMM d, yyyy")}`;
+                  onChange(next, appliedLabel);
                   setOpen(false);
                   setCalendarRange(undefined);
                 }}
