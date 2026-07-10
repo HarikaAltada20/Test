@@ -4,8 +4,7 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import AdminDashboardClient from "./AdminDashboardClient";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import {
-  getCachedAdminUserGrowth,
-  getCachedAdminDashboardGraphData,
+  getCachedAdminDashboardData,
   fetchAdminSubmissions,
 } from "@/lib/admin-dashboard-graph-cache";
 import {
@@ -155,9 +154,7 @@ export default async function AdminDashboardPage({
   }
 
   try {
-    const userGrowthPromise = getCachedAdminUserGrowth();
-    const graphDataPromise =
-      getCachedAdminDashboardGraphData(contestTypeFilter);
+    const dashboardDataPromise = getCachedAdminDashboardData(contestTypeFilter);
     const submissionsPromise = fetchAdminSubmissions();
     const adminSupabase = createAdminClient();
 
@@ -321,11 +318,12 @@ export default async function AdminDashboardPage({
     const totalCreators = totalCreatorsCount ?? 0;
     const totalBrands = totalBrandsCount ?? 0;
 
-    const [userGrowth, graphData] = await Promise.all([
-      userGrowthPromise,
-      graphDataPromise,
-    ]);
-    const { submissionGrowth, viewsGrowth, submissionCreatorsByDay } = graphData;
+    const {
+      userGrowth,
+      submissionGrowth,
+      viewsGrowth,
+      submissionCreatorsByDay,
+    } = await dashboardDataPromise;
     const contestGrowth = buildCountGrowth(contests);
 
     const parsePayment = (pd: any) => {

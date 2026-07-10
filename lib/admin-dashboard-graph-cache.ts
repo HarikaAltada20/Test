@@ -62,13 +62,12 @@ export type AdminDashboardGraphData = {
   submissionCreatorsByDay: SubmissionCreatorsByDay[];
 };
 
-export const ADMIN_DASHBOARD_CONTEST_TYPE_FILTERS = [
-  "all",
-  "cpm",
-  "leaderboard",
-  "milestone",
-  "dual_rewards",
-] as const;
+export type AdminDashboardCacheData = {
+  userGrowth: AdminUserGrowthSeries;
+  byContestType: Record<string, AdminDashboardGraphData>;
+};
+
+export const ADMIN_DASHBOARD_CACHE_TAG = "admin-dashboard-graph";
 
 export function buildUserGrowth(
   users: { created_at: string; user_type: string }[],
@@ -482,33 +481,11 @@ async function loadAdminSubmissions(): Promise<
 /** Uncached — raw rows exceed Next.js 2MB data-cache limit. Deduped per request via React cache(). */
 export const fetchAdminSubmissions = cache(loadAdminSubmissions);
 
-async function loadAdminDashboardGraphData(
+function buildGraphForFilter(
   contestTypeFilter: string,
-): Promise<AdminDashboardGraphData> {
-  const supabase = createAdminClient();
-  const CHUNK = 1000;
-
-  let contests: { id: string; contest_type: string }[] = [];
-  let contestRangeFrom = 0;
-  while (true) {
-    const { data: chunk, error } = await supabase
-      .from("contests_with_status")
-      .select("id, contest_type")
-      .order("id", { ascending: true })
-      .range(contestRangeFrom, contestRangeFrom + CHUNK - 1);
-    if (error) {
-      throw new Error(
-        `Failed to fetch contests for graph cache: ${error.message}`,
-      );
-    }
-    if (!chunk || chunk.length === 0) break;
-    contests = contests.concat(chunk);
-    if (chunk.length < CHUNK) break;
-    contestRangeFrom += CHUNK;
-  }
-
-  const allSubmissions = await fetchAdminSubmissions();
-
+  contests: { id: string; contest_type: string }[],
+  allSubmissions: Awaited<ReturnType<typeof loadAdminSubmissions>>,
+): AdminDashboardGraphData {
   const contestsForFilter =
     contestTypeFilter === "all"
       ? contests
@@ -526,47 +503,106 @@ async function loadAdminDashboardGraphData(
   };
 }
 
-export function adminDashboardGraphCacheTag(contestTypeFilter: string) {
-  return `admin-dashboard-graph-${contestTypeFilter}`;
+async function loadAdminDashboardCache(): Promise<AdminDashboardCacheData> {
+  const supabase = createAdminClient();
+  const CHUNK = 1000;
+
+  const [userGrowth, allSubmissions] = await Promise.all([
+    loadAdminUserGrowth(),
+    fetchAdminSubmissions(),
+  ]);
+
+  let contests: { id: string; contest_type: string }[] = [];
+  let contestRangeFrom = 0;
+  while (true) {
+    const { data: chunk, error } = await supabase
+      .from("contests_with_status")
+      .select("id, contest_type")
+      .order("id", { ascending: true })
+      .range(contestRangeFrom, contestRangeFrom + CHUNK - 1);
+    if (error) {
+      throw new Error(
+        `Failed to fetch contests for admin dashboard cache: ${error.message}`,
+      );
+    }
+    if (!chunk || chunk.length === 0) break;
+    contests = contests.concat(chunk);
+    if (chunk.length < CHUNK) break;
+    contestRangeFrom += CHUNK;
+  }
+
+  const contestTypeFilters = new Set<string>([
+    "all",
+    ...contests.map((c) => c.contest_type).filter(Boolean),
+  ]);
+  const byContestType: Record<string, AdminDashboardGraphData> = {};
+  for (const filter of contestTypeFilters) {
+    byContestType[filter] = buildGraphForFilter(
+      filter,
+      contests,
+      allSubmissions,
+    );
+  }
+
+  return { userGrowth, byContestType };
 }
 
-export async function getCachedAdminUserGrowth(): Promise<AdminUserGrowthSeries> {
+async function loadAdminDashboardCacheEntry(): Promise<AdminDashboardCacheData> {
+  return loadAdminDashboardCache();
+}
+
+async function getCachedAdminDashboardCache(): Promise<AdminDashboardCacheData> {
   return unstable_cache(
-    () => loadAdminUserGrowth(),
-    ["admin-dashboard-user-growth"],
+    () => loadAdminDashboardCacheEntry(),
+    [ADMIN_DASHBOARD_CACHE_TAG],
     {
       revalidate: ADMIN_DASHBOARD_GRAPH_CACHE_SECONDS,
-      tags: ["admin-dashboard-user-growth"],
+      tags: [ADMIN_DASHBOARD_CACHE_TAG],
     },
   )();
 }
 
+/** Single 30-min cache for all admin dashboard graph series (users + submissions/views per contest type). */
+export async function getCachedAdminDashboardData(
+  contestTypeFilter: string,
+): Promise<AdminDashboardGraphData & { userGrowth: AdminUserGrowthSeries }> {
+  const cache = await getCachedAdminDashboardCache();
+  const graph =
+    cache.byContestType[contestTypeFilter] ?? cache.byContestType.all;
+
+  return {
+    userGrowth: cache.userGrowth,
+    ...graph,
+  };
+}
+
+/** @deprecated Use getCachedAdminDashboardData(contestTypeFilter).userGrowth */
+export async function getCachedAdminUserGrowth(): Promise<AdminUserGrowthSeries> {
+  const cache = await getCachedAdminDashboardCache();
+  return cache.userGrowth;
+}
+
+/** @deprecated Use getCachedAdminDashboardData(contestTypeFilter) */
 export async function getCachedAdminDashboardGraphData(
   contestTypeFilter: string,
 ): Promise<AdminDashboardGraphData> {
-  return unstable_cache(
-    () => loadAdminDashboardGraphData(contestTypeFilter),
-    ["admin-dashboard-graph", contestTypeFilter],
-    {
-      revalidate: ADMIN_DASHBOARD_GRAPH_CACHE_SECONDS,
-      tags: [adminDashboardGraphCacheTag(contestTypeFilter)],
-    },
-  )();
+  const data = await getCachedAdminDashboardData(contestTypeFilter);
+  return {
+    submissionGrowth: data.submissionGrowth,
+    viewsGrowth: data.viewsGrowth,
+    submissionCreatorsByDay: data.submissionCreatorsByDay,
+  };
 }
 
-/** Bust admin dashboard graph caches after user/submission mutations. */
-export function revalidateAdminDashboardCaches(
-  contestTypeFilter?: string,
-): void {
+/** @deprecated Use ADMIN_DASHBOARD_CACHE_TAG */
+export function adminDashboardGraphCacheTag(_contestTypeFilter?: string) {
+  return ADMIN_DASHBOARD_CACHE_TAG;
+}
+
+/** Bust the single admin dashboard graph cache after user/submission mutations. */
+export function revalidateAdminDashboardCaches(): void {
   try {
-    revalidateTag("admin-dashboard-user-growth");
-    if (contestTypeFilter) {
-      revalidateTag(adminDashboardGraphCacheTag(contestTypeFilter));
-      return;
-    }
-    for (const filter of ADMIN_DASHBOARD_CONTEST_TYPE_FILTERS) {
-      revalidateTag(adminDashboardGraphCacheTag(filter));
-    }
+    revalidateTag(ADMIN_DASHBOARD_CACHE_TAG);
   } catch (e) {
     console.warn("[admin-dashboard-graph-cache] revalidateTag failed:", e);
   }
