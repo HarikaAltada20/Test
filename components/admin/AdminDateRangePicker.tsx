@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { subDays, subMonths, format } from "date-fns";
+import { subDays, format } from "date-fns";
 import { Calendar as CalendarIcon, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,10 @@ import { cn } from "@/lib/utils";
 import {
   ADMIN_GROWTH_TIMEZONE,
   type AdminGrowthTimezone,
+  dayRangeFromKeys,
   getDateStrInTz,
+  getLastNDaysRange,
+  getMonthsAgoRange,
   getTimeStrInTz,
   parseTime12To24,
   setTimeInTz,
@@ -42,7 +45,7 @@ export type AdminDateRangePickerProps = {
 };
 
 /**
- * Presets + custom calendar + timezone controls, matching admin dashboard UX.
+ * Presets + custom calendar + timezone controls for admin dashboard date filtering.
  */
 export function AdminDateRangePicker({
   isDark,
@@ -109,19 +112,19 @@ export function AdminDateRangePicker({
               [
                 {
                   label: "Last 7 Days",
-                  get: () => ({ from: subDays(now, 6), to: now }),
+                  get: () => getLastNDaysRange(7, rangeTimezone),
                 },
                 {
                   label: "Last 30 Days",
-                  get: () => ({ from: subDays(now, 29), to: now }),
+                  get: () => getLastNDaysRange(30, rangeTimezone),
                 },
                 {
                   label: "Last 3 Months",
-                  get: () => ({ from: subMonths(now, 3), to: now }),
+                  get: () => getMonthsAgoRange(3, rangeTimezone),
                 },
                 {
                   label: "Last 12 Months",
-                  get: () => ({ from: subMonths(now, 12), to: now }),
+                  get: () => getMonthsAgoRange(12, rangeTimezone),
                 },
               ] as const
             ).map(({ label: presetLabelItem, get }) => (
@@ -141,8 +144,7 @@ export function AdminDateRangePicker({
                       : "",
                 )}
                 onClick={() => {
-                  const { from, to } = get();
-                  const next = { from, to };
+                  const next = get();
                   setInternalRange(next);
                   onChange(next, presetLabelItem);
                   setOpen(false);
@@ -175,9 +177,7 @@ export function AdminDateRangePicker({
               }
               onSelect={(range) => {
                 setCalendarRange(
-                  range
-                    ? { from: range.from, to: range.to }
-                    : undefined,
+                  range ? { from: range.from, to: range.to } : undefined,
                 );
                 if (range?.from && range?.to) {
                   const next = { from: range.from, to: range.to };
@@ -403,22 +403,12 @@ export function AdminDateRangePicker({
                     internalRange.to,
                     rangeTimezone,
                   );
-                  const normalizedFrom =
-                    setTimeInTz(
-                      internalRange.from,
-                      fromDateStr,
-                      "12:00 AM",
-                      rangeTimezone,
-                    ) ?? internalRange.from;
-                  const normalizedTo =
-                    setTimeInTz(
-                      internalRange.to,
-                      toDateStr,
-                      "11:59 PM",
-                      rangeTimezone,
-                    ) ?? internalRange.to;
-                  const next = { from: normalizedFrom, to: normalizedTo };
-                  const appliedLabel = `${format(next.from, "MMM d, yyyy")} – ${format(next.to, "MMM d, yyyy")}`;
+                  const next = dayRangeFromKeys(
+                    fromDateStr,
+                    toDateStr,
+                    rangeTimezone,
+                  );
+                  const appliedLabel = `${format(next.from, "MMM d, yyyy")} \u2013 ${format(next.to, "MMM d, yyyy")}`;
                   onChange(next, appliedLabel);
                   setOpen(false);
                   setCalendarRange(undefined);

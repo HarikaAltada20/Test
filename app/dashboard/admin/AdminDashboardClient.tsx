@@ -32,11 +32,11 @@ import {
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
 import {
-  addDaysToDateKey,
+  countUniqueCreatorsFromByDay,
   filterAndFillGrowthByRange,
   formatGrowthDayLabel,
-  getDateStrInTz,
-  getGrowthDayKey,
+  getLastNDaysUtcRange,
+  type SubmissionCreatorsByDay,
 } from "@/lib/admin-date-range";
 import { formatCurrencyFromCents, formatCompactCount } from "@/lib/currency-utils";
 import { Button } from "@/components/ui/button";
@@ -207,10 +207,7 @@ interface AdminDashboardClientProps {
   submissionGrowth: StatusGrowthSeries;
   viewsGrowth: StatusGrowthSeries;
   contestGrowth: CountGrowthSeries;
-  submissionCreatorDates: {
-    created_at: string;
-    creator_id: string | null;
-  }[];
+  submissionCreatorsByDay: SubmissionCreatorsByDay[];
 }
 
 type StatusGrowthPoint = {
@@ -376,22 +373,6 @@ function sumCountGrowthPoints(points: CountGrowthPoint[]) {
   return points.reduce((sum, p) => sum + p.all, 0);
 }
 
-function countUniqueCreatorsInRange(
-  records: { created_at: string; creator_id: string | null }[],
-  from: Date,
-  to: Date,
-) {
-  const fromStr = getDateStrInTz(from);
-  const toStr = getDateStrInTz(to);
-  const ids = new Set<string>();
-  for (const record of records) {
-    if (!record.creator_id) continue;
-    const dayKey = getGrowthDayKey(record.created_at);
-    if (dayKey >= fromStr && dayKey <= toStr) ids.add(record.creator_id);
-  }
-  return ids.size;
-}
-
 function SummaryMetricCard({
   title,
   value,
@@ -494,7 +475,7 @@ export default function AdminDashboardClient({
   submissionGrowth,
   viewsGrowth,
   contestGrowth,
-  submissionCreatorDates,
+  submissionCreatorsByDay,
 }: AdminDashboardClientProps) {
   // Get theme from parent layout
   const [isDark, setIsDark] = useState<boolean | null>(null);
@@ -509,21 +490,10 @@ export default function AdminDashboardClient({
   const [viewsStatusFilter, setViewsStatusFilter] =
     useState<StatusFilter>("all");
 
-  const now = new Date();
-  const todayKey = getGrowthDayKey(now);
-  const fromKey = addDaysToDateKey(todayKey, -30);
-  const [fromYear, fromMonth, fromDay] = fromKey.split("-").map(Number);
-  const [toYear, toMonth, toDay] = todayKey.split("-").map(Number);
-  const defaultRangeStart = new Date(
-    Date.UTC(fromYear, fromMonth - 1, fromDay, 0, 0, 0, 0),
+  const defaultRange = getLastNDaysUtcRange(30);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(
+    defaultRange,
   );
-  const defaultRangeEnd = new Date(
-    Date.UTC(toYear, toMonth - 1, toDay, 23, 59, 59, 999),
-  );
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: defaultRangeStart,
-    to: defaultRangeEnd,
-  });
   const [dateRangePresetLabel, setDateRangePresetLabel] =
     useState<string>("Last 30 Days");
   const [isSyncingAllCreatorViews, setIsSyncingAllCreatorViews] =
@@ -557,7 +527,7 @@ export default function AdminDashboardClient({
           `${platformPass} submission${platformPass === 1 ? "" : "s"} checked (platform-aware pass)`,
         ]
           .filter(Boolean)
-          .join(" Â· "),
+          .join(" \u00b7 "),
       });
       setSyncAllViewsDialogOpen(false);
     } catch (error: unknown) {
@@ -728,8 +698,8 @@ export default function AdminDashboardClient({
       brands: userTotals.brands,
       submissions: submissionTotals,
       views: viewTotals,
-      uniqueCreators: countUniqueCreatorsInRange(
-        submissionCreatorDates,
+      uniqueCreators: countUniqueCreatorsFromByDay(
+        submissionCreatorsByDay,
         dateRange.from,
         dateRange.to,
       ),
@@ -739,7 +709,7 @@ export default function AdminDashboardClient({
     dateRange.from,
     dateRange.to,
     isLast12MonthsPreset,
-    submissionCreatorDates,
+    submissionCreatorsByDay,
     submissionGrowth,
     userGrowth,
     viewsGrowth,
@@ -868,7 +838,7 @@ export default function AdminDashboardClient({
                 {isSyncingAllCreatorViews ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Syncingâ€¦
+                    Syncing{"\u2026"}
                   </>
                 ) : (
                   "Sync now"
@@ -999,7 +969,7 @@ export default function AdminDashboardClient({
                 title="Verified Views"
                 value={overviewMetrics.views.verified}
                 subtitle={`Verified in ${overviewPeriodLabel}`}
-                tooltip="Views from verified submissions created in the selected date range"
+                tooltip="Current view counts from verified submissions, grouped by submission created date"
                 icon={CheckCircle}
                 isDark={isDark}
               />
@@ -1007,7 +977,7 @@ export default function AdminDashboardClient({
                 title="Pending Views"
                 value={overviewMetrics.views.pending}
                 subtitle={`Pending in ${overviewPeriodLabel}`}
-                tooltip="Views from pending submissions created in the selected date range"
+                tooltip="Current view counts from pending submissions, grouped by submission created date"
                 icon={Eye}
                 isDark={isDark}
               />
@@ -1015,7 +985,7 @@ export default function AdminDashboardClient({
                 title="Rejected Views"
                 value={overviewMetrics.views.rejected}
                 subtitle={`Rejected in ${overviewPeriodLabel}`}
-                tooltip="Views from rejected submissions created in the selected date range"
+                tooltip="Current view counts from rejected submissions, grouped by submission created date"
                 icon={XCircle}
                 isDark={isDark}
               />
@@ -1023,7 +993,7 @@ export default function AdminDashboardClient({
                 title="Paid Views"
                 value={overviewMetrics.views.paid}
                 subtitle={`Paid in ${overviewPeriodLabel}`}
-                tooltip="Views from paid submissions created in the selected date range"
+                tooltip="Current view counts from paid submissions, grouped by submission created date"
                 icon={DollarSign}
                 isDark={isDark}
               />
@@ -1031,7 +1001,7 @@ export default function AdminDashboardClient({
                 title="Total Views"
                 value={overviewMetrics.views.all}
                 subtitle={`Submitted in ${overviewPeriodLabel}`}
-                tooltip="All views from submissions created in the selected date range"
+                tooltip="Current view counts from all submissions, grouped by submission created date (not when views were earned)"
                 icon={Video}
                 isDark={isDark}
               />

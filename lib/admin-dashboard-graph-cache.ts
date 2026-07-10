@@ -1,9 +1,16 @@
-import { unstable_cache } from "next/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
+import { cache } from "react";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   addDaysToDateKey,
+  buildSubmissionCreatorsByDay,
   formatGrowthDayLabel,
+  formatGrowthWeekLabel,
   getGrowthDayKey,
+  getGrowthMonthKey,
+  getGrowthWeekKey,
+  getGrowthYearKey,
+  type SubmissionCreatorsByDay,
 } from "@/lib/admin-date-range";
 
 export const ADMIN_DASHBOARD_GRAPH_CACHE_SECONDS = 30 * 60;
@@ -50,16 +57,18 @@ export type AdminStatusGrowthSeries = {
 };
 
 export type AdminDashboardGraphData = {
-  userGrowth: AdminUserGrowthSeries;
   submissionGrowth: AdminStatusGrowthSeries;
   viewsGrowth: AdminStatusGrowthSeries;
+  submissionCreatorsByDay: SubmissionCreatorsByDay[];
 };
 
-function getStartOfWeek(d: Date) {
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.getFullYear(), d.getMonth(), diff);
-}
+export const ADMIN_DASHBOARD_CONTEST_TYPE_FILTERS = [
+  "all",
+  "cpm",
+  "leaderboard",
+  "milestone",
+  "dual_rewards",
+] as const;
 
 export function buildUserGrowth(
   users: { created_at: string; user_type: string }[],
@@ -93,10 +102,9 @@ export function buildUserGrowth(
     const isAdmin = u.user_type === "admin";
 
     const dayKey = getGrowthDayKey(d);
-    const weekStart = getStartOfWeek(d);
-    const weekKey = weekStart.toISOString().slice(0, 10);
-    const monthKey = d.toISOString().slice(0, 7);
-    const yearKey = String(d.getFullYear());
+    const weekKey = getGrowthWeekKey(d);
+    const monthKey = getGrowthMonthKey(d);
+    const yearKey = getGrowthYearKey(d);
 
     if (!byDayMap[dayKey])
       byDayMap[dayKey] = { all: 0, creators: 0, brands: 0, admins: 0 };
@@ -147,7 +155,7 @@ export function buildUserGrowth(
   const byDay: AdminUserGrowthPoint[] = [];
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
-    d.setDate(d.getDate() - i);
+    d.setUTCDate(d.getUTCDate() - i);
     const key = getGrowthDayKey(d);
     const pt = toGrowthPoint(key, byDayMap);
     pt.label = formatGrowthDayLabel(key);
@@ -157,14 +165,10 @@ export function buildUserGrowth(
   const byWeek: AdminUserGrowthPoint[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now);
-    d.setDate(d.getDate() - i * 7);
-    const weekStart = getStartOfWeek(d);
-    const key = weekStart.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    const key = getGrowthWeekKey(d);
     const pt = toGrowthPoint(key, byWeekMap);
-    pt.label = weekStart.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
+    pt.label = formatGrowthWeekLabel(key);
     byWeek.push(pt);
   }
 
@@ -197,8 +201,8 @@ export function buildUserGrowth(
   }
 
   const byYear: AdminUserGrowthPoint[] = [];
-  const yearStart = now.getFullYear() - 4;
-  for (let y = yearStart; y <= now.getFullYear(); y++) {
+  const yearStart = now.getUTCFullYear() - 4;
+  for (let y = yearStart; y <= now.getUTCFullYear(); y++) {
     const key = String(y);
     const v = byYearMap[key] || { all: 0, creators: 0, brands: 0, admins: 0 };
     byYear.push({
@@ -266,10 +270,9 @@ export function buildStatusGrowth(
     const value = mode === "count" ? 1 : record.views || 0;
 
     const dayKey = getGrowthDayKey(d);
-    const weekStart = getStartOfWeek(d);
-    const weekKey = weekStart.toISOString().slice(0, 10);
-    const monthKey = d.toISOString().slice(0, 7);
-    const yearKey = String(d.getFullYear());
+    const weekKey = getGrowthWeekKey(d);
+    const monthKey = getGrowthMonthKey(d);
+    const yearKey = getGrowthYearKey(d);
 
     if (!byDayMap[dayKey]) byDayMap[dayKey] = emptyStatusBuckets();
     addToStatusBuckets(byDayMap[dayKey], record.status, value);
@@ -302,7 +305,7 @@ export function buildStatusGrowth(
   const byDay: AdminStatusGrowthPoint[] = [];
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
-    d.setDate(d.getDate() - i);
+    d.setUTCDate(d.getUTCDate() - i);
     const key = getGrowthDayKey(d);
     const pt = toStatusGrowthPoint(key, byDayMap);
     pt.label = formatGrowthDayLabel(key);
@@ -312,14 +315,10 @@ export function buildStatusGrowth(
   const byWeek: AdminStatusGrowthPoint[] = [];
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now);
-    d.setDate(d.getDate() - i * 7);
-    const weekStart = getStartOfWeek(d);
-    const key = weekStart.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    const key = getGrowthWeekKey(d);
     const pt = toStatusGrowthPoint(key, byWeekMap);
-    pt.label = weekStart.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
+    pt.label = formatGrowthWeekLabel(key);
     byWeek.push(pt);
   }
 
@@ -352,8 +351,8 @@ export function buildStatusGrowth(
   }
 
   const byYear: AdminStatusGrowthPoint[] = [];
-  const yearStart = now.getFullYear() - 4;
-  for (let y = yearStart; y <= now.getFullYear(); y++) {
+  const yearStart = now.getUTCFullYear() - 4;
+  for (let y = yearStart; y <= now.getUTCFullYear(); y++) {
     const key = String(y);
     const v = byYearMap[key] || emptyStatusBuckets();
     byYear.push({
@@ -420,8 +419,7 @@ async function fetchAllRows<T extends { id?: string }>(
       rangeFrom + CHUNK - 1,
     );
     if (error) {
-      console.error(`Error fetching ${table} for admin dashboard:`, error);
-      break;
+      throw new Error(`Failed to fetch ${table} for admin dashboard: ${error.message}`);
     }
     if (!chunk || chunk.length === 0) break;
     all = all.concat(chunk as unknown as T[]);
@@ -454,8 +452,7 @@ async function loadAdminUserGrowth(): Promise<AdminUserGrowthSeries> {
       .order("id", { ascending: true })
       .range(rangeFrom, rangeFrom + CHUNK - 1);
     if (error) {
-      console.error("Error fetching users for graph cache:", error);
-      break;
+      throw new Error(`Failed to fetch users for graph cache: ${error.message}`);
     }
     if (!chunk || chunk.length === 0) break;
     usersForGrowth = usersForGrowth.concat(chunk);
@@ -465,6 +462,25 @@ async function loadAdminUserGrowth(): Promise<AdminUserGrowthSeries> {
 
   return buildUserGrowth(dedupeById(usersForGrowth));
 }
+
+async function loadAdminSubmissions(): Promise<
+  {
+    id: string;
+    created_at: string;
+    status: string;
+    views: number | null;
+    contest_id: string;
+    creator_id: string | null;
+  }[]
+> {
+  return fetchAllRows("submissions", "id, created_at, status, views, contest_id, creator_id", [
+    { column: "created_at", ascending: true },
+    { column: "id", ascending: true },
+  ]);
+}
+
+/** Uncached — raw rows exceed Next.js 2MB data-cache limit. Deduped per request via React cache(). */
+export const fetchAdminSubmissions = cache(loadAdminSubmissions);
 
 async function loadAdminDashboardGraphData(
   contestTypeFilter: string,
@@ -481,8 +497,9 @@ async function loadAdminDashboardGraphData(
       .order("id", { ascending: true })
       .range(contestRangeFrom, contestRangeFrom + CHUNK - 1);
     if (error) {
-      console.error("Error fetching contests for graph cache:", error);
-      break;
+      throw new Error(
+        `Failed to fetch contests for graph cache: ${error.message}`,
+      );
     }
     if (!chunk || chunk.length === 0) break;
     contests = contests.concat(chunk);
@@ -490,18 +507,7 @@ async function loadAdminDashboardGraphData(
     contestRangeFrom += CHUNK;
   }
 
-  const allSubmissions = await fetchAllRows<{
-    id: string;
-    created_at: string;
-    status: string;
-    views: number | null;
-    contest_id: string;
-  }>("submissions", "id, created_at, status, views, contest_id", [
-    { column: "created_at", ascending: true },
-    { column: "id", ascending: true },
-  ]);
-
-  const userGrowth = await loadAdminUserGrowth();
+  const allSubmissions = await fetchAdminSubmissions();
 
   const contestsForFilter =
     contestTypeFilter === "all"
@@ -514,9 +520,9 @@ async function loadAdminDashboardGraphData(
       : allSubmissions.filter((s) => contestIdSet.has(s.contest_id));
 
   return {
-    userGrowth,
     submissionGrowth: buildStatusGrowth(filteredSubmissions, "count"),
     viewsGrowth: buildStatusGrowth(filteredSubmissions, "views"),
+    submissionCreatorsByDay: buildSubmissionCreatorsByDay(filteredSubmissions),
   };
 }
 
@@ -546,4 +552,22 @@ export async function getCachedAdminDashboardGraphData(
       tags: [adminDashboardGraphCacheTag(contestTypeFilter)],
     },
   )();
+}
+
+/** Bust admin dashboard graph caches after user/submission mutations. */
+export function revalidateAdminDashboardCaches(
+  contestTypeFilter?: string,
+): void {
+  try {
+    revalidateTag("admin-dashboard-user-growth");
+    if (contestTypeFilter) {
+      revalidateTag(adminDashboardGraphCacheTag(contestTypeFilter));
+      return;
+    }
+    for (const filter of ADMIN_DASHBOARD_CONTEST_TYPE_FILTERS) {
+      revalidateTag(adminDashboardGraphCacheTag(filter));
+    }
+  } catch (e) {
+    console.warn("[admin-dashboard-graph-cache] revalidateTag failed:", e);
+  }
 }

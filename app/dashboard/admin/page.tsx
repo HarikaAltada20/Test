@@ -3,11 +3,19 @@ import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import AdminDashboardClient from "./AdminDashboardClient";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
-import { getCachedAdminUserGrowth, buildStatusGrowth } from "@/lib/admin-dashboard-graph-cache";
+import {
+  getCachedAdminUserGrowth,
+  getCachedAdminDashboardGraphData,
+  fetchAdminSubmissions,
+} from "@/lib/admin-dashboard-graph-cache";
 import {
   addDaysToDateKey,
   formatGrowthDayLabel,
+  formatGrowthWeekLabel,
   getGrowthDayKey,
+  getGrowthMonthKey,
+  getGrowthWeekKey,
+  getGrowthYearKey,
 } from "@/lib/admin-date-range";
 import { createAdminClient } from "@/utils/supabase/admin";
 
@@ -28,12 +36,6 @@ export default async function AdminDashboardPage({
   const resolvedSearch = await (searchParams ||
     Promise.resolve({} as Record<string, string | undefined>));
   const contestTypeFilter = (resolvedSearch?.["type"] as string) || "all";
-
-  function getStartOfWeek(d: Date) {
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.getFullYear(), d.getMonth(), diff);
-  }
 
   type CountGrowthPoint = { label: string; all: number };
   type CountGrowthPointWithDate = CountGrowthPoint & { date: string };
@@ -59,10 +61,9 @@ export default async function AdminDashboardPage({
       if (d < twoYearsAgo) continue;
 
       const dayKey = getGrowthDayKey(d);
-      const weekStart = getStartOfWeek(d);
-      const weekKey = weekStart.toISOString().slice(0, 10);
-      const monthKey = d.toISOString().slice(0, 7);
-      const yearKey = String(d.getFullYear());
+      const weekKey = getGrowthWeekKey(d);
+      const monthKey = getGrowthMonthKey(d);
+      const yearKey = getGrowthYearKey(d);
 
       byDayMap[dayKey] = (byDayMap[dayKey] || 0) + 1;
       byWeekMap[weekKey] = (byWeekMap[weekKey] || 0) + 1;
@@ -81,7 +82,7 @@ export default async function AdminDashboardPage({
     const byDay: CountGrowthPoint[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
-      d.setDate(d.getDate() - i);
+      d.setUTCDate(d.getUTCDate() - i);
       const key = getGrowthDayKey(d);
       const pt = toCountPoint(key, byDayMap);
       pt.label = formatGrowthDayLabel(key);
@@ -91,14 +92,10 @@ export default async function AdminDashboardPage({
     const byWeek: CountGrowthPoint[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now);
-      d.setDate(d.getDate() - i * 7);
-      const weekStart = getStartOfWeek(d);
-      const key = weekStart.toISOString().slice(0, 10);
+      d.setUTCDate(d.getUTCDate() - i * 7);
+      const key = getGrowthWeekKey(d);
       const pt = toCountPoint(key, byWeekMap);
-      pt.label = weekStart.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
+      pt.label = formatGrowthWeekLabel(key);
       byWeek.push(pt);
     }
 
@@ -131,8 +128,8 @@ export default async function AdminDashboardPage({
     }
 
     const byYear: CountGrowthPoint[] = [];
-    const yearStart = now.getFullYear() - 4;
-    for (let y = yearStart; y <= now.getFullYear(); y++) {
+    const yearStart = now.getUTCFullYear() - 4;
+    for (let y = yearStart; y <= now.getUTCFullYear(); y++) {
       const key = String(y);
       byYear.push({
         label: key,
@@ -159,6 +156,9 @@ export default async function AdminDashboardPage({
 
   try {
     const userGrowthPromise = getCachedAdminUserGrowth();
+    const graphDataPromise =
+      getCachedAdminDashboardGraphData(contestTypeFilter);
+    const submissionsPromise = fetchAdminSubmissions();
     const adminSupabase = createAdminClient();
 
     // Fetch all contests in chunks to avoid 1000-row limit
@@ -175,8 +175,7 @@ export default async function AdminDashboardPage({
         .range(contestRangeFrom, contestRangeFrom + CHUNK_CONTEST - 1);
       
       if (contestError) {
-        console.error("Error fetching contests chunk:", contestError);
-        break;
+        throw new Error(`Failed to fetch contests: ${contestError.message}`);
       }
       if (!chunk || chunk.length === 0) break;
       allContests = allContests.concat(chunk);
@@ -201,32 +200,8 @@ export default async function AdminDashboardPage({
         .eq("user_type", "advertiser"),
     ]);
 
-    // Fetch all submissions in chunks to avoid 1000-row limit
-    let allSubmissions: any[] = [];
-    const CHUNK_SUB = 1000;
-    let subRangeFrom = 0;
-    const seenSubmissionIds = new Set<string>();
-    while (true) {
-      const { data: chunk, error: subError } = await adminSupabase
-        .from("submissions")
-        .select("id, views, status, contest_id, created_at, creator_id")
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .range(subRangeFrom, subRangeFrom + CHUNK_SUB - 1);
-      
-      if (subError) {
-        console.error("Error fetching submissions chunk:", subError);
-        break;
-      }
-      if (!chunk || chunk.length === 0) break;
-      for (const row of chunk) {
-        if (seenSubmissionIds.has(row.id)) continue;
-        seenSubmissionIds.add(row.id);
-        allSubmissions.push(row);
-      }
-      if (chunk.length < CHUNK_SUB) break;
-      subRangeFrom += CHUNK_SUB;
-    }
+    // Fetch all submissions (uncached; aggregated graph data is cached separately)
+    const allSubmissions = await submissionsPromise;
 
     // Apply optional contest type filter
     const contests = (allContests || []).filter((c: any) =>
@@ -346,14 +321,12 @@ export default async function AdminDashboardPage({
     const totalCreators = totalCreatorsCount ?? 0;
     const totalBrands = totalBrandsCount ?? 0;
 
-    const userGrowth = await userGrowthPromise;
-    const submissionGrowth = buildStatusGrowth(filteredSubmissions, "count");
-    const viewsGrowth = buildStatusGrowth(filteredSubmissions, "views");
+    const [userGrowth, graphData] = await Promise.all([
+      userGrowthPromise,
+      graphDataPromise,
+    ]);
+    const { submissionGrowth, viewsGrowth, submissionCreatorsByDay } = graphData;
     const contestGrowth = buildCountGrowth(contests);
-    const submissionCreatorDates = filteredSubmissions.map((s: any) => ({
-      created_at: s.created_at,
-      creator_id: s.creator_id ?? null,
-    }));
 
     const parsePayment = (pd: any) => {
       if (!pd) return null as any;
@@ -535,7 +508,7 @@ export default async function AdminDashboardPage({
         submissionGrowth={submissionGrowth}
         viewsGrowth={viewsGrowth}
         contestGrowth={contestGrowth}
-        submissionCreatorDates={submissionCreatorDates}
+        submissionCreatorsByDay={submissionCreatorsByDay}
       />
     );
   } catch (error) {
