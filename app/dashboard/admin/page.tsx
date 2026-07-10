@@ -3,12 +3,13 @@ import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import AdminDashboardClient from "./AdminDashboardClient";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
-import { getCachedAdminDashboardGraphData } from "@/lib/admin-dashboard-graph-cache";
+import { getCachedAdminUserGrowth, buildStatusGrowth } from "@/lib/admin-dashboard-graph-cache";
 import {
   addDaysToDateKey,
   formatGrowthDayLabel,
   getGrowthDayKey,
 } from "@/lib/admin-date-range";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -157,18 +158,20 @@ export default async function AdminDashboardPage({
   }
 
   try {
-    const graphDataPromise = getCachedAdminDashboardGraphData(contestTypeFilter);
+    const userGrowthPromise = getCachedAdminUserGrowth();
+    const adminSupabase = createAdminClient();
 
     // Fetch all contests in chunks to avoid 1000-row limit
     let allContests: any[] = [];
     const CHUNK_CONTEST = 1000;
     let contestRangeFrom = 0;
     while (true) {
-      const { data: chunk, error: contestError } = await supabase
+      const { data: chunk, error: contestError } = await adminSupabase
         .from("contests_with_status")
         .select(
           "id, contest_type, contest_based_details, created_at, moderation_status, status, post_contest_status, payment_details",
         )
+        .order("id", { ascending: true })
         .range(contestRangeFrom, contestRangeFrom + CHUNK_CONTEST - 1);
       
       if (contestError) {
@@ -202,10 +205,13 @@ export default async function AdminDashboardPage({
     let allSubmissions: any[] = [];
     const CHUNK_SUB = 1000;
     let subRangeFrom = 0;
+    const seenSubmissionIds = new Set<string>();
     while (true) {
-      const { data: chunk, error: subError } = await supabase
+      const { data: chunk, error: subError } = await adminSupabase
         .from("submissions")
         .select("id, views, status, contest_id, created_at, creator_id")
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
         .range(subRangeFrom, subRangeFrom + CHUNK_SUB - 1);
       
       if (subError) {
@@ -213,7 +219,11 @@ export default async function AdminDashboardPage({
         break;
       }
       if (!chunk || chunk.length === 0) break;
-      allSubmissions = allSubmissions.concat(chunk);
+      for (const row of chunk) {
+        if (seenSubmissionIds.has(row.id)) continue;
+        seenSubmissionIds.add(row.id);
+        allSubmissions.push(row);
+      }
       if (chunk.length < CHUNK_SUB) break;
       subRangeFrom += CHUNK_SUB;
     }
@@ -336,8 +346,9 @@ export default async function AdminDashboardPage({
     const totalCreators = totalCreatorsCount ?? 0;
     const totalBrands = totalBrandsCount ?? 0;
 
-    const { userGrowth, submissionGrowth, viewsGrowth } =
-      await graphDataPromise;
+    const userGrowth = await userGrowthPromise;
+    const submissionGrowth = buildStatusGrowth(filteredSubmissions, "count");
+    const viewsGrowth = buildStatusGrowth(filteredSubmissions, "views");
     const contestGrowth = buildCountGrowth(contests);
     const submissionCreatorDates = filteredSubmissions.map((s: any) => ({
       created_at: s.created_at,

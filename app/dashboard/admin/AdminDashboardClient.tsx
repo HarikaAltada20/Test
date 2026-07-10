@@ -32,6 +32,7 @@ import {
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
 import {
+  addDaysToDateKey,
   filterAndFillGrowthByRange,
   formatGrowthDayLabel,
   getDateStrInTz,
@@ -64,9 +65,68 @@ import {
   endOfYear,
   startOfMonth,
   startOfYear,
-  subDays,
   subMonths,
 } from "date-fns";
+
+const GROWTH_CHART_MARGIN = { top: 10, right: 16, left: 0, bottom: 20 };
+
+type GrowthXAxisTickProps = {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+  index?: number;
+};
+
+/** Pick ~6–8 evenly spaced tick indices so 30-day ranges stay readable. */
+function getGrowthXAxisTickIndices(dataLength: number): Set<number> {
+  if (dataLength <= 0) return new Set();
+  if (dataLength <= 8) {
+    return new Set(Array.from({ length: dataLength }, (_, i) => i));
+  }
+
+  const targetTicks =
+    dataLength <= 31 ? 7 : dataLength <= 90 ? 8 : Math.min(10, dataLength);
+  const indices = new Set<number>([0, dataLength - 1]);
+  const innerCount = targetTicks - 2;
+
+  for (let i = 1; i <= innerCount; i++) {
+    indices.add(Math.round((i * (dataLength - 1)) / (innerCount + 1)));
+  }
+
+  return indices;
+}
+
+function createGrowthXAxisTick(isDark: boolean, dataLength: number) {
+  const visibleIndices = getGrowthXAxisTickIndices(dataLength);
+
+  return function GrowthXAxisTick({
+    x = 0,
+    y = 0,
+    payload,
+    index = 0,
+  }: GrowthXAxisTickProps) {
+    if (!visibleIndices.has(index)) {
+      return <g />;
+    }
+
+    const isFirst = index === 0;
+    const isLast = index === dataLength - 1;
+    const textAnchor = isFirst ? "start" : isLast ? "end" : "middle";
+
+    return (
+      <text
+        x={x}
+        y={y}
+        dy={14}
+        textAnchor={textAnchor}
+        fontSize={11}
+        fill={isDark ? "#9CA3AF" : "#6B7280"}
+      >
+        {payload?.value}
+      </text>
+    );
+  };
+}
 
 interface AdminDashboardClientProps {
   totalContests: number;
@@ -450,10 +510,16 @@ export default function AdminDashboardClient({
     useState<StatusFilter>("all");
 
   const now = new Date();
-  const defaultRangeEnd = new Date(now);
-  defaultRangeEnd.setHours(23, 59, 59, 999);
-  const defaultRangeStart = subDays(now, 30);
-  defaultRangeStart.setHours(0, 0, 0, 0);
+  const todayKey = getGrowthDayKey(now);
+  const fromKey = addDaysToDateKey(todayKey, -30);
+  const [fromYear, fromMonth, fromDay] = fromKey.split("-").map(Number);
+  const [toYear, toMonth, toDay] = todayKey.split("-").map(Number);
+  const defaultRangeStart = new Date(
+    Date.UTC(fromYear, fromMonth - 1, fromDay, 0, 0, 0, 0),
+  );
+  const defaultRangeEnd = new Date(
+    Date.UTC(toYear, toMonth - 1, toDay, 23, 59, 59, 999),
+  );
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: defaultRangeStart,
     to: defaultRangeEnd,
@@ -1123,11 +1189,11 @@ export default function AdminDashboardClient({
                     color: isDark ? "#F87171" : "#DC2626",
                   },
                 }}
-                className="h-[320px] w-full min-w-0"
+                className="h-[320px] w-full min-w-0 overflow-visible"
               >
                 <LineChart
                   data={usersChartData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  margin={GROWTH_CHART_MARGIN}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1135,12 +1201,12 @@ export default function AdminDashboardClient({
                   />
                   <XAxis
                     dataKey="label"
-                    tick={{
-                      fontSize: 11,
-                      fill: isDark ? "#9CA3AF" : "#6B7280",
-                    }}
+                    tick={createGrowthXAxisTick(isDark, usersChartData.length)}
                     tickLine={false}
                     axisLine={false}
+                    interval={0}
+                    height={36}
+                    padding={{ left: 12, right: 12 }}
                   />
                   <YAxis
                     width={44}
@@ -1299,11 +1365,11 @@ export default function AdminDashboardClient({
             <>
               <ChartContainer
                 config={statusChartConfig}
-                className="h-[320px] w-full min-w-0"
+                className="h-[320px] w-full min-w-0 overflow-visible"
               >
                 <LineChart
                   data={statusChartData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  margin={GROWTH_CHART_MARGIN}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1311,12 +1377,12 @@ export default function AdminDashboardClient({
                   />
                   <XAxis
                     dataKey="label"
-                    tick={{
-                      fontSize: 11,
-                      fill: isDark ? "#9CA3AF" : "#6B7280",
-                    }}
+                    tick={createGrowthXAxisTick(isDark, statusChartData.length)}
                     tickLine={false}
                     axisLine={false}
+                    interval={0}
+                    height={36}
+                    padding={{ left: 12, right: 12 }}
                   />
                   <YAxis
                     width={44}

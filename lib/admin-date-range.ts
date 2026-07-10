@@ -1,5 +1,5 @@
-/** Admin dashboard growth charts and date picker use Asia/Kolkata calendar days. */
-export const ADMIN_GROWTH_TIMEZONE = "local" as const;
+/** Admin dashboard growth charts bucket by UTC calendar days (matches Supabase timestamps). */
+export const ADMIN_GROWTH_TIMEZONE = "utc" as const;
 export type AdminGrowthTimezone = "utc" | "local";
 
 export const KOLKATA_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;

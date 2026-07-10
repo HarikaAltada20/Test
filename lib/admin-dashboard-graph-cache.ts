@@ -61,7 +61,7 @@ function getStartOfWeek(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), diff);
 }
 
-function buildUserGrowth(
+export function buildUserGrowth(
   users: { created_at: string; user_type: string }[],
 ): AdminUserGrowthSeries {
   const now = new Date();
@@ -247,7 +247,7 @@ function addToStatusBuckets(
   else if (status === "paid") buckets.paid += value;
 }
 
-function buildStatusGrowth(
+export function buildStatusGrowth(
   records: { created_at: string; status: string; views?: number | null }[],
   mode: "count" | "views",
 ): AdminStatusGrowthSeries {
@@ -383,6 +383,89 @@ function buildStatusGrowth(
   return { byDay, byWeek, byMonth, byYear, byDayFull };
 }
 
+function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const row of rows) {
+    const id = row.id;
+    if (!id) {
+      result.push(row);
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push(row);
+  }
+  return result;
+}
+
+async function fetchAllRows<T extends { id?: string }>(
+  table: string,
+  select: string,
+  orderColumns: { column: string; ascending?: boolean }[],
+): Promise<T[]> {
+  const supabase = createAdminClient();
+  const CHUNK = 1000;
+  let all: T[] = [];
+  let rangeFrom = 0;
+
+  while (true) {
+    let query = supabase.from(table).select(select);
+    for (const { column, ascending = true } of orderColumns) {
+      query = query.order(column, { ascending });
+    }
+
+    const { data: chunk, error } = await query.range(
+      rangeFrom,
+      rangeFrom + CHUNK - 1,
+    );
+    if (error) {
+      console.error(`Error fetching ${table} for admin dashboard:`, error);
+      break;
+    }
+    if (!chunk || chunk.length === 0) break;
+    all = all.concat(chunk as unknown as T[]);
+    if (chunk.length < CHUNK) break;
+    rangeFrom += CHUNK;
+  }
+
+  return dedupeById(all);
+}
+
+async function loadAdminUserGrowth(): Promise<AdminUserGrowthSeries> {
+  const supabase = createAdminClient();
+  const twoYearsAgoIso = new Date(
+    Date.now() - 2 * 365 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const CHUNK = 1000;
+  let usersForGrowth: {
+    id: string;
+    created_at: string;
+    user_type: string;
+  }[] = [];
+  let rangeFrom = 0;
+
+  while (true) {
+    const { data: chunk, error } = await supabase
+      .from("users")
+      .select("id, created_at, user_type")
+      .gte("created_at", twoYearsAgoIso)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(rangeFrom, rangeFrom + CHUNK - 1);
+    if (error) {
+      console.error("Error fetching users for graph cache:", error);
+      break;
+    }
+    if (!chunk || chunk.length === 0) break;
+    usersForGrowth = usersForGrowth.concat(chunk);
+    if (chunk.length < CHUNK) break;
+    rangeFrom += CHUNK;
+  }
+
+  return buildUserGrowth(dedupeById(usersForGrowth));
+}
+
 async function loadAdminDashboardGraphData(
   contestTypeFilter: string,
 ): Promise<AdminDashboardGraphData> {
@@ -395,6 +478,7 @@ async function loadAdminDashboardGraphData(
     const { data: chunk, error } = await supabase
       .from("contests_with_status")
       .select("id, contest_type")
+      .order("id", { ascending: true })
       .range(contestRangeFrom, contestRangeFrom + CHUNK - 1);
     if (error) {
       console.error("Error fetching contests for graph cache:", error);
@@ -406,48 +490,18 @@ async function loadAdminDashboardGraphData(
     contestRangeFrom += CHUNK;
   }
 
-  let allSubmissions: {
+  const allSubmissions = await fetchAllRows<{
+    id: string;
     created_at: string;
     status: string;
     views: number | null;
     contest_id: string;
-  }[] = [];
-  let subRangeFrom = 0;
-  while (true) {
-    const { data: chunk, error } = await supabase
-      .from("submissions")
-      .select("created_at, status, views, contest_id")
-      .range(subRangeFrom, subRangeFrom + CHUNK - 1);
-    if (error) {
-      console.error("Error fetching submissions for graph cache:", error);
-      break;
-    }
-    if (!chunk || chunk.length === 0) break;
-    allSubmissions = allSubmissions.concat(chunk);
-    if (chunk.length < CHUNK) break;
-    subRangeFrom += CHUNK;
-  }
+  }>("submissions", "id, created_at, status, views, contest_id", [
+    { column: "created_at", ascending: true },
+    { column: "id", ascending: true },
+  ]);
 
-  const twoYearsAgoIso = new Date(
-    Date.now() - 2 * 365 * 24 * 60 * 60 * 1000,
-  ).toISOString();
-  let usersForGrowth: { created_at: string; user_type: string }[] = [];
-  let rangeFrom = 0;
-  while (true) {
-    const { data: chunk, error } = await supabase
-      .from("users")
-      .select("created_at, user_type")
-      .gte("created_at", twoYearsAgoIso)
-      .order("created_at", { ascending: true })
-      .range(rangeFrom, rangeFrom + CHUNK - 1);
-    if (error) {
-      console.error("Error fetching users for graph cache:", error);
-      break;
-    }
-    usersForGrowth = usersForGrowth.concat(chunk || []);
-    if (!chunk || chunk.length < CHUNK) break;
-    rangeFrom += CHUNK;
-  }
+  const userGrowth = await loadAdminUserGrowth();
 
   const contestsForFilter =
     contestTypeFilter === "all"
@@ -460,7 +514,7 @@ async function loadAdminDashboardGraphData(
       : allSubmissions.filter((s) => contestIdSet.has(s.contest_id));
 
   return {
-    userGrowth: buildUserGrowth(usersForGrowth),
+    userGrowth,
     submissionGrowth: buildStatusGrowth(filteredSubmissions, "count"),
     viewsGrowth: buildStatusGrowth(filteredSubmissions, "views"),
   };
@@ -468,6 +522,17 @@ async function loadAdminDashboardGraphData(
 
 export function adminDashboardGraphCacheTag(contestTypeFilter: string) {
   return `admin-dashboard-graph-${contestTypeFilter}`;
+}
+
+export async function getCachedAdminUserGrowth(): Promise<AdminUserGrowthSeries> {
+  return unstable_cache(
+    () => loadAdminUserGrowth(),
+    ["admin-dashboard-user-growth"],
+    {
+      revalidate: ADMIN_DASHBOARD_GRAPH_CACHE_SECONDS,
+      tags: ["admin-dashboard-user-growth"],
+    },
+  )();
 }
 
 export async function getCachedAdminDashboardGraphData(
