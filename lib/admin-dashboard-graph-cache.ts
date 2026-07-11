@@ -3,13 +3,13 @@ import { cache } from "react";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   addDaysToDateKey,
-  buildSubmissionCreatorsByDay,
   formatGrowthDayLabel,
   formatGrowthWeekLabel,
   getGrowthDayKey,
   getGrowthMonthKey,
   getGrowthWeekKey,
   getGrowthYearKey,
+  utcDateFromDayKey,
   type SubmissionCreatorsByDay,
 } from "@/lib/admin-date-range";
 
@@ -250,41 +250,55 @@ function addToStatusBuckets(
   else if (status === "paid") buckets.paid += value;
 }
 
-export function buildStatusGrowth(
-  records: { created_at: string; status: string; views?: number | null }[],
-  mode: "count" | "views",
+type StatusBucketMaps = {
+  byDayMap: Record<string, ReturnType<typeof emptyStatusBuckets>>;
+  byWeekMap: Record<string, ReturnType<typeof emptyStatusBuckets>>;
+  byMonthMap: Record<string, ReturnType<typeof emptyStatusBuckets>>;
+  byYearMap: Record<string, ReturnType<typeof emptyStatusBuckets>>;
+};
+
+function createEmptyStatusBucketMaps(): StatusBucketMaps {
+  return {
+    byDayMap: {},
+    byWeekMap: {},
+    byMonthMap: {},
+    byYearMap: {},
+  };
+}
+
+function addDailyStatusRowToMaps(
+  maps: StatusBucketMaps,
+  dayKey: string,
+  status: string,
+  value: number,
+) {
+  const d = utcDateFromDayKey(dayKey);
+  const weekKey = getGrowthWeekKey(d);
+  const monthKey = getGrowthMonthKey(d);
+  const yearKey = getGrowthYearKey(d);
+
+  if (!maps.byDayMap[dayKey]) maps.byDayMap[dayKey] = emptyStatusBuckets();
+  addToStatusBuckets(maps.byDayMap[dayKey], status, value);
+
+  if (!maps.byWeekMap[weekKey]) maps.byWeekMap[weekKey] = emptyStatusBuckets();
+  addToStatusBuckets(maps.byWeekMap[weekKey], status, value);
+
+  if (!maps.byMonthMap[monthKey]) {
+    maps.byMonthMap[monthKey] = emptyStatusBuckets();
+  }
+  addToStatusBuckets(maps.byMonthMap[monthKey], status, value);
+
+  if (!maps.byYearMap[yearKey]) maps.byYearMap[yearKey] = emptyStatusBuckets();
+  addToStatusBuckets(maps.byYearMap[yearKey], status, value);
+}
+
+function finalizeStatusGrowthSeries(
+  maps: StatusBucketMaps,
 ): AdminStatusGrowthSeries {
+  const { byDayMap, byWeekMap, byMonthMap, byYearMap } = maps;
   const now = new Date();
   const twoYearsAgo = new Date(now);
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-
-  const byDayMap: Record<string, ReturnType<typeof emptyStatusBuckets>> = {};
-  const byWeekMap: Record<string, ReturnType<typeof emptyStatusBuckets>> = {};
-  const byMonthMap: Record<string, ReturnType<typeof emptyStatusBuckets>> = {};
-  const byYearMap: Record<string, ReturnType<typeof emptyStatusBuckets>> = {};
-
-  for (const record of records) {
-    const d = new Date(record.created_at);
-    if (d < twoYearsAgo) continue;
-    const value = mode === "count" ? 1 : record.views || 0;
-
-    const dayKey = getGrowthDayKey(d);
-    const weekKey = getGrowthWeekKey(d);
-    const monthKey = getGrowthMonthKey(d);
-    const yearKey = getGrowthYearKey(d);
-
-    if (!byDayMap[dayKey]) byDayMap[dayKey] = emptyStatusBuckets();
-    addToStatusBuckets(byDayMap[dayKey], record.status, value);
-
-    if (!byWeekMap[weekKey]) byWeekMap[weekKey] = emptyStatusBuckets();
-    addToStatusBuckets(byWeekMap[weekKey], record.status, value);
-
-    if (!byMonthMap[monthKey]) byMonthMap[monthKey] = emptyStatusBuckets();
-    addToStatusBuckets(byMonthMap[monthKey], record.status, value);
-
-    if (!byYearMap[yearKey]) byYearMap[yearKey] = emptyStatusBuckets();
-    addToStatusBuckets(byYearMap[yearKey], record.status, value);
-  }
 
   const toStatusGrowthPoint = (
     key: string,
@@ -379,6 +393,44 @@ export function buildStatusGrowth(
   }
 
   return { byDay, byWeek, byMonth, byYear, byDayFull };
+}
+
+function buildStatusGrowthFromDailyBuckets(
+  rows: {
+    day_key: string;
+    status: string;
+    submission_count: number;
+    views_sum: number;
+  }[],
+  mode: "count" | "views",
+): AdminStatusGrowthSeries {
+  const maps = createEmptyStatusBucketMaps();
+  for (const row of rows) {
+    const value =
+      mode === "count" ? Number(row.submission_count) : Number(row.views_sum);
+    addDailyStatusRowToMaps(maps, row.day_key, row.status, value);
+  }
+  return finalizeStatusGrowthSeries(maps);
+}
+
+export function buildStatusGrowth(
+  records: { created_at: string; status: string; views?: number | null }[],
+  mode: "count" | "views",
+): AdminStatusGrowthSeries {
+  const now = new Date();
+  const twoYearsAgo = new Date(now);
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+
+  const maps = createEmptyStatusBucketMaps();
+
+  for (const record of records) {
+    const d = new Date(record.created_at);
+    if (d < twoYearsAgo) continue;
+    const value = mode === "count" ? 1 : record.views || 0;
+    addDailyStatusRowToMaps(maps, getGrowthDayKey(d), record.status, value);
+  }
+
+  return finalizeStatusGrowthSeries(maps);
 }
 
 function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
@@ -481,25 +533,146 @@ async function loadAdminSubmissions(): Promise<
 /** Uncached — raw rows exceed Next.js 2MB data-cache limit. Deduped per request via React cache(). */
 export const fetchAdminSubmissions = cache(loadAdminSubmissions);
 
-function buildGraphForFilter(
+function getAdminGraphSinceIso(): string {
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
+  return twoYearsAgo.toISOString();
+}
+
+function normalizeSqlDayKey(dayKey: string): string {
+  return dayKey.slice(0, 10);
+}
+
+type SqlDailyGrowthRow = {
+  day_key: string;
+  contest_type: string | null;
+  status: string;
+  submission_count: number;
+  views_sum: number;
+};
+
+type SqlDailyCreatorsRow = {
+  day_key: string;
+  contest_type: string | null;
+  creator_ids: string[] | null;
+};
+
+function filterRowsByContestType<T extends { contest_type: string | null }>(
+  rows: T[],
   contestTypeFilter: string,
-  contests: { id: string; contest_type: string }[],
-  allSubmissions: Awaited<ReturnType<typeof loadAdminSubmissions>>,
-): AdminDashboardGraphData {
-  const contestsForFilter =
-    contestTypeFilter === "all"
-      ? contests
-      : contests.filter((c) => c.contest_type === contestTypeFilter);
-  const contestIdSet = new Set(contestsForFilter.map((c) => c.id));
-  const filteredSubmissions =
-    contestTypeFilter === "all"
-      ? allSubmissions
-      : allSubmissions.filter((s) => contestIdSet.has(s.contest_id));
+): T[] {
+  if (contestTypeFilter === "all") return rows;
+  return rows.filter((row) => row.contest_type === contestTypeFilter);
+}
+
+function aggregateDailyGrowthRows(
+  rows: SqlDailyGrowthRow[],
+): {
+  day_key: string;
+  status: string;
+  submission_count: number;
+  views_sum: number;
+}[] {
+  const map = new Map<
+    string,
+    { submission_count: number; views_sum: number }
+  >();
+
+  for (const row of rows) {
+    const dayKey = normalizeSqlDayKey(row.day_key);
+    const key = `${dayKey}|${row.status}`;
+    const existing = map.get(key) ?? { submission_count: 0, views_sum: 0 };
+    map.set(key, {
+      submission_count:
+        existing.submission_count + Number(row.submission_count || 0),
+      views_sum: existing.views_sum + Number(row.views_sum || 0),
+    });
+  }
+
+  return Array.from(map.entries()).map(([key, totals]) => {
+    const [day_key, status] = key.split("|");
+    return {
+      day_key,
+      status,
+      submission_count: totals.submission_count,
+      views_sum: totals.views_sum,
+    };
+  });
+}
+
+function buildSubmissionCreatorsByDayFromSqlRows(
+  rows: SqlDailyCreatorsRow[],
+): SubmissionCreatorsByDay[] {
+  const byDay = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    const dayKey = normalizeSqlDayKey(row.day_key);
+    if (!byDay.has(dayKey)) byDay.set(dayKey, new Set());
+    for (const creatorId of row.creator_ids ?? []) {
+      if (creatorId) byDay.get(dayKey)!.add(creatorId);
+    }
+  }
+
+  return Array.from(byDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, ids]) => ({ date, creatorIds: [...ids] }));
+}
+
+async function loadAdminSubmissionGraphSql(): Promise<{
+  dailyGrowthRows: SqlDailyGrowthRow[];
+  dailyCreatorsRows: SqlDailyCreatorsRow[];
+}> {
+  const supabase = createAdminClient();
+  const pSince = getAdminGraphSinceIso();
+
+  const [growthRes, creatorsRes] = await Promise.all([
+    supabase.rpc("admin_submission_growth_daily", { p_since: pSince }),
+    supabase.rpc("admin_submission_creators_by_day", { p_since: pSince }),
+  ]);
+
+  if (growthRes.error) {
+    throw new Error(
+      `Failed to aggregate submission growth for admin dashboard: ${growthRes.error.message}`,
+    );
+  }
+  if (creatorsRes.error) {
+    throw new Error(
+      `Failed to aggregate submission creators for admin dashboard: ${creatorsRes.error.message}`,
+    );
+  }
 
   return {
-    submissionGrowth: buildStatusGrowth(filteredSubmissions, "count"),
-    viewsGrowth: buildStatusGrowth(filteredSubmissions, "views"),
-    submissionCreatorsByDay: buildSubmissionCreatorsByDay(filteredSubmissions),
+    dailyGrowthRows: (growthRes.data ?? []) as SqlDailyGrowthRow[],
+    dailyCreatorsRows: (creatorsRes.data ?? []) as SqlDailyCreatorsRow[],
+  };
+}
+
+function buildGraphForFilterFromSql(
+  contestTypeFilter: string,
+  dailyGrowthRows: SqlDailyGrowthRow[],
+  dailyCreatorsRows: SqlDailyCreatorsRow[],
+): AdminDashboardGraphData {
+  const growthRowsForFilter = filterRowsByContestType(
+    dailyGrowthRows,
+    contestTypeFilter,
+  );
+  const creatorsRowsForFilter = filterRowsByContestType(
+    dailyCreatorsRows,
+    contestTypeFilter,
+  );
+  const aggregatedGrowthRows = aggregateDailyGrowthRows(growthRowsForFilter);
+
+  return {
+    submissionGrowth: buildStatusGrowthFromDailyBuckets(
+      aggregatedGrowthRows,
+      "count",
+    ),
+    viewsGrowth: buildStatusGrowthFromDailyBuckets(
+      aggregatedGrowthRows,
+      "views",
+    ),
+    submissionCreatorsByDay:
+      buildSubmissionCreatorsByDayFromSqlRows(creatorsRowsForFilter),
   };
 }
 
@@ -507,9 +680,9 @@ async function loadAdminDashboardCache(): Promise<AdminDashboardCacheData> {
   const supabase = createAdminClient();
   const CHUNK = 1000;
 
-  const [userGrowth, allSubmissions] = await Promise.all([
+  const [userGrowth, sqlGraphData] = await Promise.all([
     loadAdminUserGrowth(),
-    fetchAdminSubmissions(),
+    loadAdminSubmissionGraphSql(),
   ]);
 
   let contests: { id: string; contest_type: string }[] = [];
@@ -534,17 +707,22 @@ async function loadAdminDashboardCache(): Promise<AdminDashboardCacheData> {
   const contestTypeFilters = new Set<string>([
     "all",
     ...contests.map((c) => c.contest_type).filter(Boolean),
+    ...dailyGrowthRowsContestTypes(sqlGraphData.dailyGrowthRows),
   ]);
   const byContestType: Record<string, AdminDashboardGraphData> = {};
   for (const filter of contestTypeFilters) {
-    byContestType[filter] = buildGraphForFilter(
+    byContestType[filter] = buildGraphForFilterFromSql(
       filter,
-      contests,
-      allSubmissions,
+      sqlGraphData.dailyGrowthRows,
+      sqlGraphData.dailyCreatorsRows,
     );
   }
 
   return { userGrowth, byContestType };
+}
+
+function dailyGrowthRowsContestTypes(rows: SqlDailyGrowthRow[]): string[] {
+  return [...new Set(rows.map((row) => row.contest_type).filter(Boolean))] as string[];
 }
 
 async function loadAdminDashboardCacheEntry(): Promise<AdminDashboardCacheData> {

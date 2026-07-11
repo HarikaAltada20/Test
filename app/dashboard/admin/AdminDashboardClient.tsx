@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Loader2,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Tooltip,
@@ -219,6 +220,11 @@ type StatusGrowthPoint = {
   paid: number;
 };
 
+type ChartStatusGrowthPoint = StatusGrowthPoint & {
+  verified_or_paid: number;
+  not_rejected: number;
+};
+
 type StatusGrowthSeries = {
   byDay: StatusGrowthPoint[];
   byWeek: StatusGrowthPoint[];
@@ -237,7 +243,14 @@ type CountGrowthSeries = {
   byDayFull: (CountGrowthPoint & { date: string })[];
 };
 
-type StatusFilter = "all" | "verified" | "pending" | "rejected" | "paid";
+type StatusFilter =
+  | "all"
+  | "verified"
+  | "pending"
+  | "rejected"
+  | "paid"
+  | "verified_or_paid"
+  | "not_rejected";
 
 const STATUS_SERIES = [
   { key: "all", label: "All", colorLight: "#7C3AED", colorDark: "#A78BFA" },
@@ -261,6 +274,36 @@ const STATUS_SERIES = [
   },
   { key: "paid", label: "Paid", colorLight: "#2563EB", colorDark: "#60A5FA" },
 ] as const;
+
+const COMPOSITE_STATUS_SERIES = [
+  {
+    key: "verified_or_paid",
+    label: "Verified + Paid",
+    colorLight: "#0D9488",
+    colorDark: "#2DD4BF",
+  },
+  {
+    key: "not_rejected",
+    label: "Non Rejected",
+    colorLight: "#C026D3",
+    colorDark: "#E879F9",
+  },
+] as const;
+
+const CHART_STATUS_SERIES = [
+  ...STATUS_SERIES,
+  ...COMPOSITE_STATUS_SERIES,
+] as const;
+
+function enrichStatusChartData(
+  data: StatusGrowthPoint[],
+): ChartStatusGrowthPoint[] {
+  return data.map((d) => ({
+    ...d,
+    verified_or_paid: d.verified + d.paid,
+    not_rejected: d.all - d.rejected,
+  }));
+}
 
 function toStatusCumulative(data: StatusGrowthPoint[]): StatusGrowthPoint[] {
   let sumAll = 0;
@@ -367,6 +410,29 @@ function sumStatusGrowthPoints(points: StatusGrowthPoint[]) {
     }),
     { all: 0, verified: 0, pending: 0, rejected: 0, paid: 0 },
   );
+}
+
+function deriveCompositeStatusTotals(totals: {
+  all: number;
+  verified: number;
+  pending: number;
+  rejected: number;
+  paid: number;
+}) {
+  return {
+    verifiedOrPaid: totals.verified + totals.paid,
+    notRejected: totals.all - totals.rejected,
+  };
+}
+
+function isStatusSeriesVisibleForFilter(
+  key: string,
+  filter: StatusFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "verified_or_paid") return key === "verified_or_paid";
+  if (filter === "not_rejected") return key === "not_rejected";
+  return filter === key;
 }
 
 function sumCountGrowthPoints(points: CountGrowthPoint[]) {
@@ -613,10 +679,11 @@ export default function AdminDashboardClient({
           paid: 0,
         }),
       );
-  const statusChartData =
+  const statusChartData = enrichStatusChartData(
     growthMode === "cumulative"
       ? toStatusCumulative(rawStatusChartData)
-      : rawStatusChartData;
+      : rawStatusChartData,
+  );
 
   const overviewMetrics = useMemo(() => {
     const usersInRange: {
@@ -690,14 +757,24 @@ export default function AdminDashboardClient({
     const userTotals = sumUserGrowthPoints(usersInRange);
     const submissionTotals = sumStatusGrowthPoints(submissionsInRange);
     const viewTotals = sumStatusGrowthPoints(viewsInRange);
+    const submissionComposite = deriveCompositeStatusTotals(submissionTotals);
+    const viewComposite = deriveCompositeStatusTotals(viewTotals);
 
     return {
       campaigns: sumCountGrowthPoints(contestsInRange),
       users: userTotals.all,
       creators: userTotals.creators,
       brands: userTotals.brands,
-      submissions: submissionTotals,
-      views: viewTotals,
+      submissions: {
+        ...submissionTotals,
+        verifiedOrPaid: submissionComposite.verifiedOrPaid,
+        notRejected: submissionComposite.notRejected,
+      },
+      views: {
+        ...viewTotals,
+        verifiedOrPaid: viewComposite.verifiedOrPaid,
+        notRejected: viewComposite.notRejected,
+      },
       uniqueCreators: countUniqueCreatorsFromByDay(
         submissionCreatorsByDay,
         dateRange.from,
@@ -735,10 +812,10 @@ export default function AdminDashboardClient({
     }`;
 
   const isStatusSeriesVisible = (key: string) =>
-    activeStatusFilter === "all" || activeStatusFilter === key;
+    isStatusSeriesVisibleForFilter(key, activeStatusFilter);
 
   const statusChartConfig = Object.fromEntries(
-    STATUS_SERIES.map((s) => [
+    CHART_STATUS_SERIES.map((s) => [
       s.key,
       { label: s.label, color: isDark ? s.colorDark : s.colorLight },
     ]),
@@ -946,6 +1023,22 @@ export default function AdminDashboardClient({
                 isDark={isDark}
               />
               <SummaryMetricCard
+                title="Verified + Paid Submissions"
+                value={overviewMetrics.submissions.verifiedOrPaid}
+                subtitle={`Verified or paid in ${overviewPeriodLabel}`}
+                tooltip="Submissions that are verified or paid in the selected date range"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Non Rejected Submissions"
+                value={overviewMetrics.submissions.notRejected}
+                subtitle={`Not rejected in ${overviewPeriodLabel}`}
+                tooltip="Submissions excluding rejected in the selected date range"
+                icon={ShieldCheck}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
                 title="Unique Creators"
                 value={overviewMetrics.uniqueCreators}
                 subtitle={`Submitted in ${overviewPeriodLabel}`}
@@ -1003,6 +1096,22 @@ export default function AdminDashboardClient({
                 subtitle={`Submitted in ${overviewPeriodLabel}`}
                 tooltip="Current view counts from all submissions, grouped by submission created date (not when views were earned)"
                 icon={Video}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified + Paid Views"
+                value={overviewMetrics.views.verifiedOrPaid}
+                subtitle={`Verified or paid in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from verified or paid submissions, grouped by submission created date"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Non Rejected Views"
+                value={overviewMetrics.views.notRejected}
+                subtitle={`Not rejected in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from non-rejected submissions, grouped by submission created date"
+                icon={ShieldCheck}
                 isDark={isDark}
               />
             </>
@@ -1102,6 +1211,10 @@ export default function AdminDashboardClient({
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="rejected">Rejected</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="verified_or_paid">
+                      Verified + Paid
+                    </SelectItem>
+                    <SelectItem value="not_rejected">Non Rejected</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -1368,7 +1481,7 @@ export default function AdminDashboardClient({
                     }
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
-                  {STATUS_SERIES.map((series) => (
+                  {CHART_STATUS_SERIES.map((series) => (
                     <Line
                       key={series.key}
                       type="monotone"
@@ -1388,7 +1501,7 @@ export default function AdminDashboardClient({
                 </LineChart>
               </ChartContainer>
               <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
-                {STATUS_SERIES.filter((series) =>
+                {CHART_STATUS_SERIES.filter((series) =>
                   isStatusSeriesVisible(series.key),
                 ).map((series) => (
                   <span
