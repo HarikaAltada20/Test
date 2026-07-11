@@ -18,7 +18,7 @@ SET search_path = public
 AS $$
   SELECT
     (s.created_at AT TIME ZONE 'UTC')::date AS day_key,
-    COALESCE(c.contest_type::text, 'unknown') AS contest_type,
+    c.contest_type::text AS contest_type,
     lower(COALESCE(s.status::text, 'pending')) AS status,
     COUNT(*)::bigint AS submission_count,
     COALESCE(SUM(GREATEST(COALESCE(s.views, 0), 0)), 0)::bigint AS views_sum
@@ -43,7 +43,7 @@ SET search_path = public
 AS $$
   SELECT
     (s.created_at AT TIME ZONE 'UTC')::date AS day_key,
-    COALESCE(c.contest_type::text, 'unknown') AS contest_type,
+    c.contest_type::text AS contest_type,
     array_agg(DISTINCT s.creator_id) FILTER (WHERE s.creator_id IS NOT NULL) AS creator_ids
   FROM public.submissions s
   LEFT JOIN public.contests c ON c.id = s.contest_id

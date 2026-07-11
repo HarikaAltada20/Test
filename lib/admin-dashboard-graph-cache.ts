@@ -704,10 +704,12 @@ async function loadAdminDashboardCache(): Promise<AdminDashboardCacheData> {
     contestRangeFrom += CHUNK;
   }
 
+  // Orphan submissions (missing/deleted contest) have null contest_type in SQL and
+  // only appear under the "all" filter — same as the pre-RPC contestIdSet behavior.
   const contestTypeFilters = new Set<string>([
     "all",
     ...contests.map((c) => c.contest_type).filter(Boolean),
-    ...dailyGrowthRowsContestTypes(sqlGraphData.dailyGrowthRows),
+    ...knownContestTypesFromGrowthRows(sqlGraphData.dailyGrowthRows),
   ]);
   const byContestType: Record<string, AdminDashboardGraphData> = {};
   for (const filter of contestTypeFilters) {
@@ -721,8 +723,15 @@ async function loadAdminDashboardCache(): Promise<AdminDashboardCacheData> {
   return { userGrowth, byContestType };
 }
 
-function dailyGrowthRowsContestTypes(rows: SqlDailyGrowthRow[]): string[] {
-  return [...new Set(rows.map((row) => row.contest_type).filter(Boolean))] as string[];
+/** Contest types present in submission aggregates but not orphaned rows (null contest_type). */
+function knownContestTypesFromGrowthRows(rows: SqlDailyGrowthRow[]): string[] {
+  return [
+    ...new Set(
+      rows
+        .map((row) => row.contest_type)
+        .filter((type): type is string => Boolean(type)),
+    ),
+  ];
 }
 
 async function loadAdminDashboardCacheEntry(): Promise<AdminDashboardCacheData> {
