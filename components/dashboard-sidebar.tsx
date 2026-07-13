@@ -153,6 +153,7 @@ export function DashboardSidebar({
       icon: LayoutDashboard,
       description: "Admin overview",
     },
+  
     {
       name: "Users",
       href: "/dashboard/admin/users",
@@ -170,6 +171,12 @@ export function DashboardSidebar({
       href: "/dashboard/admin/contest-moderation",
       icon: Shield,
       description: "Review & approve campaigns",
+    },
+    {
+      name: "Analytics",
+      href: "/dashboard/admin/analytics",
+      icon: BarChart,
+      description: "Platform performance",
     },
     {
       name: "Leaderboard",
