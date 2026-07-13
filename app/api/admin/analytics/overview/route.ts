@@ -4,15 +4,21 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import {
   ADMIN_ANALYTICS_PLATFORMS,
   ADMIN_ANALYTICS_CONTEST_TYPES,
+  ADMIN_ANALYTICS_BASE_STATUSES,
   aggregateAdminAnalytics,
   contestOverlapsDateRange,
+  expandStatusFilterIds,
+  getContestAdvertiserName,
   isAdminAnalyticsContestType,
   isAdminAnalyticsPlatform,
   isApprovedAnalyticsContest,
   normalizeAnalyticsPlatform,
+  type AdminAnalyticsAdvertiserOption,
+  type AdminAnalyticsBaseStatus,
   type AdminAnalyticsContest,
   type AdminAnalyticsContestType,
   type AdminAnalyticsPlatform,
+  type AdminAnalyticsStatusFilterId,
   type AdminAnalyticsSubmission,
 } from "@/lib/admin-analytics";
 
@@ -26,7 +32,7 @@ async function fetchAllContests(
     const { data, error } = await supabase
       .from("contests")
       .select(
-        "id, title, platform, contest_type, contest_based_details, payment_details, moderation_status, start_date, end_date",
+        "id, title, platform, contest_type, contest_based_details, payment_details, moderation_status, start_date, end_date, advertiser_id, advertiser_profiles!advertiser_id(company_name)",
       )
       .order("created_at", { ascending: false })
       .range(from, from + CHUNK - 1);
@@ -90,9 +96,40 @@ function parsePlatformsParam(raw: string | null): AdminAnalyticsPlatform[] {
   return parts.length > 0 ? parts : [...ADMIN_ANALYTICS_PLATFORMS];
 }
 
+function parseStatusesParam(raw: string | null): AdminAnalyticsBaseStatus[] {
+  if (raw?.trim().toLowerCase() === "__none__") {
+    return [];
+  }
+  if (!raw || raw.trim() === "" || raw.trim().toLowerCase() === "all") {
+    return [...ADMIN_ANALYTICS_BASE_STATUSES];
+  }
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim().toLowerCase()) as AdminAnalyticsStatusFilterId[];
+  return expandStatusFilterIds(
+    parts.filter((p): p is AdminAnalyticsStatusFilterId =>
+      (ADMIN_ANALYTICS_BASE_STATUSES as string[]).includes(p),
+    ),
+  );
+}
+
+/** null = all; [] = none; [...] = specific ids */
+function parseIdListParam(raw: string | null): string[] | null {
+  if (raw?.trim().toLowerCase() === "__none__") return [];
+  if (!raw || !raw.trim()) return null;
+  const ids = raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? ids : null;
+}
+
 function parseContestTypesParam(
   raw: string | null,
 ): AdminAnalyticsContestType[] {
+  if (raw?.trim().toLowerCase() === "__none__") {
+    return [];
+  }
   if (!raw || raw.trim() === "" || raw.trim().toLowerCase() === "all") {
     return [...ADMIN_ANALYTICS_CONTEST_TYPES];
   }
@@ -100,7 +137,50 @@ function parseContestTypesParam(
     .split(",")
     .map((p) => p.trim().toLowerCase())
     .filter(isAdminAnalyticsContestType);
-  return parts.length > 0 ? parts : [...ADMIN_ANALYTICS_CONTEST_TYPES];
+  return parts;
+}
+
+async function fetchAdvertiserUsers(
+  supabase: ReturnType<typeof createAdminClient>,
+  advertiserIds: string[],
+): Promise<Map<string, { full_name: string | null; email: string | null }>> {
+  const map = new Map<
+    string,
+    { full_name: string | null; email: string | null }
+  >();
+  if (advertiserIds.length === 0) return map;
+
+  const CHUNK = 150;
+  for (let i = 0; i < advertiserIds.length; i += CHUNK) {
+    const chunk = advertiserIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, full_name, email")
+      .in("id", chunk);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      map.set(row.id, {
+        full_name: row.full_name ?? null,
+        email: row.email ?? null,
+      });
+    }
+  }
+  return map;
+}
+
+function buildAdvertiserOptions(
+  contests: AdminAnalyticsContest[],
+  usersById: Map<string, { full_name: string | null; email: string | null }>,
+): AdminAnalyticsAdvertiserOption[] {
+  const byId = new Map<string, AdminAnalyticsAdvertiserOption>();
+  for (const c of contests) {
+    if (!c.advertiser_id || byId.has(c.advertiser_id)) continue;
+    byId.set(c.advertiser_id, {
+      id: c.advertiser_id,
+      name: getContestAdvertiserName(c, usersById.get(c.advertiser_id)),
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function GET(request: NextRequest) {
@@ -115,14 +195,9 @@ export async function GET(request: NextRequest) {
     const toParam = searchParams.get("to");
     const platforms = parsePlatformsParam(searchParams.get("platforms"));
     const contestTypes = parseContestTypesParam(searchParams.get("types"));
-    const contestIdsRaw = searchParams.get("contestIds");
-    const contestIds =
-      contestIdsRaw && contestIdsRaw.trim()
-        ? contestIdsRaw
-            .split(",")
-            .map((id) => id.trim())
-            .filter(Boolean)
-        : null;
+    const statuses = parseStatusesParam(searchParams.get("statuses"));
+    const contestIds = parseIdListParam(searchParams.get("contestIds"));
+    const advertiserIds = parseIdListParam(searchParams.get("advertiserIds"));
 
     const now = new Date();
     const defaultFrom = new Date(now);
@@ -161,12 +236,21 @@ export async function GET(request: NextRequest) {
       return isAdminAnalyticsPlatform(p) && platformSet.has(p);
     });
 
+    const advertiserIdSet =
+      advertiserIds == null ? null : new Set(advertiserIds);
+
+    const contestsForScope = advertiserIdSet
+      ? contestsInRange.filter(
+          (c) => c.advertiser_id && advertiserIdSet.has(c.advertiser_id),
+        )
+      : contestsInRange;
+
     const scopedContestIds =
-      contestIds && contestIds.length > 0
-        ? contestsInRange
+      contestIds == null
+        ? contestsForScope.map((c) => c.id)
+        : contestsForScope
             .filter((c) => contestIds.includes(c.id))
-            .map((c) => c.id)
-        : contestsInRange.map((c) => c.id);
+            .map((c) => c.id);
 
     const submissions = await fetchSubmissionsInRange(
       supabase,
@@ -176,22 +260,42 @@ export async function GET(request: NextRequest) {
     );
 
     const aggregated = aggregateAdminAnalytics({
-      contests: contestsInRange,
+      contests: contestsForScope,
       submissions,
       from,
       to,
       platforms,
       contestTypes,
       contestIds,
+      advertiserIds,
+      statuses,
     });
 
-    // Campaign picker: approved/published video campaigns overlapping the range
-    const allCampaigns = contestsInRange
+    // Advertisers with campaigns overlapping the current date/platform/type scope
+    const advertiserIdsForLabels = [
+      ...new Set(
+        contestsInRange
+          .map((c) => c.advertiser_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const advertiserUsers = await fetchAdvertiserUsers(
+      supabase,
+      advertiserIdsForLabels,
+    );
+    const allAdvertisers = buildAdvertiserOptions(
+      contestsInRange,
+      advertiserUsers,
+    );
+
+    // Campaign picker: scoped by selected advertisers (and date/platform/type)
+    const allCampaigns = contestsForScope
       .map((c) => ({
         id: c.id,
         title: (c.title || "Untitled campaign").trim() || "Untitled campaign",
         platform: c.platform,
         contest_type: c.contest_type,
+        advertiser_id: c.advertiser_id ?? null,
       }))
       .sort((a, b) => a.title.localeCompare(b.title));
 
@@ -200,14 +304,18 @@ export async function GET(request: NextRequest) {
       to: to.toISOString(),
       platforms,
       types: contestTypes,
+      statuses,
+      advertiserIds: advertiserIds ?? [],
       summary: aggregated.summary,
       series: aggregated.series,
+      viewsByStatus: aggregated.viewsByStatus,
       campaigns: aggregated.campaigns,
+      allAdvertisers,
       allCampaigns,
       selectedCampaignCount:
-        contestIds && contestIds.length > 0
-          ? contestIds.length
-          : aggregated.campaigns.length,
+        contestIds == null
+          ? aggregated.campaigns.length
+          : contestIds.length,
     });
   } catch (error) {
     console.error("Admin analytics error:", error);

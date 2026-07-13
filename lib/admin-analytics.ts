@@ -1,8 +1,6 @@
-import { getCpmRateFromContest } from "@/lib/report-export-context";
 import { computeEffectiveCpmUsd } from "@/lib/report-export-metrics";
 import {
   getPoolBudgetCentsFromDetails,
-  isCpmContestType,
   type ContestBasedDetailsForPool,
 } from "@/lib/contest-type";
 
@@ -53,7 +51,52 @@ export type AdminAnalyticsContest = {
   moderation_status?: string | null;
   start_date?: string | null;
   end_date?: string | null;
+  advertiser_id?: string | null;
+  advertiser_profiles?:
+    | { company_name?: string | null }
+    | { company_name?: string | null }[]
+    | null;
 };
+
+export type AdminAnalyticsAdvertiserOption = {
+  id: string;
+  name: string;
+};
+
+export function getContestAdvertiserCompanyName(
+  contest: Pick<AdminAnalyticsContest, "advertiser_profiles">,
+): string | null {
+  const profile = Array.isArray(contest.advertiser_profiles)
+    ? contest.advertiser_profiles[0]
+    : contest.advertiser_profiles;
+  const name = profile?.company_name?.trim();
+  return name || null;
+}
+
+/** Prefer company name, then user full name, then email. */
+export function formatAdvertiserDisplayName(input: {
+  company_name?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+}): string {
+  return (
+    input.company_name?.trim() ||
+    input.full_name?.trim() ||
+    input.email?.trim() ||
+    "Unknown advertiser"
+  );
+}
+
+export function getContestAdvertiserName(
+  contest: Pick<AdminAnalyticsContest, "advertiser_profiles">,
+  user?: { full_name?: string | null; email?: string | null } | null,
+): string {
+  return formatAdvertiserDisplayName({
+    company_name: getContestAdvertiserCompanyName(contest),
+    full_name: user?.full_name,
+    email: user?.email,
+  });
+}
 
 export type AdminAnalyticsSubmission = {
   id: string;
@@ -74,21 +117,115 @@ export type AdminAnalyticsSeriesPoint = {
   likes: number;
   comments: number;
   shares: number;
+  pendingViews: number;
+  verifiedViews: number;
+  paidViews: number;
+  rejectedViews: number;
+  notRejectedViews: number;
+  verifiedPaidViews: number;
+};
+
+export type AdminAnalyticsBaseStatus =
+  | "pending"
+  | "verified"
+  | "paid"
+  | "rejected";
+
+export type AdminAnalyticsStatusFilterId = AdminAnalyticsBaseStatus;
+
+export type AdminAnalyticsStatusCardId =
+  | AdminAnalyticsBaseStatus
+  | "not_rejected"
+  | "verified_paid";
+
+export const ADMIN_ANALYTICS_BASE_STATUSES: AdminAnalyticsBaseStatus[] = [
+  "pending",
+  "verified",
+  "paid",
+  "rejected",
+];
+
+/** Status options shown in the view-status filter dropdown (bases only). */
+export const ADMIN_ANALYTICS_STATUS_FILTERS: {
+  id: AdminAnalyticsStatusFilterId;
+  label: string;
+  bases: AdminAnalyticsBaseStatus[];
+}[] = [
+  { id: "pending", label: "Pending Views", bases: ["pending"] },
+  { id: "verified", label: "Verified Views", bases: ["verified"] },
+  { id: "paid", label: "Paid Views", bases: ["paid"] },
+  { id: "rejected", label: "Rejected Views", bases: ["rejected"] },
+];
+
+/** Status metric cards (includes composites; not all appear in the filter dropdown). */
+export const ADMIN_ANALYTICS_STATUS_CARDS: {
+  id: AdminAnalyticsStatusCardId;
+  label: string;
+}[] = [
+  { id: "pending", label: "Pending Views" },
+  { id: "verified", label: "Verified Views" },
+  { id: "paid", label: "Paid Views" },
+  { id: "rejected", label: "Rejected Views" },
+  { id: "not_rejected", label: "Non Rejected Views" },
+  { id: "verified_paid", label: "Verified + Paid Views" },
+];
+
+export type AdminAnalyticsViewsByStatus = {
+  all: number;
+  pending: number;
+  verified: number;
+  paid: number;
+  rejected: number;
+  notRejected: number;
+  verifiedPaid: number;
 };
 
 export type AdminAnalyticsSummary = {
   views: number;
+  filteredViews: number;
   likes: number;
   comments: number;
   shares: number;
   totalPayoutsCents: number;
   effectiveCpm: number | null;
-  originalCpm: number | null;
-  cpmEfficient: boolean | null;
   totalSubmissions: number;
   approvedSubmissions: number;
   approvalRate: number;
 };
+
+export function normalizeSubmissionStatus(
+  status: string | null | undefined,
+): AdminAnalyticsBaseStatus | "unknown" {
+  const s = (status ?? "").toLowerCase();
+  if (s === "pending" || s === "verified" || s === "paid" || s === "rejected") {
+    return s;
+  }
+  // Treat legacy "approved" as verified
+  if (s === "approved") return "verified";
+  return "unknown";
+}
+
+export function expandStatusFilterIds(
+  selected: AdminAnalyticsStatusFilterId[],
+): AdminAnalyticsBaseStatus[] {
+  const set = new Set<AdminAnalyticsBaseStatus>();
+  for (const id of selected) {
+    const def = ADMIN_ANALYTICS_STATUS_FILTERS.find((f) => f.id === id);
+    if (!def) continue;
+    for (const base of def.bases) set.add(base);
+  }
+  return ADMIN_ANALYTICS_BASE_STATUSES.filter((s) => set.has(s));
+}
+
+export function isStatusFilterFullySelected(
+  id: AdminAnalyticsStatusFilterId,
+  selectedBases: AdminAnalyticsBaseStatus[],
+): boolean {
+  const def = ADMIN_ANALYTICS_STATUS_FILTERS.find((f) => f.id === id);
+  if (!def) return false;
+  const set = new Set(selectedBases);
+  return def.bases.every((b) => set.has(b));
+}
 
 /** Creator-facing campaign budget in cents (not advertiser funding charge). */
 export function getContestBudgetCents(contest: AdminAnalyticsContest): number {
@@ -252,22 +389,32 @@ export function aggregateAdminAnalytics(input: {
   platforms: AdminAnalyticsPlatform[];
   contestTypes: AdminAnalyticsContestType[];
   contestIds: string[] | null;
+  advertiserIds?: string[] | null;
+  statuses: AdminAnalyticsBaseStatus[];
 }): {
   summary: AdminAnalyticsSummary;
   series: AdminAnalyticsSeriesPoint[];
   campaigns: { id: string; title: string }[];
+  viewsByStatus: AdminAnalyticsViewsByStatus;
 } {
   const platformSet = new Set(input.platforms);
   const contestTypeSet = new Set(input.contestTypes);
+  const statusSet = new Set(input.statuses);
   const contestIdFilter =
-    input.contestIds && input.contestIds.length > 0
-      ? new Set(input.contestIds)
-      : null;
+    input.contestIds == null ? null : new Set(input.contestIds);
+  const advertiserIdFilter =
+    input.advertiserIds == null ? null : new Set(input.advertiserIds);
 
   const contestById = new Map(input.contests.map((c) => [c.id, c] as const));
 
   const matchingContests = input.contests.filter((c) => {
     if (contestIdFilter && !contestIdFilter.has(c.id)) return false;
+    if (
+      advertiserIdFilter &&
+      (!c.advertiser_id || !advertiserIdFilter.has(c.advertiser_id))
+    ) {
+      return false;
+    }
     if (!isApprovedAnalyticsContest(c)) return false;
     if (!contestOverlapsDateRange(c, input.from, input.to)) return false;
     const type = (c.contest_type ?? "").toLowerCase();
@@ -283,7 +430,7 @@ export function aggregateAdminAnalytics(input: {
   const fromMs = input.from.getTime();
   const toMs = input.to.getTime();
 
-  const filteredSubs = input.submissions.filter((sub) => {
+  const scopedSubs = input.submissions.filter((sub) => {
     if (!matchingContestIds.has(sub.contest_id)) return false;
     const t = new Date(sub.created_at).getTime();
     if (Number.isNaN(t) || t < fromMs || t > toMs) return false;
@@ -296,17 +443,70 @@ export function aggregateAdminAnalytics(input: {
     return platformSet.has(p);
   });
 
-  let views = 0;
+  const viewsByStatus: AdminAnalyticsViewsByStatus = {
+    all: 0,
+    pending: 0,
+    verified: 0,
+    paid: 0,
+    rejected: 0,
+    notRejected: 0,
+    verifiedPaid: 0,
+  };
+
+  for (const sub of scopedSubs) {
+    const contest = contestById.get(sub.contest_id);
+    const metrics = getSubmissionMetricBundle(
+      sub,
+      contest?.platform,
+      contest?.contest_based_details,
+    );
+    const st = normalizeSubmissionStatus(sub.status);
+    viewsByStatus.all += metrics.views;
+    if (st === "pending") viewsByStatus.pending += metrics.views;
+    else if (st === "verified") viewsByStatus.verified += metrics.views;
+    else if (st === "paid") viewsByStatus.paid += metrics.views;
+    else if (st === "rejected") viewsByStatus.rejected += metrics.views;
+  }
+  viewsByStatus.notRejected =
+    viewsByStatus.pending + viewsByStatus.verified + viewsByStatus.paid;
+  viewsByStatus.verifiedPaid = viewsByStatus.verified + viewsByStatus.paid;
+
+  const filteredSubs = scopedSubs.filter((sub) => {
+    const st = normalizeSubmissionStatus(sub.status);
+    if (st === "unknown") return false;
+    return statusSet.has(st);
+  });
+
+  let filteredViews = 0;
   let likes = 0;
   let comments = 0;
   let shares = 0;
   let approvedSubmissions = 0;
   let totalPayoutsFromEarnings = 0;
 
-  const daily = new Map<
-    string,
-    { views: number; likes: number; comments: number; shares: number }
-  >();
+  type DailyBucket = {
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    pendingViews: number;
+    verifiedViews: number;
+    paidViews: number;
+    rejectedViews: number;
+  };
+
+  const emptyDaily = (): DailyBucket => ({
+    views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    pendingViews: 0,
+    verifiedViews: 0,
+    paidViews: 0,
+    rejectedViews: 0,
+  });
+
+  const daily = new Map<string, DailyBucket>();
 
   // Pre-fill days in range so the chart is continuous
   {
@@ -316,12 +516,38 @@ export function aggregateAdminAnalytics(input: {
     end.setUTCHours(12, 0, 0, 0);
     while (cursor <= end) {
       const key = cursor.toISOString().slice(0, 10);
-      daily.set(key, { views: 0, likes: 0, comments: 0, shares: 0 });
+      daily.set(key, emptyDaily());
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
   }
 
-  const viewsByContest = new Map<string, number>();
+  // Status breakdown series uses all scoped submissions (not status-filtered)
+  for (const sub of scopedSubs) {
+    const contest = contestById.get(sub.contest_id);
+    const metrics = getSubmissionMetricBundle(
+      sub,
+      contest?.platform,
+      contest?.contest_based_details,
+    );
+    const st = normalizeSubmissionStatus(sub.status);
+    const key = dayKey(sub.created_at);
+    if (!key) continue;
+    const bucket = daily.get(key) ?? emptyDaily();
+    if (st === "pending") bucket.pendingViews += metrics.views;
+    else if (st === "verified") bucket.verifiedViews += metrics.views;
+    else if (st === "paid") bucket.paidViews += metrics.views;
+    else if (st === "rejected") bucket.rejectedViews += metrics.views;
+    daily.set(key, bucket);
+
+    // Total payouts: all paid earnings in range (not status-filtered)
+    const paid =
+      (sub.status ?? "").toLowerCase() === "paid" ||
+      Number(sub.earnings || 0) > 0;
+    if (paid) {
+      totalPayoutsFromEarnings +=
+        Number(sub.earnings || 0) + Number(sub.bonus_amount || 0);
+    }
+  }
 
   for (const sub of filteredSubs) {
     const contest = contestById.get(sub.contest_id);
@@ -330,33 +556,15 @@ export function aggregateAdminAnalytics(input: {
       contest?.platform,
       contest?.contest_based_details,
     );
-    views += metrics.views;
+    filteredViews += metrics.views;
     likes += metrics.likes;
     comments += metrics.comments;
     shares += metrics.shares;
     if (isApprovedStatus(sub.status)) approvedSubmissions += 1;
 
-    const paid =
-      (sub.status ?? "").toLowerCase() === "paid" ||
-      Number(sub.earnings || 0) > 0;
-    if (paid) {
-      totalPayoutsFromEarnings +=
-        Number(sub.earnings || 0) + Number(sub.bonus_amount || 0);
-    }
-
-    viewsByContest.set(
-      sub.contest_id,
-      (viewsByContest.get(sub.contest_id) || 0) + metrics.views,
-    );
-
     const key = dayKey(sub.created_at);
     if (!key) continue;
-    const bucket = daily.get(key) ?? {
-      views: 0,
-      likes: 0,
-      comments: 0,
-      shares: 0,
-    };
+    const bucket = daily.get(key) ?? emptyDaily();
     bucket.views += metrics.views;
     bucket.likes += metrics.likes;
     bucket.comments += metrics.comments;
@@ -364,29 +572,14 @@ export function aggregateAdminAnalytics(input: {
     daily.set(key, bucket);
   }
 
-  // Total Payouts (Gross): sum of paid earnings + bonus for submissions
-  // in the selected date range (not campaign budgets).
+  // Total Payouts (Gross): paid earnings + bonus in range (independent of status filter)
   const totalPayoutsCents = totalPayoutsFromEarnings;
 
-  // View-weighted average of target CPM rates
-  let weightedCpmNum = 0;
-  let weightedCpmDen = 0;
-  for (const c of matchingContests) {
-    if (!isCpmContestType(c.contest_type)) continue;
-    const rate = getCpmRateFromContest(c.contest_based_details);
-    if (rate == null || rate <= 0) continue;
-    const cViews = viewsByContest.get(c.id) || 0;
-    if (cViews <= 0) continue;
-    weightedCpmNum += rate * cViews;
-    weightedCpmDen += cViews;
-  }
-  const originalCpm =
-    weightedCpmDen > 0 ? weightedCpmNum / weightedCpmDen : null;
-  const effectiveCpm = computeEffectiveCpmUsd(totalPayoutsCents, views);
-  const cpmEfficient =
-    originalCpm != null && effectiveCpm != null
-      ? effectiveCpm <= originalCpm
-      : null;
+  // Effective CPM = total payouts / views from selected statuses
+  const effectiveCpm = computeEffectiveCpmUsd(
+    totalPayoutsCents,
+    filteredViews,
+  );
 
   const totalSubmissions = filteredSubs.length;
   const approvalRate =
@@ -400,12 +593,20 @@ export function aggregateAdminAnalytics(input: {
   let cumLikes = 0;
   let cumComments = 0;
   let cumShares = 0;
+  let cumPending = 0;
+  let cumVerified = 0;
+  let cumPaid = 0;
+  let cumRejected = 0;
   const series: AdminAnalyticsSeriesPoint[] = sortedKeys.map((key) => {
     const day = daily.get(key)!;
     cumViews += day.views;
     cumLikes += day.likes;
     cumComments += day.comments;
     cumShares += day.shares;
+    cumPending += day.pendingViews;
+    cumVerified += day.verifiedViews;
+    cumPaid += day.paidViews;
+    cumRejected += day.rejectedViews;
     return {
       date: key,
       label: formatDayLabel(key),
@@ -413,6 +614,12 @@ export function aggregateAdminAnalytics(input: {
       likes: cumLikes,
       comments: cumComments,
       shares: cumShares,
+      pendingViews: cumPending,
+      verifiedViews: cumVerified,
+      paidViews: cumPaid,
+      rejectedViews: cumRejected,
+      notRejectedViews: cumPending + cumVerified + cumPaid,
+      verifiedPaidViews: cumVerified + cumPaid,
     };
   });
 
@@ -425,20 +632,20 @@ export function aggregateAdminAnalytics(input: {
 
   return {
     summary: {
-      views,
+      views: viewsByStatus.all,
+      filteredViews,
       likes,
       comments,
       shares,
       totalPayoutsCents,
       effectiveCpm,
-      originalCpm,
-      cpmEfficient,
       totalSubmissions,
       approvedSubmissions,
       approvalRate,
     },
     series,
     campaigns,
+    viewsByStatus,
   };
 }
 

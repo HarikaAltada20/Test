@@ -10,19 +10,25 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import {
+  CheckCircle,
   ChevronDown,
+  Clock,
   Eye,
   Loader2,
   MessageSquare,
   Search,
+  ShieldCheck,
+  SlidersHorizontal,
   Target,
   Wallet,
+  XCircle,
 } from "lucide-react";
 import { FaYoutube, FaTiktok, FaInstagram } from "react-icons/fa";
 import { format } from "date-fns";
@@ -38,11 +44,18 @@ import {
   ADMIN_ANALYTICS_PLATFORMS,
   ADMIN_ANALYTICS_CONTEST_TYPES,
   ADMIN_ANALYTICS_CONTEST_TYPE_LABELS,
+  ADMIN_ANALYTICS_STATUS_FILTERS,
+  ADMIN_ANALYTICS_STATUS_CARDS,
+  expandStatusFilterIds,
   formatCpmDisplay,
+  type AdminAnalyticsAdvertiserOption,
   type AdminAnalyticsContestType,
   type AdminAnalyticsPlatform,
   type AdminAnalyticsSeriesPoint,
+  type AdminAnalyticsStatusCardId,
+  type AdminAnalyticsStatusFilterId,
   type AdminAnalyticsSummary,
+  type AdminAnalyticsViewsByStatus,
 } from "@/lib/admin-analytics";
 import { getLastNDaysUtcRange } from "@/lib/admin-date-range";
 import {
@@ -62,6 +75,7 @@ type CampaignOption = {
   title: string;
   platform?: string | null;
   contest_type?: string | null;
+  advertiser_id?: string | null;
 };
 
 type AnalyticsPayload = {
@@ -69,9 +83,13 @@ type AnalyticsPayload = {
   to: string;
   platforms: AdminAnalyticsPlatform[];
   types?: AdminAnalyticsContestType[];
+  statuses?: string[];
+  advertiserIds?: string[];
   summary: AdminAnalyticsSummary;
   series: AdminAnalyticsSeriesPoint[];
+  viewsByStatus?: AdminAnalyticsViewsByStatus;
   campaigns: CampaignOption[];
+  allAdvertisers?: AdminAnalyticsAdvertiserOption[];
   allCampaigns: CampaignOption[];
   selectedCampaignCount: number;
 };
@@ -95,22 +113,170 @@ const CHART_TABS: { id: ChartMetric; label: string }[] = [
   { id: "shares", label: "Shares" },
 ];
 
+type AnalyticsMetricCardId =
+  | "views"
+  | "total_payouts"
+  | "effective_cpm"
+  | "submissions"
+  | AdminAnalyticsStatusCardId;
+
+const METRIC_CARD_OPTIONS: { id: AnalyticsMetricCardId; label: string }[] = [
+  { id: "views", label: "Views" },
+  { id: "total_payouts", label: "Total Payouts" },
+  { id: "effective_cpm", label: "Effective CPM" },
+  { id: "submissions", label: "Submissions" },
+  { id: "pending", label: "Pending Views" },
+  { id: "verified", label: "Verified Views" },
+  { id: "paid", label: "Paid Views" },
+  { id: "rejected", label: "Rejected Views" },
+  { id: "not_rejected", label: "Non Rejected Views" },
+  { id: "verified_paid", label: "Verified + Paid Views" },
+];
+
+const DEFAULT_VISIBLE_CARDS: AnalyticsMetricCardId[] = METRIC_CARD_OPTIONS.map(
+  (c) => c.id,
+);
+
+const STATUS_CARD_ICONS: Record<
+  AdminAnalyticsStatusCardId,
+  ComponentType<{ className?: string }>
+> = {
+  pending: Clock,
+  verified: CheckCircle,
+  paid: Wallet,
+  rejected: XCircle,
+  not_rejected: ShieldCheck,
+  verified_paid: CheckCircle,
+};
+
 const EMPTY_SUMMARY: AdminAnalyticsSummary = {
   views: 0,
+  filteredViews: 0,
   likes: 0,
   comments: 0,
   shares: 0,
   totalPayoutsCents: 0,
   effectiveCpm: null,
-  originalCpm: null,
-  cpmEfficient: null,
   totalSubmissions: 0,
   approvedSubmissions: 0,
   approvalRate: 0,
 };
 
+const EMPTY_VIEWS_BY_STATUS: AdminAnalyticsViewsByStatus = {
+  all: 0,
+  pending: 0,
+  verified: 0,
+  paid: 0,
+  rejected: 0,
+  notRejected: 0,
+  verifiedPaid: 0,
+};
+
+function viewsForStatusCard(
+  id: AdminAnalyticsStatusCardId,
+  viewsByStatus: AdminAnalyticsViewsByStatus,
+): number {
+  switch (id) {
+    case "pending":
+      return viewsByStatus.pending;
+    case "verified":
+      return viewsByStatus.verified;
+    case "paid":
+      return viewsByStatus.paid;
+    case "rejected":
+      return viewsByStatus.rejected;
+    case "not_rejected":
+      return viewsByStatus.notRejected;
+    case "verified_paid":
+      return viewsByStatus.verifiedPaid;
+    default:
+      return 0;
+  }
+}
+
+const STATUS_SERIES: {
+  id: AdminAnalyticsStatusFilterId;
+  dataKey: keyof AdminAnalyticsSeriesPoint;
+  color: string;
+  label: string;
+}[] = [
+  {
+    id: "pending",
+    dataKey: "pendingViews",
+    color: "#F59E0B",
+    label: "Pending Views",
+  },
+  {
+    id: "verified",
+    dataKey: "verifiedViews",
+    color: "#22C55E",
+    label: "Verified Views",
+  },
+  {
+    id: "paid",
+    dataKey: "paidViews",
+    color: "#3B82F6",
+    label: "Paid Views",
+  },
+  {
+    id: "rejected",
+    dataKey: "rejectedViews",
+    color: "#EF4444",
+    label: "Rejected Views",
+  },
+];
+
 function formatRangeLabel(from: Date, to: Date): string {
   return `${format(from, "MMM d")} - ${format(to, "MMM d, yyyy")}`;
+}
+
+function AnalyticsChartTooltip({
+  active,
+  payload,
+  label,
+  isDark,
+  chartMetric,
+  statusSeries,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: AdminAnalyticsSeriesPoint }>;
+  label?: string;
+  isDark: boolean;
+  chartMetric: ChartMetric;
+  statusSeries: typeof STATUS_SERIES;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+
+  const metricLabel =
+    CHART_TABS.find((t) => t.id === chartMetric)?.label || chartMetric;
+  const metricValue = Number(row[chartMetric] ?? 0);
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border px-3 py-2 shadow-lg text-sm",
+        isDark
+          ? "border-white/10 bg-[#1a1a1a] text-white"
+          : "border-black/10 bg-white text-black",
+      )}
+    >
+      <p className="font-medium mb-1.5">{String(label)}</p>
+      <p className="text-[#7F39EC] mb-1">
+        {metricLabel} : {metricValue.toLocaleString()}
+      </p>
+      {chartMetric === "views" && statusSeries.length > 0 && (
+        <div className="space-y-0.5 pt-1 border-t border-black/5 dark:border-white/10">
+          {statusSeries.map((s) => (
+            <p key={s.id} style={{ color: s.color }}>
+              {s.label} : {Number(row[s.dataKey] ?? 0).toLocaleString()}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminAnalyticsClient() {
@@ -127,30 +293,49 @@ export default function AdminAnalyticsClient() {
   const [contestTypes, setContestTypes] = useState<AdminAnalyticsContestType[]>([
     ...ADMIN_ANALYTICS_CONTEST_TYPES,
   ]);
-  const [selectedContestIds, setSelectedContestIds] = useState<string[]>([]);
+  const [selectedAdvertiserIds, setSelectedAdvertiserIds] = useState<
+    string[] | null
+  >(null);
+  const [selectedContestIds, setSelectedContestIds] = useState<string[] | null>(
+    null,
+  );
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState<
+    AdminAnalyticsStatusFilterId[]
+  >(ADMIN_ANALYTICS_STATUS_FILTERS.map((f) => f.id));
+  const [advertiserSearch, setAdvertiserSearch] = useState("");
   const [campaignSearch, setCampaignSearch] = useState("");
+  const [visibleCards, setVisibleCards] = useState<AnalyticsMetricCardId[]>(
+    DEFAULT_VISIBLE_CARDS,
+  );
   const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalyticsPayload | null>(null);
 
-  const typesParam = useMemo(
-    () =>
-      [...contestTypes]
-        .sort()
-        .join(","),
-    [contestTypes],
-  );
+  const typesParam = useMemo(() => {
+    if (contestTypes.length === 0) return "__none__";
+    if (contestTypes.length === ADMIN_ANALYTICS_CONTEST_TYPES.length) {
+      return [...contestTypes].sort().join(",");
+    }
+    return [...contestTypes].sort().join(",");
+  }, [contestTypes]);
   const platformsParam = useMemo(
     () => [...platforms].sort().join(","),
     [platforms],
   );
-  const contestIdsParam = useMemo(
-    () =>
-      selectedContestIds.length > 0
-        ? [...selectedContestIds].sort().join(",")
-        : "",
-    [selectedContestIds],
-  );
+  const statusesParam = useMemo(() => {
+    if (selectedStatusFilters.length === 0) return "__none__";
+    return expandStatusFilterIds(selectedStatusFilters).sort().join(",");
+  }, [selectedStatusFilters]);
+  const advertiserIdsParam = useMemo(() => {
+    if (selectedAdvertiserIds === null) return "";
+    if (selectedAdvertiserIds.length === 0) return "__none__";
+    return [...selectedAdvertiserIds].sort().join(",");
+  }, [selectedAdvertiserIds]);
+  const contestIdsParam = useMemo(() => {
+    if (selectedContestIds === null) return "";
+    if (selectedContestIds.length === 0) return "__none__";
+    return [...selectedContestIds].sort().join(",");
+  }, [selectedContestIds]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -164,7 +349,11 @@ export default function AdminAnalyticsClient() {
           to: dateRange.to.toISOString(),
           platforms: platformsParam,
           types: typesParam,
+          statuses: statusesParam,
         });
+        if (advertiserIdsParam) {
+          params.set("advertiserIds", advertiserIdsParam);
+        }
         if (contestIdsParam) {
           params.set("contestIds", contestIdsParam);
         }
@@ -200,12 +389,48 @@ export default function AdminAnalyticsClient() {
     dateRange.to,
     platformsParam,
     typesParam,
+    statusesParam,
+    advertiserIdsParam,
     contestIdsParam,
   ]);
 
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const series = data?.series ?? [];
+  const allAdvertisers = data?.allAdvertisers ?? [];
   const allCampaigns = data?.allCampaigns ?? [];
+  const viewsByStatus = data?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS;
+
+  // Drop advertiser/campaign picks that are no longer in the current scope
+  useEffect(() => {
+    setSelectedAdvertiserIds((prev) => {
+      if (prev === null || prev.length === 0 || allAdvertisers.length === 0) {
+        return prev;
+      }
+      const valid = new Set(allAdvertisers.map((a) => a.id));
+      const next = prev.filter((id) => valid.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [allAdvertisers]);
+
+  useEffect(() => {
+    setSelectedContestIds((prev) => {
+      if (prev === null || prev.length === 0 || allCampaigns.length === 0) {
+        return prev;
+      }
+      const valid = new Set(allCampaigns.map((c) => c.id));
+      const next = prev.filter((id) => valid.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [allCampaigns]);
+
+  const filteredAdvertisers = useMemo(() => {
+    const q = advertiserSearch.trim().toLowerCase();
+    if (!q) return allAdvertisers;
+    return allAdvertisers.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q),
+    );
+  }, [allAdvertisers, advertiserSearch]);
 
   const filteredCampaigns = useMemo(() => {
     const q = campaignSearch.trim().toLowerCase();
@@ -216,22 +441,60 @@ export default function AdminAnalyticsClient() {
     );
   }, [allCampaigns, campaignSearch]);
 
+  const advertiserButtonLabel =
+    selectedAdvertiserIds === null
+      ? `${allAdvertisers.length} advertisers`
+      : selectedAdvertiserIds.length === 0
+        ? "No advertisers"
+        : selectedAdvertiserIds.length === 1
+          ? allAdvertisers.find((a) => a.id === selectedAdvertiserIds[0])
+              ?.name || "1 advertiser"
+          : `${selectedAdvertiserIds.length} advertisers`;
+
   const campaignButtonLabel =
-    selectedContestIds.length > 0
-      ? `${selectedContestIds.length} campaign${selectedContestIds.length === 1 ? "" : "s"}`
-      : `${data?.selectedCampaignCount ?? allCampaigns.length} campaigns`;
+    selectedContestIds === null
+      ? `${data?.selectedCampaignCount ?? allCampaigns.length} campaigns`
+      : selectedContestIds.length === 0
+        ? "No campaigns"
+        : `${selectedContestIds.length} campaign${selectedContestIds.length === 1 ? "" : "s"}`;
 
   const contestTypeButtonLabel =
-    contestTypes.length === ADMIN_ANALYTICS_CONTEST_TYPES.length
-      ? "All Campaign types"
-      : contestTypes.length === 1
-        ? ADMIN_ANALYTICS_CONTEST_TYPE_LABELS[contestTypes[0]]
-        : `${contestTypes.length} types`;
+    contestTypes.length === 0
+      ? "No campaign types"
+      : contestTypes.length === ADMIN_ANALYTICS_CONTEST_TYPES.length
+        ? "All Campaign types"
+        : contestTypes.length === 1
+          ? ADMIN_ANALYTICS_CONTEST_TYPE_LABELS[contestTypes[0]]
+          : `${contestTypes.length} types`;
 
-  const chartTotal = summary[chartMetric] ?? 0;
+  const statusButtonLabel =
+    selectedStatusFilters.length === 0
+      ? "No view statuses"
+      : selectedStatusFilters.length === ADMIN_ANALYTICS_STATUS_FILTERS.length
+        ? "All view statuses"
+        : selectedStatusFilters.length === 1
+          ? ADMIN_ANALYTICS_STATUS_FILTERS.find(
+              (f) => f.id === selectedStatusFilters[0],
+            )?.label || "1 status"
+          : `${selectedStatusFilters.length} statuses`;
+
+  const chartTotal =
+    chartMetric === "views"
+      ? (summary.filteredViews ?? summary.views)
+      : (summary[chartMetric] ?? 0);
+
+  const visibleStatusSeries = useMemo(
+    () =>
+      STATUS_SERIES.filter((s) => selectedStatusFilters.includes(s.id)),
+    [selectedStatusFilters],
+  );
 
   const clearCampaignSelection = () => {
-    setSelectedContestIds((prev) => (prev.length === 0 ? prev : []));
+    setSelectedContestIds((prev) => (prev === null ? prev : null));
+  };
+
+  const clearAdvertiserSelection = () => {
+    setSelectedAdvertiserIds((prev) => (prev === null ? prev : null));
   };
 
   const togglePlatform = (platform: AdminAnalyticsPlatform) => {
@@ -256,10 +519,6 @@ export default function AdminAnalyticsClient() {
         return prev.includes(type) ? prev : [...prev, type];
       }
       if (!prev.includes(type)) return prev;
-      if (prev.length === 1) {
-        toast.message("Keep at least one campaign type selected");
-        return prev;
-      }
       return prev.filter((t) => t !== type);
     });
     clearCampaignSelection();
@@ -268,11 +527,60 @@ export default function AdminAnalyticsClient() {
   const setAllContestTypesChecked = (checked: boolean) => {
     if (checked) {
       setContestTypes([...ADMIN_ANALYTICS_CONTEST_TYPES]);
+    } else {
+      setContestTypes([]);
+    }
+    clearCampaignSelection();
+  };
+
+  const allAdvertiserIds = useMemo(
+    () => allAdvertisers.map((a) => a.id),
+    [allAdvertisers],
+  );
+
+  const isAdvertiserChecked = (id: string) =>
+    selectedAdvertiserIds === null || selectedAdvertiserIds.includes(id);
+
+  const setAdvertiserChecked = (id: string, checked: boolean) => {
+    if (selectedAdvertiserIds === null) {
+      if (!checked) {
+        setSelectedAdvertiserIds(
+          allAdvertiserIds.filter((advertiserId) => advertiserId !== id),
+        );
+        clearCampaignSelection();
+      }
+      return;
+    }
+
+    if (checked) {
+      const next = selectedAdvertiserIds.includes(id)
+        ? selectedAdvertiserIds
+        : [...selectedAdvertiserIds, id];
+      if (
+        allAdvertiserIds.length > 0 &&
+        allAdvertiserIds.every((advertiserId) => next.includes(advertiserId))
+      ) {
+        setSelectedAdvertiserIds(null);
+      } else {
+        setSelectedAdvertiserIds(next);
+      }
       clearCampaignSelection();
       return;
     }
-    // Unchecking "All" is a no-op while controlled as fully selected;
-    // users remove types via the individual checkboxes.
+
+    setSelectedAdvertiserIds(
+      selectedAdvertiserIds.filter((advertiserId) => advertiserId !== id),
+    );
+    clearCampaignSelection();
+  };
+
+  const setAllAdvertisersChecked = (checked: boolean) => {
+    if (checked) {
+      setSelectedAdvertiserIds(null);
+    } else {
+      setSelectedAdvertiserIds([]);
+    }
+    clearCampaignSelection();
   };
 
   const allCampaignIds = useMemo(
@@ -281,19 +589,14 @@ export default function AdminAnalyticsClient() {
   );
 
   const isCampaignChecked = (id: string) =>
-    selectedContestIds.length === 0 || selectedContestIds.includes(id);
+    selectedContestIds === null || selectedContestIds.includes(id);
 
   const setCampaignChecked = (id: string, checked: boolean) => {
-    // Empty selection means "all campaigns"
-    if (selectedContestIds.length === 0) {
+    if (selectedContestIds === null) {
       if (!checked) {
-        // Uncheck one while all selected → all except this campaign
-        const next = allCampaignIds.filter((campaignId) => campaignId !== id);
-        if (next.length === 0) {
-          toast.message("Keep at least one campaign selected");
-          return;
-        }
-        setSelectedContestIds(next);
+        setSelectedContestIds(
+          allCampaignIds.filter((campaignId) => campaignId !== id),
+        );
       }
       return;
     }
@@ -302,32 +605,88 @@ export default function AdminAnalyticsClient() {
       const next = selectedContestIds.includes(id)
         ? selectedContestIds
         : [...selectedContestIds, id];
-      // If every campaign is selected again, collapse back to "all"
       if (
         allCampaignIds.length > 0 &&
         allCampaignIds.every((campaignId) => next.includes(campaignId))
       ) {
-        setSelectedContestIds([]);
+        setSelectedContestIds(null);
       } else {
         setSelectedContestIds(next);
       }
       return;
     }
 
-    const next = selectedContestIds.filter((campaignId) => campaignId !== id);
-    if (next.length === 0) {
-      toast.message("Keep at least one campaign selected");
-      return;
-    }
-    setSelectedContestIds(next);
+    setSelectedContestIds(
+      selectedContestIds.filter((campaignId) => campaignId !== id),
+    );
   };
 
   const setAllCampaignsChecked = (checked: boolean) => {
     if (checked) {
+      setSelectedContestIds(null);
+    } else {
       setSelectedContestIds([]);
     }
-    // Unchecking "All" is a no-op; deselect via individual checkboxes.
   };
+
+  const setStatusFilterChecked = (
+    id: AdminAnalyticsStatusFilterId,
+    checked: boolean,
+  ) => {
+    setSelectedStatusFilters((prev) => {
+      if (checked) {
+        return prev.includes(id) ? prev : [...prev, id];
+      }
+      return prev.filter((x) => x !== id);
+    });
+  };
+
+  const setAllStatusFiltersChecked = (checked: boolean) => {
+    if (checked) {
+      setSelectedStatusFilters(ADMIN_ANALYTICS_STATUS_FILTERS.map((f) => f.id));
+    } else {
+      setSelectedStatusFilters([]);
+    }
+  };
+
+  const isCardVisible = (id: AnalyticsMetricCardId) =>
+    visibleCards.includes(id);
+
+  const setCardVisible = (id: AnalyticsMetricCardId, checked: boolean) => {
+    setVisibleCards((prev) => {
+      if (checked) {
+        return prev.includes(id) ? prev : [...prev, id];
+      }
+      return prev.filter((x) => x !== id);
+    });
+  };
+
+  const setAllCardsVisible = (checked: boolean) => {
+    if (checked) {
+      setVisibleCards(DEFAULT_VISIBLE_CARDS);
+    } else {
+      setVisibleCards([]);
+    }
+  };
+
+  const visibleTopCards = useMemo(
+    () =>
+      (
+        [
+          "views",
+          "total_payouts",
+          "effective_cpm",
+          "submissions",
+        ] as AnalyticsMetricCardId[]
+      ).filter((id) => visibleCards.includes(id)),
+    [visibleCards],
+  );
+
+  const visibleStatusCards = useMemo(
+    () =>
+      ADMIN_ANALYTICS_STATUS_CARDS.filter((c) => visibleCards.includes(c.id)),
+    [visibleCards],
+  );
 
   const cardClass = cn(
     "rounded-2xl border p-4 sm:p-5",
@@ -403,10 +762,87 @@ export default function AdminAnalyticsClient() {
             onChange={(next, label) => {
               setDateRange(next);
               setDateRangePresetLabel(label);
+              clearAdvertiserSelection();
+              clearCampaignSelection();
             }}
             triggerClassName={cn(pillClass, "h-10")}
             align="end"
           />
+
+          {/* Advertisers */}
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={cn(pillClass, "h-10")}>
+                <span className="max-w-[160px] truncate">
+                  {advertiserButtonLabel}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+              className={cn(
+                "w-80 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+              )}
+            >
+              <DropdownMenuLabel>Advertisers</DropdownMenuLabel>
+              <div
+                className="px-2 pb-2"
+                onKeyDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 opacity-40" />
+                  <Input
+                    value={advertiserSearch}
+                    onChange={(e) => setAdvertiserSearch(e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    placeholder="Search advertisers…"
+                    autoComplete="off"
+                    className={cn(
+                      "h-9 pl-8",
+                      isDark && "border-white/10 bg-[#121212]",
+                    )}
+                  />
+                </div>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={selectedAdvertiserIds === null}
+                onCheckedChange={(checked) =>
+                  setAllAdvertisersChecked(checked === true)
+                }
+                onSelect={(e) => e.preventDefault()}
+              >
+                All advertisers
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <div className="max-h-64 overflow-y-auto">
+                {filteredAdvertisers.length === 0 ? (
+                  <p className="px-3 py-4 text-sm opacity-50">
+                    No advertisers found
+                  </p>
+                ) : (
+                  filteredAdvertisers.map((a) => (
+                    <DropdownMenuCheckboxItem
+                      key={a.id}
+                      checked={isAdvertiserChecked(a.id)}
+                      onCheckedChange={(checked) =>
+                        setAdvertiserChecked(a.id, checked === true)
+                      }
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      <span className="whitespace-normal break-words">
+                        {a.name}
+                      </span>
+                    </DropdownMenuCheckboxItem>
+                  ))
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Contest types */}
           <DropdownMenu>
@@ -500,7 +936,7 @@ export default function AdminAnalyticsClient() {
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
-                checked={selectedContestIds.length === 0}
+                checked={selectedContestIds === null}
                 onCheckedChange={(checked) =>
                   setAllCampaignsChecked(checked === true)
                 }
@@ -533,182 +969,323 @@ export default function AdminAnalyticsClient() {
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* View statuses */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={cn(pillClass, "h-10")}>
+                <span className="max-w-[150px] truncate">
+                  {statusButtonLabel}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className={cn(
+                "w-64 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+              )}
+            >
+              <DropdownMenuLabel>View statuses</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={
+                  selectedStatusFilters.length ===
+                  ADMIN_ANALYTICS_STATUS_FILTERS.length
+                }
+                onCheckedChange={(checked) =>
+                  setAllStatusFiltersChecked(checked === true)
+                }
+                onSelect={(e) => e.preventDefault()}
+              >
+                All view statuses
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {ADMIN_ANALYTICS_STATUS_FILTERS.map((filter) => (
+                <DropdownMenuCheckboxItem
+                  key={filter.id}
+                  checked={selectedStatusFilters.includes(filter.id)}
+                  onCheckedChange={(checked) =>
+                    setStatusFilterChecked(filter.id, checked === true)
+                  }
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {filter.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Customize cards */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={cn(pillClass, "h-10")}>
+                <SlidersHorizontal className="h-4 w-4 opacity-70" />
+                <span>Customize</span>
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className={cn(
+                "w-64 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+              )}
+            >
+              <DropdownMenuLabel>Customize cards</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={
+                  visibleCards.length === METRIC_CARD_OPTIONS.length
+                }
+                onCheckedChange={(checked) =>
+                  setAllCardsVisible(checked === true)
+                }
+                onSelect={(e) => e.preventDefault()}
+              >
+                All cards
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {METRIC_CARD_OPTIONS.map((card) => (
+                <DropdownMenuCheckboxItem
+                  key={card.id}
+                  checked={visibleCards.includes(card.id)}
+                  onCheckedChange={(checked) =>
+                    setCardVisible(card.id, checked === true)
+                  }
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {card.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       {/* Metric cards */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className={cardClass}>
-          <div className="mb-3 flex items-center gap-2">
-            <span
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-lg",
-                isDark ? "bg-white/10" : "bg-[#D8C3FF]",
-              )}
-            >
-              <Eye
-                className={cn(
-                  "h-4 w-4",
-                  isDark ? "text-white" : "text-[#4A00BE]",
-                )}
-              />
-            </span>
-            <span
-              className={cn(
-                "text-sm font-medium",
-                isDark ? "text-white/60" : "text-black/55",
-              )}
-            >
-              Views
-            </span>
-          </div>
-          <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {loading ? "…" : summary.views.toLocaleString()}
-          </p>
-        </div>
-
-        <div className={cardClass}>
-          <div className="mb-3 flex items-center gap-2">
-            <span
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-lg",
-                isDark ? "bg-white/10" : "bg-[#D8C3FF]",
-              )}
-            >
-              <Wallet
-                className={cn(
-                  "h-4 w-4",
-                  isDark ? "text-white" : "text-[#4A00BE]",
-                )}
-              />
-            </span>
-            <span
-              className={cn(
-                "text-sm font-medium",
-                isDark ? "text-white/60" : "text-black/55",
-              )}
-            >
-              Total Payouts (Gross)
-            </span>
-          </div>
-          <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {loading ? "…" : formatCurrencyFromCents(summary.totalPayoutsCents)}
-          </p>
-        </div>
-
-        <div className={cardClass}>
-          <div className="mb-2 flex items-center gap-2">
-            <span
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-lg",
-                isDark ? "bg-white/10" : "bg-[#D8C3FF]",
-              )}
-            >
-              <Target
-                className={cn(
-                  "h-4 w-4",
-                  isDark ? "text-white" : "text-[#4A00BE]",
-                )}
-              />
-            </span>
-            <span
-              className={cn(
-                "text-sm font-medium",
-                isDark ? "text-white/60" : "text-black/55",
-              )}
-            >
-              CPM
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <p
-                className={cn(
-                  "text-xs",
-                  isDark ? "text-white/45" : "text-black/45",
-                )}
-              >
-                Effective CPM
+      {visibleTopCards.length > 0 && (
+        <div
+          className={cn(
+            "mb-3 grid gap-3",
+            visibleTopCards.length === 1
+              ? "grid-cols-1"
+              : visibleTopCards.length === 2
+                ? "sm:grid-cols-2"
+                : visibleTopCards.length === 3
+                  ? "sm:grid-cols-2 xl:grid-cols-3"
+                  : "sm:grid-cols-2 xl:grid-cols-4",
+          )}
+        >
+          {isCardVisible("views") && (
+            <div className={cardClass}>
+              <div className="mb-3 flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg",
+                    isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                  )}
+                >
+                  <Eye
+                    className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-white" : "text-[#4A00BE]",
+                    )}
+                  />
+                </span>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white/60" : "text-black/55",
+                  )}
+                >
+                  Views
+                </span>
+              </div>
+              <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                {loading ? "…" : summary.views.toLocaleString()}
               </p>
-              <p className="text-lg font-semibold">
+            </div>
+          )}
+
+          {isCardVisible("total_payouts") && (
+            <div className={cardClass}>
+              <div className="mb-3 flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg",
+                    isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                  )}
+                >
+                  <Wallet
+                    className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-white" : "text-[#4A00BE]",
+                    )}
+                  />
+                </span>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white/60" : "text-black/55",
+                  )}
+                >
+                  Total Payouts (Gross)
+                </span>
+              </div>
+              <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                {loading
+                  ? "…"
+                  : formatCurrencyFromCents(summary.totalPayoutsCents)}
+              </p>
+            </div>
+          )}
+
+          {isCardVisible("effective_cpm") && (
+            <div className={cardClass}>
+              <div className="mb-3 flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg",
+                    isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                  )}
+                >
+                  <Target
+                    className={cn(
+                      "h-4 w-4",
+                      isDark ? "text-white" : "text-[#4A00BE]",
+                    )}
+                  />
+                </span>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white/60" : "text-black/55",
+                  )}
+                >
+                  Effective CPM
+                </span>
+              </div>
+              <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
                 {loading ? "…" : formatCpmDisplay(summary.effectiveCpm)}
               </p>
             </div>
-            <div>
-              <p
-                className={cn(
-                  "text-xs",
-                  isDark ? "text-white/45" : "text-black/45",
-                )}
-              >
-                Original CPM
-              </p>
-              <p className="text-lg font-semibold">
-                {loading ? "…" : formatCpmDisplay(summary.originalCpm)}
-              </p>
-            </div>
-          </div>
-        </div>
+          )}
 
-        <div className={cardClass}>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg",
-                  isDark ? "bg-white/10" : "bg-[#D8C3FF]",
-                )}
-              >
-                <MessageSquare
-                  className={cn(
-                    "h-4 w-4",
-                    isDark ? "text-white" : "text-[#4A00BE]",
-                  )}
-                />
-              </span>
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  isDark ? "text-white/60" : "text-black/55",
-                )}
-              >
-                Submissions
-              </span>
+          {isCardVisible("submissions") && (
+            <div className={cardClass}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-lg",
+                      isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                    )}
+                  >
+                    <MessageSquare
+                      className={cn(
+                        "h-4 w-4",
+                        isDark ? "text-white" : "text-[#4A00BE]",
+                      )}
+                    />
+                  </span>
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-white/60" : "text-black/55",
+                    )}
+                  >
+                    Submissions
+                  </span>
+                </div>
+                <span className="text-lg font-semibold text-orange-400">
+                  {loading ? "…" : `${summary.approvalRate}%`}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <p
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-white/45" : "text-black/45",
+                    )}
+                  >
+                    Total
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {loading
+                      ? "…"
+                      : summary.totalSubmissions.toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-white/45" : "text-black/45",
+                    )}
+                  >
+                    Approved
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {loading
+                      ? "…"
+                      : summary.approvedSubmissions.toLocaleString()}
+                  </p>
+                </div>
+              </div>
             </div>
-            <span className="text-lg font-semibold text-orange-400">
-              {loading ? "…" : `${summary.approvalRate}%`}
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div>
-              <p
-                className={cn(
-                  "text-xs",
-                  isDark ? "text-white/45" : "text-black/45",
-                )}
-              >
-                Total
-              </p>
-              <p className="text-lg font-semibold">
-                {loading ? "…" : summary.totalSubmissions.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p
-                className={cn(
-                  "text-xs",
-                  isDark ? "text-white/45" : "text-black/45",
-                )}
-              >
-                Approved
-              </p>
-              <p className="text-lg font-semibold">
-                {loading ? "…" : summary.approvedSubmissions.toLocaleString()}
-              </p>
-            </div>
-          </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* Views by status cards (outside graph) */}
+      {visibleStatusCards.length > 0 && (
+        <div
+          className={cn(
+            "mb-5 grid gap-3 grid-cols-2 sm:grid-cols-3",
+            visibleStatusCards.length >= 6
+              ? "xl:grid-cols-6"
+              : visibleStatusCards.length >= 4
+                ? "xl:grid-cols-4"
+                : "xl:grid-cols-3",
+          )}
+        >
+          {visibleStatusCards.map((card) => {
+            const Icon = STATUS_CARD_ICONS[card.id];
+            const value = viewsForStatusCard(card.id, viewsByStatus);
+            return (
+              <div key={card.id} className={cardClass}>
+                <div className="mb-2 flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "flex h-7 w-7 items-center justify-center rounded-lg",
+                      isDark ? "bg-white/10" : "bg-[#D8C3FF]",
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        isDark ? "text-white" : "text-[#4A00BE]",
+                      )}
+                    />
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs font-medium leading-tight",
+                      isDark ? "text-white/60" : "text-black/55",
+                    )}
+                  >
+                    {card.label}
+                  </span>
+                </div>
+                <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+                  {loading ? "…" : value.toLocaleString()}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Chart card */}
       <div className={cn(cardClass, "min-h-[420px]")}>
@@ -720,10 +1297,14 @@ export default function AdminAnalyticsClient() {
                 isDark ? "text-white/55" : "text-black/55",
               )}
             >
-              {selectedContestIds.length === 1
-                ? allCampaigns.find((c) => c.id === selectedContestIds[0])
-                    ?.title || "Campaign"
-                : "All Campaigns"}
+              {selectedContestIds === null
+                ? "All Campaigns"
+                : selectedContestIds.length === 0
+                  ? "No Campaigns"
+                  : selectedContestIds.length === 1
+                    ? allCampaigns.find((c) => c.id === selectedContestIds[0])
+                        ?.title || "Campaign"
+                    : `${selectedContestIds.length} Campaigns`}
             </p>
             <p className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
               {loading ? "…" : chartTotal.toLocaleString()}
@@ -733,7 +1314,9 @@ export default function AdminAnalyticsClient() {
           <div
             className={cn(
               "inline-flex flex-wrap gap-1 rounded-full border p-1",
-              isDark ? "border-white/10 bg-[#0d0d0d]" : "border-black/10 bg-[#f5f5f5]",
+              isDark
+                ? "border-white/10 bg-[#0d0d0d]"
+                : "border-black/10 bg-[#f5f5f5]",
             )}
           >
             {CHART_TABS.map((tab) => (
@@ -778,14 +1361,22 @@ export default function AdminAnalyticsClient() {
                 margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
               >
                 <defs>
-                  <linearGradient id="adminAnalyticsFill" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient
+                    id="adminAnalyticsFill"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
                     <stop offset="0%" stopColor="#7F39EC" stopOpacity={0.45} />
                     <stop offset="95%" stopColor="#7F39EC" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   vertical={false}
-                  stroke={isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}
+                  stroke={
+                    isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"
+                  }
                 />
                 <XAxis
                   dataKey="label"
@@ -793,7 +1384,9 @@ export default function AdminAnalyticsClient() {
                   axisLine={false}
                   minTickGap={40}
                   tick={{
-                    fill: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)",
+                    fill: isDark
+                      ? "rgba(255,255,255,0.45)"
+                      : "rgba(0,0,0,0.45)",
                     fontSize: 12,
                   }}
                 />
@@ -804,25 +1397,20 @@ export default function AdminAnalyticsClient() {
                   width={56}
                   tickFormatter={(v) => formatCompactCount(Number(v))}
                   tick={{
-                    fill: isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)",
+                    fill: isDark
+                      ? "rgba(255,255,255,0.45)"
+                      : "rgba(0,0,0,0.45)",
                     fontSize: 12,
                   }}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: isDark ? "#1a1a1a" : "#fff",
-                    border: isDark
-                      ? "1px solid rgba(255,255,255,0.1)"
-                      : "1px solid rgba(0,0,0,0.08)",
-                    borderRadius: 12,
-                    color: isDark ? "#fff" : "#000",
-                  }}
-                  formatter={(value: number) => [
-                    Number(value).toLocaleString(),
-                    CHART_TABS.find((t) => t.id === chartMetric)?.label ||
-                      chartMetric,
-                  ]}
-                  labelFormatter={(label) => String(label)}
+                  content={
+                    <AnalyticsChartTooltip
+                      isDark={isDark}
+                      chartMetric={chartMetric}
+                      statusSeries={visibleStatusSeries}
+                    />
+                  }
                 />
                 <Area
                   type="monotone"
@@ -833,6 +1421,18 @@ export default function AdminAnalyticsClient() {
                   dot={false}
                   activeDot={{ r: 4, fill: "#7F39EC" }}
                 />
+                {chartMetric === "views" &&
+                  visibleStatusSeries.map((s) => (
+                    <Line
+                      key={s.id}
+                      type="monotone"
+                      dataKey={s.dataKey}
+                      stroke={s.color}
+                      strokeWidth={1.75}
+                      dot={false}
+                      activeDot={{ r: 3, fill: s.color }}
+                    />
+                  ))}
               </AreaChart>
             </ResponsiveContainer>
           )}
