@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import SubmissionsClient from "./SubmissionsClient";
 import { RouteGuard } from "@/components/guards/RouteGuard";
@@ -9,9 +10,7 @@ import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 export default async function SubmissionsPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   if (!user) {
     redirect("/auth/signin");

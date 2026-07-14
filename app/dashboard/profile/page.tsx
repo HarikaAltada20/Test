@@ -1,12 +1,14 @@
 import React from "react";
 import ProfilePage from "./client";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 
 export default async function page() {
   try {
     const supabase = await createClient();
-    const { data: user, error } = await supabase.auth.getUser();
+    const user = await getSessionUser(supabase);
+    const error = user ? null : new Error("No session");
 
     // Handle authentication errors
     if (error) {
@@ -30,7 +32,7 @@ export default async function page() {
       );
     }
 
-    return <ProfilePage user={user?.user} />;
+    return <ProfilePage user={user} />;
   } catch (error: any) {
     console.error("Unexpected error in profile page:", error);
 

@@ -1,6 +1,7 @@
 import React from "react";
 import EditContestClient from "./client";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 
 export default async function page({
@@ -13,10 +14,10 @@ export default async function page({
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   const datesOnly = resolvedSearchParams.dates === 'true';
 
-  if (!user?.user) {
+  if (!user) {
     redirect("/login");
   }
 
@@ -24,13 +25,13 @@ export default async function page({
   const { data: userRow } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", user.user.id)
+    .eq("id", user.id)
     .single();
 
   const isAdmin = userRow?.user_type === "admin";
 
   return <EditContestClient
-    user={user?.user}
+    user={user}
     contestId={resolvedParams.id}
     datesOnly={datesOnly}
     isAdmin={isAdmin}

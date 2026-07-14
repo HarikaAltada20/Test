@@ -1,6 +1,7 @@
 import React from "react";
 import SubmitContentPage from "./client";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 
 export default async function page({
   params,
@@ -9,6 +10,6 @@ export default async function page({
 }) {
   const resolvedParams = await params;
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
-  return <SubmitContentPage contestId={resolvedParams.id} user={user?.user} />;
+  const user = await getSessionUser(supabase);
+  return <SubmitContentPage contestId={resolvedParams.id} user={user} />;
 }

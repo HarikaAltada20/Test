@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import GettingStartedClient from "./GettingStartedClient";
 
@@ -11,9 +12,7 @@ export const metadata: Metadata = {
 export default async function GettingStartedPage() {
     const supabase = await createClient();
 
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getSessionUser(supabase);
 
     if (!user) {
         redirect("/auth/signin");

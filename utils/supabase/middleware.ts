@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import {
+  clearAuthCookiesIfTrulyDead,
   cookieListHasSupabaseAuthToken,
   getUserSafe,
 } from './auth-server'
@@ -104,6 +105,7 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
     // After a stale token is cleared (or for true guests), Sign In must not wait on Supabase.
     if (!hasSupabaseAuthCookie(request)) {
       if (!isPublicAuthPath && !isPublicMarketingHome) {
+        console.log('[auth] middleware_redirect_no_session_cookie')
         const signInUrl = new URL('/auth/signin', request.url)
         signInUrl.searchParams.set('next', currentPath)
         return {
@@ -121,21 +123,35 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
       }
     }
 
-    // Has session cookies: validate with getUserSafe so invalid/stale refresh tokens
-    // are cleared on the middleware response (layout alone cannot clear them).
-    const { data } = await getUserSafe(supabase)
+    // Has session cookies: validate (retry on refresh races; do not wipe on soft null).
+    const { data, meta } = await getUserSafe(supabase)
     const user = data.user
 
     // --- Handle Unauthenticated Users ---
     if (!user) {
-        // If /verify-otp is now under /auth (e.g., /auth/verify-otp), this single check is sufficient.
-        // /choose-username is removed as it should typically be accessed by authenticated users.
+        // Soft null after refresh race (or clean null): only clear cookies when session
+        // storage is truly empty. If a session payload remains, allow through so the
+        // browser can apply a concurrent refresh winner's Set-Cookie — do not bounce
+        // to sign-in (that caused intermittent logouts).
+        const cleared = await clearAuthCookiesIfTrulyDead(supabase)
 
-        // The root middleware.ts matcher ensures this function only runs on matched routes
-        // (e.g. /dashboard/*, /choose-username, /auth/*, /).
-        // If an unauthenticated user is trying to access a protected path,
-        // and it's NOT an allowed public path, redirect to signin.
+        if (!cleared) {
+          console.log(
+            '[auth] middleware_allow_through_refresh_race path=' +
+              currentPath +
+              (meta?.refreshErrorSoftNull ? ' soft_null=1' : '')
+          )
+          return {
+            response: supabaseResponse,
+            user: null,
+            supabase,
+            profile: null,
+          }
+        }
+
+        // Truly dead cookies cleared — redirect protected routes only.
         if (!isPublicAuthPath && !isPublicMarketingHome) {
+            console.log('[auth] middleware_redirect_truly_dead_session')
             const signInUrl = new URL('/auth/signin', request.url)
             signInUrl.searchParams.set('next', currentPath)
             return {
@@ -145,7 +161,6 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
               profile: null,
             }
         }
-        // If it's an allowed public auth path (or /choose-username for direct nav), let unauthenticated user proceed.
         return {
           response: supabaseResponse,
           user: null,
