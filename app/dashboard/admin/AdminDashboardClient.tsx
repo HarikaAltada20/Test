@@ -284,7 +284,7 @@ const COMPOSITE_STATUS_SERIES = [
   },
   {
     key: "not_rejected",
-    label: "Non Rejected",
+    label: "Pending + Verified + Paid",
     colorLight: "#C026D3",
     colorDark: "#E879F9",
   },
@@ -301,7 +301,7 @@ function enrichStatusChartData(
   return data.map((d) => ({
     ...d,
     verified_or_paid: d.verified + d.paid,
-    // Match analytics: pending + verified + paid (excludes unknown/legacy)
+    // Match analytics: pending + verified + paid (excludes rejected/unknown)
     not_rejected: d.pending + d.verified + d.paid,
   }));
 }
@@ -422,7 +422,7 @@ function deriveCompositeStatusTotals(totals: {
 }) {
   return {
     verifiedOrPaid: totals.verified + totals.paid,
-    // Match analytics: pending + verified + paid (excludes unknown/legacy)
+    // Match analytics: pending + verified + paid (excludes rejected/unknown)
     notRejected: totals.pending + totals.verified + totals.paid,
   };
 }
@@ -1035,8 +1035,8 @@ export default function AdminDashboardClient({
               <SummaryMetricCard
                 title="Non Rejected Submissions"
                 value={overviewMetrics.submissions.notRejected}
-                subtitle={`Not rejected in ${overviewPeriodLabel}`}
-                tooltip="Submissions excluding rejected in the selected date range"
+                subtitle={`Pending + verified + paid in ${overviewPeriodLabel}`}
+                tooltip="Pending + verified + paid submissions (excludes rejected and unknown statuses)"
                 icon={ShieldCheck}
                 isDark={isDark}
               />
@@ -1111,8 +1111,8 @@ export default function AdminDashboardClient({
               <SummaryMetricCard
                 title="Non Rejected Views"
                 value={overviewMetrics.views.notRejected}
-                subtitle={`Not rejected in ${overviewPeriodLabel}`}
-                tooltip="Current view counts from non-rejected submissions, grouped by submission created date"
+                subtitle={`Pending + verified + paid in ${overviewPeriodLabel}`}
+                tooltip="Current views from pending + verified + paid submissions (excludes rejected and unknown); grouped by submission created date"
                 icon={ShieldCheck}
                 isDark={isDark}
               />
@@ -1216,7 +1216,9 @@ export default function AdminDashboardClient({
                     <SelectItem value="verified_or_paid">
                       Verified + Paid
                     </SelectItem>
-                    <SelectItem value="not_rejected">Non Rejected</SelectItem>
+                    <SelectItem value="not_rejected">
+                      Pending + Verified + Paid
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -2074,8 +2076,8 @@ export default function AdminDashboardClient({
         <SummaryMetricCard
           title="Total Submissions"
           value={totalSubmissions}
-          subtitle="All submissions"
-          tooltip="All submissions across campaigns"
+          subtitle="Last ~2 years"
+          tooltip="All submissions in the dashboard growth window (~2 years), using the same aggregates as the charts"
           icon={Video}
           isDark={isDark}
         />
@@ -2083,7 +2085,7 @@ export default function AdminDashboardClient({
           title="Unique Creators"
           value={uniqueCreators}
           subtitle="Creators with submissions"
-          tooltip="Distinct creators who have submitted"
+          tooltip="Distinct creators who have submitted in the dashboard growth window (~2 years)"
           icon={Users}
           isDark={isDark}
         />
@@ -2103,8 +2105,8 @@ export default function AdminDashboardClient({
         <SummaryMetricCard
           title="Expected Views"
           value={totalExpectedViews}
-          subtitle="Pending + Verified"
-          tooltip="Pending + Verified views"
+          subtitle="Pending + Verified + Paid"
+          tooltip="Pending + verified + paid views (same other_stats-aware rules as growth charts)"
           icon={Eye}
           isDark={isDark}
         />

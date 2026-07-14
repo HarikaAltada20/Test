@@ -140,6 +140,19 @@ async function fetchAnalyticsDailyRows(
       p_contest_ids: idChunk,
     });
     if (error) {
+      const code = (error as { code?: string }).code ?? "";
+      const msg = (error.message ?? "").toLowerCase();
+      const missingRpc =
+        code === "PGRST202" ||
+        code === "42883" ||
+        msg.includes("could not find the function") ||
+        (msg.includes("function") && msg.includes("does not exist")) ||
+        msg.includes("schema cache");
+      if (missingRpc) {
+        throw new Error(
+          "Admin analytics RPCs are not deployed yet. Apply SUPABASE migration 20260714_admin_analytics_daily_rpc.sql before using this page.",
+        );
+      }
       throw new Error(
         `Failed to aggregate admin analytics: ${error.message}`,
       );

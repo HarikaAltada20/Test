@@ -135,6 +135,7 @@ AS $$
   WITH scoped AS (
     SELECT
       (s.created_at AT TIME ZONE 'UTC')::date AS day_key,
+      -- Same rules as admin_submission_growth_daily / normalizeSubmissionStatus
       CASE
         WHEN lower(COALESCE(s.status::text, '')) = 'approved' THEN 'verified'
         WHEN lower(COALESCE(s.status::text, '')) IN (
@@ -220,6 +221,9 @@ GRANT EXECUTE ON FUNCTION public.admin_analytics_submission_views(bigint, text, 
 GRANT EXECUTE ON FUNCTION public.admin_analytics_daily(timestamptz, timestamptz, uuid[]) TO service_role;
 
 -- Supports contest-scoped date-range scans used by admin_analytics_daily.
+-- other_stats omitted from INCLUDE (large JSONB; still heap-fetched for
+-- view/like helpers). On large prod tables, prefer CREATE INDEX
+-- CONCURRENTLY outside a transaction during a maintenance window.
 CREATE INDEX IF NOT EXISTS idx_submissions_admin_analytics_contest_created
 ON public.submissions (contest_id, created_at)
 INCLUDE (status, views, earnings, bonus_amount, platform);

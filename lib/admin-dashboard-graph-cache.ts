@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   addDaysToDateKey,
+  buildSubmissionCreatorsByDay,
   formatGrowthDayLabel,
   formatGrowthWeekLabel,
   getGrowthDayKey,
@@ -298,7 +299,7 @@ function finalizeStatusGrowthSeries(
   const { byDayMap, byWeekMap, byMonthMap, byYearMap } = maps;
   const now = new Date();
   const twoYearsAgo = new Date(now);
-  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
 
   const toStatusGrowthPoint = (
     key: string,
@@ -419,7 +420,7 @@ export function buildStatusGrowth(
 ): AdminStatusGrowthSeries {
   const now = new Date();
   const twoYearsAgo = new Date(now);
-  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
 
   const maps = createEmptyStatusBucketMaps();
 
@@ -431,6 +432,52 @@ export function buildStatusGrowth(
   }
 
   return finalizeStatusGrowthSeries(maps);
+}
+
+/** Lifetime totals from daily buckets (matches chart view rules when series came from RPC). */
+export function sumStatusGrowthTotals(
+  series: AdminStatusGrowthSeries,
+): AdminStatusGrowthPoint {
+  return series.byDayFull.reduce(
+    (acc, p) => ({
+      label: "all",
+      all: acc.all + p.all,
+      verified: acc.verified + p.verified,
+      pending: acc.pending + p.pending,
+      rejected: acc.rejected + p.rejected,
+      paid: acc.paid + p.paid,
+    }),
+    { label: "all", all: 0, verified: 0, pending: 0, rejected: 0, paid: 0 },
+  );
+}
+
+/** Distinct creators across all days in the compact by-day series. */
+export function countUniqueCreatorsFromSeries(
+  byDay: SubmissionCreatorsByDay[],
+): number {
+  const ids = new Set<string>();
+  for (const { creatorIds } of byDay) {
+    for (const id of creatorIds) {
+      if (id) ids.add(id);
+    }
+  }
+  return ids.size;
+}
+
+function isMissingRpcError(error: {
+  message?: string;
+  code?: string;
+} | null): boolean {
+  if (!error) return false;
+  const code = error.code ?? "";
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    code === "PGRST202" ||
+    code === "42883" ||
+    msg.includes("could not find the function") ||
+    (msg.includes("function") && msg.includes("does not exist")) ||
+    msg.includes("schema cache")
+  );
 }
 
 function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
@@ -621,7 +668,7 @@ function buildSubmissionCreatorsByDayFromSqlRows(
 async function loadAdminSubmissionGraphSql(): Promise<{
   dailyGrowthRows: SqlDailyGrowthRow[];
   dailyCreatorsRows: SqlDailyCreatorsRow[];
-}> {
+} | null> {
   const supabase = createAdminClient();
   const pSince = getAdminGraphSinceIso();
 
@@ -631,11 +678,25 @@ async function loadAdminSubmissionGraphSql(): Promise<{
   ]);
 
   if (growthRes.error) {
+    if (isMissingRpcError(growthRes.error)) {
+      console.warn(
+        "[admin-dashboard-graph-cache] growth RPC missing; falling back to row scan. Apply migration 20260711_admin_dashboard_submission_growth_rpc.sql",
+        growthRes.error.message,
+      );
+      return null;
+    }
     throw new Error(
       `Failed to aggregate submission growth for admin dashboard: ${growthRes.error.message}`,
     );
   }
   if (creatorsRes.error) {
+    if (isMissingRpcError(creatorsRes.error)) {
+      console.warn(
+        "[admin-dashboard-graph-cache] creators RPC missing; falling back to row scan. Apply migration 20260711_admin_dashboard_submission_growth_rpc.sql",
+        creatorsRes.error.message,
+      );
+      return null;
+    }
     throw new Error(
       `Failed to aggregate submission creators for admin dashboard: ${creatorsRes.error.message}`,
     );
@@ -644,6 +705,28 @@ async function loadAdminSubmissionGraphSql(): Promise<{
   return {
     dailyGrowthRows: (growthRes.data ?? []) as SqlDailyGrowthRow[],
     dailyCreatorsRows: (creatorsRes.data ?? []) as SqlDailyCreatorsRow[],
+  };
+}
+
+function buildGraphForFilterFromRows(
+  contestTypeFilter: string,
+  contests: { id: string; contest_type: string }[],
+  allSubmissions: Awaited<ReturnType<typeof loadAdminSubmissions>>,
+): AdminDashboardGraphData {
+  const contestsForFilter =
+    contestTypeFilter === "all"
+      ? contests
+      : contests.filter((c) => c.contest_type === contestTypeFilter);
+  const contestIdSet = new Set(contestsForFilter.map((c) => c.id));
+  const filteredSubmissions =
+    contestTypeFilter === "all"
+      ? allSubmissions
+      : allSubmissions.filter((s) => contestIdSet.has(s.contest_id));
+
+  return {
+    submissionGrowth: buildStatusGrowth(filteredSubmissions, "count"),
+    viewsGrowth: buildStatusGrowth(filteredSubmissions, "views"),
+    submissionCreatorsByDay: buildSubmissionCreatorsByDay(filteredSubmissions),
   };
 }
 
@@ -704,20 +787,36 @@ async function loadAdminDashboardCache(): Promise<AdminDashboardCacheData> {
     contestRangeFrom += CHUNK;
   }
 
-  // Orphan submissions (missing/deleted contest) have null contest_type in SQL and
-  // only appear under the "all" filter — same as the pre-RPC contestIdSet behavior.
-  const contestTypeFilters = new Set<string>([
-    "all",
-    ...contests.map((c) => c.contest_type).filter(Boolean),
-    ...knownContestTypesFromGrowthRows(sqlGraphData.dailyGrowthRows),
-  ]);
   const byContestType: Record<string, AdminDashboardGraphData> = {};
-  for (const filter of contestTypeFilters) {
-    byContestType[filter] = buildGraphForFilterFromSql(
-      filter,
-      sqlGraphData.dailyGrowthRows,
-      sqlGraphData.dailyCreatorsRows,
-    );
+
+  if (sqlGraphData) {
+    // Orphan submissions (missing/deleted contest) have null contest_type in SQL and
+    // only appear under the "all" filter — same as the pre-RPC contestIdSet behavior.
+    const contestTypeFilters = new Set<string>([
+      "all",
+      ...contests.map((c) => c.contest_type).filter(Boolean),
+      ...knownContestTypesFromGrowthRows(sqlGraphData.dailyGrowthRows),
+    ]);
+    for (const filter of contestTypeFilters) {
+      byContestType[filter] = buildGraphForFilterFromSql(
+        filter,
+        sqlGraphData.dailyGrowthRows,
+        sqlGraphData.dailyCreatorsRows,
+      );
+    }
+  } else {
+    const allSubmissions = await loadAdminSubmissions();
+    const contestTypeFilters = new Set<string>([
+      "all",
+      ...contests.map((c) => c.contest_type).filter(Boolean),
+    ]);
+    for (const filter of contestTypeFilters) {
+      byContestType[filter] = buildGraphForFilterFromRows(
+        filter,
+        contests,
+        allSubmissions,
+      );
+    }
   }
 
   return { userGrowth, byContestType };

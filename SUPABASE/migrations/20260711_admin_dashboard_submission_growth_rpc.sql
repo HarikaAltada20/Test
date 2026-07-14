@@ -132,14 +132,14 @@ AS $$
   SELECT
     (s.created_at AT TIME ZONE 'UTC')::date AS day_key,
     c.contest_type::text AS contest_type,
-    -- Match admin_analytics_daily: legacy "approved" counts as verified
+    -- Same rules as admin_analytics_daily / normalizeSubmissionStatus:
+    -- legacy "approved" → verified; NULL/empty/other → unknown
     CASE
       WHEN lower(COALESCE(s.status::text, '')) = 'approved' THEN 'verified'
       WHEN lower(COALESCE(s.status::text, '')) IN (
         'pending', 'verified', 'paid', 'rejected'
       ) THEN lower(s.status::text)
-      WHEN s.status IS NULL OR btrim(s.status::text) = '' THEN 'pending'
-      ELSE lower(s.status::text)
+      ELSE 'unknown'
     END AS status,
     COUNT(*)::bigint AS submission_count,
     COALESCE(SUM(
@@ -193,6 +193,10 @@ GRANT EXECUTE ON FUNCTION public.admin_analytics_submission_views(bigint, text, 
 GRANT EXECUTE ON FUNCTION public.admin_submission_growth_daily(timestamptz) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_submission_creators_by_day(timestamptz) TO service_role;
 
+-- Speeds date-range scans for growth RPCs. Does not INCLUDE other_stats
+-- (JSONB is large; view helpers still heap-fetch). On large prod tables,
+-- prefer CREATE INDEX CONCURRENTLY outside a transaction during a
+-- maintenance window, then drop this IF NOT EXISTS from the migrate run.
 CREATE INDEX IF NOT EXISTS idx_submissions_admin_growth_daily
 ON public.submissions (created_at, contest_id, status)
 INCLUDE (views, creator_id);
