@@ -7,7 +7,10 @@ import ReferralCapture from "@/components/ReferralCapture";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { createClient } from "@/utils/supabase/server";
-import { getUserSafe } from "@/utils/supabase/auth-server";
+import {
+  cookieListHasSupabaseAuthToken,
+  getUserSafe,
+} from "@/utils/supabase/auth-server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
@@ -81,9 +84,13 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  // Guests with no session cookie: skip Auth network call in the shared layout.
+  const hasAuthCookie = cookieListHasSupabaseAuthToken(cookieStore.getAll());
   const supabase = await createClient();
-  const { data: authData } = await getUserSafe(supabase);
-  const user = authData?.user;
+  const user = hasAuthCookie
+    ? (await getUserSafe(supabase)).data?.user ?? null
+    : null;
 
   let profileFullName: string | null = null;
   let profilePictureUrl: string | null = null;
@@ -138,7 +145,6 @@ export default async function RootLayout({
   }
 
   // Determine initial theme mode on the server from cookies to avoid white flash
-  const cookieStore = await cookies();
   const presetCookie = cookieStore.get("dashboard-preset")?.value as
     | "game-of-creators"
     | "clean-professional"

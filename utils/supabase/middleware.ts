@@ -1,7 +1,10 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isRefreshTokenError } from './auth-server'
+import {
+  cookieListHasSupabaseAuthToken,
+  getUserSafe,
+} from './auth-server'
 
 export type MiddlewareUserProfile = {
   username: string | null
@@ -15,80 +18,118 @@ export type UpdateSessionResult = {
   profile: MiddlewareUserProfile | null
 }
 
+export function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return cookieListHasSupabaseAuthToken(request.cookies.getAll())
+}
+
+function createMiddlewareSupabase(
+  request: NextRequest,
+  getResponse: () => NextResponse,
+  setResponse: (response: NextResponse) => void
+) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+          const supabaseResponse = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          // Preserve cookies already queued on the previous response (e.g. multi-cookie signOut).
+          getResponse().cookies.getAll().forEach((cookie) => {
+            supabaseResponse.cookies.set(cookie)
+          })
+          supabaseResponse.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+          setResponse(supabaseResponse)
+        },
+        remove(name: string, options: CookieOptions) {
+          request.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+          const supabaseResponse = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          getResponse().cookies.getAll().forEach((cookie) => {
+            supabaseResponse.cookies.set(cookie)
+          })
+          supabaseResponse.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+          setResponse(supabaseResponse)
+        },
+      },
+    }
+  )
+}
+
 export async function updateSession(request: NextRequest): Promise<UpdateSessionResult> {
     let supabaseResponse = NextResponse.next({
         request,
     })
 
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                get(name: string) {
-                    return request.cookies.get(name)?.value
-                },
-                set(name: string, value: string, options: CookieOptions) {
-                    request.cookies.set({
-                        name,
-                        value,
-                        ...options,
-                    })
-                    supabaseResponse = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    })
-                    supabaseResponse.cookies.set({
-                        name,
-                        value,
-                        ...options,
-                    })
-                },
-                remove(name: string, options: CookieOptions) {
-                    request.cookies.set({
-                        name,
-                        value: '',
-                        ...options,
-                    })
-                    supabaseResponse = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    })
-                    supabaseResponse.cookies.set({
-                        name,
-                        value: '',
-                        ...options,
-                    })
-                },
-            },
-        }
+    const supabase = createMiddlewareSupabase(
+      request,
+      () => supabaseResponse,
+      (response) => {
+        supabaseResponse = response
+      }
     )
 
-    let user: User | null = null
-    try {
-        const { data } = await supabase.auth.getUser()
-        user = data.user
-    } catch (err) {
-        if (isRefreshTokenError(err)) {
-            // Default signOut() is scope "global" and revokes every device — use local
-            // so a bad/stale cookie on this browser does not log everyone else out.
-            await supabase.auth.signOut({ scope: 'local' })
-            user = null
-        } else {
-            throw err
+    const currentPath = request.nextUrl.pathname
+    const isPublicAuthPath = currentPath.startsWith('/auth')
+    const isPublicMarketingHome = currentPath === '/'
+
+    // Guests with no session cookie: skip Auth network round-trip entirely.
+    // After a stale token is cleared (or for true guests), Sign In must not wait on Supabase.
+    if (!hasSupabaseAuthCookie(request)) {
+      if (!isPublicAuthPath && !isPublicMarketingHome) {
+        const signInUrl = new URL('/auth/signin', request.url)
+        signInUrl.searchParams.set('next', currentPath)
+        return {
+          response: NextResponse.redirect(signInUrl),
+          user: null,
+          supabase,
+          profile: null,
         }
+      }
+      return {
+        response: supabaseResponse,
+        user: null,
+        supabase,
+        profile: null,
+      }
     }
 
-    const currentPath = request.nextUrl.pathname;
+    // Has session cookies: validate with getUserSafe so invalid/stale refresh tokens
+    // are cleared on the middleware response (layout alone cannot clear them).
+    const { data } = await getUserSafe(supabase)
+    const user = data.user
 
     // --- Handle Unauthenticated Users ---
     if (!user) {
         // If /verify-otp is now under /auth (e.g., /auth/verify-otp), this single check is sufficient.
         // /choose-username is removed as it should typically be accessed by authenticated users.
-        const isPublicAuthPath = currentPath.startsWith('/auth')
-        const isPublicMarketingHome = currentPath === '/'
 
         // The root middleware.ts matcher ensures this function only runs on matched routes
         // (e.g. /dashboard/*, /choose-username, /auth/*, /).

@@ -15,6 +15,16 @@ export function isRefreshTokenError(error: unknown): boolean {
   return false
 }
 
+/** Session cookies only (not PKCE code-verifier). Matches chunked tokens too. */
+export const SUPABASE_AUTH_TOKEN_COOKIE = /^sb-.*-auth-token(?:\.\d+)?$/
+
+/** True when request/storage has a Supabase session cookie (not merely a PKCE verifier). */
+export function cookieListHasSupabaseAuthToken(
+  cookies: ReadonlyArray<{ name: string }>
+): boolean {
+  return cookies.some(({ name }) => SUPABASE_AUTH_TOKEN_COOKIE.test(name))
+}
+
 export type GetUserSafeResult = { data: { user: User | null } }
 
 /**

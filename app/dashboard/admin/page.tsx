@@ -4,8 +4,9 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import AdminDashboardClient from "./AdminDashboardClient";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import {
+  countUniqueCreatorsFromSeries,
   getCachedAdminDashboardData,
-  fetchAdminSubmissions,
+  sumStatusGrowthTotals,
 } from "@/lib/admin-dashboard-graph-cache";
 import {
   addDaysToDateKey,
@@ -48,7 +49,7 @@ export default async function AdminDashboardPage({
   } {
     const now = new Date();
     const twoYearsAgo = new Date(now);
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
 
     const byDayMap: Record<string, number> = {};
     const byWeekMap: Record<string, number> = {};
@@ -155,7 +156,6 @@ export default async function AdminDashboardPage({
 
   try {
     const dashboardDataPromise = getCachedAdminDashboardData(contestTypeFilter);
-    const submissionsPromise = fetchAdminSubmissions();
     const adminSupabase = createAdminClient();
 
     // Fetch all contests in chunks to avoid 1000-row limit
@@ -170,7 +170,7 @@ export default async function AdminDashboardPage({
         )
         .order("id", { ascending: true })
         .range(contestRangeFrom, contestRangeFrom + CHUNK_CONTEST - 1);
-      
+
       if (contestError) {
         throw new Error(`Failed to fetch contests: ${contestError.message}`);
       }
@@ -196,9 +196,6 @@ export default async function AdminDashboardPage({
         .select("*", { count: "exact", head: true })
         .eq("user_type", "advertiser"),
     ]);
-
-    // Fetch all submissions (uncached; aggregated graph data is cached separately)
-    const allSubmissions = await submissionsPromise;
 
     // Apply optional contest type filter
     const contests = (allContests || []).filter((c: any) =>
@@ -248,82 +245,36 @@ export default async function AdminDashboardPage({
           c.post_contest_status !== "payouts_processed",
       ).length || 0;
 
-    const submissions = allSubmissions || [];
-    const contestIdSet = new Set(contests.map((c: any) => c.id));
-    const filteredSubmissions =
-      contestTypeFilter === "all"
-        ? submissions
-        : submissions.filter((s: any) => contestIdSet.has(s.contest_id));
-
-    const totalViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) => sum + (sub.views || 0),
-        0,
-      ) || 0;
-    const totalVerifiedViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "verified" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalPaidViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "paid" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalRejectedViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "rejected" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalPendingViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "pending" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalExpectedViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum +
-          (sub.status === "pending" ||
-          sub.status === "verified" ||
-          sub.status === "paid"
-            ? sub.views || 0
-            : 0),
-        0,
-      ) || 0;
-
-    const totalSubmissions = filteredSubmissions.length;
-    const verifiedSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "verified",
-    ).length;
-    const pendingSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "pending",
-    ).length;
-    const rejectedSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "rejected",
-    ).length;
-    const paidSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "paid",
-    ).length;
-    const uniqueCreators = new Set(
-      filteredSubmissions
-        .map((s: any) => s.creator_id)
-        .filter((id: string | null | undefined) => Boolean(id)),
-    ).size;
-    const totalUsers = totalUsersCount ?? 0;
-    const totalCreators = totalCreatorsCount ?? 0;
-    const totalBrands = totalBrandsCount ?? 0;
-
     const {
       userGrowth,
       submissionGrowth,
       viewsGrowth,
       submissionCreatorsByDay,
     } = await dashboardDataPromise;
+
+    // Derive submission/view KPIs from the same RPC aggregates as the charts
+    // (other_stats-aware views, ~2y window) — no per-row submission scan.
+    const submissionTotals = sumStatusGrowthTotals(submissionGrowth);
+    const viewTotals = sumStatusGrowthTotals(viewsGrowth);
+    const totalSubmissions = submissionTotals.all;
+    const verifiedSubmissions = submissionTotals.verified;
+    const pendingSubmissions = submissionTotals.pending;
+    const rejectedSubmissions = submissionTotals.rejected;
+    const paidSubmissions = submissionTotals.paid;
+    const totalViews = viewTotals.all;
+    const totalVerifiedViews = viewTotals.verified;
+    const totalPaidViews = viewTotals.paid;
+    const totalRejectedViews = viewTotals.rejected;
+    const totalPendingViews = viewTotals.pending;
+    const totalExpectedViews =
+      viewTotals.pending + viewTotals.verified + viewTotals.paid;
+    const uniqueCreators = countUniqueCreatorsFromSeries(
+      submissionCreatorsByDay,
+    );
+    const totalUsers = totalUsersCount ?? 0;
+    const totalCreators = totalCreatorsCount ?? 0;
+    const totalBrands = totalBrandsCount ?? 0;
+
     const contestGrowth = buildCountGrowth(contests);
 
     const parsePayment = (pd: any) => {
