@@ -2076,8 +2076,8 @@ export default function AdminDashboardClient({
         <SummaryMetricCard
           title="Total Submissions"
           value={totalSubmissions}
-          subtitle="Last ~2 years"
-          tooltip="All submissions in the dashboard growth window (~2 years), using the same aggregates as the charts"
+          subtitle="All submissions"
+          tooltip="All submissions across all campaigns"
           icon={Video}
           isDark={isDark}
         />
@@ -2085,7 +2085,7 @@ export default function AdminDashboardClient({
           title="Unique Creators"
           value={uniqueCreators}
           subtitle="Creators with submissions"
-          tooltip="Distinct creators who have submitted in the dashboard growth window (~2 years)"
+          tooltip="Distinct creators who have submitted"
           icon={Users}
           isDark={isDark}
         />
@@ -2105,8 +2105,8 @@ export default function AdminDashboardClient({
         <SummaryMetricCard
           title="Expected Views"
           value={totalExpectedViews}
-          subtitle="Pending + Verified + Paid"
-          tooltip="Pending + verified + paid views (same other_stats-aware rules as growth charts)"
+          subtitle="Pending + Verified + Paid views"
+          tooltip="Pending + verified + paid views"
           icon={Eye}
           isDark={isDark}
         />
