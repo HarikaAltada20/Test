@@ -9,7 +9,7 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { createClient } from "@/utils/supabase/server";
 import {
   cookieListHasSupabaseAuthToken,
-  getUserSafe,
+  getSessionUser,
 } from "@/utils/supabase/auth-server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
@@ -85,12 +85,12 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const cookieStore = await cookies();
-  // Guests with no session cookie: skip Auth network call in the shared layout.
+  // Guests with no session cookie: skip Auth entirely.
+  // With cookies: read session from cookies only — middleware already refreshes
+  // on matched routes; a second getUser here raced the single-use refresh token.
   const hasAuthCookie = cookieListHasSupabaseAuthToken(cookieStore.getAll());
   const supabase = await createClient();
-  const user = hasAuthCookie
-    ? (await getUserSafe(supabase)).data?.user ?? null
-    : null;
+  const user = hasAuthCookie ? await getSessionUser(supabase) : null;
 
   let profileFullName: string | null = null;
   let profilePictureUrl: string | null = null;

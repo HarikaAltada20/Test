@@ -1,6 +1,7 @@
 import React from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import CreateContestPage from "../../../../contests/create/client";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -54,15 +55,15 @@ export default async function AdminCreateContestWizardPage({
     PRODUCT_IDS.EXPLORER;
 
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
-  if (!user?.user) {
+  if (!user) {
     redirect("/login");
   }
 
   return (
     <CreateContestPage
-      user={user.user}
+      user={user}
       isAdmin
       targetAdvertiserId={advertiserId}
       targetBrandCompanyName={brandCompanyName}

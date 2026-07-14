@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import {
@@ -81,9 +82,7 @@ export default async function ContestDetailPage({
   console.log(`[page.tsx] Processing request for Contest ID: ${contestId}`);
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   if (!user) {
     redirect("/login");

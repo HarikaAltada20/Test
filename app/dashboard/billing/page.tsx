@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import BillingClientPage from "./BillingClientPage";
 import { RouteGuard } from "@/components/guards/RouteGuard";
@@ -35,13 +36,10 @@ export default async function AdvertiserBillingServerPage({
     const resolvedSearchParams = await searchParams;
     const isReturningFromCheckout = resolvedSearchParams.success === 'true' && resolvedSearchParams.session_id;
 
-    const {
-        data: { user: authUser },
-        error: authError,
-    } = await supabase.auth.getUser();
+    const authUser = await getSessionUser(supabase);
 
-    if (authError || !authUser) {
-        console.error("Auth error or no user, redirecting to login:", authError);
+    if (!authUser) {
+        console.error("Auth error or no user, redirecting to login");
         redirect("/login");
     }
 

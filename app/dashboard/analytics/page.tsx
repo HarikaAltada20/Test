@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import AnalyticsClient from "./AnalyticsClient";
@@ -8,9 +9,7 @@ import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 export default async function AnalyticsPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   if (!user) {
     redirect("/auth/signin");

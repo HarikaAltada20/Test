@@ -1,4 +1,5 @@
-import { createClient } from "@/utils/supabase/server"; // Changed to server client
+import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server"; // Changed to server client
 import { redirect } from "next/navigation";
 import EarningsClientPage from "./EarningsClientPage"; // New client component
 import { RouteGuard } from "@/components/guards/RouteGuard";
@@ -10,13 +11,10 @@ export default async function CreatorEarningsServerPage() {
   // If createClient is synchronous, this await should be removed and the underlying issue with types investigated.
   const supabase = await createClient();
 
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const authUser = await getSessionUser(supabase);
 
-  if (authError || !authUser) {
-    console.error("Auth error or no user, redirecting to login:", authError);
+  if (!authUser) {
+    console.error("Auth error or no user, redirecting to login");
     redirect("/login");
   }
 

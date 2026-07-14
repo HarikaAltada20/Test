@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { ContestClientPage } from "./client";
 
 export default async function OpportunityDetailPage({
@@ -8,6 +9,6 @@ export default async function OpportunityDetailPage({
 }) {
   const resolvedParams = await params;
   const supabase = await createClient();
-  const { data: user } = await supabase.auth.getUser();
-  return <ContestClientPage contestId={resolvedParams.id} user={user?.user} />;
+  const user = await getSessionUser(supabase);
+  return <ContestClientPage contestId={resolvedParams.id} user={user} />;
 }

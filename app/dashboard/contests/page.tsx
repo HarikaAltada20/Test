@@ -1,5 +1,6 @@
 import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import {
@@ -20,14 +21,9 @@ export default async function ContestsPage({
   }>;
 }) {
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
-  if (error) {
-    console.error("Error getting user:", error);
-    return <div>Error loading page</div>;
-  }
-
-  if (!data.user) {
+  if (!user) {
     console.log("ContestsPage: No session found, redirecting to signin.");
     redirect("/auth/signin");
   }
@@ -35,7 +31,7 @@ export default async function ContestsPage({
   const { data: userData } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", data.user.id)
+    .eq("id", user.id)
     .single();
 
   if (userData?.user_type === "creator") {
@@ -52,7 +48,7 @@ export default async function ContestsPage({
   }
 
   const contestsWithCalculatedBudgets =
-    await getAdvertiserContestsWithCalculatedBudgets(data.user.id, supabase);
+    await getAdvertiserContestsWithCalculatedBudgets(user.id, supabase);
 
   const typedContests = await enrichContestsWithListCardStats(
     contestsWithCalculatedBudgets || [],
@@ -67,7 +63,7 @@ export default async function ContestsPage({
         .select("advertiser_id, title")
         .eq("id", resolvedSearch.contest_id)
         .maybeSingle();
-      const owns = Boolean(contest && contest.advertiser_id === data.user.id);
+      const owns = Boolean(contest && contest.advertiser_id === user.id);
       // Only block / modal when this brand does not own the contest (owners are redirected to /dashboard/contests/[id] by middleware).
       if (!owns) {
         creatorRouteNotice = {
@@ -97,7 +93,7 @@ export default async function ContestsPage({
     >
       <ContestsPageClient
         initialContests={typedContests}
-        userId={data.user.id}
+        userId={user.id}
         creatorRouteNotice={creatorRouteNotice}
       />
     </Suspense>
