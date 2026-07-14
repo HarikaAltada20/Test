@@ -1,6 +1,7 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { cache } from "react";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { revalidateAdminAnalyticsCaches } from "@/lib/admin-analytics-cache";
 import {
   addDaysToDateKey,
   formatGrowthDayLabel,
@@ -793,4 +794,5 @@ export function revalidateAdminDashboardCaches(): void {
   } catch (e) {
     console.warn("[admin-dashboard-graph-cache] revalidateTag failed:", e);
   }
+  revalidateAdminAnalyticsCaches();
 }
