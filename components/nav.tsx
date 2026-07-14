@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
@@ -63,6 +63,7 @@ export function Nav({
   subscriptionPlan,
 }: NavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { logout } = useClientAuth();
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [creatorsLoading, setCreatorsLoading] = useState(false);
@@ -70,6 +71,13 @@ export function Nav({
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [quickLinkLoading, setQuickLinkLoading] = useState(false);
   const [homeLoading, setHomeLoading] = useState(false);
+
+  // Warm auth routes so Sign In / Get Started do not wait on first compile/RSC fetch.
+  useEffect(() => {
+    if (user) return;
+    router.prefetch("/auth/signin");
+    router.prefetch("/auth/signup");
+  }, [router, user]);
 
   const handleSignOut = async () => {
     try {
