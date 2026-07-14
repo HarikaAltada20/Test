@@ -1,4 +1,4 @@
-import { unstable_cache, revalidateTag } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   ADMIN_ANALYTICS_PLATFORMS,
@@ -342,7 +342,7 @@ function canonicalizeParams(
 
 /**
  * KPI cards + All Campaigns series, cached 30 minutes per filter set.
- * Uses Postgres daily rollups (not raw submissions).
+ * Uses Postgres daily rollups (not raw submissions). TTL-only — no tag busting.
  */
 export async function getCachedAdminAnalyticsOverview(
   params: AdminAnalyticsOverviewParams,
@@ -362,15 +362,6 @@ export async function getCachedAdminAnalyticsOverview(
       tags: [ADMIN_ANALYTICS_CACHE_TAG],
     },
   )();
-}
-
-/** Bust analytics card/graph caches after submission/contest mutations. */
-export function revalidateAdminAnalyticsCaches(): void {
-  try {
-    revalidateTag(ADMIN_ANALYTICS_CACHE_TAG);
-  } catch (e) {
-    console.warn("[admin-analytics-cache] revalidateTag failed:", e);
-  }
 }
 
 export function parsePlatformsParam(raw: string | null): AdminAnalyticsPlatform[] {

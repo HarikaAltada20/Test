@@ -1,4 +1,4 @@
-import { unstable_cache, revalidateTag } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
@@ -781,16 +781,3 @@ export async function getCachedAdminDashboardGraphData(
   };
 }
 
-/** @deprecated Use ADMIN_DASHBOARD_CACHE_TAG */
-export function adminDashboardGraphCacheTag(_contestTypeFilter?: string) {
-  return ADMIN_DASHBOARD_CACHE_TAG;
-}
-
-/** Bust the single admin dashboard graph cache after user/submission mutations. */
-export function revalidateAdminDashboardCaches(): void {
-  try {
-    revalidateTag(ADMIN_DASHBOARD_CACHE_TAG);
-  } catch (e) {
-    console.warn("[admin-dashboard-graph-cache] revalidateTag failed:", e);
-  }
-}
