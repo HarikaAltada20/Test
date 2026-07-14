@@ -301,7 +301,8 @@ function enrichStatusChartData(
   return data.map((d) => ({
     ...d,
     verified_or_paid: d.verified + d.paid,
-    not_rejected: d.all - d.rejected,
+    // Match analytics: pending + verified + paid (excludes unknown/legacy)
+    not_rejected: d.pending + d.verified + d.paid,
   }));
 }
 
@@ -421,7 +422,8 @@ function deriveCompositeStatusTotals(totals: {
 }) {
   return {
     verifiedOrPaid: totals.verified + totals.paid,
-    notRejected: totals.all - totals.rejected,
+    // Match analytics: pending + verified + paid (excludes unknown/legacy)
+    notRejected: totals.pending + totals.verified + totals.paid,
   };
 }
 

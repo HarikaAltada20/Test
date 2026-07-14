@@ -38,6 +38,12 @@ export async function GET(request: NextRequest) {
         { status: 400 },
       );
     }
+    if (from.getTime() > to.getTime()) {
+      return NextResponse.json(
+        { error: "Invalid date range: from must be before to" },
+        { status: 400 },
+      );
+    }
 
     const result = await getCachedAdminAnalyticsOverview({
       fromIso: from.toISOString(),

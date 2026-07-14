@@ -249,28 +249,6 @@ export function getContestBudgetCents(contest: AdminAnalyticsContest): number {
   return getPoolBudgetCentsFromDetails(contest.contest_type, details);
 }
 
-/** True when the campaign window overlaps [from, to], or has no dates (include). */
-export function contestOverlapsDateRange(
-  contest: Pick<AdminAnalyticsContest, "start_date" | "end_date">,
-  from: Date,
-  to: Date,
-): boolean {
-  const fromMs = from.getTime();
-  const toMs = to.getTime();
-  const startMs = contest.start_date
-    ? new Date(contest.start_date).getTime()
-    : NaN;
-  const endMs = contest.end_date ? new Date(contest.end_date).getTime() : NaN;
-
-  const hasStart = Number.isFinite(startMs);
-  const hasEnd = Number.isFinite(endMs);
-
-  if (!hasStart && !hasEnd) return true;
-  if (hasStart && hasEnd) return startMs <= toMs && endMs >= fromMs;
-  if (hasStart) return startMs <= toMs;
-  return endMs >= fromMs;
-}
-
 export function normalizeAnalyticsPlatform(
   raw: string | null | undefined,
   contestBasedDetails?: unknown,
@@ -416,7 +394,6 @@ export function aggregateAdminAnalytics(input: {
       return false;
     }
     if (!isApprovedAnalyticsContest(c)) return false;
-    if (!contestOverlapsDateRange(c, input.from, input.to)) return false;
     const type = (c.contest_type ?? "").toLowerCase();
     if (!isAdminAnalyticsContestType(type) || !contestTypeSet.has(type)) {
       return false;

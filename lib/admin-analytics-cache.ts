@@ -5,7 +5,6 @@ import {
   ADMIN_ANALYTICS_CONTEST_TYPES,
   ADMIN_ANALYTICS_BASE_STATUSES,
   aggregateAdminAnalyticsFromDailyRows,
-  contestOverlapsDateRange,
   expandStatusFilterIds,
   getContestAdvertiserName,
   isAdminAnalyticsContestType,
@@ -24,7 +23,7 @@ import {
   type AdminAnalyticsViewsByStatus,
 } from "@/lib/admin-analytics";
 
-/** Match admin dashboard graph cache: 30 minutes. */
+/** 30-min TTL for analytics KPI cards + All Campaigns graph. */
 export const ADMIN_ANALYTICS_CACHE_SECONDS = 30 * 60;
 
 export const ADMIN_ANALYTICS_CACHE_TAG = "admin-analytics-overview";
@@ -194,25 +193,6 @@ function buildAdvertiserOptions(
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function normalizeListKey(ids: string[] | null): string {
-  if (ids == null) return "__all__";
-  if (ids.length === 0) return "__none__";
-  return [...ids].sort().join(",");
-}
-
-function buildCacheKeyParts(params: AdminAnalyticsOverviewParams): string[] {
-  return [
-    ADMIN_ANALYTICS_CACHE_TAG,
-    params.fromIso,
-    params.toIso,
-    [...params.platforms].sort().join(","),
-    [...params.contestTypes].sort().join(","),
-    [...params.statuses].sort().join(","),
-    normalizeListKey(params.advertiserIds),
-    normalizeListKey(params.contestIds),
-  ];
-}
-
 async function loadAdminAnalyticsOverview(
   params: AdminAnalyticsOverviewParams,
 ): Promise<AdminAnalyticsOverviewResult> {
@@ -220,6 +200,9 @@ async function loadAdminAnalyticsOverview(
   const to = new Date(params.toIso);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     throw new Error("Invalid date range");
+  }
+  if (from.getTime() > to.getTime()) {
+    throw new Error("Invalid date range: from must be before to");
   }
 
   const supabase = createAdminClient();
@@ -235,8 +218,9 @@ async function loadAdminAnalyticsOverview(
 
   const contestTypeSet = new Set(params.contestTypes);
   const platformSet = new Set(params.platforms);
+  // Scope by type/platform only — not contest start/end dates — so late
+  // submissions after end_date still count when created_at is in range.
   const contestsInRange = videoApprovedContests.filter((c) => {
-    if (!contestOverlapsDateRange(c, from, to)) return false;
     const type = (c.contest_type ?? "").toLowerCase();
     if (!isAdminAnalyticsContestType(type) || !contestTypeSet.has(type)) {
       return false;
@@ -317,11 +301,27 @@ async function loadAdminAnalyticsOverview(
     campaigns: aggregated.campaigns,
     allAdvertisers,
     allCampaigns,
-    selectedCampaignCount:
-      params.contestIds == null
-        ? aggregated.campaigns.length
-        : params.contestIds.length,
+    selectedCampaignCount: aggregated.campaigns.length,
   };
+}
+
+function normalizeListKey(ids: string[] | null): string {
+  if (ids == null) return "__all__";
+  if (ids.length === 0) return "__none__";
+  return [...ids].sort().join(",");
+}
+
+function buildCacheKeyParts(params: AdminAnalyticsOverviewParams): string[] {
+  return [
+    ADMIN_ANALYTICS_CACHE_TAG,
+    params.fromIso,
+    params.toIso,
+    [...params.platforms].sort().join(","),
+    [...params.contestTypes].sort().join(","),
+    [...params.statuses].sort().join(","),
+    normalizeListKey(params.advertiserIds),
+    normalizeListKey(params.contestIds),
+  ];
 }
 
 function canonicalizeParams(
@@ -341,8 +341,8 @@ function canonicalizeParams(
 }
 
 /**
- * Aggregated admin analytics (KPI cards + All Campaigns series) with a 30-min TTL.
- * Uses Postgres daily rollups (not raw submissions) per filter set.
+ * KPI cards + All Campaigns series, cached 30 minutes per filter set.
+ * Uses Postgres daily rollups (not raw submissions).
  */
 export async function getCachedAdminAnalyticsOverview(
   params: AdminAnalyticsOverviewParams,
@@ -364,7 +364,7 @@ export async function getCachedAdminAnalyticsOverview(
   )();
 }
 
-/** Bust all admin analytics overview caches after submission/contest mutations. */
+/** Bust analytics card/graph caches after submission/contest mutations. */
 export function revalidateAdminAnalyticsCaches(): void {
   try {
     revalidateTag(ADMIN_ANALYTICS_CACHE_TAG);

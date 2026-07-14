@@ -359,7 +359,7 @@ export default function AdminAnalyticsClient() {
         }
         const res = await fetch(
           `/api/admin/analytics/overview?${params.toString()}`,
-          { signal: controller.signal },
+          { signal: controller.signal, cache: "no-store" },
         );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
