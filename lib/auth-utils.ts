@@ -11,8 +11,8 @@ function sleep(ms: number): Promise<void> {
 
 export async function completeLogout() {
   const supabase = createClient()
-  // Revoke server-side session everywhere before wiping storage (tokens live in storage).
-  await supabase.auth.signOut({ scope: 'global' })
+  // Sign out this device only. Use manage-sessions (revoke-all / revoke-others) for all devices.
+  await supabase.auth.signOut({ scope: 'local' })
   localStorage.clear()
   sessionStorage.clear()
   // Only redirect if not already on the sign-in page
@@ -71,7 +71,7 @@ async function getUserAuthResult(): Promise<ClientAuthResult> {
  * Check if a user is authenticated on the client side.
  * Prefers local getSession when the access token is not near expiry (no Auth API).
  * Otherwise getUser (may refresh), with one retry on refresh-token races.
- * Does not call completeLogout / global signOut on soft failures.
+ * Does not call completeLogout / local signOut on soft failures.
  */
 export async function checkClientAuth(
   options: { retryOnRefreshError?: boolean } = {}
