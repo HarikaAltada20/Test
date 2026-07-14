@@ -653,3 +653,232 @@ export function formatCpmDisplay(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
   return `$${value.toFixed(value >= 1 ? 2 : 3)}`;
 }
+
+/** One daily × status bucket from `admin_analytics_daily` RPC. */
+export type AdminAnalyticsDailySqlRow = {
+  day_key: string;
+  status: string;
+  submission_count: number;
+  views_sum: number;
+  likes_sum: number;
+  comments_sum: number;
+  shares_sum: number;
+  payouts_cents_sum: number;
+};
+
+function normalizeSqlDayKey(dayKey: string): string {
+  return dayKey.slice(0, 10);
+}
+
+/**
+ * Build analytics summary + cumulative series from Postgres daily rollups
+ * (no per-submission rows in memory).
+ */
+export function aggregateAdminAnalyticsFromDailyRows(input: {
+  contests: AdminAnalyticsContest[];
+  dailyRows: AdminAnalyticsDailySqlRow[];
+  from: Date;
+  to: Date;
+  contestIds: string[] | null;
+  advertiserIds?: string[] | null;
+  statuses: AdminAnalyticsBaseStatus[];
+}): {
+  summary: AdminAnalyticsSummary;
+  series: AdminAnalyticsSeriesPoint[];
+  campaigns: { id: string; title: string }[];
+  viewsByStatus: AdminAnalyticsViewsByStatus;
+} {
+  const statusSet = new Set(input.statuses);
+  const contestIdFilter =
+    input.contestIds == null ? null : new Set(input.contestIds);
+  const advertiserIdFilter =
+    input.advertiserIds == null ? null : new Set(input.advertiserIds);
+
+  const matchingContests = input.contests.filter((c) => {
+    if (contestIdFilter && !contestIdFilter.has(c.id)) return false;
+    if (
+      advertiserIdFilter &&
+      (!c.advertiser_id || !advertiserIdFilter.has(c.advertiser_id))
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  type DailyBucket = {
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    pendingViews: number;
+    verifiedViews: number;
+    paidViews: number;
+    rejectedViews: number;
+    totalSubmissions: number;
+    approvedSubmissions: number;
+    payoutsCents: number;
+  };
+
+  const emptyDaily = (): DailyBucket => ({
+    views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    pendingViews: 0,
+    verifiedViews: 0,
+    paidViews: 0,
+    rejectedViews: 0,
+    totalSubmissions: 0,
+    approvedSubmissions: 0,
+    payoutsCents: 0,
+  });
+
+  const daily = new Map<string, DailyBucket>();
+  {
+    const cursor = new Date(input.from);
+    cursor.setUTCHours(12, 0, 0, 0);
+    const end = new Date(input.to);
+    end.setUTCHours(12, 0, 0, 0);
+    while (cursor <= end) {
+      const key = cursor.toISOString().slice(0, 10);
+      daily.set(key, emptyDaily());
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+
+  const viewsByStatus: AdminAnalyticsViewsByStatus = {
+    all: 0,
+    pending: 0,
+    verified: 0,
+    paid: 0,
+    rejected: 0,
+    notRejected: 0,
+    verifiedPaid: 0,
+  };
+
+  let filteredViews = 0;
+  let likes = 0;
+  let comments = 0;
+  let shares = 0;
+  let totalSubmissions = 0;
+  let approvedSubmissions = 0;
+  let totalPayoutsCents = 0;
+
+  for (const row of input.dailyRows) {
+    const key = normalizeSqlDayKey(row.day_key);
+    if (!key) continue;
+    const st = normalizeSubmissionStatus(row.status);
+    const views = Number(row.views_sum) || 0;
+    const rowLikes = Number(row.likes_sum) || 0;
+    const rowComments = Number(row.comments_sum) || 0;
+    const rowShares = Number(row.shares_sum) || 0;
+    const count = Number(row.submission_count) || 0;
+    const payouts = Number(row.payouts_cents_sum) || 0;
+
+    viewsByStatus.all += views;
+    if (st === "pending") viewsByStatus.pending += views;
+    else if (st === "verified") viewsByStatus.verified += views;
+    else if (st === "paid") viewsByStatus.paid += views;
+    else if (st === "rejected") viewsByStatus.rejected += views;
+
+    totalPayoutsCents += payouts;
+
+    const bucket = daily.get(key) ?? emptyDaily();
+    if (st === "pending") bucket.pendingViews += views;
+    else if (st === "verified") bucket.verifiedViews += views;
+    else if (st === "paid") bucket.paidViews += views;
+    else if (st === "rejected") bucket.rejectedViews += views;
+    bucket.payoutsCents += payouts;
+
+    if (st !== "unknown" && statusSet.has(st)) {
+      filteredViews += views;
+      likes += rowLikes;
+      comments += rowComments;
+      shares += rowShares;
+      totalSubmissions += count;
+      if (st === "verified" || st === "paid") {
+        approvedSubmissions += count;
+      }
+      bucket.views += views;
+      bucket.likes += rowLikes;
+      bucket.comments += rowComments;
+      bucket.shares += rowShares;
+      bucket.totalSubmissions += count;
+      if (st === "verified" || st === "paid") {
+        bucket.approvedSubmissions += count;
+      }
+    }
+
+    daily.set(key, bucket);
+  }
+
+  viewsByStatus.notRejected =
+    viewsByStatus.pending + viewsByStatus.verified + viewsByStatus.paid;
+  viewsByStatus.verifiedPaid = viewsByStatus.verified + viewsByStatus.paid;
+
+  const effectiveCpm = computeEffectiveCpmUsd(totalPayoutsCents, filteredViews);
+  const approvalRate =
+    totalSubmissions > 0
+      ? Math.round((approvedSubmissions / totalSubmissions) * 100)
+      : 0;
+
+  const sortedKeys = Array.from(daily.keys()).sort();
+  let cumViews = 0;
+  let cumLikes = 0;
+  let cumComments = 0;
+  let cumShares = 0;
+  let cumPending = 0;
+  let cumVerified = 0;
+  let cumPaid = 0;
+  let cumRejected = 0;
+  const series: AdminAnalyticsSeriesPoint[] = sortedKeys.map((key) => {
+    const day = daily.get(key)!;
+    cumViews += day.views;
+    cumLikes += day.likes;
+    cumComments += day.comments;
+    cumShares += day.shares;
+    cumPending += day.pendingViews;
+    cumVerified += day.verifiedViews;
+    cumPaid += day.paidViews;
+    cumRejected += day.rejectedViews;
+    return {
+      date: key,
+      label: formatDayLabel(key),
+      views: cumViews,
+      likes: cumLikes,
+      comments: cumComments,
+      shares: cumShares,
+      pendingViews: cumPending,
+      verifiedViews: cumVerified,
+      paidViews: cumPaid,
+      rejectedViews: cumRejected,
+      notRejectedViews: cumPending + cumVerified + cumPaid,
+      verifiedPaidViews: cumVerified + cumPaid,
+    };
+  });
+
+  const campaigns = matchingContests
+    .map((c) => ({
+      id: c.id,
+      title: (c.title || "Untitled campaign").trim() || "Untitled campaign",
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+
+  return {
+    summary: {
+      views: viewsByStatus.all,
+      filteredViews,
+      likes,
+      comments,
+      shares,
+      totalPayoutsCents,
+      effectiveCpm,
+      totalSubmissions,
+      approvedSubmissions,
+      approvalRate,
+    },
+    series,
+    campaigns,
+    viewsByStatus,
+  };
+}
