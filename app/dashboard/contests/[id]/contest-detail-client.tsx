@@ -21,6 +21,10 @@ import {
   startMetricsRunPolling,
   type MetricsRefreshPlatform,
 } from "@/lib/metrics-refresh-polling";
+import {
+  postCampaignSnapshotToSubmission,
+  type PostCampaignSubmissionSnapshot,
+} from "@/lib/post-campaign-submission-shape";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest";
@@ -561,6 +565,8 @@ interface Contest {
   resources?: any | null;
   contest_based_details?: any | null;
   last_metrics_updated?: string | null;
+  /** Independent of last_metrics_updated; only for post-campaign submission overlay. */
+  post_campaign_last_metrics_updated?: string | null;
   // New features
   multiple_submissions_enabled?: boolean;
   max_submissions_per_creator?: number;
@@ -1800,6 +1806,116 @@ export default function ContestDetailClient({
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
+  /** When contest ended: Submissions (locked) vs Post Campaign Submission (refreshable overlay). */
+  type SubmissionsLeaderboardMode = "submissions" | "post_campaign";
+  const [submissionsLeaderboardMode, setSubmissionsLeaderboardMode] =
+    useState<SubmissionsLeaderboardMode>("submissions");
+  const [postCampaignMetricsById, setPostCampaignMetricsById] = useState<
+    Record<string, PostCampaignSubmissionSnapshot>
+  >({});
+  const [postCampaignLastMetricsUpdated, setPostCampaignLastMetricsUpdated] =
+    useState<string | null>(
+      currentContest.post_campaign_last_metrics_updated ?? null,
+    );
+  const [postCampaignMetricsLoaded, setPostCampaignMetricsLoaded] =
+    useState(false);
+  const [isLoadingPostCampaignMetrics, setIsLoadingPostCampaignMetrics] =
+    useState(false);
+  const showPostCampaignToggle = currentContest.status === "ended";
+  const isPostCampaignLeaderboard =
+    showPostCampaignToggle && submissionsLeaderboardMode === "post_campaign";
+
+  const applyPostCampaignMetricsPayload = (
+    metrics: PostCampaignSubmissionSnapshot[],
+  ) => {
+    const next: typeof postCampaignMetricsById = {};
+    for (const row of metrics) {
+      next[row.submission_id] = row;
+    }
+    setPostCampaignMetricsById(next);
+    setPostCampaignMetricsLoaded(true);
+  };
+
+  const hasPostCampaignData =
+    Object.keys(postCampaignMetricsById).length > 0;
+
+  /** GET existing post-campaign snapshot (does not sync from submissions). */
+  const loadPostCampaignMetrics = async () => {
+    setIsLoadingPostCampaignMetrics(true);
+    try {
+      const res = await fetch(
+        `/api/contests/${contestId}/post-campaign-submissions`,
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to load post-campaign metrics");
+      }
+      const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+      if (data.post_campaign_last_metrics_updated !== undefined) {
+        setPostCampaignLastMetricsUpdated(
+          data.post_campaign_last_metrics_updated ?? null,
+        );
+      }
+      applyPostCampaignMetricsPayload(metrics);
+    } catch (err) {
+      toast({
+        title: "Post Campaign Submissions",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to load post-campaign data",
+        variant: "destructive",
+      });
+      setPostCampaignMetricsLoaded(true);
+    } finally {
+      setIsLoadingPostCampaignMetrics(false);
+    }
+  };
+
+  /** Copy all contest submissions into post-campaign table (Refresh on empty state). */
+  const syncPostCampaignSubmissions = async () => {
+    if (isLoadingPostCampaignMetrics) return;
+    setIsLoadingPostCampaignMetrics(true);
+    try {
+      const syncRes = await fetch(
+        `/api/contests/${contestId}/post-campaign-submissions`,
+        { method: "POST" },
+      );
+      const syncData = await syncRes.json().catch(() => ({}));
+      if (!syncRes.ok) {
+        throw new Error(
+          syncData?.error || "Failed to load submissions into post-campaign",
+        );
+      }
+      const metrics = Array.isArray(syncData.metrics) ? syncData.metrics : [];
+      if (syncData.post_campaign_last_metrics_updated !== undefined) {
+        setPostCampaignLastMetricsUpdated(
+          syncData.post_campaign_last_metrics_updated ?? null,
+        );
+      }
+      applyPostCampaignMetricsPayload(metrics);
+      toast({
+        title: "Post-campaign data loaded",
+        description: `Copied ${syncData.synced ?? metrics.length} submission${
+          (syncData.synced ?? metrics.length) !== 1 ? "s" : ""
+        } from this contest. Use Refresh Metrics to update platform stats.`,
+        variant: "success",
+        duration: 6000,
+      });
+    } catch (err) {
+      toast({
+        title: "Refresh failed",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Failed to load post-campaign submissions",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingPostCampaignMetrics(false);
+    }
+  };
+
   // YouTube detailed analytics refresh state
   const [isRefreshingTraffic, setIsRefreshingTraffic] = useState(false);
   const [isRefreshingDemographics, setIsRefreshingDemographics] =
@@ -2180,10 +2296,45 @@ export default function ContestDetailClient({
   const [twitterFeedTotalPages, setTwitterFeedTotalPages] = useState(1);
   const [isLive, setIsLive] = useState(false);
 
-  // Use admin cooldown if admin view, otherwise use brand cooldown
+  // Use admin cooldown if admin view, otherwise use brand cooldown.
+  // Post-campaign mode uses its own timestamp so submissions remain locked.
   const cooldownInfo = isAdminView
-    ? getMetricsRefreshCooldownInfoAdmin(currentContest.last_metrics_updated)
-    : getMetricsRefreshCooldownInfoBrand(currentContest.last_metrics_updated);
+    ? getMetricsRefreshCooldownInfoAdmin(
+        isPostCampaignLeaderboard
+          ? postCampaignLastMetricsUpdated
+          : currentContest.last_metrics_updated,
+      )
+    : getMetricsRefreshCooldownInfoBrand(
+        isPostCampaignLeaderboard
+          ? postCampaignLastMetricsUpdated
+          : currentContest.last_metrics_updated,
+      );
+
+  const leaderboardSubmissions = useMemo(() => {
+    if (!isPostCampaignLeaderboard) {
+      return currentSubmissions;
+    }
+    // Post-campaign table shows only synced snapshot rows (empty until Refresh).
+    if (!postCampaignMetricsLoaded || !hasPostCampaignData) {
+      return [];
+    }
+    const byId = new Map(
+      (currentSubmissions || []).map((sub) => [sub.id, sub] as const),
+    );
+    return Object.values(postCampaignMetricsById).map((snapshot) => {
+      const base = byId.get(snapshot.submission_id);
+      return postCampaignSnapshotToSubmission(
+        snapshot,
+        base ?? ({ id: snapshot.submission_id } as Submission),
+      );
+    });
+  }, [
+    isPostCampaignLeaderboard,
+    postCampaignMetricsLoaded,
+    hasPostCampaignData,
+    currentSubmissions,
+    postCampaignMetricsById,
+  ]);
 
   // Hydrate YouTube visible columns from localStorage (client-only)
   useEffect(() => {
@@ -2290,15 +2441,15 @@ export default function ContestDetailClient({
   }
 
   const qualityFilteredSubmissions = useMemo(() => {
-    if (submissionQualityScoreFilters.length === 0) return currentSubmissions;
-    return currentSubmissions.filter((submission) => {
+    if (submissionQualityScoreFilters.length === 0) return leaderboardSubmissions;
+    return leaderboardSubmissions.filter((submission) => {
       const score = getExplicitSubmissionQualityScoreForFiltering(submission);
       return submissionQualityScoreFilters.some((filterValue) => {
         if (filterValue === "unscored") return score === null;
         return score === filterValue;
       });
     });
-  }, [currentSubmissions, submissionQualityScoreFilters]);
+  }, [leaderboardSubmissions, submissionQualityScoreFilters]);
 
   const submissionQualityScoreFilterButtonLabel = useMemo(() => {
     if (submissionQualityScoreFilters.length === 0) return "All Quality Scores";
@@ -7370,6 +7521,66 @@ export default function ContestDetailClient({
       return;
     }
 
+    // Post-campaign mode: refresh overlay only (does not mutate submissions table)
+    if (isPostCampaignLeaderboard) {
+      if (!cooldownInfo.canRefresh) {
+        toast({
+          title: "Please Wait",
+          description: `You can refresh again in ${
+            cooldownInfo.remainingMinutes
+          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setIsRefreshingMetrics(true);
+      try {
+        const response = await fetch(
+          `/api/contests/${contestId}/post-campaign-submissions/refresh-metrics`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: "basic" }),
+          },
+        );
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error || "Failed to refresh post-campaign metrics");
+        }
+        if (Array.isArray(result.metrics)) {
+          applyPostCampaignMetricsPayload(result.metrics);
+        }
+        if (result.post_campaign_last_metrics_updated) {
+          setPostCampaignLastMetricsUpdated(
+            result.post_campaign_last_metrics_updated,
+          );
+          setCurrentContest((prev) => ({
+            ...prev,
+            post_campaign_last_metrics_updated:
+              result.post_campaign_last_metrics_updated,
+          }));
+        }
+        toast({
+          title: "Post-campaign metrics updated",
+          description:
+            result.message ||
+            `Synced ${result.synced ?? 0} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}. Submissions table unchanged.`,
+          variant: "success",
+          duration: 8000,
+        });
+      } catch (err) {
+        toast({
+          title: "Refresh failed",
+          description:
+            err instanceof Error ? err.message : "Failed to refresh metrics",
+          variant: "destructive",
+        });
+      } finally {
+        setIsRefreshingMetrics(false);
+      }
+      return;
+    }
+
     // Check rate limiting based on database value
     if (!cooldownInfo.canRefresh) {
       toast({
@@ -7639,6 +7850,60 @@ export default function ContestDetailClient({
   };
 
   // Handler: refresh core analytics, traffic sources, demographics, or all (on-demand YouTube analytics)
+  const runPostCampaignScopedRefresh = async (
+    scope:
+      | "basic"
+      | "core"
+      | "traffic"
+      | "demographics"
+      | "all"
+      | "all_standard",
+  ) => {
+    if (!cooldownInfo.canRefresh) {
+      toast({
+        title: "Please Wait",
+        description: `You can refresh again in ${
+          cooldownInfo.remainingMinutes
+        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const response = await fetch(
+      `/api/contests/${contestId}/post-campaign-submissions/refresh-metrics`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      },
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result?.error || "Failed to refresh post-campaign metrics");
+    }
+    if (Array.isArray(result.metrics)) {
+      applyPostCampaignMetricsPayload(result.metrics);
+    }
+    if (result.post_campaign_last_metrics_updated) {
+      setPostCampaignLastMetricsUpdated(
+        result.post_campaign_last_metrics_updated,
+      );
+      setCurrentContest((prev) => ({
+        ...prev,
+        post_campaign_last_metrics_updated:
+          result.post_campaign_last_metrics_updated,
+      }));
+    }
+    toast({
+      title: "Post-campaign metrics updated",
+      description:
+        result.message ||
+        `Scope: ${scope} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}. Submissions unchanged.`,
+      variant: "success",
+      duration: 8000,
+    });
+  };
+
   const handleRefreshDetailedAnalytics = async (
     type: "core" | "traffic" | "demographics" | "all",
     opts?: { submissionId?: string; creatorId?: string },
@@ -7654,6 +7919,37 @@ export default function ContestDetailClient({
         } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
+      return;
+    }
+
+    // Post-campaign: refresh overlay for all YouTube scopes (never touch submissions).
+    if (isPostCampaignLeaderboard) {
+      if (isContestLevel) {
+        if (type === "core" || type === "all") setIsRefreshingCore(true);
+        if (type === "traffic" || type === "all") setIsRefreshingTraffic(true);
+        if (type === "demographics" || type === "all")
+          setIsRefreshingDemographics(true);
+      } else {
+        setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: type }));
+      }
+      try {
+        await runPostCampaignScopedRefresh(type);
+      } catch (error: any) {
+        toast({
+          title: "Refresh Failed",
+          description:
+            error.message || "Could not refresh post-campaign analytics.",
+          variant: "destructive",
+        });
+      } finally {
+        if (isContestLevel) {
+          setIsRefreshingCore(false);
+          setIsRefreshingTraffic(false);
+          setIsRefreshingDemographics(false);
+        } else {
+          setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: null }));
+        }
+      }
       return;
     }
 
@@ -7833,6 +8129,24 @@ export default function ContestDetailClient({
       !cooldownInfo.canRefresh
     )
       return;
+
+    if (isPostCampaignLeaderboard) {
+      setRefreshing(true);
+      try {
+        await runPostCampaignScopedRefresh(scope);
+      } catch (error: any) {
+        toast({
+          title: "Refresh Failed",
+          description:
+            error?.message || "Could not refresh post-campaign metrics.",
+          variant: "destructive",
+        });
+      } finally {
+        setRefreshing(false);
+      }
+      return;
+    }
+
     setRefreshing(true);
     const isStandard = scope === "all_standard";
     let queuedYoutubeFull = false;
@@ -8160,21 +8474,28 @@ export default function ContestDetailClient({
 
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
-    const isLocked = ytPostContestLocked;
+    // Post-campaign leaderboard can refresh after review lock; submissions stay locked.
+    const isLocked = isPostCampaignLeaderboard ? false : ytPostContestLocked;
+    const runInProgress = isPostCampaignLeaderboard
+      ? false
+      : hasRecentRunningRun;
 
     const isDisabled =
       isRefreshingMetrics ||
       postRefreshReloadPending ||
+      isLoadingPostCampaignMetrics ||
       !cooldownInfo.canRefresh ||
       isLocked ||
-      hasRecentRunningRun;
+      runInProgress;
 
     let disabledReason = "";
     if (postRefreshReloadPending) {
       disabledReason = "Reloading with fresh metrics...";
     } else if (isRefreshingMetrics) {
       disabledReason = "Refreshing metrics...";
-    } else if (hasRecentRunningRun) {
+    } else if (isLoadingPostCampaignMetrics) {
+      disabledReason = "Loading post-campaign data...";
+    } else if (runInProgress) {
       disabledReason =
         "A refresh run is already in progress. Please wait up to 5 minutes.";
     } else if (isLocked) {
@@ -14969,7 +15290,119 @@ export default function ContestDetailClient({
           </TabPanel>
 
           <TabPanel value="submissions" activeTab={activeTab}>
-            {currentSubmissions.length > 0 ? (
+            {showPostCampaignToggle && (
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <div
+                  className={cn(
+                    "inline-flex rounded-2xl border p-1",
+                    isDark
+                      ? "border-slate-700 bg-slate-900/60"
+                      : "border-[#D1B7F9] bg-white",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSubmissionsLeaderboardMode("submissions")}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                      submissionsLeaderboardMode === "submissions"
+                        ? isDark
+                          ? "bg-[#6C43D0] text-white"
+                          : "bg-[#6C43D0] text-white"
+                        : isDark
+                          ? "text-slate-300 hover:bg-slate-800"
+                          : "text-slate-600 hover:bg-[#F3EBFF]",
+                    )}
+                  >
+                    Submissions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmissionsLeaderboardMode("post_campaign");
+                      void loadPostCampaignMetrics();
+                    }}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                      submissionsLeaderboardMode === "post_campaign"
+                        ? isDark
+                          ? "bg-[#6C43D0] text-white"
+                          : "bg-[#6C43D0] text-white"
+                        : isDark
+                          ? "text-slate-300 hover:bg-slate-800"
+                          : "text-slate-600 hover:bg-[#F3EBFF]",
+                    )}
+                  >
+                    Post Campaign Submission
+                  </button>
+                </div>
+              </div>
+            )}
+            {isPostCampaignLeaderboard && !hasPostCampaignData ? (
+              <Card
+                className={cn(
+                  "shadow-sm border-0",
+                  isDark ? "bg-[#170337]" : "bg-purple-50",
+                )}
+              >
+                <CardContent className="py-16 flex flex-col items-center justify-center text-center">
+                  <div
+                    className={cn(
+                      "p-4 rounded-full mb-6",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-purple-200 text-purple-500",
+                    )}
+                  >
+                    <FileText className="h-12 w-12 " />
+                  </div>
+                  <h3
+                    className={cn(
+                      "text-xl font-semibold mb-2",
+                      isDark ? "text-white" : "text-slate-900",
+                    )}
+                  >
+                    {!postCampaignMetricsLoaded || isLoadingPostCampaignMetrics
+                      ? "Loading…"
+                      : "No Post Campaign Submissions Yet"}
+                  </h3>
+                  <p
+                    className={cn(
+                      "max-w-md mb-6",
+                      isDark ? "text-white/80" : "text-slate-600",
+                    )}
+                  >
+                    {!postCampaignMetricsLoaded || isLoadingPostCampaignMetrics
+                      ? "Checking for saved post-campaign data…"
+                      : "Click Refresh to copy all submissions from this contest into Post Campaign Submission. Then use Refresh Metrics to update YouTube, Instagram, or TikTok stats without changing the Submissions table."}
+                  </p>
+                  {postCampaignMetricsLoaded &&
+                    !isLoadingPostCampaignMetrics && (
+                      <button
+                        type="button"
+                        onClick={() => void syncPostCampaignSubmissions()}
+                        className={cn(
+                          "flex items-center gap-2 py-2.5 px-5 rounded-2xl transition-all",
+                          "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                        )}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Refresh
+                      </button>
+                    )}
+                  {isLoadingPostCampaignMetrics && (
+                    <Loader2
+                      className={cn(
+                        "h-6 w-6 animate-spin",
+                        isDark ? "text-white" : "text-[#6C43D0]",
+                      )}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            ) : (isPostCampaignLeaderboard
+                ? hasPostCampaignData
+                : currentSubmissions.length > 0) ? (
               <div className="space-y-6">
                 {/* Enhanced Header Section */}
                 <div
@@ -15001,7 +15434,9 @@ export default function ContestDetailClient({
                                 isDark ? "text-white" : "text-gray-900 ",
                               )}
                             >
-                              Submissions Leaderboard
+                              {isPostCampaignLeaderboard
+                                ? "Post Campaign Submissions Leaderboard"
+                                : "Submissions Leaderboard"}
                             </h2>
                             <div
                               className={cn(
@@ -15022,7 +15457,9 @@ export default function ContestDetailClient({
                                 <div className="px-[2px] opacity-70">|</div>
                                 {currentContest.platform}
                               </div>
-                              {currentContest.last_metrics_updated && (
+                              {(isPostCampaignLeaderboard
+                                ? postCampaignLastMetricsUpdated
+                                : currentContest.last_metrics_updated) && (
                                 <div
                                   className={cn(
                                     "flex items-center gap-1",
@@ -15034,7 +15471,9 @@ export default function ContestDetailClient({
                                   <div className="px-[2px] opacity-70">|</div>
                                   Last updated:{" "}
                                   {formatTimeAgo(
-                                    currentContest.last_metrics_updated,
+                                    (isPostCampaignLeaderboard
+                                      ? postCampaignLastMetricsUpdated
+                                      : currentContest.last_metrics_updated) as string,
                                   )}
                                 </div>
                               )}
@@ -15059,7 +15498,9 @@ export default function ContestDetailClient({
                                     )}
                                     title={
                                       disabledReason ||
-                                      "Refresh metrics and leaderboard"
+                                      (isPostCampaignLeaderboard
+                                        ? "Refresh post-campaign metrics (does not change Submissions)"
+                                        : "Refresh metrics and leaderboard")
                                     }
                                   >
                                     {isRefreshingMetrics ? (
@@ -15355,7 +15796,9 @@ export default function ContestDetailClient({
                                 )}
                                 title={
                                   disabledReason ||
-                                  "Refresh metrics and leaderboard"
+                                  (isPostCampaignLeaderboard
+                                    ? "Refresh post-campaign metrics (does not change Submissions)"
+                                    : "Refresh metrics and leaderboard")
                                 }
                               >
                                 {isRefreshingMetrics ? (
@@ -15396,23 +15839,28 @@ export default function ContestDetailClient({
                           const anyRefreshInProgress =
                             isRefreshingMetrics ||
                             disabledDetail ||
-                            hasRecentRunningRun ||
+                            (!isPostCampaignLeaderboard && hasRecentRunningRun) ||
                             postRefreshReloadPending;
                           const cooldownDisabled = !cooldownInfo.canRefresh;
                           const cooldownLabel = `Wait ${cooldownInfo.remainingMinutes}m`;
                           const reloadPendingLabel = "Updating...";
                           const detailedRefreshDisabled =
                             anyRefreshInProgress ||
-                            ytPostContestLocked ||
+                            (!isPostCampaignLeaderboard && ytPostContestLocked) ||
                             cooldownDisabled;
-                          const detailedRefreshTitle = ytPostContestLocked
+                          const detailedRefreshTitle =
+                            !isPostCampaignLeaderboard && ytPostContestLocked
                             ? "Locked after campaign review begins"
                             : postRefreshReloadPending
                               ? "Reloading with fresh metrics..."
                               : cooldownDisabled
                                 ? disabledReason
+                                : isPostCampaignLeaderboard
+                                  ? "Updates post-campaign metrics only (Submissions unchanged)"
                                 : undefined;
-                          const basicTs = currentContest.last_metrics_updated;
+                          const basicTs = isPostCampaignLeaderboard
+                            ? postCampaignLastMetricsUpdated
+                            : currentContest.last_metrics_updated;
                           const ts = [
                             basicTs,
                             ytLast.core,
@@ -15467,9 +15915,13 @@ export default function ContestDetailClient({
                                     </button>
                                     <span className={muteClass}>
                                       Basic:{" "}
-                                      {currentContest.last_metrics_updated
+                                      {(isPostCampaignLeaderboard
+                                        ? postCampaignLastMetricsUpdated
+                                        : currentContest.last_metrics_updated)
                                         ? formatTimeAgo(
-                                            currentContest.last_metrics_updated,
+                                            (isPostCampaignLeaderboard
+                                              ? postCampaignLastMetricsUpdated
+                                              : currentContest.last_metrics_updated) as string,
                                           )
                                         : "Never"}
                                     </span>
@@ -15481,22 +15933,27 @@ export default function ContestDetailClient({
                                       disabled={
                                         anyRefreshInProgress ||
                                         !cooldownInfo.canRefresh ||
-                                        ytPostContestLocked
+                                        (!isPostCampaignLeaderboard &&
+                                          ytPostContestLocked)
                                       }
                                       className={cn(
                                         btnClass,
                                         "bg-[#5A35B8] text-white border-[#5A35B8] hover:bg-[#4a2d99]",
                                         (anyRefreshInProgress ||
                                           !cooldownInfo.canRefresh ||
-                                          ytPostContestLocked) &&
+                                          (!isPostCampaignLeaderboard &&
+                                            ytPostContestLocked)) &&
                                           "opacity-60 cursor-not-allowed",
                                       )}
                                       title={
+                                        !isPostCampaignLeaderboard &&
                                         ytPostContestLocked
                                           ? "Metrics are locked after campaign review begins"
                                           : cooldownDisabled
                                             ? disabledReason
-                                            : "Basic, core, retention, traffic details, demographics with cities/states, devices"
+                                            : isPostCampaignLeaderboard
+                                              ? "Updates post-campaign metrics only (Submissions unchanged)"
+                                              : "Basic, core, retention, traffic details, demographics with cities/states, devices"
                                       }
                                     >
                                       {isRefreshingAll ? (
@@ -15523,7 +15980,8 @@ export default function ContestDetailClient({
                                       disabled={
                                         anyRefreshInProgress ||
                                         !cooldownInfo.canRefresh ||
-                                        ytPostContestLocked
+                                        (!isPostCampaignLeaderboard &&
+                                          ytPostContestLocked)
                                       }
                                       className={cn(
                                         btnClass,
@@ -15532,15 +15990,19 @@ export default function ContestDetailClient({
                                           "bg-slate-600 border-slate-500 hover:bg-slate-500",
                                         (anyRefreshInProgress ||
                                           !cooldownInfo.canRefresh ||
-                                          ytPostContestLocked) &&
+                                          (!isPostCampaignLeaderboard &&
+                                            ytPostContestLocked)) &&
                                           "opacity-60 cursor-not-allowed",
                                       )}
                                       title={
+                                        !isPostCampaignLeaderboard &&
                                         ytPostContestLocked
                                           ? "Metrics are locked after campaign review begins"
                                           : cooldownDisabled
                                             ? disabledReason
-                                            : "Basic, core, traffic sources, age/gender/countries — faster; skips cities, states, devices, retention, and traffic details"
+                                            : isPostCampaignLeaderboard
+                                              ? "Updates post-campaign metrics only (Submissions unchanged)"
+                                              : "Basic, core, traffic sources, age/gender/countries — faster; skips cities, states, devices, retention, and traffic details"
                                       }
                                     >
                                       {isRefreshingAllStandard ? (
@@ -21257,7 +21719,8 @@ export default function ContestDetailClient({
                                               </DropdownMenuLabel>
                                               <DropdownMenuItem
                                                 disabled={
-                                                  ytPostContestLocked ||
+                                                  (!isPostCampaignLeaderboard &&
+                                                    ytPostContestLocked) ||
                                                   (loadingDetailedAnalytics[
                                                     submission.id
                                                   ] !== undefined &&
@@ -21303,7 +21766,8 @@ export default function ContestDetailClient({
                                               </DropdownMenuItem>
                                               <DropdownMenuItem
                                                 disabled={
-                                                  ytPostContestLocked ||
+                                                  (!isPostCampaignLeaderboard &&
+                                                    ytPostContestLocked) ||
                                                   (loadingDetailedAnalytics[
                                                     submission.id
                                                   ] !== undefined &&
@@ -21349,7 +21813,8 @@ export default function ContestDetailClient({
                                               </DropdownMenuItem>
                                               <DropdownMenuItem
                                                 disabled={
-                                                  ytPostContestLocked ||
+                                                  (!isPostCampaignLeaderboard &&
+                                                    ytPostContestLocked) ||
                                                   (loadingDetailedAnalytics[
                                                     submission.id
                                                   ] !== undefined &&
@@ -23984,7 +24449,8 @@ export default function ContestDetailClient({
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem
                                                           disabled={
-                                                            ytPostContestLocked ||
+                                                            (!isPostCampaignLeaderboard &&
+                                                              ytPostContestLocked) ||
                                                             !!loadingDetailedAnalytics[
                                                               group.creator.id
                                                             ]
@@ -24005,7 +24471,8 @@ export default function ContestDetailClient({
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                           disabled={
-                                                            ytPostContestLocked ||
+                                                            (!isPostCampaignLeaderboard &&
+                                                              ytPostContestLocked) ||
                                                             !!loadingDetailedAnalytics[
                                                               group.creator.id
                                                             ]
@@ -24027,7 +24494,8 @@ export default function ContestDetailClient({
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                           disabled={
-                                                            ytPostContestLocked ||
+                                                            (!isPostCampaignLeaderboard &&
+                                                              ytPostContestLocked) ||
                                                             !!loadingDetailedAnalytics[
                                                               group.creator.id
                                                             ]
@@ -24049,7 +24517,8 @@ export default function ContestDetailClient({
 
                                                         <DropdownMenuItem
                                                           disabled={
-                                                            ytPostContestLocked ||
+                                                            (!isPostCampaignLeaderboard &&
+                                                              ytPostContestLocked) ||
                                                             !!loadingDetailedAnalytics[
                                                               group.creator.id
                                                             ]

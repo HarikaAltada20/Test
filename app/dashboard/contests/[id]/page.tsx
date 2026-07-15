@@ -166,6 +166,17 @@ export default async function ContestDetailPage({
     };
   }
 
+  let postCampaignLastMetricsUpdated: string | null = null;
+  {
+    const { data: pcRow } = await supabase
+      .from("contests")
+      .select("post_campaign_last_metrics_updated")
+      .eq("id", contestId)
+      .maybeSingle();
+    postCampaignLastMetricsUpdated =
+      pcRow?.post_campaign_last_metrics_updated ?? null;
+  }
+
   // Additional security check: if contest doesn't belong to user and user is not admin, deny access
   if (!isAdmin && contestData.advertiser_id !== user.id) {
     console.log(
@@ -612,6 +623,7 @@ export default async function ContestDetailPage({
     contest_type: contestData.contest_type,
     contest_based_details: contestData.contest_based_details,
     last_metrics_updated: contestData.last_metrics_updated,
+    post_campaign_last_metrics_updated: postCampaignLastMetricsUpdated,
     // Add other moderation fields for completeness
     submitted_for_approval_at: contestData.submitted_for_approval_at,
     approved_at: contestData.approved_at,

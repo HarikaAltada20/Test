@@ -154,6 +154,17 @@ export default async function AdminContestDetailPage({
       };
     }
 
+    let postCampaignLastMetricsUpdated: string | null = null;
+    {
+      const { data: pcRow } = await supabase
+        .from("contests")
+        .select("post_campaign_last_metrics_updated")
+        .eq("id", contestId)
+        .maybeSingle();
+      postCampaignLastMetricsUpdated =
+        pcRow?.post_campaign_last_metrics_updated ?? null;
+    }
+
     // Remove all legacy parsing and filtering for inspiration_links
     const finalInspirationLinks = Array.isArray(contestData.inspiration_links)
       ? contestData.inspiration_links
@@ -648,6 +659,7 @@ export default async function AdminContestDetailPage({
       contest_type: contestData.contest_type,
       contest_based_details: contestData.contest_based_details,
       last_metrics_updated: contestData.last_metrics_updated,
+      post_campaign_last_metrics_updated: postCampaignLastMetricsUpdated,
       // Add other moderation fields for completeness
       submitted_for_approval_at: contestData.submitted_for_approval_at,
       approved_at: contestData.approved_at,

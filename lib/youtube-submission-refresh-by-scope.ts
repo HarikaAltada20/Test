@@ -220,7 +220,11 @@ export async function updateYouTubeSubmissionForScope(
   accessToken: string,
   scope: YouTubeRefreshScope,
   now: string,
-  options?: { prefetchedBasic?: PrefetchedBasic | null }
+  options?: {
+    prefetchedBasic?: PrefetchedBasic | null;
+    /** When set, writes metrics to post_campaign overlay instead of submissions. */
+    metricsTarget?: "submissions" | "post_campaign_submission_metrics";
+  },
 ): Promise<{
   ok: boolean;
   authError: boolean;
@@ -281,6 +285,9 @@ export async function updateYouTubeSubmissionForScope(
 
   const existingStats = getExistingYouTubeStats(sub.other_stats);
 
+  const metricsTarget =
+    options?.metricsTarget ?? "submissions";
+
   const markFailure = async (
     failureType: InsightsFailureType,
     errorMessage?: string,
@@ -293,15 +300,24 @@ export async function updateYouTubeSubmissionForScope(
       ...(markNeedsReconnect ? { analytics_needs_reauth: true } : {}),
     };
 
-    await supabaseAdmin
-      .from("submissions")
-      .update({
-        insights_status: failureType,
-        last_insights_update: now,
-        other_stats: buildOtherStatsWithYoutube(sub.other_stats, nextYoutube),
-        updated_at: now,
-      })
-      .eq("id", sub.id);
+    const failurePatch = {
+      insights_status: failureType,
+      last_insights_update: now,
+      other_stats: buildOtherStatsWithYoutube(sub.other_stats, nextYoutube),
+      updated_at: now,
+    };
+
+    if (metricsTarget === "post_campaign_submission_metrics") {
+      await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .update(failurePatch)
+        .eq("submission_id", sub.id);
+    } else {
+      await supabaseAdmin
+        .from("submissions")
+        .update(failurePatch)
+        .eq("id", sub.id);
+    }
   };
 
   const videoId = extractYoutubeId(sub.content_link);
@@ -637,7 +653,22 @@ export async function updateYouTubeSubmissionForScope(
     patch.views = newViews;
   }
 
-  const { error } = await supabaseAdmin.from("submissions").update(patch).eq("id", sub.id);
+  const { error } =
+    metricsTarget === "post_campaign_submission_metrics"
+      ? await supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .update({
+            ...(typeof patch.views === "number" ? { views: patch.views } : {}),
+            other_stats: patch.other_stats,
+            insights_status: patch.insights_status,
+            last_insights_update: patch.last_insights_update,
+            updated_at: now,
+          })
+          .eq("submission_id", sub.id)
+      : await supabaseAdmin
+          .from("submissions")
+          .update(patch)
+          .eq("id", sub.id);
   if (error) {
     console.error(`[youtube-refresh] DB update failed ${sub.id}:`, error.message);
     return {
