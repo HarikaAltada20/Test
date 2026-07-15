@@ -57,6 +57,9 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
+    const metricsTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
     const scope = body.scope as YouTubeRefreshScope | undefined;
     if (!scope || !SCOPES.includes(scope)) {
       return NextResponse.json(
@@ -87,7 +90,9 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated")
+      .select(
+        "id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated, end_date",
+      )
       .eq("id", contestId)
       .single();
 
@@ -98,20 +103,32 @@ export async function POST(
     if (!platformLower.includes("youtube")) {
       return NextResponse.json({ error: "Contest is not a YouTube contest" }, { status: 400 });
     }
-    if (contest.views_locked_at) {
+
+    // Submissions refresh stays locked after review; post-campaign overlay can still refresh.
+    if (!isPostCampaignTarget) {
+      if (contest.views_locked_at) {
+        return NextResponse.json(
+          { error: "Contest is finalized; refresh not allowed" },
+          { status: 400 }
+        );
+      }
+      if (
+        contest.post_contest_status === "in_review" ||
+        contest.post_contest_status === "verification_complete" ||
+        contest.post_contest_status === "payouts_processed"
+      ) {
+        return NextResponse.json(
+          { error: "Metrics are locked after contest review begins. No further refresh allowed." },
+          { status: 400 }
+        );
+      }
+    } else if (!contest.end_date || new Date() < new Date(contest.end_date)) {
       return NextResponse.json(
-        { error: "Contest is finalized; refresh not allowed" },
-        { status: 400 }
-      );
-    }
-    if (
-      contest.post_contest_status === "in_review" ||
-      contest.post_contest_status === "verification_complete" ||
-      contest.post_contest_status === "payouts_processed"
-    ) {
-      return NextResponse.json(
-        { error: "Metrics are locked after contest review begins. No further refresh allowed." },
-        { status: 400 }
+        {
+          error:
+            "Post-campaign metrics refresh is only available after the contest has ended.",
+        },
+        { status: 400 },
       );
     }
 
@@ -139,7 +156,8 @@ export async function POST(
           : {},
       }).catch((e) => console.warn("[youtube-metrics-refresh] Trigger processor failed:", e));
 
-    if (!cronAuth) {
+    // Post-campaign cooldown is enforced by the post-campaign refresh-metrics caller.
+    if (!cronAuth && !isPostCampaignTarget) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
       const cooldownMs = isOpportunitiesRefresh
@@ -198,29 +216,53 @@ export async function POST(
         total_submissions: existingRun.total_submissions,
         total_batches: existingRun.total_batches,
         processorTriggered: true,
+        metricsTarget,
       });
     }
 
-    const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
-      .from("submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("contest_id", contestId)
-      .ilike("platform", "%youtube%")
-      .neq("status", "rejected")
-      .not("content_link", "is", null)
-      .or(insightsRefreshInsightsStatusOrFilter());
-    if (eligibleCountError) {
-      console.error(
-        "[youtube-metrics-refresh enqueue] eligible count failed:",
-        eligibleCountError,
-      );
-      return NextResponse.json(
-        { error: "Failed to count eligible submissions" },
-        { status: 500 },
-      );
+    let totalEligible = 0;
+    if (isPostCampaignTarget) {
+      const { count, error: eligibleCountError } = await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .ilike("platform", "%youtube%")
+        .neq("status", "rejected")
+        .not("content_link", "is", null)
+        .or(insightsRefreshInsightsStatusOrFilter());
+      if (eligibleCountError) {
+        console.error(
+          "[youtube-metrics-refresh enqueue] eligible count failed:",
+          eligibleCountError,
+        );
+        return NextResponse.json(
+          { error: "Failed to count eligible submissions" },
+          { status: 500 },
+        );
+      }
+      totalEligible = count ?? 0;
+    } else {
+      const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
+        .from("submissions")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .ilike("platform", "%youtube%")
+        .neq("status", "rejected")
+        .not("content_link", "is", null)
+        .or(insightsRefreshInsightsStatusOrFilter());
+      if (eligibleCountError) {
+        console.error(
+          "[youtube-metrics-refresh enqueue] eligible count failed:",
+          eligibleCountError,
+        );
+        return NextResponse.json(
+          { error: "Failed to count eligible submissions" },
+          { status: 500 },
+        );
+      }
+      totalEligible = eligibleCount ?? 0;
     }
 
-    const totalEligible = eligibleCount ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));
     const runStartedAt = new Date().toISOString();
 
@@ -267,6 +309,7 @@ export async function POST(
             status: again.status,
             alreadyActive: true,
             processorTriggered: true,
+            metricsTarget,
           });
         }
       }
@@ -282,6 +325,7 @@ export async function POST(
       batchIndex: 0,
       batchSize: BATCH_SIZE,
       totalBatches: totalBatches,
+      metricsTarget,
     };
 
     const enqueueResult = await enqueueYouTubeMetricsJob(firstJob);
@@ -316,6 +360,7 @@ export async function POST(
       scope,
       total_submissions: totalEligible,
       total_batches: totalBatches,
+      metricsTarget,
     });
   } catch (e) {
     console.error("[youtube-metrics-refresh enqueue]", e);

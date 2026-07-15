@@ -6,8 +6,8 @@ export type PostCampaignSubmissionSnapshot = {
   creator_id: string;
   content_link: string | null;
   views: number | null;
-  metadata: Record<string, unknown> | null;
-  other_stats: Record<string, unknown> | null;
+  metadata: Record<string, any> | null;
+  other_stats: Record<string, any> | null;
   created_at: string | null;
   video_id: string | null;
   video_title: string | null;
@@ -19,14 +19,14 @@ export type PostCampaignSubmissionSnapshot = {
   earnings: number | null;
   views_locked: number | null;
   affiliate_paid: boolean | null;
-  affiliate_metadata: Record<string, unknown> | null;
+  affiliate_metadata: Record<string, any> | null;
   paid: boolean | null;
   paid_at: string | null;
   bonus_paid: boolean | null;
   bonus_paid_at: string | null;
   bonus_amount: number | null;
-  milestone_bonus_paid: Record<string, unknown> | null;
-  dual_rewards_payout: Record<string, unknown> | null;
+  milestone_bonus_paid: Record<string, any> | null;
+  dual_rewards_payout: Record<string, any> | null;
   quality_score: number | null;
   quality_score_backfilled: boolean | null;
   submission_updated_at: string | null;
@@ -34,11 +34,11 @@ export type PostCampaignSubmissionSnapshot = {
   updated_at?: string;
 };
 
-/** Map snapshot row to submission-shaped object for leaderboard UI. */
-export function postCampaignSnapshotToSubmission<T extends Record<string, unknown>>(
+/** Map snapshot row onto a submission-shaped object for leaderboard UI. */
+export function postCampaignSnapshotToSubmission<T extends object = Record<string, any>>(
   row: PostCampaignSubmissionSnapshot,
   base?: T,
-): T & Record<string, unknown> {
+): T {
   const snapshot = {
     id: row.submission_id,
     contest_id: row.contest_id,
@@ -46,7 +46,7 @@ export function postCampaignSnapshotToSubmission<T extends Record<string, unknow
     content_link: row.content_link,
     views: row.views ?? 0,
     metadata: row.metadata,
-    other_stats: row.other_stats,
+    other_stats: row.other_stats ?? null,
     created_at: row.created_at,
     video_id: row.video_id,
     video_title: row.video_title,
@@ -70,5 +70,5 @@ export function postCampaignSnapshotToSubmission<T extends Record<string, unknow
     quality_score_backfilled: row.quality_score_backfilled,
     updated_at: row.submission_updated_at,
   };
-  return { ...(base ?? {}), ...snapshot } as T & Record<string, unknown>;
+  return { ...(base ?? ({} as T)), ...snapshot } as T;
 }

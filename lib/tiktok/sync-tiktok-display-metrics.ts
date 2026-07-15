@@ -17,7 +17,28 @@ export type TikTokSyncResult = {
   videosFailed?: number;
 };
 
+export type TikTokSyncMetricsTarget =
+  | "submissions"
+  | "post_campaign_submission_metrics";
+
 const QUERY_CHUNK = 20;
+
+async function writeTikTokRowUpdate(
+  supabase: SupabaseClient,
+  submissionId: string,
+  payload: Record<string, unknown>,
+  metricsTarget: TikTokSyncMetricsTarget,
+): Promise<void> {
+  const now = new Date().toISOString();
+  if (metricsTarget === "post_campaign_submission_metrics") {
+    await supabase
+      .from("post_campaign_submission_metrics")
+      .update({ ...payload, updated_at: now })
+      .eq("submission_id", submissionId);
+  } else {
+    await supabase.from("submissions").update(payload).eq("id", submissionId);
+  }
+}
 
 /**
  * Refreshes TikTok submission metrics using Login Kit only (Display API video.query).
@@ -26,7 +47,9 @@ export async function syncCreatorTikTokDisplayMetrics(
   supabase: SupabaseClient,
   creatorId: string,
   submissions: TikTokSubmissionRow[],
+  options?: { metricsTarget?: TikTokSyncMetricsTarget },
 ): Promise<TikTokSyncResult> {
+  const metricsTarget = options?.metricsTarget ?? "submissions";
   const provider = new TikTokProvider();
 
   const tokenResult = await ensureFreshTikTokToken(supabase, creatorId);
@@ -55,17 +78,20 @@ export async function syncCreatorTikTokDisplayMetrics(
 
   // Handle unrecognized links (e.g. short links we can't parse without expansion)
   for (const sub of unrecognized) {
-    await supabase
-      .from("submissions")
-      .update({
+    await writeTikTokRowUpdate(
+      supabase,
+      sub.id,
+      {
         insights_status: "permanent_failure",
         last_insights_update: new Date().toISOString(),
         other_stats: {
           ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
-          tiktok_error: "Could not extract Video ID from link. Please use a standard TikTok video URL.",
+          tiktok_error:
+            "Could not extract Video ID from link. Please use a standard TikTok video URL.",
         },
-      })
-      .eq("id", sub.id);
+      },
+      metricsTarget,
+    );
   }
 
   const uniqueIds = [...new Set(rows.map((r) => r.videoId))];
@@ -120,17 +146,22 @@ export async function syncCreatorTikTokDisplayMetrics(
     if (!m) {
       // Video not found in TikTok's response but we have a valid token.
       // Likely private, deleted, or unauthorized.
-      await supabase
-        .from("submissions")
-        .update({
+      await writeTikTokRowUpdate(
+        supabase,
+        sub.id,
+        {
           insights_status: "permanent_failure",
           last_insights_update: new Date().toISOString(),
           other_stats: {
-            ...(typeof sub.other_stats === "object" ? (sub.other_stats as any) : {}),
-            tiktok_error: "Video not found or is private. Ensure video is set to Public.",
+            ...(typeof sub.other_stats === "object"
+              ? (sub.other_stats as Record<string, unknown>)
+              : {}),
+            tiktok_error:
+              "Video not found or is private. Ensure video is set to Public.",
           },
-        })
-        .eq("id", sub.id);
+        },
+        metricsTarget,
+      );
       videosFailed++;
       continue;
     }
@@ -159,9 +190,10 @@ export async function syncCreatorTikTokDisplayMetrics(
       last_updated: new Date().toISOString(),
     };
 
-    await supabase
-      .from("submissions")
-      .update({
+    await writeTikTokRowUpdate(
+      supabase,
+      sub.id,
+      {
         views,
         other_stats: {
           ...currentOtherStats,
@@ -170,25 +202,28 @@ export async function syncCreatorTikTokDisplayMetrics(
         },
         last_insights_update: new Date().toISOString(),
         insights_status: "ok",
-      })
-      .eq("id", sub.id);
+      },
+      metricsTarget,
+    );
 
     videosSynced++;
   }
 
-  // Update creator profile aggregations
-  await supabase
-    .from("creator_profiles")
-    .update({
-      tiktok_achieved: {
-        views: sumViews,
-        likes: sumLikes,
-        comments: sumComments,
-        shares: sumShares,
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", creatorId);
+  // Only roll up into creator profile for live submissions refresh.
+  if (metricsTarget === "submissions") {
+    await supabase
+      .from("creator_profiles")
+      .update({
+        tiktok_achieved: {
+          views: sumViews,
+          likes: sumLikes,
+          comments: sumComments,
+          shares: sumShares,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", creatorId);
+  }
 
   return { success: true, videosSynced, videosFailed };
 }

@@ -43,6 +43,11 @@ export async function POST(
       ({ isAdmin } = await verifyAdminAccess());
     }
 
+    const body = await request.json().catch(() => ({}));
+    const metricsTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
+
     const { id: contestId } = await params;
     if (!contestId) {
       return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
@@ -55,7 +60,9 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated")
+      .select(
+        "id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated, end_date",
+      )
       .eq("id", contestId)
       .single();
 
@@ -68,27 +75,39 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (contest.views_locked_at) {
+
+    // Submissions refresh stays locked after review; post-campaign overlay can still refresh.
+    if (!isPostCampaignTarget) {
+      if (contest.views_locked_at) {
+        return NextResponse.json(
+          { error: "Contest is finalized; refresh not allowed" },
+          { status: 400 }
+        );
+      }
+
+      if (
+        contest.post_contest_status === "in_review" ||
+        contest.post_contest_status === "verification_complete" ||
+        contest.post_contest_status === "payouts_processed"
+      ) {
+        return NextResponse.json(
+          { error: "Metrics are locked after contest review begins. No further refresh allowed." },
+          { status: 400 }
+        );
+      }
+    } else if (!contest.end_date || new Date() < new Date(contest.end_date)) {
       return NextResponse.json(
-        { error: "Contest is finalized; refresh not allowed" },
-        { status: 400 }
-      );
-    }
-    
-    if (
-      contest.post_contest_status === "in_review" ||
-      contest.post_contest_status === "verification_complete" ||
-      contest.post_contest_status === "payouts_processed"
-    ) {
-      return NextResponse.json(
-        { error: "Metrics are locked after contest review begins. No further refresh allowed." },
-        { status: 400 }
+        {
+          error:
+            "Post-campaign metrics refresh is only available after the contest has ended.",
+        },
+        { status: 400 },
       );
     }
 
     // Enforce the same cooldown as `refresh-metrics` to prevent bypassing rate limits by
-    // calling the enqueue endpoint directly.
-    if (!cronAuth) {
+    // calling the enqueue endpoint directly. Post-campaign cooldown is enforced by caller.
+    if (!cronAuth && !isPostCampaignTarget) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
       const cooldownMs = isOpportunitiesRefresh
@@ -171,26 +190,45 @@ export async function POST(
         total_submissions: existingRun.total_submissions,
         total_batches: existingRun.total_batches,
         processorTriggered: true,
+        metricsTarget,
       });
     }
 
-    // Count eligible submissions in DB (Instagram-style) for better performance.
-    const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
-      .from("submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("contest_id", contestId)
-      .eq("platform", "tiktok")
-      .neq("status", "rejected")
-      .or("video_id.not.is.null,content_link.not.is.null")
-      .or(insightsRefreshInsightsStatusOrFilter());
-    if (eligibleCountError) {
-      return NextResponse.json(
-        { error: "Failed to count eligible submissions" },
-        { status: 500 },
-      );
+    let totalEligible = 0;
+    if (isPostCampaignTarget) {
+      const { count, error: eligibleCountError } = await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .ilike("platform", "%tiktok%")
+        .neq("status", "rejected")
+        .or("video_id.not.is.null,content_link.not.is.null")
+        .or(insightsRefreshInsightsStatusOrFilter());
+      if (eligibleCountError) {
+        return NextResponse.json(
+          { error: "Failed to count eligible submissions" },
+          { status: 500 },
+        );
+      }
+      totalEligible = count ?? 0;
+    } else {
+      const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
+        .from("submissions")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("platform", "tiktok")
+        .neq("status", "rejected")
+        .or("video_id.not.is.null,content_link.not.is.null")
+        .or(insightsRefreshInsightsStatusOrFilter());
+      if (eligibleCountError) {
+        return NextResponse.json(
+          { error: "Failed to count eligible submissions" },
+          { status: 500 },
+        );
+      }
+      totalEligible = eligibleCount ?? 0;
     }
 
-    const totalEligible = eligibleCount ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));
     const runStartedAt = new Date().toISOString();
 
@@ -225,6 +263,7 @@ export async function POST(
             runId: again.id,
             status: again.status,
             alreadyActive: true,
+            metricsTarget,
           });
         }
       }
@@ -242,6 +281,7 @@ export async function POST(
       batchIndex: 0,
       batchSize: BATCH_SIZE,
       totalBatches: totalBatches,
+      metricsTarget,
     };
 
     const enqueueResult = await enqueueTikTokMetricsJob(firstJob);
@@ -269,6 +309,7 @@ export async function POST(
       status: "running",
       total_submissions: totalEligible,
       total_batches: totalBatches,
+      metricsTarget,
     });
   } catch (e) {
     console.error("[tiktok-metrics-refresh enqueue]", e);

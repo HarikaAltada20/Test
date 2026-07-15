@@ -26,6 +26,11 @@ export interface InstagramInsightsJob {
   batchSize: number;
   totalBatches: number;
   cursor?: InstagramInsightsJobCursor;
+  /**
+   * When "post_campaign", batch reads/writes post_campaign_submission_metrics
+   * and bypasses post-contest metrics lock. Default: submissions.
+   */
+  metricsTarget?: "submissions" | "post_campaign";
 }
 
 function getInstagramRedisEnv(): { url?: string; token?: string; using: "instagram" | "shared" } {

@@ -214,7 +214,7 @@ function mapSubmissionToPostCampaignRow(
 /** Shape for UI: post-campaign row as a submission-like object. */
 export function postCampaignRowToSubmissionShape(
   row: PostCampaignMetricRow,
-): Record<string, unknown> {
+): Record<string, any> {
   return postCampaignSnapshotToSubmission(row);
 }
 
@@ -350,9 +350,16 @@ async function refreshInstagramPostCampaign(
   supabaseAdmin: any,
   contestId: string,
   submissions: SubmissionSourceRow[],
-): Promise<{ success: number; failed: number }> {
+): Promise<{ success: number; failed: number; skipped: number }> {
   const eligible = submissions.filter(
-    (s) => s.status !== "rejected" && s.video_id,
+    (s) =>
+      s.status !== "rejected" &&
+      s.video_id &&
+      // Match submissions queue: skip permanent_failure unless cooldown elapsed
+      (s.insights_status !== "permanent_failure" ||
+        !s.last_insights_update ||
+        Date.now() - new Date(s.last_insights_update).getTime() >
+          24 * 60 * 60 * 1000),
   );
   const byCreator = new Map<string, SubmissionSourceRow[]>();
   for (const sub of eligible) {
@@ -362,6 +369,10 @@ async function refreshInstagramPostCampaign(
   }
 
   const creatorIds = [...byCreator.keys()];
+  if (creatorIds.length === 0) {
+    return { success: 0, failed: 0, skipped: submissions.length };
+  }
+
   const { data: creators } = await supabaseAdmin
     .from("creator_profiles")
     .select("id, instagram_account")
@@ -383,6 +394,8 @@ async function refreshInstagramPostCampaign(
   }> = [];
   let success = 0;
   let failed = 0;
+  let skipped = 0;
+  const creatorsNeedingReconnect = new Set<string>();
 
   await mapLimit(creatorIds, 3, async (creatorId) => {
     const creator = creatorsById.get(creatorId) as
@@ -390,56 +403,53 @@ async function refreshInstagramPostCampaign(
       | undefined;
     const subs = byCreator.get(creatorId) ?? [];
     const account = creator?.instagram_account;
+
     if (
       !account?.access_token ||
       (account.account_type !== "BUSINESS" &&
         account.account_type !== "MEDIA_CREATOR")
     ) {
-      for (const sub of subs) {
-        failed += 1;
-        updates.push({
-          submission_id: sub.id,
-          views: sub.views ?? 0,
-          other_stats: parseOtherStats(sub.other_stats),
-          last_insights_update: now,
-          insights_status: "temporary_failure",
-        });
-      }
+      // Keep existing post-campaign snapshot metrics (same as locked submissions).
+      failed += subs.length;
       return;
+    }
+
+    // Match submissions batch: skip recently-failed reconnects for 1 day.
+    if (account.needs_reconnect) {
+      const lastCheck = account.last_connection_check_at
+        ? dayjs(account.last_connection_check_at)
+        : null;
+      if (lastCheck && lastCheck.isAfter(dayjs().subtract(1, "day"))) {
+        skipped += subs.length;
+        return;
+      }
     }
 
     let accessToken = account.access_token;
     if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
       const refreshResult = await refreshToken(creatorId, accessToken);
-      if (!refreshResult) {
-        for (const sub of subs) {
-          failed += 1;
-          updates.push({
-            submission_id: sub.id,
-            views: sub.views ?? 0,
-            other_stats: parseOtherStats(sub.other_stats),
-            last_insights_update: now,
-            insights_status: "temporary_failure",
-          });
-        }
-        return;
+      if (refreshResult) {
+        accessToken = refreshResult.access_token;
+        const expirySeconds = refreshResult.expires_in ?? 3600;
+        await supabaseAdmin
+          .from("creator_profiles")
+          .update({
+            instagram_account: {
+              ...account,
+              access_token: refreshResult.access_token,
+              token_expiry: dayjs().add(expirySeconds, "second").toISOString(),
+              last_connection_check_at: now,
+              needs_reconnect: false,
+            },
+            updated_at: now,
+          })
+          .eq("id", creatorId);
       }
-      accessToken = refreshResult.access_token;
-      const expirySeconds = refreshResult.expires_in ?? 3600;
-      await supabaseAdmin
-        .from("creator_profiles")
-        .update({
-          instagram_account: {
-            ...account,
-            access_token: refreshResult.access_token,
-            token_expiry: dayjs().add(expirySeconds, "second").toISOString(),
-            last_connection_check_at: now,
-            needs_reconnect: false,
-          },
-          updated_at: now,
-        })
-        .eq("id", creatorId);
+      // If refresh fails, still try Graph insights with the current token
+      // (same API path as submissions refresh for media that still works).
     }
+
+    let creatorHadAccountTokenError = false;
 
     await mapLimit(subs, 4, async (sub) => {
       const submission: SubmissionForInsights = {
@@ -453,6 +463,7 @@ async function refreshInstagramPostCampaign(
         submission,
         accessToken,
       );
+
       if (result.kind === "success") {
         success += 1;
         updates.push({
@@ -465,24 +476,54 @@ async function refreshInstagramPostCampaign(
           last_insights_update: now,
           insights_status: "ok",
         });
-      } else {
-        failed += 1;
+        return;
+      }
+
+      if (result.classification === "account_token") {
+        creatorHadAccountTokenError = true;
+      }
+
+      // Preserve previous snapshot metrics on failure (do not blank/overwrite).
+      failed += 1;
+      if (result.classification === "permanent_media") {
         updates.push({
           submission_id: sub.id,
           views: sub.views ?? 0,
           other_stats: parseOtherStats(sub.other_stats),
           last_insights_update: now,
-          insights_status:
-            result.classification === "permanent_media"
-              ? "permanent_failure"
-              : "temporary_failure",
+          insights_status: "permanent_failure",
         });
       }
+      // temporary / account_token: leave views/other_stats unchanged in overlay
     });
+
+    if (creatorHadAccountTokenError) {
+      creatorsNeedingReconnect.add(creatorId);
+    }
   });
 
+  if (creatorsNeedingReconnect.size > 0) {
+    await mapLimit([...creatorsNeedingReconnect], 5, async (creatorId) => {
+      const creator = creatorsById.get(creatorId) as
+        | { id: string; instagram_account: InstagramAccount | null }
+        | undefined;
+      if (!creator?.instagram_account) return;
+      await supabaseAdmin
+        .from("creator_profiles")
+        .update({
+          instagram_account: {
+            ...creator.instagram_account,
+            needs_reconnect: true,
+            last_connection_check_at: now,
+          },
+          updated_at: now,
+        })
+        .eq("id", creatorId);
+    });
+  }
+
   await writeOverlayMetrics(supabaseAdmin, updates);
-  return { success, failed };
+  return { success, failed, skipped };
 }
 
 async function refreshYouTubePostCampaign(
@@ -803,6 +844,7 @@ export type PostCampaignRefreshResult = {
   synced: number;
   success: number;
   failed: number;
+  skipped: number;
   platform: string;
   post_campaign_last_metrics_updated: string;
 };
@@ -857,6 +899,7 @@ export async function refreshPostCampaignMetrics(
   const platformKey = (platform ?? "").toLowerCase();
   let success = 0;
   let failed = 0;
+  let skipped = 0;
 
   if (platformKey.includes("instagram")) {
     const r = await refreshInstagramPostCampaign(
@@ -866,6 +909,7 @@ export async function refreshPostCampaignMetrics(
     );
     success = r.success;
     failed = r.failed;
+    skipped = r.skipped;
   } else if (platformKey.includes("youtube")) {
     const r = await refreshYouTubePostCampaign(
       supabaseAdmin,
@@ -899,6 +943,7 @@ export async function refreshPostCampaignMetrics(
     synced,
     success,
     failed,
+    skipped,
     platform: platformKey,
     post_campaign_last_metrics_updated: now,
   };

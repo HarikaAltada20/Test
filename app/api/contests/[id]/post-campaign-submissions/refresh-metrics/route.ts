@@ -9,7 +9,11 @@ import {
 import {
   fetchPostCampaignMetrics,
   refreshPostCampaignMetrics,
+  syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
+import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
+import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue";
+import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 
 const YT_SCOPES: YouTubeRefreshScope[] = [
@@ -20,6 +24,18 @@ const YT_SCOPES: YouTubeRefreshScope[] = [
   "all",
   "all_standard",
 ];
+
+function resolveBaseUrl(request: Request): string {
+  const protocol = request.headers.get("x-forwarded-proto") || "http";
+  const host = request.headers.get("host");
+  if (host) return `${protocol}://${host}`;
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.startsWith("http")
+      ? process.env.NEXT_PUBLIC_APP_URL
+      : `https://${process.env.NEXT_PUBLIC_APP_URL}`;
+  }
+  return "http://localhost:3000";
+}
 
 export async function POST(
   request: Request,
@@ -123,19 +139,111 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
+    // Always copy full submission snapshot into overlay first so every row is present.
+    const { synced } = await syncPostCampaignFromSubmissions(
+      supabaseAdmin,
+      contestId,
+    );
+
+    const baseUrl = resolveBaseUrl(request);
+    const cookieHeader = request.headers.get("cookie");
+
+    const enqueueQueuedRefresh = async (options: {
+      platformLabel: string;
+      enqueuePath: string;
+      body: Record<string, unknown>;
+    }) => {
+      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}${options.enqueuePath}`;
+      const enqueueRes = await fetch(enqueueUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify(options.body),
+      });
+      const enqueueData = await enqueueRes.json().catch(() => ({}));
+      if (!enqueueRes.ok) {
+        return NextResponse.json(
+          {
+            error:
+              enqueueData?.error ??
+              `Failed to start ${options.platformLabel} post-campaign refresh`,
+          },
+          { status: enqueueRes.status },
+        );
+      }
+
+      const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId);
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        synced,
+        message:
+          enqueueData.alreadyActive
+            ? `Post-campaign ${options.platformLabel} refresh already in progress. Metrics will update shortly.`
+            : `Copied ${synced} submissions into post-campaign. ${options.platformLabel} refresh started (same queue as Submissions). Metrics update in the background; Submissions table is not modified.`,
+        contestId,
+        contestTitle: contest.title,
+        platform: contest.platform,
+        runId: enqueueData.runId,
+        metricsTarget: "post_campaign",
+        scope: options.body.scope ?? "basic",
+        metrics,
+        nextRefreshAvailable: new Date(
+          now.getTime() + cooldownMs,
+        ).toISOString(),
+      });
+    };
+
+    // Instagram / YouTube / TikTok: same background queue as Submissions, overlay only.
+    if (platform.includes("instagram") && isInstagramInsightsQueueEnabled()) {
+      return enqueueQueuedRefresh({
+        platformLabel: "Instagram",
+        enqueuePath: `/api/contests/${contestId}/instagram-insights-refresh/enqueue`,
+        body: { metricsTarget: "post_campaign" },
+      });
+    }
+
+    if (platform.includes("youtube") && isYouTubeMetricsQueueEnabled()) {
+      return enqueueQueuedRefresh({
+        platformLabel: "YouTube",
+        enqueuePath: `/api/contests/${contestId}/youtube-metrics-refresh/enqueue`,
+        body: { scope, metricsTarget: "post_campaign" },
+      });
+    }
+
+    if (platform.includes("tiktok") && isTikTokMetricsQueueEnabled()) {
+      return enqueueQueuedRefresh({
+        platformLabel: "TikTok",
+        enqueuePath: `/api/contests/${contestId}/tiktok-metrics-refresh/enqueue`,
+        body: { metricsTarget: "post_campaign" },
+      });
+    }
+
     const result = await refreshPostCampaignMetrics(
       supabaseAdmin,
       contestId,
       contest.platform,
-      { scope, syncIfEmpty: true },
+      { scope, syncIfEmpty: false },
     );
     const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId);
 
+    const reconnectHint =
+      platform.includes("instagram") && result.failed > 0
+        ? " Failed rows usually mean creators need to reconnect Instagram (invalid/expired token). Previous metrics were kept for those rows."
+        : "";
+
+    const { success: updatedCount, synced: _ignoredSynced, ...resultRest } =
+      result;
+
     return NextResponse.json({
-      success: true,
-      message: `Post-campaign metrics refreshed (${scope}) for ${contest.platform}. Updated ${result.success} submissions (${result.failed} failed). Submissions table was not modified.`,
+      ...resultRest,
+      message: `Post-campaign metrics refreshed (${scope}) for ${contest.platform}. Synced ${synced}, updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}. Submissions table was not modified.${reconnectHint}`,
       scope,
-      ...result,
+      synced,
+      success: updatedCount,
       metrics,
       contestId,
       contestTitle: contest.title,

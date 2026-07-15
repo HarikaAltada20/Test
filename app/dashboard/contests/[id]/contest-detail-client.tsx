@@ -2310,7 +2310,7 @@ export default function ContestDetailClient({
           : currentContest.last_metrics_updated,
       );
 
-  const leaderboardSubmissions = useMemo(() => {
+  const leaderboardSubmissions = useMemo((): Submission[] => {
     if (!isPostCampaignLeaderboard) {
       return currentSubmissions;
     }
@@ -2323,7 +2323,7 @@ export default function ContestDetailClient({
     );
     return Object.values(postCampaignMetricsById).map((snapshot) => {
       const base = byId.get(snapshot.submission_id);
-      return postCampaignSnapshotToSubmission(
+      return postCampaignSnapshotToSubmission<Submission>(
         snapshot,
         base ?? ({ id: snapshot.submission_id } as Submission),
       );
@@ -2466,15 +2466,17 @@ export default function ContestDetailClient({
   }, [submissionQualityScoreFilters]);
 
   const analyticsQualityFilteredSubmissions = useMemo(() => {
-    if (analyticsQualityScoreFilters.length === 0) return currentSubmissions;
-    return currentSubmissions.filter((submission) => {
+    // PC Submissions tab: analytics must use post-campaign overlay rows, not locked submissions.
+    const source = leaderboardSubmissions;
+    if (analyticsQualityScoreFilters.length === 0) return source;
+    return source.filter((submission) => {
       const score = getExplicitSubmissionQualityScoreForFiltering(submission);
       return analyticsQualityScoreFilters.some((filterValue) => {
         if (filterValue === "unscored") return score === null;
         return score === filterValue;
       });
     });
-  }, [currentSubmissions, analyticsQualityScoreFilters]);
+  }, [leaderboardSubmissions, analyticsQualityScoreFilters]);
 
   const analyticsQualityScoreFilterButtonLabel = useMemo(() => {
     if (analyticsQualityScoreFilters.length === 0) return "All Quality Scores";
@@ -5371,6 +5373,14 @@ export default function ContestDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, currentContest?.platform, contestId]);
 
+  // When PC Submissions is selected, ensure overlay is loaded for Analytics (and Submissions).
+  useEffect(() => {
+    if (!isPostCampaignLeaderboard) return;
+    if (postCampaignMetricsLoaded || isLoadingPostCampaignMetrics) return;
+    void loadPostCampaignMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPostCampaignLeaderboard, postCampaignMetricsLoaded, isLoadingPostCampaignMetrics]);
+
   const getStatusBadgeProps = (contest: Contest, isDarkMode: boolean) => {
     const light = (bg: string, text: string, border: string) =>
       `${bg} ${text} border ${border}`;
@@ -7545,11 +7555,136 @@ export default function ContestDetailClient({
         );
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(result?.error || "Failed to refresh post-campaign metrics");
+          throw new Error(
+            result?.error || "Failed to refresh post-campaign metrics",
+          );
         }
+
         if (Array.isArray(result.metrics)) {
           applyPostCampaignMetricsPayload(result.metrics);
         }
+
+        // Same background queues as Submissions — poll until done, then reload overlay.
+        if (result.queued) {
+          const platformLower = (
+            currentContest.platform ||
+            result.platform ||
+            ""
+          )
+            .toString()
+            .toLowerCase();
+          const isYoutube = platformLower.includes("youtube");
+          const isTiktok = platformLower.includes("tiktok");
+          const statusPath = isYoutube
+            ? "youtube-metrics-refresh/status"
+            : isTiktok
+              ? "tiktok-metrics-refresh/status"
+              : "instagram-insights-refresh/status";
+          const platformLabel = isYoutube
+            ? "YouTube"
+            : isTiktok
+              ? "TikTok"
+              : "Instagram";
+
+          if (isYoutube) {
+            setShowYoutubeRunPopup(true);
+            setYoutubeRunCompleted(false);
+          } else if (isTiktok) {
+            setShowTiktokRunPopup(true);
+            setTiktokRunCompleted(false);
+          } else {
+            setShowInstagramRunPopup(true);
+          }
+          const previousUpdated = postCampaignLastMetricsUpdated;
+          const started = Date.now();
+          const maxMs = 600000;
+          const pollTimer = setInterval(async () => {
+            if (Date.now() - started > maxMs) {
+              clearInterval(pollTimer);
+              setIsRefreshingMetrics(false);
+              return;
+            }
+            try {
+              const sres = await fetch(
+                `/api/contests/${contestId}/${statusPath}`,
+              );
+              if (sres.ok) {
+                const sj = await sres.json();
+                const run = sj?.run as
+                  | InstagramInsightsRefreshRunSummary
+                  | YouTubeMetricsRefreshRunSummary
+                  | TikTokMetricsRefreshRunSummary
+                  | null;
+                if (run) {
+                  if (isYoutube) {
+                    setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                  } else if (isTiktok) {
+                    setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                  } else {
+                    setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                  }
+                  const st = run.status;
+                  if (
+                    st === "completed" ||
+                    st === "failed" ||
+                    st === "cancelled"
+                  ) {
+                    clearInterval(pollTimer);
+                    if (isYoutube) {
+                      setShowYoutubeRunPopup(false);
+                      setYoutubeRunCompleted(true);
+                    } else if (isTiktok) {
+                      setShowTiktokRunPopup(false);
+                      setTiktokRunCompleted(true);
+                    } else {
+                      setShowInstagramRunPopup(false);
+                      setInstagramRunCompleted(true);
+                    }
+                    await loadPostCampaignMetrics();
+                    setIsRefreshingMetrics(false);
+                    if (st === "completed") {
+                      toast({
+                        title: `Post-campaign ${platformLabel} refresh completed`,
+                        description: `Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}. Submissions unchanged.`,
+                        duration: 10000,
+                        variant: "success",
+                      });
+                    }
+                    return;
+                  }
+                }
+              }
+              // Fallback: detect overlay timestamp bump
+              const mres = await fetch(
+                `/api/contests/${contestId}/post-campaign-submissions`,
+              );
+              if (mres.ok) {
+                const md = await mres.json();
+                const updated = md.post_campaign_last_metrics_updated ?? null;
+                if (updated && updated !== previousUpdated) {
+                  clearInterval(pollTimer);
+                  applyPostCampaignMetricsPayload(
+                    Array.isArray(md.metrics) ? md.metrics : [],
+                  );
+                  setPostCampaignLastMetricsUpdated(updated);
+                  setIsRefreshingMetrics(false);
+                  if (isYoutube) setShowYoutubeRunPopup(false);
+                  else if (isTiktok) setShowTiktokRunPopup(false);
+                  else setShowInstagramRunPopup(false);
+                  toast({
+                    title: "Post-campaign metrics updated",
+                    description: `${platformLabel} refresh finished. Submissions table was not modified.`,
+                    variant: "success",
+                  });
+                }
+              }
+            } catch {
+              // ignore poll errors
+            }
+          }, 3000);
+          return;
+        }
+
         if (result.post_campaign_last_metrics_updated) {
           setPostCampaignLastMetricsUpdated(
             result.post_campaign_last_metrics_updated,
@@ -7568,6 +7703,7 @@ export default function ContestDetailClient({
           variant: "success",
           duration: 8000,
         });
+        setIsRefreshingMetrics(false);
       } catch (err) {
         toast({
           title: "Refresh failed",
@@ -7575,7 +7711,6 @@ export default function ContestDetailClient({
             err instanceof Error ? err.message : "Failed to refresh metrics",
           variant: "destructive",
         });
-      } finally {
         setIsRefreshingMetrics(false);
       }
       return;
@@ -7884,6 +8019,82 @@ export default function ContestDetailClient({
     if (Array.isArray(result.metrics)) {
       applyPostCampaignMetricsPayload(result.metrics);
     }
+
+    // YouTube post-campaign analytics scopes also use the shared metrics queue.
+    if (result.queued) {
+      setShowYoutubeRunPopup(true);
+      setYoutubeRunCompleted(false);
+      const previousUpdated = postCampaignLastMetricsUpdated;
+      const started = Date.now();
+      const maxMs = 600000;
+      await new Promise<void>((resolve) => {
+        const pollTimer = setInterval(async () => {
+          if (Date.now() - started > maxMs) {
+            clearInterval(pollTimer);
+            resolve();
+            return;
+          }
+          try {
+            const sres = await fetch(
+              `/api/contests/${contestId}/youtube-metrics-refresh/status`,
+            );
+            if (sres.ok) {
+              const sj = await sres.json();
+              const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
+              if (run) {
+                setYoutubeRun(run);
+                const st = run.status;
+                if (
+                  st === "completed" ||
+                  st === "failed" ||
+                  st === "cancelled"
+                ) {
+                  clearInterval(pollTimer);
+                  setShowYoutubeRunPopup(false);
+                  setYoutubeRunCompleted(true);
+                  await loadPostCampaignMetrics();
+                  if (st === "completed") {
+                    toast({
+                      title: "Post-campaign YouTube refresh completed",
+                      description: `Scope: ${scope} · Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}. Submissions unchanged.`,
+                      duration: 10000,
+                      variant: "success",
+                    });
+                  }
+                  resolve();
+                  return;
+                }
+              }
+            }
+            const mres = await fetch(
+              `/api/contests/${contestId}/post-campaign-submissions`,
+            );
+            if (mres.ok) {
+              const md = await mres.json();
+              const updated = md.post_campaign_last_metrics_updated ?? null;
+              if (updated && updated !== previousUpdated) {
+                clearInterval(pollTimer);
+                applyPostCampaignMetricsPayload(
+                  Array.isArray(md.metrics) ? md.metrics : [],
+                );
+                setPostCampaignLastMetricsUpdated(updated);
+                setShowYoutubeRunPopup(false);
+                toast({
+                  title: "Post-campaign metrics updated",
+                  description: `YouTube (${scope}) refresh finished. Submissions table was not modified.`,
+                  variant: "success",
+                });
+                resolve();
+              }
+            }
+          } catch {
+            // ignore poll errors
+          }
+        }, 3000);
+      });
+      return;
+    }
+
     if (result.post_campaign_last_metrics_updated) {
       setPostCampaignLastMetricsUpdated(
         result.post_campaign_last_metrics_updated,
@@ -8958,8 +9169,9 @@ export default function ContestDetailClient({
   );
 
   const reportAllSubmissions = useMemo(
-    () => currentSubmissions as unknown as ContestAnalyticsExportSubmission[],
-    [currentSubmissions],
+    () =>
+      leaderboardSubmissions as unknown as ContestAnalyticsExportSubmission[],
+    [leaderboardSubmissions],
   );
 
   const reportExportSubmissions = useMemo(
@@ -10126,6 +10338,52 @@ export default function ContestDetailClient({
                           ? "Milestone"
                           : "Leaderboard"}
                   </Badge>
+                )}
+                {showPostCampaignToggle && (
+                  <div
+                    className={cn(
+                      "inline-flex rounded-2xl border p-1",
+                      isDark
+                        ? "border-slate-700 bg-slate-900/60"
+                        : "border-[#D1B7F9] bg-white",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubmissionsLeaderboardMode("submissions");
+                        setActiveTab("submissions");
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
+                        submissionsLeaderboardMode === "submissions"
+                          ? "bg-[#6C43D0] text-white"
+                          : isDark
+                            ? "text-slate-300 hover:bg-slate-800"
+                            : "text-slate-600 hover:bg-[#F3EBFF]",
+                      )}
+                    >
+                      Submissions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubmissionsLeaderboardMode("post_campaign");
+                        setActiveTab("submissions");
+                        void loadPostCampaignMetrics();
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
+                        submissionsLeaderboardMode === "post_campaign"
+                          ? "bg-[#6C43D0] text-white"
+                          : isDark
+                            ? "text-slate-300 hover:bg-slate-800"
+                            : "text-slate-600 hover:bg-[#F3EBFF]",
+                      )}
+                    >
+                      PC Submissions
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -15290,54 +15548,6 @@ export default function ContestDetailClient({
           </TabPanel>
 
           <TabPanel value="submissions" activeTab={activeTab}>
-            {showPostCampaignToggle && (
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <div
-                  className={cn(
-                    "inline-flex rounded-2xl border p-1",
-                    isDark
-                      ? "border-slate-700 bg-slate-900/60"
-                      : "border-[#D1B7F9] bg-white",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSubmissionsLeaderboardMode("submissions")}
-                    className={cn(
-                      "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                      submissionsLeaderboardMode === "submissions"
-                        ? isDark
-                          ? "bg-[#6C43D0] text-white"
-                          : "bg-[#6C43D0] text-white"
-                        : isDark
-                          ? "text-slate-300 hover:bg-slate-800"
-                          : "text-slate-600 hover:bg-[#F3EBFF]",
-                    )}
-                  >
-                    Submissions
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubmissionsLeaderboardMode("post_campaign");
-                      void loadPostCampaignMetrics();
-                    }}
-                    className={cn(
-                      "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                      submissionsLeaderboardMode === "post_campaign"
-                        ? isDark
-                          ? "bg-[#6C43D0] text-white"
-                          : "bg-[#6C43D0] text-white"
-                        : isDark
-                          ? "text-slate-300 hover:bg-slate-800"
-                          : "text-slate-600 hover:bg-[#F3EBFF]",
-                    )}
-                  >
-                    Post Campaign Submission
-                  </button>
-                </div>
-              </div>
-            )}
             {isPostCampaignLeaderboard && !hasPostCampaignData ? (
               <Card
                 className={cn(
@@ -15374,7 +15584,7 @@ export default function ContestDetailClient({
                   >
                     {!postCampaignMetricsLoaded || isLoadingPostCampaignMetrics
                       ? "Checking for saved post-campaign data…"
-                      : "Click Refresh to copy all submissions from this contest into Post Campaign Submission. Then use Refresh Metrics to update YouTube, Instagram, or TikTok stats without changing the Submissions table."}
+                      : "Click Refresh to copy all submissions from this contest into Post Campaign Submission."}
                   </p>
                   {postCampaignMetricsLoaded &&
                     !isLoadingPostCampaignMetrics && (
@@ -25099,7 +25309,11 @@ export default function ContestDetailClient({
             >
               <CardHeader>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <CardTitle className="shrink-0">Campaign Analytics</CardTitle>
+                  <CardTitle className="shrink-0">
+                    {isPostCampaignLeaderboard
+                      ? "Campaign Analytics (PC Submissions)"
+                      : "Campaign Analytics"}
+                  </CardTitle>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                     {/* Quality Score filter (multi-select, video campaigns only) */}
                     {showNormalViewQualityScoreColumn && (
@@ -25377,6 +25591,24 @@ export default function ContestDetailClient({
                 </div>
               </CardHeader>
               <CardContent>
+                {isPostCampaignLeaderboard &&
+                  postCampaignMetricsLoaded &&
+                  !hasPostCampaignData && (
+                    <Alert className="mb-4">
+                      <AlertDescription>
+                        No PC Submissions data yet. Open{" "}
+                        <button
+                          type="button"
+                          className="underline font-medium"
+                          onClick={() => setActiveTab("submissions")}
+                        >
+                          PC Submissions
+                        </button>{" "}
+                        and click Refresh to copy submissions, then return here
+                        for post-campaign analytics.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 {/* Twitter Campaign Metrics Display */}
                 {currentContest?.platform?.toLowerCase() === "twitter" &&
                   (() => {

@@ -136,6 +136,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         batchSize: job.batchSize,
         totalBatches: job.totalBatches,
         cursor: job.cursor,
+        metricsTarget: job.metricsTarget ?? "submissions",
       }),
     });
   } catch (err) {
@@ -233,6 +234,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchSize: job.batchSize,
       totalBatches: job.totalBatches,
       cursor: batchData.nextCursor,
+      metricsTarget: job.metricsTarget ?? "submissions",
     };
     const enqueueNext = await enqueueYouTubeMetricsJob(nextJob);
     if (enqueueNext.error) {
@@ -300,8 +302,16 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .select("id")
       .maybeSingle();
     if (completedRun) {
-      await finalizeContestAfterYoutubeRun(supabaseAdmin, job.contestId, job.scope);
-      revalidateLeaderboardCache(job.contestId);
+      const isPostCampaignTarget = job.metricsTarget === "post_campaign";
+      if (isPostCampaignTarget) {
+        await supabaseAdmin
+          .from("contests")
+          .update({ post_campaign_last_metrics_updated: now })
+          .eq("id", job.contestId);
+      } else {
+        await finalizeContestAfterYoutubeRun(supabaseAdmin, job.contestId, job.scope);
+        revalidateLeaderboardCache(job.contestId);
+      }
     }
   }
   await removeFromProcessingYouTube(rawJobString);

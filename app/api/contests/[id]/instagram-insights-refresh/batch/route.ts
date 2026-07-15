@@ -60,6 +60,9 @@ export async function POST(
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
     const batchSize = typeof body.batchSize === "number" ? body.batchSize : 100;
     const cursor = body.cursor as { last_insights_update: string | null; id: string } | undefined;
+    const metricsTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
 
     if (!runId) {
       return NextResponse.json({ error: "runId required" }, { status: 400 });
@@ -93,7 +96,10 @@ export async function POST(
       .eq("id", contestId)
       .maybeSingle();
 
-    if (!contest || !isContestEligibleForScheduledMetricsRefresh(contest)) {
+    if (
+      !isPostCampaignTarget &&
+      (!contest || !isContestEligibleForScheduledMetricsRefresh(contest))
+    ) {
       const now = new Date().toISOString();
       await supabaseAdmin
         .from("instagram_insights_refresh_runs")
@@ -114,25 +120,48 @@ export async function POST(
 
     const runStartedAt = run.started_at;
 
-    let query = supabaseAdmin
-      .from("submissions")
-      .select("id, creator_id, video_id, views, other_stats, last_insights_update, insights_status")
-      .eq("contest_id", contestId)
-      .eq("platform", "instagram")
-      .neq("status", "rejected")
-      .not("video_id", "is", null)
-      .or(insightsRefreshInsightsStatusOrFilter())
-      .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
-      .order("last_insights_update", { ascending: true, nullsFirst: true })
-      .order("id", { ascending: true })
-      .limit(batchSize + 1);
+    let query = isPostCampaignTarget
+      ? supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .select(
+            "submission_id, creator_id, video_id, views, other_stats, last_insights_update, insights_status",
+          )
+          .eq("contest_id", contestId)
+          .neq("status", "rejected")
+          .not("video_id", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .or(
+            `last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`,
+          )
+          .order("last_insights_update", { ascending: true, nullsFirst: true })
+          .order("submission_id", { ascending: true })
+          .limit(batchSize + 1)
+      : supabaseAdmin
+          .from("submissions")
+          .select(
+            "id, creator_id, video_id, views, other_stats, last_insights_update, insights_status",
+          )
+          .eq("contest_id", contestId)
+          .eq("platform", "instagram")
+          .neq("status", "rejected")
+          .not("video_id", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .or(
+            `last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`,
+          )
+          .order("last_insights_update", { ascending: true, nullsFirst: true })
+          .order("id", { ascending: true })
+          .limit(batchSize + 1);
 
     if (cursor && cursor.id) {
+      const idCol = isPostCampaignTarget ? "submission_id" : "id";
       if (cursor.last_insights_update == null) {
-        query = query.or(`and(last_insights_update.is.null,id.gt.${cursor.id}),last_insights_update.not.is.null`);
+        query = query.or(
+          `and(last_insights_update.is.null,${idCol}.gt.${cursor.id}),last_insights_update.not.is.null`,
+        );
       } else {
         query = query.or(
-          `last_insights_update.gt.${cursor.last_insights_update},and(last_insights_update.eq.${cursor.last_insights_update},id.gt.${cursor.id})`
+          `last_insights_update.gt.${cursor.last_insights_update},and(last_insights_update.eq.${cursor.last_insights_update},${idCol}.gt.${cursor.id})`,
         );
       }
     }
@@ -154,8 +183,18 @@ export async function POST(
       insights_status: string | null;
     };
 
-    const batch: BatchRow[] = (rows ?? []).slice(0, batchSize) as BatchRow[];
-    const hasMore = (rows?.length ?? 0) > batchSize;
+    const normalizedRows: BatchRow[] = (rows ?? []).map((row: any) => ({
+      id: isPostCampaignTarget ? row.submission_id : row.id,
+      creator_id: row.creator_id,
+      video_id: row.video_id,
+      views: row.views,
+      other_stats: row.other_stats,
+      last_insights_update: row.last_insights_update,
+      insights_status: row.insights_status,
+    }));
+
+    const batch: BatchRow[] = normalizedRows.slice(0, batchSize);
+    const hasMore = normalizedRows.length > batchSize;
     const lastRow = batch[batch.length - 1];
     const nextCursor =
       lastRow && hasMore
@@ -282,27 +321,33 @@ export async function POST(
           usageAccumulator
         );
         if (!refreshResult) {
-          creatorNeedsReconnect.add(creatorId);
-          allSubsForCreator.forEach((sub) => {
-            submissionUpdates.push({
-              id: sub.id,
-              views: sub.views ?? 0,
-              other_stats: (sub.other_stats as Record<string, unknown>) || {},
-              last_insights_update: now,
-              insights_status: "temporary_failure",
-              previous_insights_status: sub.insights_status ?? null,
+          // Post-campaign: still attempt insights with current token (same Graph path as submissions).
+          // Submissions path: mark temporary_failure and skip.
+          if (!isPostCampaignTarget) {
+            creatorNeedsReconnect.add(creatorId);
+            allSubsForCreator.forEach((sub) => {
+              submissionUpdates.push({
+                id: sub.id,
+                views: sub.views ?? 0,
+                other_stats: (sub.other_stats as Record<string, unknown>) || {},
+                last_insights_update: now,
+                insights_status: "temporary_failure",
+                previous_insights_status: sub.insights_status ?? null,
+              });
             });
+            return;
+          }
+          creatorNeedsReconnect.add(creatorId);
+        } else {
+          accessToken = refreshResult.access_token;
+          const expirySeconds = refreshResult.expires_in ?? 3600;
+          tokenUpdatesByCreator.set(creatorId, {
+            ...account,
+            access_token: refreshResult.access_token,
+            token_expiry: dayjs().add(expirySeconds, "second").toISOString(),
+            last_connection_check_at: now,
           });
-          return;
         }
-        accessToken = refreshResult.access_token;
-        const expirySeconds = refreshResult.expires_in ?? 3600;
-        tokenUpdatesByCreator.set(creatorId, {
-          ...account,
-          access_token: refreshResult.access_token,
-          token_expiry: dayjs().add(expirySeconds, "second").toISOString(),
-          last_connection_check_at: now,
-        });
       }
 
       const subs = submissionsByCreator[creatorId] as Array<{
@@ -384,6 +429,25 @@ export async function POST(
     // We update by id only: the batch was already selected with last_insights_update < runStartedAt (or null), and we have one active run per contest, so no need to re-check last_insights_update here (that check was causing 0 rows updated when timestamps or concurrency made the condition fail).
     type UpdateResult = { updated: boolean; newStatus: string; previousStatus: string | null };
     const updateResults: UpdateResult[] = await mapLimit(submissionUpdates, 10, async (up) => {
+      if (isPostCampaignTarget) {
+        const { data, error } = await supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .update({
+            views: up.views,
+            other_stats: up.other_stats,
+            last_insights_update: up.last_insights_update,
+            insights_status: up.insights_status,
+            updated_at: now,
+          })
+          .eq("submission_id", up.id)
+          .select("submission_id")
+          .maybeSingle();
+        return {
+          updated: !error && data != null,
+          newStatus: up.insights_status,
+          previousStatus: up.previous_insights_status,
+        };
+      }
       const { data, error } = await supabaseAdmin
         .from("submissions")
         .update({

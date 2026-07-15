@@ -74,6 +74,12 @@ export async function POST(
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
     const batchSize = typeof body.batchSize === "number" ? body.batchSize : 25;
     const cursor = body.cursor as { id: string } | undefined;
+    const metricsTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
+    const writeTarget = isPostCampaignTarget
+      ? "post_campaign_submission_metrics"
+      : "submissions";
 
     if (!runId) {
       return NextResponse.json({ error: "runId required" }, { status: 400 });
@@ -109,7 +115,10 @@ export async function POST(
       .eq("id", contestId)
       .maybeSingle();
 
-    if (!contest || !isContestEligibleForScheduledMetricsRefresh(contest)) {
+    if (
+      !isPostCampaignTarget &&
+      (!contest || !isContestEligibleForScheduledMetricsRefresh(contest))
+    ) {
       const now = new Date().toISOString();
       await supabaseAdmin
         .from("youtube_metrics_refresh_runs")
@@ -128,19 +137,34 @@ export async function POST(
       });
     }
 
-    let query = supabaseAdmin
-      .from("submissions")
-      .select("id, creator_id, content_link, views, other_stats")
-      .eq("contest_id", contestId)
-      .ilike("platform", "%youtube%")
-      .neq("status", "rejected")
-      .not("content_link", "is", null)
-      .or(insightsRefreshInsightsStatusOrFilter())
-      .order("id", { ascending: true })
-      .limit(batchSize + 1);
+    let query = isPostCampaignTarget
+      ? supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .select("submission_id, creator_id, content_link, views, other_stats")
+          .eq("contest_id", contestId)
+          .ilike("platform", "%youtube%")
+          .neq("status", "rejected")
+          .not("content_link", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .order("submission_id", { ascending: true })
+          .limit(batchSize + 1)
+      : supabaseAdmin
+          .from("submissions")
+          .select("id, creator_id, content_link, views, other_stats")
+          .eq("contest_id", contestId)
+          .ilike("platform", "%youtube%")
+          .neq("status", "rejected")
+          .not("content_link", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .order("id", { ascending: true })
+          .limit(batchSize + 1);
 
     if (cursor?.id) {
-      query = query.gt("id", cursor.id);
+      if (isPostCampaignTarget) {
+        query = query.gt("submission_id", cursor.id);
+      } else {
+        query = query.gt("id", cursor.id);
+      }
     }
 
     const { data: rows, error: selectError } = await query;
@@ -150,7 +174,13 @@ export async function POST(
       return NextResponse.json({ error: "Batch select failed" }, { status: 500 });
     }
 
-    const batch = (rows ?? []).slice(0, batchSize) as BatchRow[];
+    const batch = ((rows ?? []).slice(0, batchSize) as any[]).map((row) => ({
+      id: isPostCampaignTarget ? row.submission_id : row.id,
+      creator_id: row.creator_id,
+      content_link: row.content_link,
+      views: row.views,
+      other_stats: row.other_stats,
+    })) as BatchRow[];
     const hasMore = (rows?.length ?? 0) > batchSize;
     const lastRow = batch[batch.length - 1];
     const nextCursor = lastRow && hasMore ? { id: lastRow.id } : undefined;
@@ -167,6 +197,31 @@ export async function POST(
         skippedRecentCount: 0,
       });
     }
+
+    const markTemporaryFailure = async (
+      sub: BatchRow,
+      now: string,
+      patch: Record<string, unknown>,
+    ) => {
+      const existingYoutube = getExistingYouTubeStats(sub.other_stats);
+      const payload = {
+        insights_status: "temporary_failure",
+        last_insights_update: now,
+        updated_at: now,
+        other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
+          ...existingYoutube,
+          ...patch,
+        }),
+      };
+      if (isPostCampaignTarget) {
+        await supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .update(payload)
+          .eq("submission_id", sub.id);
+      } else {
+        await supabaseAdmin.from("submissions").update(payload).eq("id", sub.id);
+      }
+    };
 
     const creatorIds = [...new Set(batch.map((r) => r.creator_id))];
     const byCreator = batch.reduce<Record<string, BatchRow[]>>((acc, row) => {
@@ -191,20 +246,10 @@ export async function POST(
         const creatorSubs = byCreator[creator.id] ?? [];
         skippedRecentCount += creatorSubs.length;
         await mapLimit(creatorSubs, 8, async (sub) => {
-          const existingYoutube = getExistingYouTubeStats(sub.other_stats);
-          await supabaseAdmin
-            .from("submissions")
-            .update({
-              insights_status: "temporary_failure",
-              last_insights_update: now,
-              updated_at: now,
-              other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
-                ...existingYoutube,
-                analytics_needs_reauth: true,
-                insights_error: "Account disconnected or missing token",
-              }),
-            })
-            .eq("id", sub.id);
+          await markTemporaryFailure(sub, now, {
+            analytics_needs_reauth: true,
+            insights_error: "Account disconnected or missing token",
+          });
         });
         skippedCreatorIds.add(creator.id);
         continue;
@@ -222,19 +267,9 @@ export async function POST(
           const creatorSubs = byCreator[creator.id] ?? [];
           skippedRecentCount += creatorSubs.length;
           await mapLimit(creatorSubs, 8, async (sub) => {
-            const existingYoutube = getExistingYouTubeStats(sub.other_stats);
-            await supabaseAdmin
-              .from("submissions")
-              .update({
-                insights_status: "temporary_failure",
-                last_insights_update: now,
-                updated_at: now,
-                other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
-                  ...existingYoutube,
-                  analytics_needs_reauth: true,
-                }),
-              })
-              .eq("id", sub.id);
+            await markTemporaryFailure(sub, now, {
+              analytics_needs_reauth: true,
+            });
           });
           skippedCreatorIds.add(creator.id);
           continue;
@@ -280,20 +315,10 @@ export async function POST(
           const creatorSubs = byCreator[creator.id] ?? [];
           skippedRecentCount += creatorSubs.length;
           await mapLimit(creatorSubs, 8, async (sub) => {
-            const existingYoutube = getExistingYouTubeStats(sub.other_stats);
-            await supabaseAdmin
-              .from("submissions")
-              .update({
-                insights_status: "temporary_failure",
-                last_insights_update: now,
-                updated_at: now,
-                other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
-                  ...existingYoutube,
-                  analytics_needs_reauth: true,
-                  insights_error: "Token refresh failed",
-                }),
-              })
-              .eq("id", sub.id);
+            await markTemporaryFailure(sub, now, {
+              analytics_needs_reauth: true,
+              insights_error: "Token refresh failed",
+            });
           });
           skippedCreatorIds.add(creator.id);
           continue;
@@ -327,20 +352,10 @@ export async function POST(
       if (!token) {
         // Fallback for any creators who didn't even have a record in creators list
         // Update DB so it turns yellow
-        const existingYoutube = getExistingYouTubeStats(sub.other_stats);
-        await supabaseAdmin
-          .from("submissions")
-          .update({
-            insights_status: "temporary_failure",
-            last_insights_update: now,
-            updated_at: now,
-            other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
-              ...existingYoutube,
-              analytics_needs_reauth: true,
-              insights_error: "Missing creator profile or token",
-            }),
-          })
-          .eq("id", sub.id);
+        await markTemporaryFailure(sub, now, {
+          analytics_needs_reauth: true,
+          insights_error: "Missing creator profile or token",
+        });
         return {
           ok: false,
           auth: false,
@@ -358,7 +373,10 @@ export async function POST(
         token,
         scope,
         now,
-        prefetchBasic ? { prefetchedBasic: prefetched } : undefined
+        {
+          ...(prefetchBasic ? { prefetchedBasic: prefetched } : {}),
+          metricsTarget: writeTarget,
+        }
       );
       return { ok: res.ok, auth: res.authError, failureType: res.failureType };
     });

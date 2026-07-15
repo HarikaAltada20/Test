@@ -102,6 +102,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         batchSize: job.batchSize,
         totalBatches: job.totalBatches,
         cursor: job.cursor,
+        metricsTarget: job.metricsTarget ?? "submissions",
       }),
     });
   } catch (err) {
@@ -142,6 +143,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchSize: job.batchSize,
       totalBatches: job.totalBatches,
       cursor: batchData.nextCursor,
+      metricsTarget: job.metricsTarget ?? "submissions",
     };
     await enqueueInstagramInsightsJob(nextJob);
     const doFetch = () =>
@@ -179,15 +181,24 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .eq("id", job.runId);
 
     // Budget rollup can be expensive; do it once per run, after completion.
-    await updateCpmContestBudgets(supabaseAdmin, job.contestId);
+    const isPostCampaignTarget = job.metricsTarget === "post_campaign";
+    if (!isPostCampaignTarget) {
+      await updateCpmContestBudgets(supabaseAdmin, job.contestId);
+    }
 
     // Always bump contest last_metrics_updated on run completion to avoid instant repeated refresh calls (cooldown).
     await supabaseAdmin
       .from("contests")
-      .update({ last_metrics_updated: now })
+      .update(
+        isPostCampaignTarget
+          ? { post_campaign_last_metrics_updated: now }
+          : { last_metrics_updated: now },
+      )
       .eq("id", job.contestId);
 
-    revalidateLeaderboardCache(job.contestId);
+    if (!isPostCampaignTarget) {
+      revalidateLeaderboardCache(job.contestId);
+    }
   }
 
   return NextResponse.json({

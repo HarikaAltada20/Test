@@ -59,6 +59,12 @@ export async function POST(
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
     const batchSize = typeof body.batchSize === "number" ? body.batchSize : 50;
     const cursor = body.cursor as { last_insights_update: string | null; id: string } | undefined;
+    const metricsTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
+    const writeTarget = isPostCampaignTarget
+      ? "post_campaign_submission_metrics"
+      : "submissions";
 
     if (!runId) {
       return NextResponse.json({ error: "runId required" }, { status: 400 });
@@ -92,7 +98,10 @@ export async function POST(
       .eq("id", contestId)
       .maybeSingle();
 
-    if (!contest || !isContestEligibleForScheduledMetricsRefresh(contest)) {
+    if (
+      !isPostCampaignTarget &&
+      (!contest || !isContestEligibleForScheduledMetricsRefresh(contest))
+    ) {
       const now = new Date().toISOString();
       await supabaseAdmin
         .from("tiktok_metrics_refresh_runs")
@@ -112,29 +121,45 @@ export async function POST(
     }
 
     const runStartedAt = run.started_at;
-    let query = supabaseAdmin
-      .from("submissions")
-      .select(
-        "id, creator_id, content_link, video_id, views, other_stats, last_insights_update, insights_status",
-      )
-      .eq("contest_id", contestId)
-      .eq("platform", "tiktok")
-      .neq("status", "rejected")
-      .or("video_id.not.is.null,content_link.not.is.null")
-      .or(insightsRefreshInsightsStatusOrFilter())
-      .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
-      .order("last_insights_update", { ascending: true, nullsFirst: true })
-      .order("id", { ascending: true })
-      .limit(batchSize + 1);
+    let query = isPostCampaignTarget
+      ? supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .select(
+            "submission_id, creator_id, content_link, video_id, views, other_stats, last_insights_update, insights_status",
+          )
+          .eq("contest_id", contestId)
+          .ilike("platform", "%tiktok%")
+          .neq("status", "rejected")
+          .or("video_id.not.is.null,content_link.not.is.null")
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
+          .order("last_insights_update", { ascending: true, nullsFirst: true })
+          .order("submission_id", { ascending: true })
+          .limit(batchSize + 1)
+      : supabaseAdmin
+          .from("submissions")
+          .select(
+            "id, creator_id, content_link, video_id, views, other_stats, last_insights_update, insights_status",
+          )
+          .eq("contest_id", contestId)
+          .eq("platform", "tiktok")
+          .neq("status", "rejected")
+          .or("video_id.not.is.null,content_link.not.is.null")
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
+          .order("last_insights_update", { ascending: true, nullsFirst: true })
+          .order("id", { ascending: true })
+          .limit(batchSize + 1);
 
     if (cursor && cursor.id) {
+      const idCol = isPostCampaignTarget ? "submission_id" : "id";
       if (cursor.last_insights_update == null) {
         query = query.or(
-          `and(last_insights_update.is.null,id.gt.${cursor.id}),last_insights_update.not.is.null`,
+          `and(last_insights_update.is.null,${idCol}.gt.${cursor.id}),last_insights_update.not.is.null`,
         );
       } else {
         query = query.or(
-          `last_insights_update.gt.${cursor.last_insights_update},and(last_insights_update.eq.${cursor.last_insights_update},id.gt.${cursor.id})`,
+          `last_insights_update.gt.${cursor.last_insights_update},and(last_insights_update.eq.${cursor.last_insights_update},${idCol}.gt.${cursor.id})`,
         );
       }
     }
@@ -145,7 +170,18 @@ export async function POST(
       return NextResponse.json({ error: "Batch select failed" }, { status: 500 });
     }
 
-    const batch = ((rows ?? []).slice(0, batchSize) as SubmissionCandidate[]);
+    const batch: SubmissionCandidate[] = ((rows ?? []).slice(0, batchSize) as any[]).map(
+      (row) => ({
+        id: isPostCampaignTarget ? row.submission_id : row.id,
+        creator_id: row.creator_id,
+        content_link: row.content_link,
+        video_id: row.video_id,
+        views: row.views,
+        other_stats: row.other_stats,
+        last_insights_update: row.last_insights_update,
+        insights_status: row.insights_status,
+      }),
+    );
     const hasMore = (rows?.length ?? 0) > batchSize;
     const lastRow = batch[batch.length - 1];
     const nextCursor =
@@ -169,12 +205,15 @@ export async function POST(
       });
     }
 
-    const submissionsByCreator = batch.reduce<Record<string, any[]>>((acc, row) => {
-      const cid = row.creator_id;
-      if (!acc[cid]) acc[cid] = [];
-      acc[cid].push(row);
-      return acc;
-    }, {});
+    const submissionsByCreator = batch.reduce<Record<string, SubmissionCandidate[]>>(
+      (acc, row) => {
+        const cid = row.creator_id;
+        if (!acc[cid]) acc[cid] = [];
+        acc[cid].push(row);
+        return acc;
+      },
+      {},
+    );
 
     const creatorIds = Object.keys(submissionsByCreator);
     const now = new Date().toISOString();
@@ -184,7 +223,8 @@ export async function POST(
       const result = await syncCreatorTikTokDisplayMetrics(
         supabaseAdmin,
         creatorId,
-        subs
+        subs,
+        { metricsTarget: writeTarget },
       );
 
       if (!result.success) {
@@ -192,25 +232,44 @@ export async function POST(
         // and record the error message for debugging.
         const errorMsg = result.error || "Unknown error during TikTok sync";
 
-        const updates = subs.map((sub) => ({
-          id: sub.id,
-          last_insights_update: now,
-          insights_status: "temporary_failure",
-          updated_at: now,
-          other_stats: {
-            ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
-            tiktok_error: errorMsg,
-          },
-        }));
+        if (isPostCampaignTarget) {
+          await mapLimit(subs, 8, async (sub) => {
+            await supabaseAdmin
+              .from("post_campaign_submission_metrics")
+              .update({
+                last_insights_update: now,
+                insights_status: "temporary_failure",
+                updated_at: now,
+                other_stats: {
+                  ...(typeof sub.other_stats === "object" && sub.other_stats
+                    ? (sub.other_stats as Record<string, unknown>)
+                    : {}),
+                  tiktok_error: errorMsg,
+                },
+              })
+              .eq("submission_id", sub.id);
+          });
+        } else {
+          const updates = subs.map((sub) => ({
+            id: sub.id,
+            last_insights_update: now,
+            insights_status: "temporary_failure",
+            updated_at: now,
+            other_stats: {
+              ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
+              tiktok_error: errorMsg,
+            },
+          }));
 
-        const { error: batchUpdateError } = await supabaseAdmin
-          .from("submissions")
-          .upsert(updates, { onConflict: "id" });
-        if (batchUpdateError) {
-          console.error(
-            "[tiktok-metrics-refresh batch] failed to persist temporary_failure updates:",
-            batchUpdateError,
-          );
+          const { error: batchUpdateError } = await supabaseAdmin
+            .from("submissions")
+            .upsert(updates, { onConflict: "id" });
+          if (batchUpdateError) {
+            console.error(
+              "[tiktok-metrics-refresh batch] failed to persist temporary_failure updates:",
+              batchUpdateError,
+            );
+          }
         }
       }
     });
@@ -222,13 +281,16 @@ export async function POST(
       batch.map((row) => [row.id, row.insights_status ?? null]),
     );
     const runStartedAtMs = new Date(runStartedAt).getTime();
-    const { data: afterRows, error: afterRowsError } = await supabaseAdmin
-      .from("submissions")
-      .select("id, insights_status, last_insights_update")
-      .in(
-        "id",
-        batch.map((row) => row.id),
-      );
+    const batchIds = batch.map((row) => row.id);
+    const { data: afterRows, error: afterRowsError } = isPostCampaignTarget
+      ? await supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .select("submission_id, insights_status, last_insights_update")
+          .in("submission_id", batchIds)
+      : await supabaseAdmin
+          .from("submissions")
+          .select("id, insights_status, last_insights_update")
+          .in("id", batchIds);
     if (afterRowsError) {
       console.error("[tiktok-metrics-refresh batch] post-update read failed:", afterRowsError);
       return NextResponse.json(
@@ -242,6 +304,9 @@ export async function POST(
     let permanentTransitions = 0;
     let temporaryTransitions = 0;
     for (const row of afterRows ?? []) {
+      const rowId = isPostCampaignTarget
+        ? (row as { submission_id: string }).submission_id
+        : (row as { id: string }).id;
       const updatedAtMs = row.last_insights_update
         ? new Date(row.last_insights_update).getTime()
         : Number.NaN;
@@ -251,7 +316,7 @@ export async function POST(
       if (!wasProcessed) continue;
 
       processedInBatch += 1;
-      const previousStatus = previousStatusById.get(row.id) ?? null;
+      const previousStatus = previousStatusById.get(rowId) ?? null;
       const newStatus = row.insights_status ?? null;
       if (newStatus === "ok" && previousStatus !== "ok") successTransitions += 1;
       else if (

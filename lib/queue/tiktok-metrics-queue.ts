@@ -26,6 +26,11 @@ export interface TikTokMetricsJob {
   batchSize: number;
   totalBatches: number;
   cursor?: TikTokMetricsJobCursor;
+  /**
+   * When "post_campaign", batch reads/writes post_campaign_submission_metrics
+   * and bypasses post-contest metrics lock. Default: submissions.
+   */
+  metricsTarget?: "submissions" | "post_campaign";
 }
 
 function getTikTokRedisEnv(): { url?: string; token?: string; using: "tiktok" | "shared" } {
