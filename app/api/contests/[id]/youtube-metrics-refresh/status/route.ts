@@ -5,9 +5,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { parseMetricsTarget } from "@/lib/post-campaign-enqueue-guards";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -42,12 +43,17 @@ export async function GET(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
+    const metricsTarget = parseMetricsTarget(
+      new URL(request.url).searchParams.get("metricsTarget"),
+    );
+
     const { data: run, error } = await supabaseAdmin
       .from("youtube_metrics_refresh_runs")
       .select(
         "id, status, scope, total_submissions, processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count, current_batch_index, total_batches, started_at, last_batch_completed_at, finished_at, updated_at, error_message",
       )
       .eq("contest_id", contestId)
+      .eq("metrics_target", metricsTarget)
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
