@@ -129,9 +129,28 @@ export async function POST(
       .eq("id", contestId)
       .maybeSingle();
 
+    if (!contest) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("tiktok_metrics_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest not found",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
     if (
       !isPostCampaignTarget &&
-      (!contest || !isContestEligibleForScheduledMetricsRefresh(contest))
+      !isContestEligibleForScheduledMetricsRefresh(contest)
     ) {
       const now = new Date().toISOString();
       await supabaseAdmin

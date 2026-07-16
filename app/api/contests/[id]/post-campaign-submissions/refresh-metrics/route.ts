@@ -3,10 +3,6 @@ import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
-  METRICS_REFRESH_COOLDOWN_MS_BRAND,
-  METRICS_REFRESH_COOLDOWN_MS_ADMIN,
-} from "@/lib/constants";
-import {
   fetchPostCampaignMetrics,
   refreshPostCampaignMetrics,
   syncPostCampaignFromSubmissions,
@@ -18,6 +14,8 @@ import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import {
   activePostCampaignRunResponse,
   hasActivePostCampaignMetricsRun,
+  postCampaignCooldownResponse,
+  postCampaignNextRefreshAvailable,
 } from "@/lib/post-campaign-enqueue-guards";
 
 const YT_SCOPES: YouTubeRefreshScope[] = [
@@ -115,28 +113,11 @@ export async function POST(
       );
     }
 
-    const now = new Date();
-    const cooldownMs = isAdmin
-      ? METRICS_REFRESH_COOLDOWN_MS_ADMIN
-      : METRICS_REFRESH_COOLDOWN_MS_BRAND;
-
-    if (contest.post_campaign_last_metrics_updated) {
-      const lastUpdate = new Date(contest.post_campaign_last_metrics_updated);
-      const elapsed = now.getTime() - lastUpdate.getTime();
-      if (elapsed < cooldownMs) {
-        const remainingMs = cooldownMs - elapsed;
-        const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
-        return NextResponse.json(
-          {
-            error: `Post-campaign metrics were updated recently. Please wait ${remainingMinutes} more minute${remainingMinutes !== 1 ? "s" : ""}.`,
-            nextRefreshAvailable: new Date(
-              lastUpdate.getTime() + cooldownMs,
-            ).toISOString(),
-          },
-          { status: 429 },
-        );
-      }
-    }
+    const cooldownDenied = postCampaignCooldownResponse(
+      contest.post_campaign_last_metrics_updated,
+      isAdmin,
+    );
+    if (cooldownDenied) return cooldownDenied;
 
     const supabaseAdmin = createAdminSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -196,9 +177,14 @@ export async function POST(
       }
 
       const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId);
+      // Cooldown starts when the queue finishes (DB timestamp bump), not at enqueue.
+      // Active-run guard blocks duplicate enqueues until then.
+      const existingUpdated =
+        contest.post_campaign_last_metrics_updated ?? null;
       return NextResponse.json({
         success: true,
         queued: true,
+        refreshInProgress: true,
         synced,
         message:
           enqueueData.alreadyActive
@@ -211,11 +197,11 @@ export async function POST(
         metricsTarget: "post_campaign",
         scope: options.body.scope ?? "basic",
         metrics,
-        post_campaign_last_metrics_updated:
-          enqueueData.post_campaign_last_metrics_updated ?? null,
-        nextRefreshAvailable: new Date(
-          now.getTime() + cooldownMs,
-        ).toISOString(),
+        post_campaign_last_metrics_updated: existingUpdated,
+        nextRefreshAvailable: postCampaignNextRefreshAvailable(
+          existingUpdated,
+          isAdmin,
+        ),
       });
     };
 
@@ -270,9 +256,10 @@ export async function POST(
       contestId,
       contestTitle: contest.title,
       post_campaign_last_metrics_updated: result.post_campaign_last_metrics_updated,
-      nextRefreshAvailable: new Date(
-        new Date(result.post_campaign_last_metrics_updated).getTime() + cooldownMs,
-      ).toISOString(),
+      nextRefreshAvailable: postCampaignNextRefreshAvailable(
+        result.post_campaign_last_metrics_updated,
+        isAdmin,
+      ),
     });
   } catch (e) {
     console.error("[post-campaign-submissions/refresh-metrics]", e);

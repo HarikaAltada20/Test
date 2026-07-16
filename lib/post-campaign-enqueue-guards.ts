@@ -40,6 +40,20 @@ export function assertPostCampaignEnqueueAccess(
   return null;
 }
 
+/** Compute nextRefreshAvailable from the last completed refresh timestamp. */
+export function postCampaignNextRefreshAvailable(
+  postCampaignLastMetricsUpdated: string | null | undefined,
+  isAdmin: boolean,
+): string | null {
+  if (!postCampaignLastMetricsUpdated) return null;
+  const lastUpdateMs = new Date(postCampaignLastMetricsUpdated).getTime();
+  if (Number.isNaN(lastUpdateMs)) return null;
+  const cooldownMs = isAdmin
+    ? METRICS_REFRESH_COOLDOWN_MS_ADMIN
+    : METRICS_REFRESH_COOLDOWN_MS_BRAND;
+  return new Date(lastUpdateMs + cooldownMs).toISOString();
+}
+
 /** Server-side post-campaign cooldown (brand vs admin). */
 export function postCampaignCooldownResponse(
   postCampaignLastMetricsUpdated: string | null | undefined,
@@ -61,7 +75,10 @@ export function postCampaignCooldownResponse(
   return NextResponse.json(
     {
       error: `Post-campaign metrics were updated recently. Please wait ${remainingMinutes} more minute${remainingMinutes !== 1 ? "s" : ""}.`,
-      nextRefreshAvailable: new Date(lastUpdateMs + cooldownMs).toISOString(),
+      nextRefreshAvailable: postCampaignNextRefreshAvailable(
+        postCampaignLastMetricsUpdated,
+        isAdmin,
+      ),
     },
     { status: 429 },
   );

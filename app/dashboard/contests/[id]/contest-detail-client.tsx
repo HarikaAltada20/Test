@@ -16177,7 +16177,7 @@ export default function ContestDetailClient({
                                   </button>
                                 );
                               })()}
-                            {isAdminView && (
+                            {isAdminView && !isPostCampaignLeaderboard && (
                               <div
                                 className={cn(
                                   "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs flex-wrap",

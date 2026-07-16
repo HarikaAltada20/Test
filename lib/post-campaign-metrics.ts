@@ -314,6 +314,23 @@ export async function fetchPostCampaignMetricsCount(
   return Number(count) || 0;
 }
 
+/** Latest overlay synced_at for sync rate-limiting when refresh timestamp is still null. */
+export async function fetchPostCampaignLastSyncedAt(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("post_campaign_submission_metrics")
+    .select("synced_at")
+    .eq("contest_id", contestId)
+    .order("synced_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.synced_at as string | null | undefined) ?? null;
+}
+
 export async function fetchPostCampaignMetrics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,

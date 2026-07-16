@@ -1,5 +1,10 @@
 -- Post-campaign metrics overlay: refreshed independently of locked submissions.
--- DEPLOY: Run before enabling the Post Campaign Submission UI.
+--
+-- DEPLOY ORDER (required before enabling Post Campaign UI / refresh routes):
+--   1) 20260715_post_campaign_submission_metrics.sql  (this file)
+--   2) 20260716_admin_analytics_pc_daily_rpc.sql
+--   3) 20260717_post_campaign_security_fixes.sql
+-- Do not deploy app code that references metrics_target / PC RPCs until all three run.
 
 ALTER TABLE public.contests
   ADD COLUMN IF NOT EXISTS post_campaign_last_metrics_updated timestamp with time zone;
@@ -7,11 +12,10 @@ ALTER TABLE public.contests
 COMMENT ON COLUMN public.contests.post_campaign_last_metrics_updated IS
   'Last time post-campaign submission metrics were refreshed (independent of submissions.last_metrics_updated).';
 
--- Recreate contests_with_status to expose post_campaign_last_metrics_updated.
--- Preserve production column order from 20260630, then append the new column.
-DROP VIEW IF EXISTS public.contests_with_status;
-
-CREATE VIEW public.contests_with_status
+-- Append column via CREATE OR REPLACE (safe if prior definition matches 20260630).
+-- Avoid DROP VIEW: dependents keep working; REPLACE fails loudly if column order/types diverge.
+-- Pre-prod gate: compare live contests_with_status columns to the SELECT below.
+CREATE OR REPLACE VIEW public.contests_with_status
 WITH (security_invoker = on) AS
 SELECT
   contests.id,

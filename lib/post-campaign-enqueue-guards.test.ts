@@ -5,6 +5,7 @@ import {
   isMetricsTargetMismatch,
   parseMetricsTarget,
   postCampaignCooldownResponse,
+  postCampaignNextRefreshAvailable,
 } from "./post-campaign-enqueue-guards";
 import {
   buildPostCampaignExistingRowPatch,
@@ -95,6 +96,19 @@ describe("assertPostCampaignEnqueueAccess", () => {
       assertPostCampaignEnqueueAccess(true, false, "admin", "adv", true),
       null,
     );
+  });
+});
+
+describe("postCampaignNextRefreshAvailable", () => {
+  it("returns null when never updated", () => {
+    assert.equal(postCampaignNextRefreshAvailable(null, false), null);
+  });
+
+  it("returns a future timestamp from last completed refresh", () => {
+    const last = "2026-01-01T00:00:00.000Z";
+    const next = postCampaignNextRefreshAvailable(last, true);
+    assert.ok(next);
+    assert.ok(new Date(next!).getTime() > new Date(last).getTime());
   });
 });
 

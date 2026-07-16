@@ -1,5 +1,8 @@
 -- Admin analytics: daily post-campaign overlay metrics by status.
 -- Same columns as admin_analytics_daily so Node can reuse one aggregator.
+--
+-- DEPLOY ORDER: run after 20260715_post_campaign_submission_metrics.sql,
+-- before 20260717_post_campaign_security_fixes.sql.
 
 CREATE OR REPLACE FUNCTION public.admin_analytics_pc_daily(
   p_from timestamptz,
