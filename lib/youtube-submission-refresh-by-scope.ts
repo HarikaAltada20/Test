@@ -136,6 +136,51 @@ export function isYouTubeAllLikeScope(scope: YouTubeRefreshScope): boolean {
   return scope === "all" || scope === "all_standard";
 }
 
+export type YouTubeScopeTimestamps = {
+  core?: string;
+  traffic?: string;
+  demographics?: string;
+};
+
+/** Merge post-campaign YouTube analytics timestamps into contest_based_details. */
+export function mergePostCampaignYouTubeTimestamps(
+  existingDetails: Record<string, unknown> | null | undefined,
+  scope: YouTubeRefreshScope,
+  now: string,
+): {
+  post_campaign_last_metrics_updated: string;
+  contest_based_details?: Record<string, unknown>;
+} {
+  const result: {
+    post_campaign_last_metrics_updated: string;
+    contest_based_details?: Record<string, unknown>;
+  } = {
+    post_campaign_last_metrics_updated: now,
+  };
+
+  if (scope === "basic") {
+    return result;
+  }
+
+  const existing = existingDetails ?? {};
+  const existingYt =
+    (existing.post_campaign_youtube_metrics_last_updated as
+      | YouTubeScopeTimestamps
+      | undefined) ?? {};
+  const nextYt: YouTubeScopeTimestamps = { ...existingYt };
+  if (scope === "core" || isYouTubeAllLikeScope(scope)) nextYt.core = now;
+  if (scope === "traffic" || isYouTubeAllLikeScope(scope)) nextYt.traffic = now;
+  if (scope === "demographics" || isYouTubeAllLikeScope(scope)) {
+    nextYt.demographics = now;
+  }
+
+  result.contest_based_details = {
+    ...existing,
+    post_campaign_youtube_metrics_last_updated: nextYt,
+  };
+  return result;
+}
+
 async function fetchBasicFromDataApi(
   accessToken: string,
   videoId: string

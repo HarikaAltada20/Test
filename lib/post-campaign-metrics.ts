@@ -19,6 +19,8 @@ import { extractYoutubeId, refreshAccessToken } from "@/lib/youtube-api";
 import {
   fetchYouTubeBasicStatsByVideoId,
   updateYouTubeSubmissionForScope,
+  mergePostCampaignYouTubeTimestamps,
+  isYouTubeAllLikeScope,
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
@@ -27,6 +29,9 @@ import { extractTikTokVideoIdFromLink } from "@/lib/tiktok/extract-video-id";
 import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
 import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
 import { postCampaignSnapshotToSubmission } from "@/lib/post-campaign-submission-shape";
+import { updateCpmContestBudgets } from "@/lib/instagram-insights";
+import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 
 export type { PostCampaignSubmissionSnapshot };
 export { postCampaignSnapshotToSubmission };
@@ -51,6 +56,39 @@ export const POST_CAMPAIGN_SUBMISSION_SELECT = `
   views_locked,
   affiliate_paid,
   affiliate_metadata,
+  paid,
+  paid_at,
+  bonus_paid,
+  bonus_paid_at,
+  bonus_amount,
+  milestone_bonus_paid,
+  dual_rewards_payout,
+  quality_score,
+  quality_score_backfilled,
+  submission_updated_at,
+  synced_at,
+  updated_at
+`;
+
+/** Lighter select for PC tab/list UI (skips bulky metadata blobs). */
+export const POST_CAMPAIGN_LIST_SELECT = `
+  submission_id,
+  contest_id,
+  creator_id,
+  content_link,
+  views,
+  other_stats,
+  created_at,
+  video_id,
+  video_title,
+  video_thumbnail_url,
+  platform,
+  last_insights_update,
+  insights_status,
+  status,
+  earnings,
+  views_locked,
+  affiliate_paid,
   paid,
   paid_at,
   bonus_paid,
@@ -218,17 +256,34 @@ export function postCampaignRowToSubmissionShape(
   return postCampaignSnapshotToSubmission(row);
 }
 
+export async function fetchPostCampaignMetricsCount(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("post_campaign_submission_metrics")
+    .select("submission_id", { count: "exact", head: true })
+    .eq("contest_id", contestId);
+  if (error) throw new Error(error.message);
+  return Number(count) || 0;
+}
+
 export async function fetchPostCampaignMetrics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   contestId: string,
+  options?: { light?: boolean },
 ): Promise<PostCampaignMetricRow[]> {
+  const select = options?.light
+    ? POST_CAMPAIGN_LIST_SELECT
+    : POST_CAMPAIGN_SUBMISSION_SELECT;
   const all: PostCampaignMetricRow[] = [];
   const pageSize = 1000;
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase
       .from("post_campaign_submission_metrics")
-      .select(POST_CAMPAIGN_SUBMISSION_SELECT)
+      .select(select)
       .eq("contest_id", contestId)
       .order("submission_id", { ascending: true })
       .range(offset, offset + pageSize - 1);
@@ -934,10 +989,38 @@ export async function refreshPostCampaignMetrics(
   }
 
   const now = new Date().toISOString();
+  const contestUpdate: Record<string, unknown> = {
+    post_campaign_last_metrics_updated: now,
+  };
+
+  if (platformKey.includes("youtube") && scope !== "basic") {
+    const { data: contestRow } = await supabaseAdmin
+      .from("contests")
+      .select("contest_based_details")
+      .eq("id", contestId)
+      .maybeSingle();
+    const patch = mergePostCampaignYouTubeTimestamps(
+      (contestRow?.contest_based_details as Record<string, unknown>) || {},
+      scope,
+      now,
+    );
+    Object.assign(contestUpdate, patch);
+  }
+
   await supabaseAdmin
     .from("contests")
-    .update({ post_campaign_last_metrics_updated: now })
+    .update(contestUpdate)
     .eq("id", contestId);
+
+  // Match queue completion: CPM/budget + leaderboard cache (same as submissions refresh).
+  if (platformKey.includes("youtube")) {
+    if (scope === "basic" || isYouTubeAllLikeScope(scope)) {
+      await updateYouTubeCpmContestBudgets(supabaseAdmin, contestId);
+    }
+  } else if (platformKey.includes("instagram")) {
+    await updateCpmContestBudgets(supabaseAdmin, contestId);
+  }
+  revalidateLeaderboardCache(contestId);
 
   return {
     synced,

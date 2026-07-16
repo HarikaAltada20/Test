@@ -70,12 +70,22 @@ import { Input } from "@/components/ui/input";
 
 type ChartMetric = "views" | "likes" | "comments" | "shares";
 
+type AnalyticsDataSource = "submissions" | "pc_submissions";
+
 type CampaignOption = {
   id: string;
   title: string;
   platform?: string | null;
   contest_type?: string | null;
   advertiser_id?: string | null;
+};
+
+type AnalyticsSourcePayload = {
+  summary: AdminAnalyticsSummary;
+  series: AdminAnalyticsSeriesPoint[];
+  viewsByStatus: AdminAnalyticsViewsByStatus;
+  allCampaigns?: CampaignOption[];
+  selectedCampaignCount?: number;
 };
 
 type AnalyticsPayload = {
@@ -88,6 +98,7 @@ type AnalyticsPayload = {
   summary: AdminAnalyticsSummary;
   series: AdminAnalyticsSeriesPoint[];
   viewsByStatus?: AdminAnalyticsViewsByStatus;
+  pc?: AnalyticsSourcePayload;
   campaigns: CampaignOption[];
   allAdvertisers?: AdminAnalyticsAdvertiserOption[];
   allCampaigns: CampaignOption[];
@@ -105,6 +116,11 @@ const PLATFORM_META: Record<
   tiktok: { label: "TikTok", icon: FaTiktok },
   instagram: { label: "Instagram", icon: FaInstagram },
 };
+
+const DATA_SOURCE_TABS: { id: AnalyticsDataSource; label: string }[] = [
+  { id: "submissions", label: "Submissions" },
+  { id: "pc_submissions", label: "PC Submissions" },
+];
 
 const CHART_TABS: { id: ChartMetric; label: string }[] = [
   { id: "views", label: "Views" },
@@ -308,6 +324,8 @@ export default function AdminAnalyticsClient() {
     DEFAULT_VISIBLE_CARDS,
   );
   const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
+  const [dataSource, setDataSource] =
+    useState<AnalyticsDataSource>("submissions");
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalyticsPayload | null>(null);
 
@@ -394,11 +412,27 @@ export default function AdminAnalyticsClient() {
     contestIdsParam,
   ]);
 
-  const summary = data?.summary ?? EMPTY_SUMMARY;
-  const series = data?.series ?? [];
+  const summary =
+    dataSource === "pc_submissions"
+      ? (data?.pc?.summary ?? EMPTY_SUMMARY)
+      : (data?.summary ?? EMPTY_SUMMARY);
+  const series =
+    dataSource === "pc_submissions"
+      ? (data?.pc?.series ?? [])
+      : (data?.series ?? []);
   const allAdvertisers = data?.allAdvertisers ?? [];
-  const allCampaigns = data?.allCampaigns ?? [];
-  const viewsByStatus = data?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS;
+  const allCampaigns =
+    dataSource === "pc_submissions"
+      ? (data?.pc?.allCampaigns ?? [])
+      : (data?.allCampaigns ?? []);
+  const selectedCampaignCount =
+    dataSource === "pc_submissions"
+      ? (data?.pc?.selectedCampaignCount ?? allCampaigns.length)
+      : (data?.selectedCampaignCount ?? allCampaigns.length);
+  const viewsByStatus =
+    dataSource === "pc_submissions"
+      ? (data?.pc?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS)
+      : (data?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS);
 
   // Drop advertiser/campaign picks that are no longer in the current scope
   useEffect(() => {
@@ -414,12 +448,14 @@ export default function AdminAnalyticsClient() {
 
   useEffect(() => {
     setSelectedContestIds((prev) => {
-      if (prev === null || prev.length === 0 || allCampaigns.length === 0) {
-        return prev;
-      }
+      if (prev === null || prev.length === 0) return prev;
+      if (allCampaigns.length === 0) return prev;
       const valid = new Set(allCampaigns.map((c) => c.id));
       const next = prev.filter((id) => valid.has(id));
-      return next.length === prev.length ? prev : next;
+      if (next.length === prev.length) return prev;
+      // Source switch dropped every pick — fall back to all campaigns for this tab
+      if (next.length === 0) return null;
+      return next;
     });
   }, [allCampaigns]);
 
@@ -453,7 +489,7 @@ export default function AdminAnalyticsClient() {
 
   const campaignButtonLabel =
     selectedContestIds === null
-      ? `${data?.selectedCampaignCount ?? allCampaigns.length} campaigns`
+      ? `${selectedCampaignCount} campaigns`
       : selectedContestIds.length === 0
         ? "No campaigns"
         : `${selectedContestIds.length} campaign${selectedContestIds.length === 1 ? "" : "s"}`;
@@ -726,35 +762,6 @@ export default function AdminAnalyticsClient() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          {/* Platform toggles */}
-          <div className="flex items-center gap-1.5">
-            {ADMIN_ANALYTICS_PLATFORMS.map((key) => {
-              const meta = PLATFORM_META[key];
-              const Icon = meta.icon;
-              const active = platforms.includes(key);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  title={meta.label}
-                  onClick={() => togglePlatform(key)}
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-xl border transition-all",
-                    active
-                      ? isDark
-                        ? "border-[#7F39EC] bg-[#7F39EC]/25 text-white"
-                        : "border-[#7F39EC] bg-[#7F39EC]/15 text-[#4A00BE]"
-                      : isDark
-                        ? "border-white/10 bg-[#1a1a1a] text-white/70 hover:bg-white/10"
-                        : "border-black/10 bg-white text-black/60 hover:bg-black/5",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
-              );
-            })}
-          </div>
-
           <AdminDateRangePicker
             isDark={isDark}
             value={dateRange}
@@ -1062,6 +1069,63 @@ export default function AdminAnalyticsClient() {
         </div>
       </div>
 
+      {/* Submissions vs PC Submissions — drives all cards + graph */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div
+          className={cn(
+            "inline-flex flex-wrap gap-1 rounded-full border p-1",
+            isDark
+              ? "border-white/10 bg-[#0d0d0d]"
+              : "border-black/10 bg-[#f5f5f5]",
+          )}
+        >
+          {DATA_SOURCE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setDataSource(tab.id)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                dataSource === tab.id
+                  ? "border border-black/80 bg-[#7F39EC] text-white"
+                  : isDark
+                    ? "text-white/60 hover:text-white"
+                    : "text-black/55 hover:text-black",
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {ADMIN_ANALYTICS_PLATFORMS.map((key) => {
+            const meta = PLATFORM_META[key];
+            const Icon = meta.icon;
+            const active = platforms.includes(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                title={meta.label}
+                onClick={() => togglePlatform(key)}
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl border transition-all",
+                  active
+                    ? isDark
+                      ? "border-[#7F39EC] bg-[#7F39EC]/25 text-white"
+                      : "border-[#7F39EC] bg-[#7F39EC]/15 text-[#4A00BE]"
+                    : isDark
+                      ? "border-white/10 bg-[#1a1a1a] text-white/70 hover:bg-white/10"
+                      : "border-black/10 bg-white text-black/60 hover:bg-black/5",
+                )}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Metric cards */}
       {visibleTopCards.length > 0 && (
         <div
@@ -1194,7 +1258,9 @@ export default function AdminAnalyticsClient() {
                       isDark ? "text-white/60" : "text-black/55",
                     )}
                   >
-                    Submissions
+                    {dataSource === "pc_submissions"
+                      ? "PC Submissions"
+                      : "Submissions"}
                   </span>
                 </div>
                 <span className="text-lg font-semibold text-orange-400">

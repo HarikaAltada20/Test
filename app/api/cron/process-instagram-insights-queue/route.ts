@@ -180,13 +180,11 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .update({ status: "completed", finished_at: now, updated_at: now })
       .eq("id", job.runId);
 
-    // Budget rollup can be expensive; do it once per run, after completion.
-    const isPostCampaignTarget = job.metricsTarget === "post_campaign";
-    if (!isPostCampaignTarget) {
-      await updateCpmContestBudgets(supabaseAdmin, job.contestId);
-    }
+    // Budget rollup + leaderboard: same for submissions and post-campaign targets.
+    await updateCpmContestBudgets(supabaseAdmin, job.contestId);
 
-    // Always bump contest last_metrics_updated on run completion to avoid instant repeated refresh calls (cooldown).
+    // Bump the correct cooldown timestamp for the metrics target.
+    const isPostCampaignTarget = job.metricsTarget === "post_campaign";
     await supabaseAdmin
       .from("contests")
       .update(
@@ -196,9 +194,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       )
       .eq("id", job.contestId);
 
-    if (!isPostCampaignTarget) {
-      revalidateLeaderboardCache(job.contestId);
-    }
+    revalidateLeaderboardCache(job.contestId);
   }
 
   return NextResponse.json({

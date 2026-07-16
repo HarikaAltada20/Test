@@ -12,7 +12,6 @@ import {
   getContestDetailsCacheKey,
   clearContestsCache,
 } from "@/lib/cache-utils";
-import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import {
   isCpmContestType,
   isDualRewardsContestType,
@@ -447,11 +446,32 @@ async function enrichContestWithCalculatedBudgets(
         milestone_bonus_paid: s.milestone_bonus_paid,
       }));
 
+      const budgetSubs: BudgetTileSubmission[] = milestoneRecords.map((s) => ({
+        id: s.id,
+        creator_id: s.creator_id,
+        created_at: s.created_at,
+        status: s.status,
+        paid: s.paid,
+        paid_at: s.paid_at,
+        earnings: s.earnings,
+        views: s.views,
+        platform: s.platform,
+        other_stats: s.other_stats,
+        bonus_paid: s.bonus_paid,
+        bonus_amount: s.bonus_amount,
+      }));
+
+      const tileInput = {
+        contest_type: contest.contest_type,
+        post_contest_status: contest.post_contest_status,
+        max_earnings_per_creator: contest.max_earnings_per_creator,
+        contest_based_details: normalizeContestDetails(updatedContest),
+      };
+      const mode = getBudgetTileMode(contest.post_contest_status);
       const milestoneBudgetSpentCents =
-        computeMilestoneContestExpectedSpendCents(
-          milestoneRecords,
-          milestoneContestDetails,
-        );
+        mode === "paid"
+          ? computeBudgetPaidCents(tileInput, budgetSubs)
+          : computeBudgetFilledCents(tileInput, budgetSubs);
 
       updatedContest = {
         ...updatedContest,

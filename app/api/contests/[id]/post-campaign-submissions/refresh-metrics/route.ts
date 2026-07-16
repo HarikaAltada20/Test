@@ -183,7 +183,7 @@ export async function POST(
         message:
           enqueueData.alreadyActive
             ? `Post-campaign ${options.platformLabel} refresh already in progress. Metrics will update shortly.`
-            : `Copied ${synced} submissions into post-campaign. ${options.platformLabel} refresh started (same queue as Submissions). Metrics update in the background; Submissions table is not modified.`,
+            : `Copied ${synced} submissions into post-campaign. ${options.platformLabel} refresh started (same queue as Submissions). Metrics update in the background.`,
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
@@ -240,7 +240,7 @@ export async function POST(
 
     return NextResponse.json({
       ...resultRest,
-      message: `Post-campaign metrics refreshed (${scope}) for ${contest.platform}. Synced ${synced}, updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}. Submissions table was not modified.${reconnectHint}`,
+      message: `Post-campaign metrics refreshed (${scope}) for ${contest.platform}. Synced ${synced}, updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}.${reconnectHint}`,
       scope,
       synced,
       success: updatedCount,

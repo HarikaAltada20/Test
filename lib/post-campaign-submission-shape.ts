@@ -35,17 +35,16 @@ export type PostCampaignSubmissionSnapshot = {
 };
 
 /** Map snapshot row onto a submission-shaped object for leaderboard UI. */
-export function postCampaignSnapshotToSubmission<T extends object = Record<string, any>>(
-  row: PostCampaignSubmissionSnapshot,
-  base?: T,
-): T {
+export function postCampaignSnapshotToSubmission<
+  T extends object = Record<string, any>,
+>(row: PostCampaignSubmissionSnapshot, base?: T): T {
   const snapshot = {
     id: row.submission_id,
     contest_id: row.contest_id,
     creator_id: row.creator_id,
     content_link: row.content_link,
     views: row.views ?? 0,
-    metadata: row.metadata,
+    metadata: row.metadata ?? null,
     other_stats: row.other_stats ?? null,
     created_at: row.created_at,
     video_id: row.video_id,

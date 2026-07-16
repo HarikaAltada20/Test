@@ -7,10 +7,12 @@ import {
   aggregateAdminAnalyticsFromDailyRows,
   expandStatusFilterIds,
   getContestAdvertiserName,
+  getSubmissionMetricBundle,
   isAdminAnalyticsContestType,
   isAdminAnalyticsPlatform,
   isApprovedAnalyticsContest,
   normalizeAnalyticsPlatform,
+  normalizeSubmissionStatus,
   type AdminAnalyticsAdvertiserOption,
   type AdminAnalyticsBaseStatus,
   type AdminAnalyticsContest,
@@ -47,9 +49,25 @@ export type AdminAnalyticsOverviewResult = {
   types: AdminAnalyticsContestType[];
   statuses: AdminAnalyticsBaseStatus[];
   advertiserIds: string[];
+  /** Locked post-review submissions metrics. */
   summary: AdminAnalyticsSummary;
   series: AdminAnalyticsSeriesPoint[];
   viewsByStatus: AdminAnalyticsViewsByStatus;
+  /** Post-campaign overlay metrics (same shape as submissions). */
+  pc: {
+    summary: AdminAnalyticsSummary;
+    series: AdminAnalyticsSeriesPoint[];
+    viewsByStatus: AdminAnalyticsViewsByStatus;
+    /** Campaigns that have PC overlay rows in range (for PC tab filter). */
+    allCampaigns: {
+      id: string;
+      title: string;
+      platform: string | null;
+      contest_type: string | null;
+      advertiser_id: string | null;
+    }[];
+    selectedCampaignCount: number;
+  };
   campaigns: { id: string; title: string }[];
   allAdvertisers: AdminAnalyticsAdvertiserOption[];
   allCampaigns: {
@@ -163,6 +181,222 @@ async function fetchAnalyticsDailyRows(
   return mergeDailyRows(chunks);
 }
 
+function mergePcDailyRows(
+  rows: AdminAnalyticsDailySqlRow[],
+): AdminAnalyticsDailySqlRow[] {
+  return mergeDailyRows(rows);
+}
+
+function isMissingRpcError(error: { code?: string; message?: string }): boolean {
+  const code = error.code ?? "";
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    code === "PGRST202" ||
+    code === "42883" ||
+    msg.includes("could not find the function") ||
+    (msg.includes("function") && msg.includes("does not exist")) ||
+    msg.includes("schema cache") ||
+    (msg.includes("post_campaign_submission_metrics") &&
+      msg.includes("does not exist"))
+  );
+}
+
+/**
+ * Daily PC overlay metrics. Prefers RPC; falls back to row scan + Node rollup
+ * if the migration is not applied yet.
+ */
+async function fetchPcAnalyticsDailyRows(
+  supabase: ReturnType<typeof createAdminClient>,
+  contestIds: string[],
+  fromIso: string,
+  toIso: string,
+  contestsById: Map<string, AdminAnalyticsContest>,
+): Promise<AdminAnalyticsDailySqlRow[]> {
+  if (contestIds.length === 0) return [];
+
+  const CONTEST_ID_CHUNK = 500;
+  const chunks: AdminAnalyticsDailySqlRow[] = [];
+  let useFallback = false;
+
+  for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
+    const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
+    const { data, error } = await supabase.rpc("admin_analytics_pc_daily", {
+      p_from: fromIso,
+      p_to: toIso,
+      p_contest_ids: idChunk,
+    });
+    if (error) {
+      if (isMissingRpcError(error)) {
+        useFallback = true;
+        break;
+      }
+      console.warn(
+        "[admin-analytics] PC daily RPC failed; PC analytics will be empty:",
+        error.message,
+      );
+      return [];
+    }
+    const rows = (data ?? []) as AdminAnalyticsDailySqlRow[];
+    // Old count-only RPC has no views_sum — treat as missing and fall back.
+    if (
+      rows.length > 0 &&
+      rows[0] != null &&
+      !("views_sum" in rows[0]) &&
+      !("likes_sum" in rows[0])
+    ) {
+      useFallback = true;
+      break;
+    }
+    chunks.push(...rows);
+  }
+
+  if (!useFallback) {
+    return mergePcDailyRows(chunks);
+  }
+
+  const fallback: AdminAnalyticsDailySqlRow[] = [];
+  const PAGE = 1000;
+  for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
+    const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await supabase
+        .from("post_campaign_submission_metrics")
+        .select(
+          "contest_id, created_at, status, platform, views, other_stats, earnings, bonus_amount",
+        )
+        .in("contest_id", idChunk)
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso)
+        .order("created_at", { ascending: true })
+        .range(offset, offset + PAGE - 1);
+      if (error) {
+        if (isMissingRpcError(error)) return [];
+        console.warn(
+          "[admin-analytics] PC daily fallback failed:",
+          error.message,
+        );
+        return [];
+      }
+      const rows = data ?? [];
+      for (const row of rows) {
+        const created = row.created_at as string | null;
+        if (!created) continue;
+        const contest = contestsById.get(String(row.contest_id));
+        const metrics = getSubmissionMetricBundle(
+          {
+            id: "",
+            contest_id: String(row.contest_id),
+            created_at: created,
+            status: (row.status as string | null) ?? null,
+            platform: (row.platform as string | null) ?? null,
+            views: Number(row.views) || 0,
+            earnings: Number(row.earnings) || 0,
+            bonus_amount: Number(row.bonus_amount) || 0,
+            other_stats:
+              (row.other_stats as Record<string, unknown> | null) ?? null,
+          },
+          contest?.platform,
+          contest?.contest_based_details,
+        );
+        const status = normalizeSubmissionStatus(
+          (row.status as string | null) ?? null,
+        );
+        const paid =
+          String(row.status ?? "").toLowerCase() === "paid" ||
+          Number(row.earnings || 0) > 0;
+        const payoutsCents = paid
+          ? Math.round(
+              (Number(row.earnings) || 0) + (Number(row.bonus_amount) || 0),
+            )
+          : 0;
+        fallback.push({
+          day_key: created.slice(0, 10),
+          status,
+          submission_count: 1,
+          views_sum: metrics.views,
+          likes_sum: metrics.likes,
+          comments_sum: metrics.comments,
+          shares_sum: metrics.shares,
+          payouts_cents_sum: payoutsCents,
+        });
+      }
+      if (rows.length < PAGE) break;
+    }
+  }
+  return mergePcDailyRows(fallback);
+}
+
+/**
+ * Contest IDs that have at least one post-campaign overlay row in range.
+ */
+async function fetchPcContestIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  contestIds: string[],
+  fromIso: string,
+  toIso: string,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (contestIds.length === 0) return out;
+
+  const CONTEST_ID_CHUNK = 500;
+  let useFallback = false;
+
+  for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
+    const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
+    const { data, error } = await supabase.rpc("admin_analytics_pc_contest_ids", {
+      p_from: fromIso,
+      p_to: toIso,
+      p_contest_ids: idChunk,
+    });
+    if (error) {
+      if (isMissingRpcError(error)) {
+        useFallback = true;
+        break;
+      }
+      console.warn(
+        "[admin-analytics] PC contest-ids RPC failed:",
+        error.message,
+      );
+      return out;
+    }
+    for (const row of data ?? []) {
+      const id = String((row as { contest_id?: string }).contest_id ?? "");
+      if (id) out.add(id);
+    }
+  }
+
+  if (!useFallback) return out;
+
+  const PAGE = 1000;
+  for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
+    const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await supabase
+        .from("post_campaign_submission_metrics")
+        .select("contest_id")
+        .in("contest_id", idChunk)
+        .gte("created_at", fromIso)
+        .lte("created_at", toIso)
+        .range(offset, offset + PAGE - 1);
+      if (error) {
+        if (isMissingRpcError(error)) return out;
+        console.warn(
+          "[admin-analytics] PC contest-ids fallback failed:",
+          error.message,
+        );
+        return out;
+      }
+      const rows = data ?? [];
+      for (const row of rows) {
+        const id = String(row.contest_id ?? "");
+        if (id) out.add(id);
+      }
+      if (rows.length < PAGE) break;
+    }
+  }
+  return out;
+}
+
 async function fetchAdvertiserUsers(
   supabase: ReturnType<typeof createAdminClient>,
   advertiserIds: string[],
@@ -258,21 +492,52 @@ async function loadAdminAnalyticsOverview(
           .filter((c) => params.contestIds!.includes(c.id))
           .map((c) => c.id);
 
-  const dailyRows = await fetchAnalyticsDailyRows(
-    supabase,
-    scopedContestIds,
-    from.toISOString(),
-    to.toISOString(),
+  const contestsById = new Map(
+    contestsForScope.map((c) => [c.id, c] as const),
   );
 
-  const aggregated = aggregateAdminAnalyticsFromDailyRows({
+  const contestsForScopeIds = contestsForScope.map((c) => c.id);
+
+  const [dailyRows, pcDailyRows, pcContestIdSet] = await Promise.all([
+    fetchAnalyticsDailyRows(
+      supabase,
+      scopedContestIds,
+      from.toISOString(),
+      to.toISOString(),
+    ),
+    fetchPcAnalyticsDailyRows(
+      supabase,
+      scopedContestIds,
+      from.toISOString(),
+      to.toISOString(),
+      contestsById,
+    ),
+    // Full advertiser/type/platform scope (not contest-id filter) so the PC
+    // campaigns dropdown lists every campaign with overlay data.
+    fetchPcContestIds(
+      supabase,
+      contestsForScopeIds,
+      from.toISOString(),
+      to.toISOString(),
+    ),
+  ]);
+
+  const aggregateInputBase = {
     contests: contestsForScope,
-    dailyRows,
     from,
     to,
     contestIds: params.contestIds,
     advertiserIds: params.advertiserIds,
     statuses: params.statuses,
+  };
+
+  const aggregated = aggregateAdminAnalyticsFromDailyRows({
+    ...aggregateInputBase,
+    dailyRows,
+  });
+  const pcAggregated = aggregateAdminAnalyticsFromDailyRows({
+    ...aggregateInputBase,
+    dailyRows: pcDailyRows,
   });
 
   const advertiserIdsForLabels = [
@@ -301,6 +566,12 @@ async function loadAdminAnalyticsOverview(
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 
+  const pcAllCampaigns = allCampaigns.filter((c) => pcContestIdSet.has(c.id));
+  const pcSelectedCampaignCount =
+    params.contestIds == null
+      ? pcAllCampaigns.length
+      : pcAllCampaigns.filter((c) => params.contestIds!.includes(c.id)).length;
+
   return {
     from: from.toISOString(),
     to: to.toISOString(),
@@ -311,6 +582,13 @@ async function loadAdminAnalyticsOverview(
     summary: aggregated.summary,
     series: aggregated.series,
     viewsByStatus: aggregated.viewsByStatus,
+    pc: {
+      summary: pcAggregated.summary,
+      series: pcAggregated.series,
+      viewsByStatus: pcAggregated.viewsByStatus,
+      allCampaigns: pcAllCampaigns,
+      selectedCampaignCount: pcSelectedCampaignCount,
+    },
     campaigns: aggregated.campaigns,
     allAdvertisers,
     allCampaigns,
@@ -327,6 +605,7 @@ function normalizeListKey(ids: string[] | null): string {
 function buildCacheKeyParts(params: AdminAnalyticsOverviewParams): string[] {
   return [
     ADMIN_ANALYTICS_CACHE_TAG,
+    "v4-pc-campaigns",
     params.fromIso,
     params.toIso,
     [...params.platforms].sort().join(","),

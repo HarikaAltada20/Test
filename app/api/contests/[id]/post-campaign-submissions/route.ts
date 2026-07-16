@@ -4,6 +4,7 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   fetchPostCampaignMetrics,
+  fetchPostCampaignMetricsCount,
   syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
 
@@ -11,14 +12,24 @@ async function authorizeContestAccess(
   contestId: string,
   userId: string,
 ): Promise<
-  | { ok: true; contest: { id: string; advertiser_id: string; platform: string | null; end_date: string | null; post_campaign_last_metrics_updated: string | null } }
+  | {
+      ok: true;
+      contest: {
+        id: string;
+        advertiser_id: string;
+        platform: string | null;
+        end_date: string | null;
+        post_campaign_last_metrics_updated: string | null;
+        contest_based_details: Record<string, unknown> | null;
+      };
+    }
   | { ok: false; status: number; error: string }
 > {
   const supabase = await createClient();
   const { data: contest, error } = await supabase
     .from("contests")
     .select(
-      "id, advertiser_id, platform, end_date, post_campaign_last_metrics_updated",
+      "id, advertiser_id, platform, end_date, post_campaign_last_metrics_updated, contest_based_details",
     )
     .eq("id", contestId)
     .single();
@@ -32,7 +43,15 @@ async function authorizeContestAccess(
     return { ok: false, status: 403, error: "Forbidden" };
   }
 
-  return { ok: true, contest };
+  return {
+    ok: true,
+    contest: {
+      ...contest,
+      contest_based_details:
+        (contest.contest_based_details as Record<string, unknown> | null) ??
+        null,
+    },
+  };
 }
 
 function isContestEnded(endDate: string | null): boolean {
@@ -41,7 +60,7 @@ function isContestEnded(endDate: string | null): boolean {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -59,11 +78,42 @@ export async function GET(
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    const metrics = await fetchPostCampaignMetrics(supabase, contestId);
+    // Service role: faster than RLS user client for large overlay payloads.
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+
+    const url = new URL(request.url);
+    const probeOnly = url.searchParams.get("probe") === "1";
+    if (probeOnly) {
+      const count = await fetchPostCampaignMetricsCount(
+        supabaseAdmin,
+        contestId,
+      );
+      return NextResponse.json({
+        count,
+        empty: count === 0,
+        post_campaign_last_metrics_updated:
+          auth.contest.post_campaign_last_metrics_updated,
+      });
+    }
+
+    const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId, {
+      light: true,
+    });
+    const pcYt =
+      (
+        auth.contest.contest_based_details
+          ?.post_campaign_youtube_metrics_last_updated as
+          | Record<string, string>
+          | undefined
+      ) ?? null;
     return NextResponse.json({
       metrics,
       post_campaign_last_metrics_updated:
         auth.contest.post_campaign_last_metrics_updated,
+      post_campaign_youtube_metrics_last_updated: pcYt,
       count: metrics.length,
     });
   } catch (e) {

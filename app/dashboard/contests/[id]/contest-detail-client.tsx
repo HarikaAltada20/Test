@@ -52,7 +52,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -138,10 +142,7 @@ import {
   formatQualitySumDisplay,
 } from "@/lib/creator-profile-stats";
 import { computeTrustScore } from "@/lib/trust-score";
-import {
-  parseQualityScore,
-  type QualityScore,
-} from "@/lib/quality-score";
+import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -159,7 +160,10 @@ import { LazyInlineSubmissionVideoPlayer } from "@/components/LazyInlineSubmissi
 import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
 import { FullCampaignReportExportDialog } from "@/components/contests/FullCampaignReportExportDialog";
 import { getCpmRateFromContest } from "@/lib/report-export-context";
-import type { BrandProfile, ReportSubmissionFilter } from "@/lib/report-export-branding";
+import type {
+  BrandProfile,
+  ReportSubmissionFilter,
+} from "@/lib/report-export-branding";
 import {
   buildAllContestAnalyticsTabSnapshots,
   buildTopSubmissionChartItems,
@@ -345,7 +349,9 @@ function EligibilityRequirementCard({
           <div
             className={cn(
               "w-10 h-10 flex items-center justify-center rounded-full shrink-0",
-              isDark ? "bg-[#FFFFFF42] text-white" : "bg-purple-100 text-[#4A00BE]",
+              isDark
+                ? "bg-[#FFFFFF42] text-white"
+                : "bg-purple-100 text-[#4A00BE]",
             )}
           >
             <Icon className="h-5 w-5" />
@@ -431,17 +437,27 @@ function CreatorQualityScoreBreakdownTooltip({
   creatorValue: number | null;
 }) {
   const total = breakdown.score1 + breakdown.score2 + breakdown.score3;
-  const creatorDisplay =
-    creatorValue !== null ? String(creatorValue) : "—";
+  const creatorDisplay = creatorValue !== null ? String(creatorValue) : "—";
 
   return (
     <div className="space-y-1 text-xs">
       <p className="font-medium">Quality Score</p>
-      <p>Score 3: {breakdown.score3} submission{breakdown.score3 === 1 ? "" : "s"}</p>
-      <p>Score 2: {breakdown.score2} submission{breakdown.score2 === 1 ? "" : "s"}</p>
-      <p>Score 1: {breakdown.score1} submission{breakdown.score1 === 1 ? "" : "s"}</p>
+      <p>
+        Score 3: {breakdown.score3} submission
+        {breakdown.score3 === 1 ? "" : "s"}
+      </p>
+      <p>
+        Score 2: {breakdown.score2} submission
+        {breakdown.score2 === 1 ? "" : "s"}
+      </p>
+      <p>
+        Score 1: {breakdown.score1} submission
+        {breakdown.score1 === 1 ? "" : "s"}
+      </p>
       {total === 0 && (
-        <p className="text-muted-foreground">No scored verified submissions yet</p>
+        <p className="text-muted-foreground">
+          No scored verified submissions yet
+        </p>
       )}
       <p className="pt-1 border-t border-border/50">
         {belowThreshold ? "Below" : "Meets"} required {requirementLabel} (
@@ -1388,8 +1404,7 @@ export default function ContestDetailClient({
     [currentContest],
   );
 
-  const isVideoContestFormat =
-    currentContest?.contest_format !== "text_image";
+  const isVideoContestFormat = currentContest?.contest_format !== "text_image";
 
   const parsedCreatorRequirements = useMemo(
     () => parseContestCreatorRequirements(currentContest),
@@ -1402,8 +1417,7 @@ export default function ContestDetailClient({
   const contestMinTrustNumber = parsedCreatorRequirements.minTrustNumber;
 
   const showCreatorEligibilitySection =
-    isVideoContestFormat &&
-    hasAnyContestCreatorRequirement(currentContest);
+    isVideoContestFormat && hasAnyContestCreatorRequirement(currentContest);
 
   const eligibilityDisplayItems = useMemo(() => {
     const iconByKey: Record<
@@ -1821,9 +1835,28 @@ export default function ContestDetailClient({
     useState(false);
   const [isLoadingPostCampaignMetrics, setIsLoadingPostCampaignMetrics] =
     useState(false);
-  const showPostCampaignToggle = currentContest.status === "ended";
+  // PC Submissions overlay is for ended video contests once review is underway
+  // (hidden while still in pending_review, when live submissions can still refresh).
+  // Twitter/X contests do not use post-campaign metrics overlay.
+  const isTwitterOrXContest =
+    (currentContest.platform?.toLowerCase() === "twitter" ||
+      currentContest.platform?.toLowerCase() === "x") &&
+    currentContest.contest_format === "text_image";
+  const showPostCampaignToggle =
+    !isTwitterOrXContest &&
+    currentContest.status === "ended" &&
+    currentContest.post_contest_status !== "pending_review";
   const isPostCampaignLeaderboard =
     showPostCampaignToggle && submissionsLeaderboardMode === "post_campaign";
+
+  useEffect(() => {
+    if (
+      !showPostCampaignToggle &&
+      submissionsLeaderboardMode === "post_campaign"
+    ) {
+      setSubmissionsLeaderboardMode("submissions");
+    }
+  }, [showPostCampaignToggle, submissionsLeaderboardMode]);
 
   const applyPostCampaignMetricsPayload = (
     metrics: PostCampaignSubmissionSnapshot[],
@@ -1836,40 +1869,113 @@ export default function ContestDetailClient({
     setPostCampaignMetricsLoaded(true);
   };
 
-  const hasPostCampaignData =
-    Object.keys(postCampaignMetricsById).length > 0;
+  const hasPostCampaignData = Object.keys(postCampaignMetricsById).length > 0;
+  const postCampaignLoadInFlightRef = useRef(false);
+  const postCampaignLoadPromiseRef = useRef<Promise<void> | null>(null);
 
   /** GET existing post-campaign snapshot (does not sync from submissions). */
-  const loadPostCampaignMetrics = async () => {
-    setIsLoadingPostCampaignMetrics(true);
-    try {
-      const res = await fetch(
-        `/api/contests/${contestId}/post-campaign-submissions`,
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to load post-campaign metrics");
+  const loadPostCampaignMetrics = async (opts?: {
+    force?: boolean;
+    /** Background prefetch: do not flash the empty Loading screen. */
+    silent?: boolean;
+  }) => {
+    if (!opts?.force && postCampaignMetricsLoaded) return;
+
+    // Join an in-flight request instead of starting a second one.
+    if (postCampaignLoadPromiseRef.current && !opts?.force) {
+      if (!opts?.silent) setIsLoadingPostCampaignMetrics(true);
+      try {
+        await postCampaignLoadPromiseRef.current;
+      } finally {
+        if (!opts?.silent) setIsLoadingPostCampaignMetrics(false);
       }
-      const metrics = Array.isArray(data.metrics) ? data.metrics : [];
-      if (data.post_campaign_last_metrics_updated !== undefined) {
-        setPostCampaignLastMetricsUpdated(
-          data.post_campaign_last_metrics_updated ?? null,
-        );
-      }
-      applyPostCampaignMetricsPayload(metrics);
-    } catch (err) {
-      toast({
-        title: "Post Campaign Submissions",
-        description:
-          err instanceof Error
-            ? err.message
-            : "Failed to load post-campaign data",
-        variant: "destructive",
-      });
-      setPostCampaignMetricsLoaded(true);
-    } finally {
-      setIsLoadingPostCampaignMetrics(false);
+      return;
     }
+
+    // Only block the PC empty-state UI when the user is waiting (non-silent).
+    if (!opts?.silent) {
+      setIsLoadingPostCampaignMetrics(true);
+    }
+
+    const run = (async () => {
+      postCampaignLoadInFlightRef.current = true;
+      try {
+        // Fast empty check — avoid downloading all rows when overlay is empty.
+        const probeRes = await fetch(
+          `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
+        );
+        const probe = await probeRes.json().catch(() => ({}));
+        if (probeRes.ok && probe.empty === true) {
+          if (probe.post_campaign_last_metrics_updated !== undefined) {
+            setPostCampaignLastMetricsUpdated(
+              probe.post_campaign_last_metrics_updated ?? null,
+            );
+          }
+          applyPostCampaignMetricsPayload([]);
+          return;
+        }
+
+        const res = await fetch(
+          `/api/contests/${contestId}/post-campaign-submissions`,
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            data?.error || "Failed to load post-campaign metrics",
+          );
+        }
+        const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+        if (data.post_campaign_last_metrics_updated !== undefined) {
+          setPostCampaignLastMetricsUpdated(
+            data.post_campaign_last_metrics_updated ?? null,
+          );
+        }
+        if (data.post_campaign_youtube_metrics_last_updated) {
+          setCurrentContest((prev) => {
+            const details =
+              (prev.contest_based_details as Record<string, unknown> | null) ||
+              {};
+            return {
+              ...prev,
+              post_campaign_last_metrics_updated:
+                data.post_campaign_last_metrics_updated ??
+                prev.post_campaign_last_metrics_updated,
+              contest_based_details: {
+                ...details,
+                post_campaign_youtube_metrics_last_updated:
+                  data.post_campaign_youtube_metrics_last_updated,
+              } as Contest["contest_based_details"],
+            };
+          });
+        } else if (data.post_campaign_last_metrics_updated !== undefined) {
+          setCurrentContest((prev) => ({
+            ...prev,
+            post_campaign_last_metrics_updated:
+              data.post_campaign_last_metrics_updated,
+          }));
+        }
+        applyPostCampaignMetricsPayload(metrics);
+      } catch (err) {
+        if (!opts?.silent) {
+          toast({
+            title: "Post Campaign Submissions",
+            description:
+              err instanceof Error
+                ? err.message
+                : "Failed to load post-campaign data",
+            variant: "destructive",
+          });
+        }
+        setPostCampaignMetricsLoaded(true);
+      } finally {
+        postCampaignLoadInFlightRef.current = false;
+        postCampaignLoadPromiseRef.current = null;
+        setIsLoadingPostCampaignMetrics(false);
+      }
+    })();
+
+    postCampaignLoadPromiseRef.current = run;
+    await run;
   };
 
   /** Copy all contest submissions into post-campaign table (Refresh on empty state). */
@@ -2435,13 +2541,15 @@ export default function ContestDetailClient({
     // - ignore backfilled quality scores
     // - score is only meaningful for verified/paid rows
     const normalizedStatus = String(getStatus(submission)).toLowerCase();
-    if (normalizedStatus !== "verified" && normalizedStatus !== "paid") return null;
+    if (normalizedStatus !== "verified" && normalizedStatus !== "paid")
+      return null;
     if ((submission as any).quality_score_backfilled === true) return null;
     return parseQualityScore((submission as any).quality_score);
   }
 
   const qualityFilteredSubmissions = useMemo(() => {
-    if (submissionQualityScoreFilters.length === 0) return leaderboardSubmissions;
+    if (submissionQualityScoreFilters.length === 0)
+      return leaderboardSubmissions;
     return leaderboardSubmissions.filter((submission) => {
       const score = getExplicitSubmissionQualityScoreForFiltering(submission);
       return submissionQualityScoreFilters.some((filterValue) => {
@@ -2509,34 +2617,36 @@ export default function ContestDetailClient({
 
   // Filter submissions based on active status tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
-  const filteredSubmissions = qualityFilteredSubmissions.filter((submission) => {
-    const status = getStatus(submission);
-    const isTwitterTweet = (submission as any).is_twitter_tweet === true;
+  const filteredSubmissions = qualityFilteredSubmissions.filter(
+    (submission) => {
+      const status = getStatus(submission);
+      const isTwitterTweet = (submission as any).is_twitter_tweet === true;
 
-    // Apply status tab filter
-    if (activeStatusTab !== "all") {
-      // Not Rejected: include all except rejected
-      if (activeStatusTab === "not_rejected") {
-        if (status === "rejected") return false;
-      } else if (activeStatusTab === "verified_or_paid") {
-        if (!(status === "verified" || status === "paid")) return false;
-      } else {
-        if (status !== activeStatusTab) return false;
+      // Apply status tab filter
+      if (activeStatusTab !== "all") {
+        // Not Rejected: include all except rejected
+        if (activeStatusTab === "not_rejected") {
+          if (status === "rejected") return false;
+        } else if (activeStatusTab === "verified_or_paid") {
+          if (!(status === "verified" || status === "paid")) return false;
+        } else {
+          if (status !== activeStatusTab) return false;
+        }
       }
-    }
 
-    // Apply eligibility filter for Twitter tweets
-    if (isTwitterTweet && activeEligibilityTab !== "all") {
-      const elOk = twitterSubmissionIsCampaignEligible(submission as any);
-      if (activeEligibilityTab === "eligible") {
-        if (!elOk) return false;
-      } else if (activeEligibilityTab === "not_eligible") {
-        if (elOk) return false;
+      // Apply eligibility filter for Twitter tweets
+      if (isTwitterTweet && activeEligibilityTab !== "all") {
+        const elOk = twitterSubmissionIsCampaignEligible(submission as any);
+        if (activeEligibilityTab === "eligible") {
+          if (!elOk) return false;
+        } else if (activeEligibilityTab === "not_eligible") {
+          if (elOk) return false;
+        }
       }
-    }
 
-    return true;
-  });
+      return true;
+    },
+  );
 
   // Sort filtered submissions
   const sortedSubmissions = [...filteredSubmissions].sort((a, b) => {
@@ -2610,14 +2720,17 @@ export default function ContestDetailClient({
     currentPage * itemsPerPage,
   );
 
-  const showNormalViewBulkModeration = submissionModerationUiAllowed(
-    currentContest.post_contest_status,
-    { forBulkBar: true },
-  );
+  // Post-campaign overlay is metrics-only — no verify/reject/pending/paid actions.
+  const showNormalViewBulkModeration =
+    !isPostCampaignLeaderboard &&
+    submissionModerationUiAllowed(currentContest.post_contest_status, {
+      forBulkBar: true,
+    });
 
   const showSubmissionRowModeration = (
     submission: (typeof currentSubmissions)[number],
   ) =>
+    !isPostCampaignLeaderboard &&
     submissionModerationUiAllowed(currentContest.post_contest_status, {
       isPaidRow: submissionIsPaidRow(submission),
     });
@@ -2654,8 +2767,7 @@ export default function ContestDetailClient({
           ? (sub as any).moderation_status || sub.status || ""
           : sub.status || "",
       ).toLowerCase();
-      const isVerified =
-        rawStatus === "verified" || rawStatus === "approved";
+      const isVerified = rawStatus === "verified" || rawStatus === "approved";
       if (isVerified) {
         toUpdateQualityOnly.push(id);
       } else {
@@ -2718,8 +2830,7 @@ export default function ContestDetailClient({
                     creatorQuality.best_quality_score ??
                     existingCreator.best_quality_score ??
                     null,
-                  quality_score_counts:
-                    creatorQuality.quality_score_counts ??
+                  quality_score_counts: creatorQuality.quality_score_counts ??
                     existingCreator.quality_score_counts ?? {
                       score1: 0,
                       score2: 0,
@@ -2743,8 +2854,7 @@ export default function ContestDetailClient({
                 creatorQuality.best_quality_score ??
                 existingCreator.best_quality_score ??
                 null,
-              quality_score_counts:
-                creatorQuality.quality_score_counts ??
+              quality_score_counts: creatorQuality.quality_score_counts ??
                 existingCreator.quality_score_counts ?? {
                   score1: 0,
                   score2: 0,
@@ -2874,13 +2984,13 @@ export default function ContestDetailClient({
     () =>
       buildFlatFeeBonusExpectedCentsBySubmissionId(
         currentContest,
-        currentSubmissions as any[],
+        leaderboardSubmissions as any[],
       ),
-    [currentContest, currentSubmissions],
+    [currentContest, leaderboardSubmissions],
   );
 
   const milestonePayoutEligibleSubmissions = useMemo(() => {
-    return (currentSubmissions || []).map((submission) => {
+    return (leaderboardSubmissions || []).map((submission) => {
       const rawStatus = (submission.status || "pending").toLowerCase();
       const normalizedStatus =
         rawStatus === "approved" ? "verified" : rawStatus;
@@ -2896,7 +3006,7 @@ export default function ContestDetailClient({
         views: Number.isFinite(views) ? views : 0,
       };
     });
-  }, [currentSubmissions]);
+  }, [leaderboardSubmissions]);
 
   const milestoneSubmissionAssignments = useMemo<{
     payoutMap: Map<string, number>;
@@ -3070,7 +3180,7 @@ export default function ContestDetailClient({
     );
 
     const grouped = new Map<string, Submission[]>();
-    for (const sub of currentSubmissions || []) {
+    for (const sub of leaderboardSubmissions || []) {
       const creatorId = String(sub.creator_id || "");
       if (!creatorId) continue;
       const list = grouped.get(creatorId) || [];
@@ -3157,7 +3267,7 @@ export default function ContestDetailClient({
     };
   }, [
     currentContest,
-    currentSubmissions,
+    leaderboardSubmissions,
     milestoneSubmissionExpectedPayoutCents,
   ]);
 
@@ -3616,16 +3726,13 @@ export default function ContestDetailClient({
               parseTrustMetricsValue((submission as any).trust_score_metrics) ??
               parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
               null,
-            avg_quality_score:
-              submission.creator?.avg_quality_score ?? null,
-            best_quality_score:
-              submission.creator?.best_quality_score ?? null,
-            quality_score_counts:
-              submission.creator?.quality_score_counts ?? {
-                score1: 0,
-                score2: 0,
-                score3: 0,
-              },
+            avg_quality_score: submission.creator?.avg_quality_score ?? null,
+            best_quality_score: submission.creator?.best_quality_score ?? null,
+            quality_score_counts: submission.creator?.quality_score_counts ?? {
+              score1: 0,
+              score2: 0,
+              score3: 0,
+            },
             total_money_won: submission.creator?.total_money_won ?? 0,
             total_views: submission.creator?.total_views ?? 0,
           },
@@ -3727,7 +3834,8 @@ export default function ContestDetailClient({
         group.creator?.best_quality_score == null &&
         submission.creator?.best_quality_score != null
       ) {
-        group.creator.best_quality_score = submission.creator.best_quality_score;
+        group.creator.best_quality_score =
+          submission.creator.best_quality_score;
       }
       if (
         group.creator?.quality_score_sum == null &&
@@ -4430,11 +4538,11 @@ export default function ContestDetailClient({
 
     // Bonus Expected: same FCFS + cap as modal / payout (created_at order over full contest list)
     const flatFeeBonusCents = getFlatFeeBonusCentsFromContest(currentContest);
-    if (flatFeeBonusCents > 0 && currentSubmissions?.length > 0) {
+    if (flatFeeBonusCents > 0 && leaderboardSubmissions?.length > 0) {
       const expectedBonusBySubmissionId =
         buildFlatFeeBonusExpectedCentsBySubmissionId(
           currentContest,
-          currentSubmissions,
+          leaderboardSubmissions,
         );
       Object.values(grouped).forEach((group: any) => {
         const subs = group.submissions || [];
@@ -4449,7 +4557,7 @@ export default function ContestDetailClient({
     return Object.values(grouped);
   }, [
     filteredSubmissions,
-    currentSubmissions,
+    leaderboardSubmissions,
     currentContest,
     activeStatusTab,
     creatorModerationData,
@@ -4502,11 +4610,7 @@ export default function ContestDetailClient({
       profile_picture_url: (sub as any).creator_avatar_url ?? null,
       full_name: (sub as any).creator_display_name ?? null,
     };
-  }, [
-    selectedCreatorForModal,
-    groupSubmissionsByCreator,
-    currentSubmissions,
-  ]);
+  }, [selectedCreatorForModal, groupSubmissionsByCreator, currentSubmissions]);
 
   /** Creator submission list for modal (respects quality filter; not status-filtered group rows). */
   const creatorModalSubmissions = useMemo(() => {
@@ -4826,6 +4930,7 @@ export default function ContestDetailClient({
   );
   const showCreatorMilestoneVerifiedBonusActions =
     Boolean(isAdminView) &&
+    !isPostCampaignLeaderboard &&
     isMilestoneContestType(currentContest?.contest_type) &&
     currentContest?.post_contest_status === "verification_complete" &&
     (showMostVerifiedViewsBonusColumns || showMostVerifiedReelsCreatorColumn);
@@ -4884,7 +4989,7 @@ export default function ContestDetailClient({
       ?.milestone_contest?.bonus;
 
     return buildMilestoneMostVerifiedBonusByCreatorMap(
-      (currentSubmissions || []).map((sub: any) => ({
+      (leaderboardSubmissions || []).map((sub: any) => ({
         id: sub.id,
         creator_id: milestoneMvCreatorIdKey(sub.creator_id),
         created_at: sub.created_at,
@@ -4906,7 +5011,7 @@ export default function ContestDetailClient({
     );
   }, [
     currentContest,
-    currentSubmissions,
+    leaderboardSubmissions,
     getStatus,
     milestoneLedgerNormalized,
     payoutAdjustmentForUi.percentage,
@@ -4920,7 +5025,7 @@ export default function ContestDetailClient({
     if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
     const payoutMap = milestoneSubmissionExpectedPayoutCents;
     let sum = 0;
-    for (const sub of currentSubmissions || []) {
+    for (const sub of leaderboardSubmissions || []) {
       const raw = String(getStatus(sub) || "").toLowerCase();
       const st = raw === "approved" ? "verified" : raw;
       if (st !== "verified" && st !== "paid") continue;
@@ -4930,7 +5035,7 @@ export default function ContestDetailClient({
   }, [
     currentContest?.contest_type,
     milestoneSubmissionExpectedPayoutCents,
-    currentSubmissions,
+    leaderboardSubmissions,
     getStatus,
   ]);
 
@@ -4954,6 +5059,167 @@ export default function ContestDetailClient({
     });
     return sum;
   }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
+
+  /**
+   * Budget tracker must stay stable when toggling Submissions ↔ PC Submissions.
+   * Always compute from locked `currentSubmissions`, never PC overlay views.
+   */
+  const budgetTrackerMilestonePayoutBySubmissionId = useMemo(() => {
+    const empty = new Map<string, number>();
+    const isMilestoneLike =
+      isMilestoneContestType(currentContest?.contest_type) ||
+      isDualRewardsContestType(currentContest?.contest_type);
+    if (!isMilestoneLike) return empty;
+    const milestones =
+      currentContest?.contest_based_details?.milestone_contest?.milestones;
+    if (!Array.isArray(milestones) || milestones.length === 0) return empty;
+
+    const sortedMilestones = [...milestones].sort(
+      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
+    );
+    const winnerCountsByMilestone = new Map<number, number>();
+    const payoutMap = new Map<string, number>();
+
+    const eligible = (currentSubmissions || [])
+      .map((submission) => {
+        const rawStatus = (submission.status || "pending").toLowerCase();
+        const normalizedStatus =
+          rawStatus === "approved" ? "verified" : rawStatus;
+        const metrics = extractPlatformMetrics(submission);
+        const views = Number(metrics?.views ?? submission.views ?? 0);
+        return {
+          id: submission.id,
+          created_at: submission.created_at,
+          status: normalizedStatus,
+          deleted_at: submission.deleted_at,
+          views: Number.isFinite(views) ? views : 0,
+        };
+      })
+      .filter(
+        (submission) =>
+          (submission.status === "pending" ||
+            submission.status === "verified" ||
+            submission.status === "paid") &&
+          submission.deleted_at == null,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.created_at || 0).getTime() -
+          new Date(b.created_at || 0).getTime(),
+      );
+
+    for (const submission of eligible) {
+      let payoutCents = 0;
+      const submissionViews = Number(submission.views || 0);
+      for (const milestone of sortedMilestones) {
+        const targetViews = Number(milestone.target_views || 0);
+        if (submissionViews < targetViews) continue;
+        if (milestone.winner_limit != null) {
+          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
+          if (currentWinners >= milestone.winner_limit) continue;
+          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
+        }
+        payoutCents = Number(milestone.payout_cents || 0);
+        break;
+      }
+      payoutMap.set(submission.id, payoutCents);
+    }
+    return payoutMap;
+  }, [
+    currentContest?.contest_type,
+    currentContest?.contest_based_details,
+    currentSubmissions,
+  ]);
+
+  const budgetTrackerMilestoneExpectedPayoutCents = useMemo(() => {
+    if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
+    let sum = 0;
+    for (const sub of currentSubmissions || []) {
+      const raw = String(getStatus(sub) || "").toLowerCase();
+      const st = raw === "approved" ? "verified" : raw;
+      if (st !== "verified" && st !== "paid") continue;
+      sum += budgetTrackerMilestonePayoutBySubmissionId.get(sub.id) ?? 0;
+    }
+    return sum;
+  }, [
+    currentContest?.contest_type,
+    currentSubmissions,
+    budgetTrackerMilestonePayoutBySubmissionId,
+    getStatus,
+  ]);
+
+  const budgetTrackerMilestoneReelsBonusByCreator = useMemo(() => {
+    const empty = new Map<
+      string,
+      {
+        expectedCents: number;
+        paidCents: number;
+        viewsExpectedCents: number;
+        viewsPaidCents: number;
+        verifiedReels: number;
+        minRequired: number;
+      }
+    >();
+    if (
+      !isMilestoneContestType(currentContest?.contest_type) &&
+      !isDualRewardsContestType(currentContest?.contest_type)
+    ) {
+      return empty;
+    }
+    const bonusConfig = (currentContest?.contest_based_details as any)
+      ?.milestone_contest?.bonus;
+    if (!bonusConfig?.enabled) return empty;
+
+    return buildMilestoneMostVerifiedBonusByCreatorMap(
+      (currentSubmissions || []).map((sub: any) => ({
+        id: sub.id,
+        creator_id: milestoneMvCreatorIdKey(sub.creator_id),
+        created_at: sub.created_at,
+        status: getStatus(sub),
+        deleted_at: sub.deleted_at,
+        views: sub.views,
+        bonus_paid: sub.bonus_paid,
+        bonus_amount: sub.bonus_amount,
+        milestone_bonus_paid: sub.milestone_bonus_paid,
+        metadata: sub.metadata,
+      })),
+      bonusConfig,
+      milestoneLedgerNormalized,
+      {
+        shouldAdjustMostVerifiedMilestoneBonus:
+          payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+        percentage: payoutAdjustmentForUi.percentage,
+      },
+    );
+  }, [
+    currentContest?.contest_type,
+    currentContest?.contest_based_details,
+    currentSubmissions,
+    getStatus,
+    milestoneLedgerNormalized,
+    payoutAdjustmentForUi.percentage,
+    payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+  ]);
+
+  const budgetTrackerMilestoneCreatorBonusExpectedCents = useMemo(() => {
+    if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
+    let sum = 0;
+    budgetTrackerMilestoneReelsBonusByCreator.forEach((row) => {
+      sum +=
+        (Number(row.viewsExpectedCents) || 0) +
+        (Number(row.expectedCents) || 0);
+    });
+    return sum;
+  }, [currentContest?.contest_type, budgetTrackerMilestoneReelsBonusByCreator]);
+
+  const budgetTrackerMilestoneCreatorBonusPaidCents = useMemo(() => {
+    if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
+    let sum = 0;
+    budgetTrackerMilestoneReelsBonusByCreator.forEach((row) => {
+      sum += (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
+    });
+    return sum;
+  }, [currentContest?.contest_type, budgetTrackerMilestoneReelsBonusByCreator]);
 
   // Filter creator groups by participant filter and eligibility (for Twitter contests)
   const filteredCreatorGroups = useMemo(() => {
@@ -5373,13 +5639,24 @@ export default function ContestDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, currentContest?.platform, contestId]);
 
-  // When PC Submissions is selected, ensure overlay is loaded for Analytics (and Submissions).
+  // Prefetch PC overlay in background as soon as the toggle is available so
+  // switching to PC Submissions is instant (cache hit / empty probe).
+  useEffect(() => {
+    if (!showPostCampaignToggle || !contestId) return;
+    if (postCampaignMetricsLoaded || postCampaignLoadInFlightRef.current)
+      return;
+    void loadPostCampaignMetrics({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPostCampaignToggle, contestId]);
+
+  // When PC Submissions is selected before prefetch finishes, show loading and
+  // join the same in-flight request (no duplicate fetch).
   useEffect(() => {
     if (!isPostCampaignLeaderboard) return;
-    if (postCampaignMetricsLoaded || isLoadingPostCampaignMetrics) return;
+    if (postCampaignMetricsLoaded) return;
     void loadPostCampaignMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPostCampaignLeaderboard, postCampaignMetricsLoaded, isLoadingPostCampaignMetrics]);
+  }, [isPostCampaignLeaderboard, postCampaignMetricsLoaded]);
 
   const getStatusBadgeProps = (contest: Contest, isDarkMode: boolean) => {
     const light = (bg: string, text: string, border: string) =>
@@ -6071,8 +6348,7 @@ export default function ContestDetailClient({
             isVideoContestFormat &&
             options?.qualityScore != null
           ) {
-            merged.quality_score =
-              merged.quality_score ?? options.qualityScore;
+            merged.quality_score = merged.quality_score ?? options.qualityScore;
           }
 
           return merged;
@@ -6087,12 +6363,11 @@ export default function ContestDetailClient({
               title: options?.skipQualityPrompt
                 ? "✅ Payment Reversed"
                 : "✅ Submission Verified",
-              description:
-                options?.skipQualityPrompt
-                  ? "Submission moved to Verified."
-                  : isVideoContestFormat && options?.qualityScore != null
-                    ? `Content verified with quality score ${options.qualityScore}/3.`
-                    : "Content has been verified and is now eligible for rewards",
+              description: options?.skipQualityPrompt
+                ? "Submission moved to Verified."
+                : isVideoContestFormat && options?.qualityScore != null
+                  ? `Content verified with quality score ${options.qualityScore}/3.`
+                  : "Content has been verified and is now eligible for rewards",
               variant: "success" as const,
             };
           case "rejected":
@@ -7586,6 +7861,16 @@ export default function ContestDetailClient({
               ? "TikTok"
               : "Instagram";
 
+          if (!isVideoContestFormat) {
+            toast({
+              title: "Post-campaign refresh started",
+              description:
+                result.message ||
+                `Refreshing ${platformLabel} metrics in the background…`,
+              variant: "success",
+              duration: 6000,
+            });
+          }
           if (isYoutube) {
             setShowYoutubeRunPopup(true);
             setYoutubeRunCompleted(false);
@@ -7645,7 +7930,7 @@ export default function ContestDetailClient({
                     if (st === "completed") {
                       toast({
                         title: `Post-campaign ${platformLabel} refresh completed`,
-                        description: `Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}. Submissions unchanged.`,
+                        description: `Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}.`,
                         duration: 10000,
                         variant: "success",
                       });
@@ -7673,7 +7958,7 @@ export default function ContestDetailClient({
                   else setShowInstagramRunPopup(false);
                   toast({
                     title: "Post-campaign metrics updated",
-                    description: `${platformLabel} refresh finished. Submissions table was not modified.`,
+                    description: `${platformLabel} refresh finished.`,
                     variant: "success",
                   });
                 }
@@ -7699,7 +7984,7 @@ export default function ContestDetailClient({
           title: "Post-campaign metrics updated",
           description:
             result.message ||
-            `Synced ${result.synced ?? 0} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}. Submissions table unchanged.`,
+            `Synced ${result.synced ?? 0} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}.`,
           variant: "success",
           duration: 8000,
         });
@@ -7872,10 +8157,7 @@ export default function ContestDetailClient({
               setYoutubeRun(ytRun);
               setYoutubeRunCompleted(true);
               setShowYoutubeRunPopup(false);
-              if (
-                ytRun.id &&
-                !notifiedYoutubeRunIds.current.has(ytRun.id)
-              ) {
+              if (ytRun.id && !notifiedYoutubeRunIds.current.has(ytRun.id)) {
                 notifiedYoutubeRunIds.current.add(ytRun.id);
                 if (status === "completed") {
                   toast({
@@ -7906,8 +8188,7 @@ export default function ContestDetailClient({
             contestId,
             platform: metricsPlatform,
             maxMs: pollMaxMs,
-            onRun: (run) =>
-              handleManualRefreshRunUpdate(metricsPlatform, run),
+            onRun: (run) => handleManualRefreshRunUpdate(metricsPlatform, run),
             onTerminal: (run) =>
               handleManualRefreshTerminal(metricsPlatform, run),
             onTimeout: () => {
@@ -7985,6 +8266,55 @@ export default function ContestDetailClient({
   };
 
   // Handler: refresh core analytics, traffic sources, demographics, or all (on-demand YouTube analytics)
+  const applyLocalPostCampaignYoutubeTimestamps = (
+    scope:
+      | "basic"
+      | "core"
+      | "traffic"
+      | "demographics"
+      | "all"
+      | "all_standard",
+    atIso: string,
+  ) => {
+    setPostCampaignLastMetricsUpdated(atIso);
+    setCurrentContest((prev) => {
+      const details =
+        (prev.contest_based_details as Record<string, unknown> | null) || {};
+      if (scope === "basic") {
+        return {
+          ...prev,
+          post_campaign_last_metrics_updated: atIso,
+        };
+      }
+      const existingYt =
+        (details.post_campaign_youtube_metrics_last_updated as
+          | { core?: string; traffic?: string; demographics?: string }
+          | undefined) || {};
+      const nextYt = { ...existingYt };
+      if (scope === "core" || scope === "all" || scope === "all_standard") {
+        nextYt.core = atIso;
+      }
+      if (scope === "traffic" || scope === "all" || scope === "all_standard") {
+        nextYt.traffic = atIso;
+      }
+      if (
+        scope === "demographics" ||
+        scope === "all" ||
+        scope === "all_standard"
+      ) {
+        nextYt.demographics = atIso;
+      }
+      return {
+        ...prev,
+        post_campaign_last_metrics_updated: atIso,
+        contest_based_details: {
+          ...details,
+          post_campaign_youtube_metrics_last_updated: nextYt,
+        } as Contest["contest_based_details"],
+      };
+    });
+  };
+
   const runPostCampaignScopedRefresh = async (
     scope:
       | "basic"
@@ -8014,7 +8344,9 @@ export default function ContestDetailClient({
     );
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(result?.error || "Failed to refresh post-campaign metrics");
+      throw new Error(
+        result?.error || "Failed to refresh post-campaign metrics",
+      );
     }
     if (Array.isArray(result.metrics)) {
       applyPostCampaignMetricsPayload(result.metrics);
@@ -8022,6 +8354,16 @@ export default function ContestDetailClient({
 
     // YouTube post-campaign analytics scopes also use the shared metrics queue.
     if (result.queued) {
+      if (!isVideoContestFormat) {
+        toast({
+          title: "Post-campaign refresh started",
+          description:
+            result.message ||
+            `Refreshing YouTube (${scope}) metrics in the background…`,
+          variant: "success",
+          duration: 6000,
+        });
+      }
       setShowYoutubeRunPopup(true);
       setYoutubeRunCompleted(false);
       const previousUpdated = postCampaignLastMetricsUpdated;
@@ -8054,9 +8396,13 @@ export default function ContestDetailClient({
                   setYoutubeRunCompleted(true);
                   await loadPostCampaignMetrics();
                   if (st === "completed") {
+                    applyLocalPostCampaignYoutubeTimestamps(
+                      scope,
+                      new Date().toISOString(),
+                    );
                     toast({
                       title: "Post-campaign YouTube refresh completed",
-                      description: `Scope: ${scope} · Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}. Submissions unchanged.`,
+                      description: `Scope: ${scope} · Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}.`,
                       duration: 10000,
                       variant: "success",
                     });
@@ -8077,11 +8423,29 @@ export default function ContestDetailClient({
                 applyPostCampaignMetricsPayload(
                   Array.isArray(md.metrics) ? md.metrics : [],
                 );
-                setPostCampaignLastMetricsUpdated(updated);
+                applyLocalPostCampaignYoutubeTimestamps(scope, updated);
+                if (md.post_campaign_youtube_metrics_last_updated) {
+                  setCurrentContest((prev) => {
+                    const details =
+                      (prev.contest_based_details as Record<
+                        string,
+                        unknown
+                      > | null) || {};
+                    return {
+                      ...prev,
+                      post_campaign_last_metrics_updated: updated,
+                      contest_based_details: {
+                        ...details,
+                        post_campaign_youtube_metrics_last_updated:
+                          md.post_campaign_youtube_metrics_last_updated,
+                      } as Contest["contest_based_details"],
+                    };
+                  });
+                }
                 setShowYoutubeRunPopup(false);
                 toast({
                   title: "Post-campaign metrics updated",
-                  description: `YouTube (${scope}) refresh finished. Submissions table was not modified.`,
+                  description: `YouTube (${scope}) refresh finished.`,
                   variant: "success",
                 });
                 resolve();
@@ -8096,20 +8460,16 @@ export default function ContestDetailClient({
     }
 
     if (result.post_campaign_last_metrics_updated) {
-      setPostCampaignLastMetricsUpdated(
+      applyLocalPostCampaignYoutubeTimestamps(
+        scope,
         result.post_campaign_last_metrics_updated,
       );
-      setCurrentContest((prev) => ({
-        ...prev,
-        post_campaign_last_metrics_updated:
-          result.post_campaign_last_metrics_updated,
-      }));
     }
     toast({
       title: "Post-campaign metrics updated",
       description:
         result.message ||
-        `Scope: ${scope} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}. Submissions unchanged.`,
+        `Scope: ${scope} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}.`,
       variant: "success",
       duration: 8000,
     });
@@ -8581,7 +8941,8 @@ export default function ContestDetailClient({
     creatorId: string,
     extraDisabled?: boolean,
   ) => {
-    if (!showCreatorMilestoneVerifiedBonusActions) return null;
+    if (!showCreatorMilestoneVerifiedBonusActions || isPostCampaignLeaderboard)
+      return null;
     const row = milestoneReelsBonusByCreator.get(
       milestoneMvCreatorIdKey(creatorId),
     ) ?? {
@@ -9188,7 +9549,9 @@ export default function ContestDetailClient({
       getReportStatus: (submission: ContestAnalyticsExportSubmission) =>
         getStatus(submission as unknown as Submission),
       getReportExpectedCents: (submission: ContestAnalyticsExportSubmission) =>
-        getSubmissionAnalyticsExpectedCents(submission as unknown as Submission),
+        getSubmissionAnalyticsExpectedCents(
+          submission as unknown as Submission,
+        ),
     }),
     [
       brandProfile,
@@ -9247,9 +9610,7 @@ export default function ContestDetailClient({
       milestoneExpectedCents: Math.round(milestoneExpectedCents),
     });
     const effectivePaidComponent =
-      componentFromMetadata === "milestone" &&
-      !hasMilestonePaid &&
-      !hasMainPaid
+      componentFromMetadata === "milestone" && !hasMilestonePaid && !hasMainPaid
         ? null
         : componentFromMetadata;
 
@@ -9309,10 +9670,7 @@ export default function ContestDetailClient({
       let cpmSplit = cpmExpectedCents;
       let milestoneSplit = milestoneExpectedCents;
 
-      if (
-        total > 0 &&
-        total !== cpmExpectedCents + milestoneExpectedCents
-      ) {
+      if (total > 0 && total !== cpmExpectedCents + milestoneExpectedCents) {
         const sp = splitDualPaidTotalByExpectedWeights(
           total,
           cpmExpectedCents,
@@ -10273,9 +10631,10 @@ export default function ContestDetailClient({
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            Could not load submissions for this campaign ({submissionsFetchError}
-            ). Counts and moderation data may be incomplete — refresh the page or
-            contact support if this persists.
+            Could not load submissions for this campaign (
+            {submissionsFetchError}
+            ). Counts and moderation data may be incomplete — refresh the page
+            or contact support if this persists.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -10339,57 +10698,11 @@ export default function ContestDetailClient({
                           : "Leaderboard"}
                   </Badge>
                 )}
-                {showPostCampaignToggle && (
-                  <div
-                    className={cn(
-                      "inline-flex rounded-2xl border p-1",
-                      isDark
-                        ? "border-slate-700 bg-slate-900/60"
-                        : "border-[#D1B7F9] bg-white",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubmissionsLeaderboardMode("submissions");
-                        setActiveTab("submissions");
-                      }}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
-                        submissionsLeaderboardMode === "submissions"
-                          ? "bg-[#6C43D0] text-white"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-800"
-                            : "text-slate-600 hover:bg-[#F3EBFF]",
-                      )}
-                    >
-                      Submissions
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubmissionsLeaderboardMode("post_campaign");
-                        setActiveTab("submissions");
-                        void loadPostCampaignMetrics();
-                      }}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
-                        submissionsLeaderboardMode === "post_campaign"
-                          ? "bg-[#6C43D0] text-white"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-800"
-                            : "text-slate-600 hover:bg-[#F3EBFF]",
-                      )}
-                    >
-                      PC Submissions
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
           {/* Quick Actions Bar */}
-          <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0 lg:max-w-[min(100%,28rem)]">
+          <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0">
             {isAdminView && (
               <Button
                 size="sm"
@@ -10636,6 +10949,53 @@ export default function ContestDetailClient({
                 isDeletable={isContestDeletable}
                 isdark={isDark}
               />
+            )}
+            {showPostCampaignToggle && (
+              <div
+                className={cn(
+                  "inline-flex rounded-2xl border p-1",
+                  isDark
+                    ? "border-slate-700 bg-slate-900/60"
+                    : "border-[#D1B7F9] bg-white",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmissionsLeaderboardMode("submissions");
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
+                    submissionsLeaderboardMode === "submissions"
+                      ? "bg-[#6C43D0] text-white"
+                      : isDark
+                        ? "text-slate-300 hover:bg-slate-800"
+                        : "text-slate-600 hover:bg-[#F3EBFF]",
+                  )}
+                >
+                  Submissions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmissionsLeaderboardMode("post_campaign");
+                    // Already cached after first load — don't re-fetch/block every toggle click.
+                    if (!postCampaignMetricsLoaded) {
+                      void loadPostCampaignMetrics();
+                    }
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all",
+                    submissionsLeaderboardMode === "post_campaign"
+                      ? "bg-[#6C43D0] text-white"
+                      : isDark
+                        ? "text-slate-300 hover:bg-slate-800"
+                        : "text-slate-600 hover:bg-[#F3EBFF]",
+                  )}
+                >
+                  PC Submissions
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -11527,17 +11887,17 @@ export default function ContestDetailClient({
                   }
                   milestoneExpectedPayoutCents={
                     isDualRewardsContestType(currentContest.contest_type)
-                      ? milestoneBudgetExpectedPayoutCents
+                      ? budgetTrackerMilestoneExpectedPayoutCents
                       : undefined
                   }
                   milestoneCreatorBonusExpectedCents={
                     isDualRewardsContestType(currentContest.contest_type)
-                      ? milestoneCreatorBonusExpectedCentsFromMap
+                      ? budgetTrackerMilestoneCreatorBonusExpectedCents
                       : undefined
                   }
                   milestoneCreatorBonusPaidCents={
                     isDualRewardsContestType(currentContest.contest_type)
-                      ? milestoneCreatorBonusPaidCentsFromMap
+                      ? budgetTrackerMilestoneCreatorBonusPaidCents
                       : undefined
                   }
                   postContestStatus={currentContest.post_contest_status}
@@ -11676,16 +12036,16 @@ export default function ContestDetailClient({
                   submissions={currentSubmissions as any}
                   showDetailed={true}
                   milestoneExpectedPayoutCents={
-                    milestoneBudgetExpectedPayoutCents
+                    budgetTrackerMilestoneExpectedPayoutCents
                   }
                   milestoneExpectedPayoutBySubmissionId={
-                    milestoneSubmissionExpectedPayoutCents
+                    budgetTrackerMilestonePayoutBySubmissionId
                   }
                   milestoneCreatorBonusExpectedCents={
-                    milestoneCreatorBonusExpectedCentsFromMap
+                    budgetTrackerMilestoneCreatorBonusExpectedCents
                   }
                   milestoneCreatorBonusPaidCents={
-                    milestoneCreatorBonusPaidCentsFromMap
+                    budgetTrackerMilestoneCreatorBonusPaidCents
                   }
                   postContestStatus={currentContest.post_contest_status}
                 />
@@ -11818,153 +12178,153 @@ export default function ContestDetailClient({
                     Contest Details
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Platform Card */}
-                  <div
-                    className={cn(
-                      "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300",
-                    )}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full ",
-                            isDark
-                              ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]",
-                          )}
-                        >
-                          <Monitor className="h-5 w-5" />
-                        </div>
-                        <div className="flex-1">
-                          <p
+                    {/* Platform Card */}
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300",
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-4">
+                          <div
                             className={cn(
-                              "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black",
+                              "w-10 h-10 flex items-center justify-center rounded-full ",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
-                            Platform
-                          </p>
-                          <p
+                            <Monitor className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p
+                              className={cn(
+                                "text-md font-medium tracking-wide",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              Platform
+                            </p>
+                            <p
+                              className={cn(
+                                "text-lg md:text-xl font-bold capitalize",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              {currentContest.platform}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* Status Card */}
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300",
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-4">
+                          <div
                             className={cn(
-                              "text-lg md:text-xl font-bold capitalize",
-                              isDark ? "text-white" : "text-black",
+                              "w-10 h-10 flex items-center justify-center rounded-full ",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
-                            {currentContest.platform}
-                          </p>
+                            <Info className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p
+                              className={cn(
+                                "text-md font-medium tracking-wide",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              Status
+                            </p>
+                            <p
+                              className={cn(
+                                "text-lg md:text-xl font-bold capitalize",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              {contestStatusBadgeInfo.text}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
+                      </CardContent>
+                    </div>
                   </div>
 
-                  {/* Status Card */}
-                  <div
-                    className={cn(
-                      "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300",
-                    )}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-4">
-                        <div
-                          className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full ",
-                            isDark
-                              ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]",
-                          )}
-                        >
-                          <Info className="h-5 w-5" />
-                        </div>
-                        <div className="flex-1">
-                          <p
+                  {/* Date & Time Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Start Date Card */}
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300",
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div
                             className={cn(
-                              "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black",
+                              "w-10 h-10 flex items-center justify-center rounded-full ",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
-                            Status
-                          </p>
-                          <p
+                            <Play className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-md font-medium tracking-wide">
+                              Start Date & Time
+                            </p>
+                            <p className="text-lg font-bold ">
+                              {formatLocalDateTime(currentContest.start_date)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* End Date Card */}
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300",
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div
                             className={cn(
-                              "text-lg md:text-xl font-bold capitalize",
-                              isDark ? "text-white" : "text-black",
+                              "w-10 h-10 flex items-center justify-center rounded-full ",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]",
                             )}
                           >
-                            {contestStatusBadgeInfo.text}
-                          </p>
+                            <Clock className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium tracking-wide">
+                              End Date & Time
+                            </p>
+                            <p className="text-lg font-bold">
+                              {formatLocalDateTime(currentContest.end_date)}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
+                      </CardContent>
+                    </div>
                   </div>
-                  </div>
-
-                {/* Date & Time Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Start Date Card */}
-                  <div
-                    className={cn(
-                      "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300",
-                    )}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full ",
-                            isDark
-                              ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]",
-                          )}
-                        >
-                          <Play className="h-5 w-5" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-md font-medium tracking-wide">
-                            Start Date & Time
-                          </p>
-                          <p className="text-lg font-bold ">
-                            {formatLocalDateTime(currentContest.start_date)}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </div>
-
-                  {/* End Date Card */}
-                  <div
-                    className={cn(
-                      "border rounded-xl transition-all duration-300",
-                      isDark ? "border-gray-600" : "border-gray-300",
-                    )}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full ",
-                            isDark
-                              ? "bg-[#FFFFFF42] text-white"
-                              : "bg-purple-100 text-[#4A00BE]",
-                          )}
-                        >
-                          <Clock className="h-5 w-5" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium tracking-wide">
-                            End Date & Time
-                          </p>
-                          <p className="text-lg font-bold">
-                            {formatLocalDateTime(currentContest.end_date)}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </div>
-                </div>
                 </div>
 
                 {showCreatorEligibilitySection && (
@@ -12423,7 +12783,9 @@ export default function ContestDetailClient({
                                             (() => {
                                               const reachedCount =
                                                 milestoneSubmissionAssignments.winnerCountsByMilestone?.get(
-                                                  Number(milestone.target_views),
+                                                  Number(
+                                                    milestone.target_views,
+                                                  ),
                                                 ) || 0;
                                               const isFull =
                                                 reachedCount >=
@@ -14806,7 +15168,8 @@ export default function ContestDetailClient({
                         >
                           🎁 Each creator earns this guaranteed amount for EVERY
                           verified submission, regardless of views or ranking!
-                          Paid after the campaign ends along with other earnings.
+                          Paid after the campaign ends along with other
+                          earnings.
                         </p>
                         {/* Flat Fee Bonus Cap (for CPM campaigns) */}
                         {isCpmContestType(currentContest.contest_type) &&
@@ -15583,7 +15946,7 @@ export default function ContestDetailClient({
                     )}
                   >
                     {!postCampaignMetricsLoaded || isLoadingPostCampaignMetrics
-                      ? "Checking for saved post-campaign data…"
+                      ? "Loading post-campaign submissions"
                       : "Click Refresh to copy all submissions from this contest into Post Campaign Submission."}
                   </p>
                   {postCampaignMetricsLoaded &&
@@ -15610,9 +15973,11 @@ export default function ContestDetailClient({
                   )}
                 </CardContent>
               </Card>
-            ) : (isPostCampaignLeaderboard
-                ? hasPostCampaignData
-                : currentSubmissions.length > 0) ? (
+            ) : (
+                isPostCampaignLeaderboard
+                  ? hasPostCampaignData
+                  : currentSubmissions.length > 0
+              ) ? (
               <div className="space-y-6">
                 {/* Enhanced Header Section */}
                 <div
@@ -16025,19 +16390,25 @@ export default function ContestDetailClient({
                             );
                           }
 
-                          const ytLast =
-                            (
-                              currentContest.contest_based_details as
-                                | Record<
-                                    string,
-                                    {
-                                      core?: string;
-                                      traffic?: string;
-                                      demographics?: string;
-                                    }
-                                  >
-                                | undefined
-                            )?.youtube_metrics_last_updated || {};
+                          const details =
+                            currentContest.contest_based_details as
+                              | {
+                                  youtube_metrics_last_updated?: {
+                                    core?: string;
+                                    traffic?: string;
+                                    demographics?: string;
+                                  };
+                                  post_campaign_youtube_metrics_last_updated?: {
+                                    core?: string;
+                                    traffic?: string;
+                                    demographics?: string;
+                                  };
+                                }
+                              | undefined;
+                          const ytLast = isPostCampaignLeaderboard
+                            ? details?.post_campaign_youtube_metrics_last_updated ||
+                              {}
+                            : details?.youtube_metrics_last_updated || {};
                           const btnClass =
                             "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm";
                           const disabledDetail =
@@ -16049,25 +16420,27 @@ export default function ContestDetailClient({
                           const anyRefreshInProgress =
                             isRefreshingMetrics ||
                             disabledDetail ||
-                            (!isPostCampaignLeaderboard && hasRecentRunningRun) ||
+                            (!isPostCampaignLeaderboard &&
+                              hasRecentRunningRun) ||
                             postRefreshReloadPending;
                           const cooldownDisabled = !cooldownInfo.canRefresh;
                           const cooldownLabel = `Wait ${cooldownInfo.remainingMinutes}m`;
                           const reloadPendingLabel = "Updating...";
                           const detailedRefreshDisabled =
                             anyRefreshInProgress ||
-                            (!isPostCampaignLeaderboard && ytPostContestLocked) ||
+                            (!isPostCampaignLeaderboard &&
+                              ytPostContestLocked) ||
                             cooldownDisabled;
                           const detailedRefreshTitle =
                             !isPostCampaignLeaderboard && ytPostContestLocked
-                            ? "Locked after campaign review begins"
-                            : postRefreshReloadPending
-                              ? "Reloading with fresh metrics..."
-                              : cooldownDisabled
-                                ? disabledReason
-                                : isPostCampaignLeaderboard
-                                  ? "Updates post-campaign metrics only (Submissions unchanged)"
-                                : undefined;
+                              ? "Locked after campaign review begins"
+                              : postRefreshReloadPending
+                                ? "Reloading with fresh metrics..."
+                                : cooldownDisabled
+                                  ? disabledReason
+                                  : isPostCampaignLeaderboard
+                                    ? "Updates post-campaign metrics only"
+                                    : undefined;
                           const basicTs = isPostCampaignLeaderboard
                             ? postCampaignLastMetricsUpdated
                             : currentContest.last_metrics_updated;
@@ -16125,9 +16498,11 @@ export default function ContestDetailClient({
                                     </button>
                                     <span className={muteClass}>
                                       Basic:{" "}
-                                      {(isPostCampaignLeaderboard
-                                        ? postCampaignLastMetricsUpdated
-                                        : currentContest.last_metrics_updated)
+                                      {(
+                                        isPostCampaignLeaderboard
+                                          ? postCampaignLastMetricsUpdated
+                                          : currentContest.last_metrics_updated
+                                      )
                                         ? formatTimeAgo(
                                             (isPostCampaignLeaderboard
                                               ? postCampaignLastMetricsUpdated
@@ -16162,7 +16537,7 @@ export default function ContestDetailClient({
                                           : cooldownDisabled
                                             ? disabledReason
                                             : isPostCampaignLeaderboard
-                                              ? "Updates post-campaign metrics only (Submissions unchanged)"
+                                              ? "Updates post-campaign metrics only"
                                               : "Basic, core, retention, traffic details, demographics with cities/states, devices"
                                       }
                                     >
@@ -16211,7 +16586,7 @@ export default function ContestDetailClient({
                                           : cooldownDisabled
                                             ? disabledReason
                                             : isPostCampaignLeaderboard
-                                              ? "Updates post-campaign metrics only (Submissions unchanged)"
+                                              ? "Updates post-campaign metrics only"
                                               : "Basic, core, traffic sources, age/gender/countries — faster; skips cities, states, devices, retention, and traffic details"
                                       }
                                     >
@@ -17742,114 +18117,146 @@ export default function ContestDetailClient({
                           </div>
                           {/* Multi-select Quality Score filter (video campaigns only) */}
                           {showNormalViewQualityScoreColumn && (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className={cn(
-                                  "h-12 w-full sm:w-[220px] rounded-xl justify-start text-left font-semibold text-sm shadow-none",
-                                  isDark
-                                    ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
-                                    : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
-                                )}
-                              >
-                                <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
-                                <span className="truncate text-sm font-semibold">
-                                  {submissionQualityScoreFilterButtonLabel}
-                                </span>
-                                <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className={cn(
-                                "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
-                                isDark ? "bg-[#0f172a]" : "bg-white",
-                              )}
-                              align="start"
-                            >
-                              <div className="flex flex-col gap-1">
-                                <div
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   className={cn(
-                                    "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                                    isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                                    "h-12 w-full sm:w-[220px] rounded-xl justify-start text-left font-semibold text-sm shadow-none",
+                                    isDark
+                                      ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
+                                      : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
                                   )}
-                                  onClick={() =>
-                                    setSubmissionQualityScoreFilters([])
-                                  }
                                 >
+                                  <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                                  <span className="truncate text-sm font-semibold">
+                                    {submissionQualityScoreFilterButtonLabel}
+                                  </span>
+                                  <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className={cn(
+                                  "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+                                  isDark ? "bg-[#0f172a]" : "bg-white",
+                                )}
+                                align="start"
+                              >
+                                <div className="flex flex-col gap-1">
                                   <div
                                     className={cn(
-                                      "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                      submissionQualityScoreFilters.length === 0
-                                        ? "bg-[#4211a1] border-[#4211a1]"
-                                        : isDark
-                                          ? "border-slate-700 bg-slate-900"
-                                          : "border-slate-300 bg-white",
+                                      "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                      isDark
+                                        ? "hover:bg-slate-800"
+                                        : "hover:bg-slate-50",
                                     )}
+                                    onClick={() =>
+                                      setSubmissionQualityScoreFilters([])
+                                    }
                                   >
-                                    {submissionQualityScoreFilters.length === 0 && (
-                                      <CheckCheck className="w-3 h-3 text-white" strokeWidth={3} />
-                                    )}
-                                  </div>
-                                  <span className={cn(
-                                    "text-[13px] font-medium",
-                                    isDark ? "text-slate-300" : "text-slate-600",
-                                  )}>
-                                    All Quality Scores
-                                  </span>
-                                </div>
-
-                                {(
-                                  [
-                                    { value: 3, label: "Score 3/3" },
-                                    { value: 2, label: "Score 2/3" },
-                                    { value: 1, label: "Score 1/3" },
-                                    { value: "unscored", label: "No Quality Score" },
-                                  ] as Array<{ value: QualityScore | "unscored"; label: string }>
-                                ).map((opt) => {
-                                  const checked = submissionQualityScoreFilters.includes(opt.value);
-                                  return (
                                     <div
-                                      key={String(opt.value)}
                                       className={cn(
-                                        "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                                        isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                                        "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                        submissionQualityScoreFilters.length ===
+                                          0
+                                          ? "bg-[#4211a1] border-[#4211a1]"
+                                          : isDark
+                                            ? "border-slate-700 bg-slate-900"
+                                            : "border-slate-300 bg-white",
                                       )}
-                                      onClick={() => {
-                                        setSubmissionQualityScoreFilters((prev) =>
-                                          prev.includes(opt.value)
-                                            ? prev.filter((v) => v !== opt.value)
-                                            : [...prev, opt.value],
-                                        );
-                                      }}
                                     >
-                                      <div
-                                        className={cn(
-                                          "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                          checked
-                                            ? "bg-[#4211a1] border-[#4211a1]"
-                                            : isDark
-                                              ? "border-slate-700 bg-slate-900"
-                                              : "border-slate-300 bg-white",
-                                        )}
-                                      >
-                                        {checked && (
-                                          <CheckCheck className="w-3 h-3 text-white" strokeWidth={3} />
-                                        )}
-                                      </div>
-                                      <span className={cn(
-                                        "text-[13px] font-medium",
-                                        isDark ? "text-slate-300" : "text-slate-600",
-                                      )}>
-                                        {opt.label}
-                                      </span>
+                                      {submissionQualityScoreFilters.length ===
+                                        0 && (
+                                        <CheckCheck
+                                          className="w-3 h-3 text-white"
+                                          strokeWidth={3}
+                                        />
+                                      )}
                                     </div>
-                                  );
-                                })}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
+                                    <span
+                                      className={cn(
+                                        "text-[13px] font-medium",
+                                        isDark
+                                          ? "text-slate-300"
+                                          : "text-slate-600",
+                                      )}
+                                    >
+                                      All Quality Scores
+                                    </span>
+                                  </div>
+
+                                  {(
+                                    [
+                                      { value: 3, label: "Score 3/3" },
+                                      { value: 2, label: "Score 2/3" },
+                                      { value: 1, label: "Score 1/3" },
+                                      {
+                                        value: "unscored",
+                                        label: "No Quality Score",
+                                      },
+                                    ] as Array<{
+                                      value: QualityScore | "unscored";
+                                      label: string;
+                                    }>
+                                  ).map((opt) => {
+                                    const checked =
+                                      submissionQualityScoreFilters.includes(
+                                        opt.value,
+                                      );
+                                    return (
+                                      <div
+                                        key={String(opt.value)}
+                                        className={cn(
+                                          "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                          isDark
+                                            ? "hover:bg-slate-800"
+                                            : "hover:bg-slate-50",
+                                        )}
+                                        onClick={() => {
+                                          setSubmissionQualityScoreFilters(
+                                            (prev) =>
+                                              prev.includes(opt.value)
+                                                ? prev.filter(
+                                                    (v) => v !== opt.value,
+                                                  )
+                                                : [...prev, opt.value],
+                                          );
+                                        }}
+                                      >
+                                        <div
+                                          className={cn(
+                                            "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                            checked
+                                              ? "bg-[#4211a1] border-[#4211a1]"
+                                              : isDark
+                                                ? "border-slate-700 bg-slate-900"
+                                                : "border-slate-300 bg-white",
+                                          )}
+                                        >
+                                          {checked && (
+                                            <CheckCheck
+                                              className="w-3 h-3 text-white"
+                                              strokeWidth={3}
+                                            />
+                                          )}
+                                        </div>
+                                        <span
+                                          className={cn(
+                                            "text-[13px] font-medium",
+                                            isDark
+                                              ? "text-slate-300"
+                                              : "text-slate-600",
+                                          )}
+                                        >
+                                          {opt.label}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                           )}
                           {/* YouTube only: customize table columns */}
                           {currentContest.platform
@@ -20568,7 +20975,9 @@ export default function ContestDetailClient({
                                         ) && (
                                           <TableCell className="text-center">
                                             <YouTubeAnalyticsPanel
-                                              metrics={metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics}
+                                              metrics={
+                                                metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics
+                                              }
                                               isDark={isDark}
                                               showCore={canSeeCore}
                                               showTraffic={canSeeTraffic}
@@ -21773,8 +22182,7 @@ export default function ContestDetailClient({
                                                             submission.id,
                                                           ],
                                                           target: "rejected",
-                                                          needRejectionReason:
-                                                            true,
+                                                          needRejectionReason: true,
                                                         })
                                                       }
                                                       className="text-red-600"
@@ -21830,7 +22238,9 @@ export default function ContestDetailClient({
                                         )}
                                         {/* Show payment options only when contest status is verification_complete */}
                                         {/* Note: For Twitter, payments are handled at creator level in creator-wise view, not here */}
-                                        {!isTwitterTweet &&
+                                        {/* Post-campaign table is metrics-only — no paid/status mutations */}
+                                        {!isPostCampaignLeaderboard &&
+                                          !isTwitterTweet &&
                                           isAdminView &&
                                           currentContest.post_contest_status ===
                                             "verification_complete" &&
@@ -22162,7 +22572,7 @@ export default function ContestDetailClient({
                                   )}
                                   {showCreatorWisePlatformViewsColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
-                                     Total Views
+                                      Total Views
                                     </TableHead>
                                   )}
                                   <TableHead className="text-center">
@@ -22638,7 +23048,9 @@ export default function ContestDetailClient({
                                         trustMetrics?.total_reels !== null &&
                                         trustMetrics?.total_reels !== undefined
                                           ? Number(trustMetrics.total_reels)
-                                          : Number(group.statusCounts?.all || 0);
+                                          : Number(
+                                              group.statusCounts?.all || 0,
+                                            );
                                       const rejectedReelsForTrust =
                                         trustMetrics?.rejected_reels !== null &&
                                         trustMetrics?.rejected_reels !==
@@ -22674,9 +23086,13 @@ export default function ContestDetailClient({
                                           },
                                         );
                                       const trustScoreDisplay =
-                                        formatTrustScoreDisplay(trustScoreComputed);
+                                        formatTrustScoreDisplay(
+                                          trustScoreComputed,
+                                        );
                                       const trustScoreDisplayShort =
-                                        formatTrustScoreDisplay(trustScoreComputed);
+                                        formatTrustScoreDisplay(
+                                          trustScoreComputed,
+                                        );
                                       const requiredTrustScore =
                                         contestMinTrustScore;
                                       const hasTrustThreshold =
@@ -22684,13 +23100,14 @@ export default function ContestDetailClient({
                                       const trustScoreBelowThreshold =
                                         hasTrustThreshold &&
                                         trustScoreComputed < requiredTrustScore;
-                                      const inferredPaidReelsForTrust = Math.max(
-                                        0,
-                                        totalReelsForTrust -
-                                          verifiedReelsForTrust -
-                                          rejectedReelsForTrust -
-                                          pendingReelsForTrust,
-                                      );
+                                      const inferredPaidReelsForTrust =
+                                        Math.max(
+                                          0,
+                                          totalReelsForTrust -
+                                            verifiedReelsForTrust -
+                                            rejectedReelsForTrust -
+                                            pendingReelsForTrust,
+                                        );
                                       const verifiedIncludingPaidForTrust =
                                         verifiedReelsForTrust +
                                         inferredPaidReelsForTrust;
@@ -22752,12 +23169,12 @@ export default function ContestDetailClient({
                                         contestMinPlatformViews !== null &&
                                         creatorPlatformViews <
                                           contestMinPlatformViews;
-                                      const creatorQualityScoreBreakdown =
-                                        group.creator?.quality_score_counts ?? {
-                                          score1: 0,
-                                          score2: 0,
-                                          score3: 0,
-                                        };
+                                      const creatorQualityScoreBreakdown = group
+                                        .creator?.quality_score_counts ?? {
+                                        score1: 0,
+                                        score2: 0,
+                                        score3: 0,
+                                      };
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -22815,8 +23232,7 @@ export default function ContestDetailClient({
                                                   <div className="space-y-1 text-xs">
                                                     {trustScoreBelowThreshold ? (
                                                       <p>
-                                                        Below required Trust %
-                                                        (
+                                                        Below required Trust % (
                                                         {formatTrustScoreMinimum(
                                                           requiredTrustScore as number,
                                                         )}
@@ -22825,8 +23241,7 @@ export default function ContestDetailClient({
                                                       </p>
                                                     ) : (
                                                       <p>
-                                                        Meets required Trust %
-                                                        (
+                                                        Meets required Trust % (
                                                         {formatTrustScoreMinimum(
                                                           requiredTrustScore as number,
                                                         )}
@@ -25317,139 +25732,146 @@ export default function ContestDetailClient({
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
                     {/* Quality Score filter (multi-select, video campaigns only) */}
                     {showNormalViewQualityScoreColumn && (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className={cn(
-                            "h-9 w-full sm:w-[200px] rounded-lg justify-start text-left font-semibold text-sm shadow-none",
-                            isDark
-                              ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
-                              : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
-                          )}
-                        >
-                          <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
-                          <span className="truncate font-semibold text-sm">
-                            {analyticsQualityScoreFilterButtonLabel}
-                          </span>
-                          <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        className={cn(
-                          "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
-                          isDark ? "bg-[#0f172a]" : "bg-white",
-                        )}
-                        align="end"
-                      >
-                        <div className="flex flex-col gap-1">
-                          <div
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             className={cn(
-                              "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                              isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                              "h-9 w-full sm:w-[200px] rounded-lg justify-start text-left font-semibold text-sm shadow-none",
+                              isDark
+                                ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
+                                : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
                             )}
-                            onClick={() =>
-                              setAnalyticsQualityScoreFilters([])
-                            }
                           >
+                            <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                            <span className="truncate font-semibold text-sm">
+                              {analyticsQualityScoreFilterButtonLabel}
+                            </span>
+                            <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          className={cn(
+                            "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+                            isDark ? "bg-[#0f172a]" : "bg-white",
+                          )}
+                          align="end"
+                        >
+                          <div className="flex flex-col gap-1">
                             <div
                               className={cn(
-                                "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                analyticsQualityScoreFilters.length === 0
-                                  ? "bg-[#4211a1] border-[#4211a1]"
-                                  : isDark
-                                    ? "border-slate-700 bg-slate-900"
-                                    : "border-slate-300 bg-white",
+                                "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                isDark
+                                  ? "hover:bg-slate-800"
+                                  : "hover:bg-slate-50",
                               )}
+                              onClick={() =>
+                                setAnalyticsQualityScoreFilters([])
+                              }
                             >
-                              {analyticsQualityScoreFilters.length === 0 && (
-                                <CheckCheck
-                                  className="w-3 h-3 text-white"
-                                  strokeWidth={3}
-                                />
-                              )}
-                            </div>
-                            <span
-                              className={cn(
-                                "text-sm font-semibold",
-                                isDark ? "text-slate-300" : "text-slate-700",
-                              )}
-                            >
-                              All Quality Scores
-                            </span>
-                          </div>
-
-                          {(
-                            [
-                              { value: 3, label: "Score 3/3" },
-                              { value: 2, label: "Score 2/3" },
-                              { value: 1, label: "Score 1/3" },
-                              {
-                                value: "unscored",
-                                label: "No Quality Score",
-                              },
-                            ] as Array<{
-                              value: QualityScore | "unscored";
-                              label: string;
-                            }>
-                          ).map((opt) => {
-                            const checked = analyticsQualityScoreFilters.includes(
-                              opt.value,
-                            );
-                            return (
                               <div
-                                key={String(opt.value)}
                                 className={cn(
-                                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-                                  isDark
-                                    ? "hover:bg-slate-800"
-                                    : "hover:bg-slate-50",
+                                  "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                  analyticsQualityScoreFilters.length === 0
+                                    ? "bg-[#4211a1] border-[#4211a1]"
+                                    : isDark
+                                      ? "border-slate-700 bg-slate-900"
+                                      : "border-slate-300 bg-white",
                                 )}
-                                onClick={() => {
-                                  setAnalyticsQualityScoreFilters((prev) =>
-                                    prev.includes(opt.value)
-                                      ? prev.filter((v) => v !== opt.value)
-                                      : [...prev, opt.value],
-                                  );
-                                }}
                               >
-                                <div
-                                  className={cn(
-                                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                    checked
-                                      ? "bg-[#4211a1] border-[#4211a1]"
-                                      : isDark
-                                        ? "border-slate-700 bg-slate-900"
-                                        : "border-slate-300 bg-white",
-                                  )}
-                                >
-                                  {checked && (
-                                    <CheckCheck
-                                      className="w-3 h-3 text-white"
-                                      strokeWidth={3}
-                                    />
-                                  )}
-                                </div>
-                                <span
-                                  className={cn(
-                                    "text-sm font-semibold",
-                                    isDark ? "text-slate-300" : "text-slate-700",
-                                  )}
-                                >
-                                  {opt.label}
-                                </span>
+                                {analyticsQualityScoreFilters.length === 0 && (
+                                  <CheckCheck
+                                    className="w-3 h-3 text-white"
+                                    strokeWidth={3}
+                                  />
+                                )}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                              <span
+                                className={cn(
+                                  "text-sm font-semibold",
+                                  isDark ? "text-slate-300" : "text-slate-700",
+                                )}
+                              >
+                                All Quality Scores
+                              </span>
+                            </div>
+
+                            {(
+                              [
+                                { value: 3, label: "Score 3/3" },
+                                { value: 2, label: "Score 2/3" },
+                                { value: 1, label: "Score 1/3" },
+                                {
+                                  value: "unscored",
+                                  label: "No Quality Score",
+                                },
+                              ] as Array<{
+                                value: QualityScore | "unscored";
+                                label: string;
+                              }>
+                            ).map((opt) => {
+                              const checked =
+                                analyticsQualityScoreFilters.includes(
+                                  opt.value,
+                                );
+                              return (
+                                <div
+                                  key={String(opt.value)}
+                                  className={cn(
+                                    "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                                    isDark
+                                      ? "hover:bg-slate-800"
+                                      : "hover:bg-slate-50",
+                                  )}
+                                  onClick={() => {
+                                    setAnalyticsQualityScoreFilters((prev) =>
+                                      prev.includes(opt.value)
+                                        ? prev.filter((v) => v !== opt.value)
+                                        : [...prev, opt.value],
+                                    );
+                                  }}
+                                >
+                                  <div
+                                    className={cn(
+                                      "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                                      checked
+                                        ? "bg-[#4211a1] border-[#4211a1]"
+                                        : isDark
+                                          ? "border-slate-700 bg-slate-900"
+                                          : "border-slate-300 bg-white",
+                                    )}
+                                  >
+                                    {checked && (
+                                      <CheckCheck
+                                        className="w-3 h-3 text-white"
+                                        strokeWidth={3}
+                                      />
+                                    )}
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "text-sm font-semibold",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-700",
+                                    )}
+                                  >
+                                    {opt.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     )}
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={analyticsQualityFilteredSubmissions.length === 0}
+                      disabled={
+                        analyticsQualityFilteredSubmissions.length === 0
+                      }
                       className={cn(
                         "gap-2 shrink-0",
                         isDark
@@ -28922,7 +29344,14 @@ export default function ContestDetailClient({
         <CreatorSubmissionsModal
           isOpen={!!selectedCreatorForModal}
           onClose={() => setSelectedCreatorForModal(null)}
-          creator={creatorForSubmissionsModal ?? { id: selectedCreatorForModal, username: "Unknown", profile_picture_url: null, full_name: null }}
+          creator={
+            creatorForSubmissionsModal ?? {
+              id: selectedCreatorForModal,
+              username: "Unknown",
+              profile_picture_url: null,
+              full_name: null,
+            }
+          }
           submissions={
             creatorModalSubmissions as React.ComponentProps<
               typeof CreatorSubmissionsModal
@@ -29025,6 +29454,7 @@ export default function ContestDetailClient({
             setPaymentModalOpen(true);
           }}
           isAdminView={isAdminView}
+          isPostCampaignView={isPostCampaignLeaderboard}
           ytVisibleColumns={ytVisibleColumns}
           canSeeCore={canSeeCore}
           canSeeTraffic={canSeeTraffic}
@@ -29055,11 +29485,14 @@ export default function ContestDetailClient({
                     creator: {
                       ...existingCreator,
                       avg_quality_score:
-                        avgQualityScore ?? existingCreator.avg_quality_score ?? null,
+                        avgQualityScore ??
+                        existingCreator.avg_quality_score ??
+                        null,
                       best_quality_score:
-                        bestQualityScore ?? existingCreator.best_quality_score ?? null,
-                      quality_score_counts:
-                        qualityScoreCounts ??
+                        bestQualityScore ??
+                        existingCreator.best_quality_score ??
+                        null,
+                      quality_score_counts: qualityScoreCounts ??
                         existingCreator.quality_score_counts ?? {
                           score1: 0,
                           score2: 0,
@@ -29123,8 +29556,7 @@ export default function ContestDetailClient({
                 toUpdateQualityOnly,
                 qualityScore,
                 {
-                  silent:
-                    toVerify.length > 0 || paidToRevert.length > 0,
+                  silent: toVerify.length > 0 || paidToRevert.length > 0,
                 },
               );
             }
@@ -29158,7 +29590,6 @@ export default function ContestDetailClient({
           }
         }}
       />
-
     </div>
   );
 }

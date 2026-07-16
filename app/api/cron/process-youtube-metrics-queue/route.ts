@@ -19,7 +19,7 @@ import {
 } from "@/lib/queue/youtube-metrics-queue";
 import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
-import { isYouTubeAllLikeScope } from "@/lib/youtube-submission-refresh-by-scope";
+import { isYouTubeAllLikeScope, mergePostCampaignYouTubeTimestamps } from "@/lib/youtube-submission-refresh-by-scope";
 import {
   authorizeProcessYouTubeMetricsQueue,
   isQStashEnabled,
@@ -37,6 +37,33 @@ function getBaseUrlFromRequest(request: Request): string {
     const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
     return url.replace(/\/$/, "");
   }
+}
+
+async function finalizePostCampaignYoutubeRun(
+  supabaseAdmin: SupabaseClient,
+  contestId: string,
+  scope: YouTubeRefreshScope,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { data: contestRow } = await supabaseAdmin
+    .from("contests")
+    .select("contest_based_details")
+    .eq("id", contestId)
+    .maybeSingle();
+
+  const patch = mergePostCampaignYouTubeTimestamps(
+    (contestRow?.contest_based_details as Record<string, unknown>) || {},
+    scope,
+    now,
+  );
+
+  await supabaseAdmin.from("contests").update(patch).eq("id", contestId);
+
+  // Same completion side effects as submissions refresh.
+  if (scope === "basic" || isYouTubeAllLikeScope(scope)) {
+    await updateYouTubeCpmContestBudgets(supabaseAdmin, contestId);
+  }
+  revalidateLeaderboardCache(contestId);
 }
 
 async function finalizeContestAfterYoutubeRun(
@@ -304,10 +331,11 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     if (completedRun) {
       const isPostCampaignTarget = job.metricsTarget === "post_campaign";
       if (isPostCampaignTarget) {
-        await supabaseAdmin
-          .from("contests")
-          .update({ post_campaign_last_metrics_updated: now })
-          .eq("id", job.contestId);
+        await finalizePostCampaignYoutubeRun(
+          supabaseAdmin,
+          job.contestId,
+          job.scope,
+        );
       } else {
         await finalizeContestAfterYoutubeRun(supabaseAdmin, job.contestId, job.scope);
         revalidateLeaderboardCache(job.contestId);
