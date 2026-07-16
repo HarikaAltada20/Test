@@ -165,11 +165,42 @@ ALTER TABLE public.post_campaign_submission_metrics ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "post_campaign_metrics_select_authenticated"
   ON public.post_campaign_submission_metrics;
-CREATE POLICY "post_campaign_metrics_select_authenticated"
+
+DROP POLICY IF EXISTS "post_campaign_metrics_admins_all"
+  ON public.post_campaign_submission_metrics;
+CREATE POLICY "post_campaign_metrics_admins_all"
+  ON public.post_campaign_submission_metrics
+  FOR ALL
+  TO authenticated
+  USING (
+    (SELECT users.user_type FROM public.users WHERE users.id = auth.uid()) = 'admin'
+  )
+  WITH CHECK (
+    (SELECT users.user_type FROM public.users WHERE users.id = auth.uid()) = 'admin'
+  );
+
+DROP POLICY IF EXISTS "post_campaign_metrics_advertisers_select"
+  ON public.post_campaign_submission_metrics;
+CREATE POLICY "post_campaign_metrics_advertisers_select"
   ON public.post_campaign_submission_metrics
   FOR SELECT
   TO authenticated
-  USING (true);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.contests c
+      WHERE c.id = post_campaign_submission_metrics.contest_id
+        AND c.advertiser_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "post_campaign_metrics_creators_select"
+  ON public.post_campaign_submission_metrics;
+CREATE POLICY "post_campaign_metrics_creators_select"
+  ON public.post_campaign_submission_metrics
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = creator_id);
 
 DROP POLICY IF EXISTS "post_campaign_metrics_service_role_all"
   ON public.post_campaign_submission_metrics;

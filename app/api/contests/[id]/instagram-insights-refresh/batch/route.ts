@@ -127,6 +127,7 @@ export async function POST(
             "submission_id, creator_id, video_id, views, other_stats, last_insights_update, insights_status",
           )
           .eq("contest_id", contestId)
+          .ilike("platform", "%instagram%")
           .neq("status", "rejected")
           .not("video_id", "is", null)
           .or(insightsRefreshInsightsStatusOrFilter())

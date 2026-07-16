@@ -7839,6 +7839,17 @@ export default function ContestDetailClient({
           applyPostCampaignMetricsPayload(result.metrics);
         }
 
+        if (result.post_campaign_last_metrics_updated) {
+          setPostCampaignLastMetricsUpdated(
+            result.post_campaign_last_metrics_updated,
+          );
+          setCurrentContest((prev) => ({
+            ...prev,
+            post_campaign_last_metrics_updated:
+              result.post_campaign_last_metrics_updated,
+          }));
+        }
+
         // Same background queues as Submissions — poll until done, then reload overlay.
         if (result.queued) {
           const platformLower = (
@@ -7930,9 +7941,15 @@ export default function ContestDetailClient({
                     if (st === "completed") {
                       toast({
                         title: `Post-campaign ${platformLabel} refresh completed`,
-                        description: `Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}.`,
+                        description: `Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}.`,
                         duration: 10000,
                         variant: "success",
+                      });
+                      toast({
+                        title: "Post-campaign metrics updated",
+                        description: `${platformLabel} refresh finished.`,
+                        variant: "success",
+                        duration: 8000,
                       });
                     }
                     return;
@@ -8402,7 +8419,7 @@ export default function ContestDetailClient({
                     );
                     toast({
                       title: "Post-campaign YouTube refresh completed",
-                      description: `Scope: ${scope} · Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0}.`,
+                      description: `Scope: ${scope} · Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}.`,
                       duration: 10000,
                       variant: "success",
                     });

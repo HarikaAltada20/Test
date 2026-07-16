@@ -8,7 +8,7 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const supabase = await createClient();
@@ -21,15 +21,22 @@ export async function GET(
 
     const { id: contestId } = await params;
     if (!contestId) {
-      return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Contest ID required" },
+        { status: 400 },
+      );
     }
 
     const supabaseAdmin = createAdminSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const { data: contest } = await supabaseAdmin.from("contests").select("id").eq("id", contestId).maybeSingle();
+    const { data: contest } = await supabaseAdmin
+      .from("contests")
+      .select("id")
+      .eq("id", contestId)
+      .maybeSingle();
 
     if (!contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
@@ -38,7 +45,7 @@ export async function GET(
     const { data: run, error } = await supabaseAdmin
       .from("youtube_metrics_refresh_runs")
       .select(
-        "id, status, scope, total_submissions, processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count, current_batch_index, total_batches, started_at, last_batch_completed_at, finished_at, updated_at, error_message"
+        "id, status, scope, total_submissions, processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count, current_batch_index, total_batches, started_at, last_batch_completed_at, finished_at, updated_at, error_message",
       )
       .eq("contest_id", contestId)
       .order("started_at", { ascending: false })
@@ -47,7 +54,10 @@ export async function GET(
 
     if (error) {
       console.error("[youtube-metrics-refresh status]", error);
-      return NextResponse.json({ error: "Failed to load run" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Failed to load run" },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({
@@ -68,8 +78,10 @@ export async function GET(
             total_batches: run.total_batches,
             started_at: run.started_at,
             last_batch_completed_at: run.last_batch_completed_at,
-            updated_at: run.updated_at ?? run.last_batch_completed_at ?? run.started_at,
-            last_updated_at: run.updated_at ?? run.last_batch_completed_at ?? run.started_at,
+            updated_at:
+              run.updated_at ?? run.last_batch_completed_at ?? run.started_at,
+            last_updated_at:
+              run.updated_at ?? run.last_batch_completed_at ?? run.started_at,
             finished_at: run.finished_at,
             error_message: run.error_message,
           }
@@ -79,7 +91,7 @@ export async function GET(
     console.error("[youtube-metrics-refresh status]", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

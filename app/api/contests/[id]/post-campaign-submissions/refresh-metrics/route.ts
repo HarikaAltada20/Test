@@ -15,6 +15,10 @@ import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-
 import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue";
 import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
+import {
+  activePostCampaignRunResponse,
+  hasActivePostCampaignMetricsRun,
+} from "@/lib/post-campaign-enqueue-guards";
 
 const YT_SCOPES: YouTubeRefreshScope[] = [
   "basic",
@@ -139,10 +143,26 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    // Always copy full submission snapshot into overlay first so every row is present.
+    const activeRunTable = platform.includes("instagram")
+      ? "instagram_insights_refresh_runs"
+      : platform.includes("youtube")
+        ? "youtube_metrics_refresh_runs"
+        : "tiktok_metrics_refresh_runs";
+    if (
+      await hasActivePostCampaignMetricsRun(
+        supabaseAdmin,
+        activeRunTable,
+        contestId,
+      )
+    ) {
+      return activePostCampaignRunResponse();
+    }
+
+    // Ensure overlay rows exist; do not reset refreshed metrics on existing rows.
     const { synced } = await syncPostCampaignFromSubmissions(
       supabaseAdmin,
       contestId,
+      { overwriteMetrics: false },
     );
 
     const baseUrl = resolveBaseUrl(request);
@@ -191,6 +211,8 @@ export async function POST(
         metricsTarget: "post_campaign",
         scope: options.body.scope ?? "basic",
         metrics,
+        post_campaign_last_metrics_updated:
+          enqueueData.post_campaign_last_metrics_updated ?? null,
         nextRefreshAvailable: new Date(
           now.getTime() + cooldownMs,
         ).toISOString(),
@@ -247,7 +269,10 @@ export async function POST(
       metrics,
       contestId,
       contestTitle: contest.title,
-      nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
+      post_campaign_last_metrics_updated: result.post_campaign_last_metrics_updated,
+      nextRefreshAvailable: new Date(
+        new Date(result.post_campaign_last_metrics_updated).getTime() + cooldownMs,
+      ).toISOString(),
     });
   } catch (e) {
     console.error("[post-campaign-submissions/refresh-metrics]", e);

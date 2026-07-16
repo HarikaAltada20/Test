@@ -249,6 +249,50 @@ function mapSubmissionToPostCampaignRow(
   };
 }
 
+/** Snapshot fields only — never overwrites live overlay metrics. */
+function mapSubmissionToPostCampaignSnapshotFields(
+  sub: SubmissionSourceRow,
+  contestId: string,
+  now: string,
+): Record<string, unknown> {
+  return {
+    contest_id: contestId,
+    creator_id: sub.creator_id,
+    content_link: sub.content_link,
+    metadata: parseJsonObject(sub.metadata),
+    created_at: sub.created_at,
+    video_id: sub.video_id,
+    video_title: sub.video_title,
+    video_thumbnail_url: sub.video_thumbnail_url,
+    platform: sub.platform,
+    status: sub.status,
+    earnings: sub.earnings,
+    views_locked: sub.views_locked,
+    affiliate_paid: sub.affiliate_paid ?? false,
+    affiliate_metadata: parseJsonObject(sub.affiliate_metadata),
+    paid: sub.paid ?? false,
+    paid_at: sub.paid_at,
+    bonus_paid: sub.bonus_paid ?? false,
+    bonus_paid_at: sub.bonus_paid_at,
+    bonus_amount: sub.bonus_amount ?? 0,
+    milestone_bonus_paid: parseJsonObject(sub.milestone_bonus_paid),
+    dual_rewards_payout: parseJsonObject(sub.dual_rewards_payout),
+    quality_score: sub.quality_score,
+    quality_score_backfilled: sub.quality_score_backfilled ?? false,
+    submission_updated_at: sub.updated_at,
+    synced_at: now,
+    updated_at: now,
+  };
+}
+
+export type PostCampaignSyncOptions = {
+  /**
+   * When true, overwrite views/other_stats/insights on existing rows from submissions.
+   * Default false — preserves post-campaign refreshed metrics.
+   */
+  overwriteMetrics?: boolean;
+};
+
 /** Shape for UI: post-campaign row as a submission-like object. */
 export function postCampaignRowToSubmissionShape(
   row: PostCampaignMetricRow,
@@ -295,12 +339,15 @@ export async function fetchPostCampaignMetrics(
   return all;
 }
 
-/** Copy full submission rows into post-campaign snapshot (upsert). */
+/** Copy submission rows into post-campaign snapshot (insert missing; update snapshot fields). */
 export async function syncPostCampaignFromSubmissions(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabaseAdmin: any,
   contestId: string,
-): Promise<{ synced: number }> {
+  options?: PostCampaignSyncOptions,
+): Promise<{ synced: number; inserted: number; updated: number }> {
+  const overwriteMetrics = options?.overwriteMetrics === true;
+
   const { data: submissions, error } =
     await fetchContestSubmissionsAllPages<SubmissionSourceRow>(
       supabaseAdmin,
@@ -315,21 +362,68 @@ export async function syncPostCampaignFromSubmissions(
     );
   }
 
-  const now = new Date().toISOString();
-  const rows = (submissions ?? []).map((sub) =>
-    mapSubmissionToPostCampaignRow(sub, contestId, now),
+  const { data: existingRows, error: existingError } = await supabaseAdmin
+    .from("post_campaign_submission_metrics")
+    .select("submission_id")
+    .eq("contest_id", contestId);
+  if (existingError) throw new Error(existingError.message);
+
+  const existingIds = new Set(
+    (existingRows ?? []).map(
+      (r: { submission_id: string }) => r.submission_id,
+    ),
   );
 
+  const now = new Date().toISOString();
+  const toInsert: Record<string, unknown>[] = [];
+  const toUpdateSnapshot: Array<{
+    submission_id: string;
+    patch: Record<string, unknown>;
+  }> = [];
+
+  for (const sub of submissions ?? []) {
+    if (!existingIds.has(sub.id)) {
+      toInsert.push(mapSubmissionToPostCampaignRow(sub, contestId, now));
+      continue;
+    }
+    const patch = mapSubmissionToPostCampaignSnapshotFields(
+      sub,
+      contestId,
+      now,
+    );
+    if (overwriteMetrics) {
+      Object.assign(patch, {
+        views: sub.views ?? 0,
+        other_stats: parseOtherStats(sub.other_stats),
+        last_insights_update: sub.last_insights_update,
+        insights_status: sub.insights_status,
+      });
+    }
+    toUpdateSnapshot.push({ submission_id: sub.id, patch });
+  }
+
   const CHUNK = 200;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const chunk = rows.slice(i, i + CHUNK);
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const chunk = toInsert.slice(i, i + CHUNK);
     const { error: upsertError } = await supabaseAdmin
       .from("post_campaign_submission_metrics")
       .upsert(chunk, { onConflict: "submission_id" });
     if (upsertError) throw new Error(upsertError.message);
   }
 
-  return { synced: rows.length };
+  await mapLimit(toUpdateSnapshot, 10, async ({ submission_id, patch }) => {
+    const { error: updateError } = await supabaseAdmin
+      .from("post_campaign_submission_metrics")
+      .update(patch)
+      .eq("submission_id", submission_id);
+    if (updateError) throw new Error(updateError.message);
+  });
+
+  return {
+    synced: (submissions ?? []).length,
+    inserted: toInsert.length,
+    updated: toUpdateSnapshot.length,
+  };
 }
 
 async function loadPostCampaignSubmissionsForRefresh(

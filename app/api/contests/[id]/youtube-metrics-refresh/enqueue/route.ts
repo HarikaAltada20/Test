@@ -20,6 +20,11 @@ import {
 } from "@/lib/queue/youtube-metrics-queue";
 import { isQStashEnabled, triggerProcessYouTubeMetricsQueue } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import {
+  assertPostCampaignEnqueueAccess,
+  parseMetricsTarget,
+  postCampaignCooldownResponse,
+} from "@/lib/post-campaign-enqueue-guards";
 
 const BATCH_SIZE = 25;
 
@@ -57,8 +62,7 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
-    const metricsTarget =
-      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const metricsTarget = parseMetricsTarget(body?.metricsTarget);
     const isPostCampaignTarget = metricsTarget === "post_campaign";
     const scope = body.scope as YouTubeRefreshScope | undefined;
     if (!scope || !SCOPES.includes(scope)) {
@@ -91,7 +95,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated, end_date",
+        "id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated, end_date, post_campaign_last_metrics_updated",
       )
       .eq("id", contestId)
       .single();
@@ -132,6 +136,15 @@ export async function POST(
       );
     }
 
+    const accessDenied = assertPostCampaignEnqueueAccess(
+      isPostCampaignTarget,
+      cronAuth,
+      user?.id,
+      contest.advertiser_id,
+      isAdmin,
+    );
+    if (accessDenied) return accessDenied;
+
     if (!isYouTubeMetricsQueueEnabled()) {
       return NextResponse.json(
         { error: "YouTube metrics queue not configured (Redis env missing)" },
@@ -156,7 +169,15 @@ export async function POST(
           : {},
       }).catch((e) => console.warn("[youtube-metrics-refresh] Trigger processor failed:", e));
 
-    // Post-campaign cooldown is enforced by the post-campaign refresh-metrics caller.
+    // Post-campaign: enforce cooldown server-side (cannot bypass via direct enqueue).
+    if (!cronAuth && isPostCampaignTarget) {
+      const cooldownDenied = postCampaignCooldownResponse(
+        contest.post_campaign_last_metrics_updated,
+        isAdmin,
+      );
+      if (cooldownDenied) return cooldownDenied;
+    }
+
     if (!cronAuth && !isPostCampaignTarget) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
@@ -193,8 +214,9 @@ export async function POST(
 
     const { data: existingRun } = await supabaseAdmin
       .from("youtube_metrics_refresh_runs")
-      .select("id, status, total_submissions, total_batches, scope")
+      .select("id, status, total_submissions, total_batches, scope, metrics_target")
       .eq("contest_id", contestId)
+      .eq("metrics_target", metricsTarget)
       .in("status", ["pending", "running"])
       .maybeSingle();
 
@@ -270,6 +292,7 @@ export async function POST(
       .from("youtube_metrics_refresh_runs")
       .insert({
         contest_id: contestId,
+        metrics_target: metricsTarget,
         status: "running",
         scope,
         total_submissions: totalEligible,
@@ -292,6 +315,7 @@ export async function POST(
           .from("youtube_metrics_refresh_runs")
           .select("id, status")
           .eq("contest_id", contestId)
+          .eq("metrics_target", metricsTarget)
           .in("status", ["pending", "running"])
           .maybeSingle();
         if (again) {
@@ -318,6 +342,7 @@ export async function POST(
     }
 
     const runId = newRun.id;
+
     const firstJob: YouTubeMetricsJob = {
       contestId,
       runId,

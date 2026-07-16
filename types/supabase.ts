@@ -632,6 +632,7 @@ export interface Database {
         Row: {
           id: string;
           contest_id: string;
+          metrics_target: "submissions" | "post_campaign";
           status: "pending" | "running" | "completed" | "failed" | "cancelled";
           total_submissions: number;
           processed_submissions: number;
@@ -651,6 +652,7 @@ export interface Database {
         Insert: {
           id?: string;
           contest_id: string;
+          metrics_target?: "submissions" | "post_campaign";
           status?: "pending" | "running" | "completed" | "failed" | "cancelled";
           total_submissions?: number;
           processed_submissions?: number;
@@ -670,6 +672,7 @@ export interface Database {
         Update: {
           id?: string;
           contest_id?: string;
+          metrics_target?: "submissions" | "post_campaign";
           status?: "pending" | "running" | "completed" | "failed" | "cancelled";
           total_submissions?: number;
           processed_submissions?: number;

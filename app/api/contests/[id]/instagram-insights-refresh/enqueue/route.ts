@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   isInstagramInsightsQueueEnabled,
   enqueueInstagramInsightsJob,
@@ -16,6 +17,11 @@ import {
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import {
+  assertPostCampaignEnqueueAccess,
+  parseMetricsTarget,
+  postCampaignCooldownResponse,
+} from "@/lib/post-campaign-enqueue-guards";
 
 const BATCH_SIZE = 100;
 
@@ -26,6 +32,7 @@ export async function POST(
   try {
     const cronAuth = request.headers.get("Authorization") === `Bearer ${process.env.CRON_SECRET}`;
     let user: { id: string } | null = null;
+    let isAdmin = false;
     if (!cronAuth) {
       const supabase = await createClient();
       const { data: { user: u } } = await supabase.auth.getUser();
@@ -33,11 +40,11 @@ export async function POST(
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
+      ({ isAdmin } = await verifyAdminAccess());
     }
 
     const body = await request.json().catch(() => ({}));
-    const metricsTarget =
-      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const metricsTarget = parseMetricsTarget(body?.metricsTarget);
     const isPostCampaignTarget = metricsTarget === "post_campaign";
 
     const { id: contestId } = await params;
@@ -52,7 +59,7 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, views_locked_at, post_contest_status, end_date")
+      .select("id, platform, advertiser_id, views_locked_at, post_contest_status, end_date, post_campaign_last_metrics_updated")
       .eq("id", contestId)
       .single();
 
@@ -94,7 +101,22 @@ export async function POST(
       );
     }
 
-    // Any authenticated user (creator, brand, admin) may enqueue; run data is non-sensitive.
+    const accessDenied = assertPostCampaignEnqueueAccess(
+      isPostCampaignTarget,
+      cronAuth,
+      user?.id,
+      contest.advertiser_id,
+      isAdmin,
+    );
+    if (accessDenied) return accessDenied;
+
+    if (isPostCampaignTarget && !cronAuth) {
+      const cooldownDenied = postCampaignCooldownResponse(
+        contest.post_campaign_last_metrics_updated,
+        isAdmin,
+      );
+      if (cooldownDenied) return cooldownDenied;
+    }
 
     if (!isInstagramInsightsQueueEnabled()) {
       return NextResponse.json(
@@ -125,8 +147,9 @@ export async function POST(
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
-      .select("id, status, total_submissions, total_batches")
+      .select("id, status, total_submissions, total_batches, metrics_target")
       .eq("contest_id", contestId)
+      .eq("metrics_target", metricsTarget)
       .in("status", ["pending", "running"])
       .maybeSingle();
 
@@ -149,6 +172,7 @@ export async function POST(
         total_submissions: existingRun.total_submissions,
         total_batches: existingRun.total_batches,
         processorTriggered: true,
+        metricsTarget,
       });
     }
 
@@ -159,6 +183,7 @@ export async function POST(
         .from("post_campaign_submission_metrics")
         .select("*", { count: "exact", head: true })
         .eq("contest_id", contestId)
+        .ilike("platform", "%instagram%")
         .neq("status", "rejected")
         .not("video_id", "is", null)
         .or(insightsRefreshInsightsStatusOrFilter());
@@ -182,6 +207,7 @@ export async function POST(
       .from("instagram_insights_refresh_runs")
       .insert({
         contest_id: contestId,
+        metrics_target: metricsTarget,
         status: "running",
         total_submissions: totalEligible,
         processed_submissions: 0,
@@ -202,6 +228,7 @@ export async function POST(
           .from("instagram_insights_refresh_runs")
           .select("id, status")
           .eq("contest_id", contestId)
+          .eq("metrics_target", metricsTarget)
           .in("status", ["pending", "running"])
           .maybeSingle();
         if (again) {
@@ -221,6 +248,7 @@ export async function POST(
     }
 
     const runId = newRun.id;
+
     const firstJob: InstagramInsightsJob = {
       contestId,
       runId,

@@ -101,7 +101,6 @@ COMMENT ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uu
 
 REVOKE ALL ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uuid[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uuid[]) TO service_role;
-GRANT EXECUTE ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uuid[]) TO authenticated;
 
 -- Distinct contest IDs that have post-campaign overlay rows in range.
 CREATE OR REPLACE FUNCTION public.admin_analytics_pc_contest_ids(
@@ -129,4 +128,3 @@ COMMENT ON FUNCTION public.admin_analytics_pc_contest_ids(timestamptz, timestamp
 
 REVOKE ALL ON FUNCTION public.admin_analytics_pc_contest_ids(timestamptz, timestamptz, uuid[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_analytics_pc_contest_ids(timestamptz, timestamptz, uuid[]) TO service_role;
-GRANT EXECUTE ON FUNCTION public.admin_analytics_pc_contest_ids(timestamptz, timestamptz, uuid[]) TO authenticated;

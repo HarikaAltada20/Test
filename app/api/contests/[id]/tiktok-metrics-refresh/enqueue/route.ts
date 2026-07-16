@@ -22,6 +22,11 @@ import {
   triggerProcessTikTokMetricsQueue,
 } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import {
+  assertPostCampaignEnqueueAccess,
+  parseMetricsTarget,
+  postCampaignCooldownResponse,
+} from "@/lib/post-campaign-enqueue-guards";
 
 const BATCH_SIZE = 50;
 
@@ -44,8 +49,7 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
-    const metricsTarget =
-      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const metricsTarget = parseMetricsTarget(body?.metricsTarget);
     const isPostCampaignTarget = metricsTarget === "post_campaign";
 
     const { id: contestId } = await params;
@@ -61,7 +65,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated, end_date",
+        "id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated, end_date, post_campaign_last_metrics_updated",
       )
       .eq("id", contestId)
       .single();
@@ -105,8 +109,24 @@ export async function POST(
       );
     }
 
-    // Enforce the same cooldown as `refresh-metrics` to prevent bypassing rate limits by
-    // calling the enqueue endpoint directly. Post-campaign cooldown is enforced by caller.
+    const accessDenied = assertPostCampaignEnqueueAccess(
+      isPostCampaignTarget,
+      cronAuth,
+      user?.id,
+      contest.advertiser_id,
+      isAdmin,
+    );
+    if (accessDenied) return accessDenied;
+
+    // Enforce cooldown server-side for both submissions and post-campaign paths.
+    if (!cronAuth && isPostCampaignTarget) {
+      const cooldownDenied = postCampaignCooldownResponse(
+        contest.post_campaign_last_metrics_updated,
+        isAdmin,
+      );
+      if (cooldownDenied) return cooldownDenied;
+    }
+
     if (!cronAuth && !isPostCampaignTarget) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
@@ -170,8 +190,9 @@ export async function POST(
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin
       .from("tiktok_metrics_refresh_runs")
-      .select("id, status, total_submissions, total_batches")
+      .select("id, status, total_submissions, total_batches, metrics_target")
       .eq("contest_id", contestId)
+      .eq("metrics_target", metricsTarget)
       .in("status", ["pending", "running"])
       .maybeSingle();
 
@@ -236,6 +257,7 @@ export async function POST(
       .from("tiktok_metrics_refresh_runs")
       .insert({
         contest_id: contestId,
+        metrics_target: metricsTarget,
         status: "running",
         total_submissions: totalEligible,
         processed_submissions: 0,
@@ -256,6 +278,7 @@ export async function POST(
           .from("tiktok_metrics_refresh_runs")
           .select("id, status")
           .eq("contest_id", contestId)
+          .eq("metrics_target", metricsTarget)
           .in("status", ["pending", "running"])
           .maybeSingle();
         if (again) {
@@ -275,6 +298,7 @@ export async function POST(
     }
 
     const runId = newRun.id;
+
     const firstJob: TikTokMetricsJob = {
       contestId,
       runId,
