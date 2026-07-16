@@ -97,7 +97,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uuid[]) IS
-  'Daily post-campaign overlay metric rollups for admin analytics (views/likes/comments/shares/payouts by status).';
+  'Daily post-campaign overlay metric rollups for admin analytics (views/likes/comments/shares/payouts by status). day_key uses pcs.created_at (submission date), not refresh time — intentional for trend charts.';
 
 REVOKE ALL ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uuid[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_analytics_pc_daily(timestamptz, timestamptz, uuid[]) TO service_role;

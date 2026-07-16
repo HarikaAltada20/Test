@@ -7,6 +7,10 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
+import {
+  isMetricsTargetMismatch,
+  type MetricsRefreshTarget,
+} from "@/lib/post-campaign-enqueue-guards";
 
 type SubmissionCandidate = {
   id: string;
@@ -59,7 +63,7 @@ export async function POST(
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
     const batchSize = typeof body.batchSize === "number" ? body.batchSize : 50;
     const cursor = body.cursor as { last_insights_update: string | null; id: string } | undefined;
-    const metricsTarget =
+    const metricsTarget: MetricsRefreshTarget =
       body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
     const isPostCampaignTarget = metricsTarget === "post_campaign";
     const writeTarget = isPostCampaignTarget
@@ -77,7 +81,7 @@ export async function POST(
 
     const { data: run, error: runError } = await supabaseAdmin
       .from("tiktok_metrics_refresh_runs")
-      .select("id, status, started_at")
+      .select("id, status, started_at, metrics_target")
       .eq("id", runId)
       .single();
 
@@ -91,6 +95,33 @@ export async function POST(
         runStatus: run.status,
       });
     }
+
+    if (isMetricsTargetMismatch(run.metrics_target, metricsTarget)) {
+      console.error(
+        "[tiktok-metrics-refresh batch] metrics_target mismatch",
+        {
+          runId,
+          contestId,
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target,
+        },
+      );
+      return NextResponse.json(
+        {
+          error: "metrics_target mismatch between job and run",
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target ?? "submissions",
+        },
+        { status: 409 },
+      );
+    }
+
+    console.info("[tiktok-metrics-refresh batch] start", {
+      contestId,
+      runId,
+      batchIndex,
+      metricsTarget,
+    });
 
     const { data: contest } = await supabaseAdmin
       .from("contests")

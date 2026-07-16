@@ -20,7 +20,6 @@ import {
   fetchYouTubeBasicStatsByVideoId,
   updateYouTubeSubmissionForScope,
   mergePostCampaignYouTubeTimestamps,
-  isYouTubeAllLikeScope,
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
@@ -29,12 +28,14 @@ import { extractTikTokVideoIdFromLink } from "@/lib/tiktok/extract-video-id";
 import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
 import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
 import { postCampaignSnapshotToSubmission } from "@/lib/post-campaign-submission-shape";
-import { updateCpmContestBudgets } from "@/lib/instagram-insights";
-import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
-import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { buildPostCampaignExistingRowPatch } from "@/lib/post-campaign-sync-patch";
 
 export type { PostCampaignSubmissionSnapshot };
 export { postCampaignSnapshotToSubmission };
+export {
+  buildPostCampaignExistingRowPatch,
+  POST_CAMPAIGN_PRESERVED_METRIC_KEYS,
+} from "@/lib/post-campaign-sync-patch";
 
 export const POST_CAMPAIGN_SUBMISSION_SELECT = `
   submission_id,
@@ -386,20 +387,19 @@ export async function syncPostCampaignFromSubmissions(
       toInsert.push(mapSubmissionToPostCampaignRow(sub, contestId, now));
       continue;
     }
-    const patch = mapSubmissionToPostCampaignSnapshotFields(
-      sub,
-      contestId,
-      now,
-    );
-    if (overwriteMetrics) {
-      Object.assign(patch, {
-        views: sub.views ?? 0,
-        other_stats: parseOtherStats(sub.other_stats),
-        last_insights_update: sub.last_insights_update,
-        insights_status: sub.insights_status,
-      });
-    }
-    toUpdateSnapshot.push({ submission_id: sub.id, patch });
+    toUpdateSnapshot.push({
+      submission_id: sub.id,
+      patch: buildPostCampaignExistingRowPatch(
+        mapSubmissionToPostCampaignSnapshotFields(sub, contestId, now),
+        {
+          views: sub.views ?? 0,
+          other_stats: parseOtherStats(sub.other_stats),
+          last_insights_update: sub.last_insights_update,
+          insights_status: sub.insights_status,
+        },
+        overwriteMetrics,
+      ),
+    });
   }
 
   const CHUNK = 200;
@@ -1106,15 +1106,7 @@ export async function refreshPostCampaignMetrics(
     .update(contestUpdate)
     .eq("id", contestId);
 
-  // Match queue completion: CPM/budget + leaderboard cache (same as submissions refresh).
-  if (platformKey.includes("youtube")) {
-    if (scope === "basic" || isYouTubeAllLikeScope(scope)) {
-      await updateYouTubeCpmContestBudgets(supabaseAdmin, contestId);
-    }
-  } else if (platformKey.includes("instagram")) {
-    await updateCpmContestBudgets(supabaseAdmin, contestId);
-  }
-  revalidateLeaderboardCache(contestId);
+  // Overlay-only: never recalculate live contest budgets / leaderboard from PC refresh.
 
   return {
     synced,

@@ -19,6 +19,10 @@ import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-lo
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
+import {
+  isMetricsTargetMismatch,
+  type MetricsRefreshTarget,
+} from "@/lib/post-campaign-enqueue-guards";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -60,7 +64,7 @@ export async function POST(
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
     const batchSize = typeof body.batchSize === "number" ? body.batchSize : 100;
     const cursor = body.cursor as { last_insights_update: string | null; id: string } | undefined;
-    const metricsTarget =
+    const metricsTarget: MetricsRefreshTarget =
       body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
     const isPostCampaignTarget = metricsTarget === "post_campaign";
 
@@ -75,7 +79,7 @@ export async function POST(
 
     const { data: run, error: runError } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
-      .select("id, status, started_at")
+      .select("id, status, started_at, metrics_target")
       .eq("id", runId)
       .single();
 
@@ -89,6 +93,33 @@ export async function POST(
         runStatus: run.status,
       });
     }
+
+    if (isMetricsTargetMismatch(run.metrics_target, metricsTarget)) {
+      console.error(
+        "[instagram-insights-refresh batch] metrics_target mismatch",
+        {
+          runId,
+          contestId,
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target,
+        },
+      );
+      return NextResponse.json(
+        {
+          error: "metrics_target mismatch between job and run",
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target ?? "submissions",
+        },
+        { status: 409 },
+      );
+    }
+
+    console.info("[instagram-insights-refresh batch] start", {
+      contestId,
+      runId,
+      batchIndex,
+      metricsTarget,
+    });
 
     const { data: contest } = await supabaseAdmin
       .from("contests")

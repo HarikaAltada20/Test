@@ -18,6 +18,10 @@ import {
   buildOtherStatsWithYoutube,
   getExistingYouTubeStats,
 } from "@/lib/youtube-other-stats";
+import {
+  isMetricsTargetMismatch,
+  type MetricsRefreshTarget,
+} from "@/lib/post-campaign-enqueue-guards";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -74,7 +78,7 @@ export async function POST(
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
     const batchSize = typeof body.batchSize === "number" ? body.batchSize : 25;
     const cursor = body.cursor as { id: string } | undefined;
-    const metricsTarget =
+    const metricsTarget: MetricsRefreshTarget =
       body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
     const isPostCampaignTarget = metricsTarget === "post_campaign";
     const writeTarget = isPostCampaignTarget
@@ -92,7 +96,7 @@ export async function POST(
 
     const { data: run, error: runError } = await supabaseAdmin
       .from("youtube_metrics_refresh_runs")
-      .select("id, status, scope")
+      .select("id, status, scope, metrics_target")
       .eq("id", runId)
       .single();
 
@@ -106,6 +110,34 @@ export async function POST(
         runStatus: run.status,
       });
     }
+
+    if (isMetricsTargetMismatch(run.metrics_target, metricsTarget)) {
+      console.error(
+        "[youtube-metrics-refresh batch] metrics_target mismatch",
+        {
+          runId,
+          contestId,
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target,
+        },
+      );
+      return NextResponse.json(
+        {
+          error: "metrics_target mismatch between job and run",
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target ?? "submissions",
+        },
+        { status: 409 },
+      );
+    }
+
+    console.info("[youtube-metrics-refresh batch] start", {
+      contestId,
+      runId,
+      batchIndex,
+      metricsTarget,
+      scope: run.scope,
+    });
 
     const scope = run.scope as YouTubeRefreshScope;
 

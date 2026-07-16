@@ -328,6 +328,14 @@ export async function POST(
       doFetch();
     }
 
+    console.info("[tiktok-metrics-refresh enqueue] created run", {
+      contestId,
+      runId,
+      metricsTarget,
+      totalEligible,
+      totalBatches,
+    });
+
     return NextResponse.json({
       runId,
       status: "running",

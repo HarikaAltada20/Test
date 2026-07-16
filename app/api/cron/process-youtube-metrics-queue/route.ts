@@ -58,12 +58,7 @@ async function finalizePostCampaignYoutubeRun(
   );
 
   await supabaseAdmin.from("contests").update(patch).eq("id", contestId);
-
-  // Same completion side effects as submissions refresh.
-  if (scope === "basic" || isYouTubeAllLikeScope(scope)) {
-    await updateYouTubeCpmContestBudgets(supabaseAdmin, contestId);
-  }
-  revalidateLeaderboardCache(contestId);
+  // Overlay-only: do not recalculate live contest budgets / leaderboard.
 }
 
 async function finalizeContestAfterYoutubeRun(

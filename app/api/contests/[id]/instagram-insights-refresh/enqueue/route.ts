@@ -278,6 +278,14 @@ export async function POST(
       doFetch();
     }
 
+    console.info("[instagram-insights-refresh enqueue] created run", {
+      contestId,
+      runId,
+      metricsTarget,
+      totalEligible,
+      totalBatches,
+    });
+
     return NextResponse.json({
       runId,
       status: "running",

@@ -379,6 +379,15 @@ export async function POST(
       doFetch();
     }
 
+    console.info("[youtube-metrics-refresh enqueue] created run", {
+      contestId,
+      runId,
+      metricsTarget,
+      scope,
+      totalEligible,
+      totalBatches,
+    });
+
     return NextResponse.json({
       runId,
       status: "running",

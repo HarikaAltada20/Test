@@ -10,6 +10,18 @@ export function parseMetricsTarget(raw: unknown): MetricsRefreshTarget {
   return raw === "post_campaign" ? "post_campaign" : "submissions";
 }
 
+/**
+ * Resolve a run row's metrics_target (null/undefined → submissions for pre-migration rows).
+ * Returns true when the job target does not match the run.
+ */
+export function isMetricsTargetMismatch(
+  runMetricsTarget: string | null | undefined,
+  jobTarget: MetricsRefreshTarget,
+): boolean {
+  const resolved = parseMetricsTarget(runMetricsTarget);
+  return resolved !== jobTarget;
+}
+
 /** Advertiser or admin required for post-campaign enqueue (not cron). */
 export function assertPostCampaignEnqueueAccess(
   isPostCampaign: boolean,
@@ -53,21 +65,6 @@ export function postCampaignCooldownResponse(
     },
     { status: 429 },
   );
-}
-
-/** Bump cooldown timestamp when a post-campaign refresh starts (queued or inline). */
-export async function markPostCampaignRefreshStarted(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabaseAdmin: any,
-  contestId: string,
-): Promise<string> {
-  const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
-    .from("contests")
-    .update({ post_campaign_last_metrics_updated: now })
-    .eq("id", contestId);
-  if (error) throw new Error(error.message);
-  return now;
 }
 
 type MetricsRunTable =

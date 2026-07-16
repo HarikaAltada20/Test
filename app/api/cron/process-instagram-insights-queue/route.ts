@@ -180,9 +180,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .update({ status: "completed", finished_at: now, updated_at: now })
       .eq("id", job.runId);
 
-    // Budget rollup + leaderboard: same for submissions and post-campaign targets.
-    await updateCpmContestBudgets(supabaseAdmin, job.contestId);
-
     // Bump the correct cooldown timestamp for the metrics target.
     const isPostCampaignTarget = job.metricsTarget === "post_campaign";
     await supabaseAdmin
@@ -194,7 +191,16 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       )
       .eq("id", job.contestId);
 
-    revalidateLeaderboardCache(job.contestId);
+    // Overlay refresh must not recalculate live contest budgets / leaderboard.
+    if (!isPostCampaignTarget) {
+      await updateCpmContestBudgets(supabaseAdmin, job.contestId);
+      revalidateLeaderboardCache(job.contestId);
+    } else {
+      console.info(
+        "[process-instagram-insights-queue] post_campaign run completed",
+        { contestId: job.contestId, runId: job.runId },
+      );
+    }
   }
 
   return NextResponse.json({

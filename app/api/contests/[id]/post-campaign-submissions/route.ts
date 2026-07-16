@@ -7,6 +7,11 @@ import {
   fetchPostCampaignMetricsCount,
   syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
+import {
+  activePostCampaignRunResponse,
+  hasActivePostCampaignMetricsRun,
+  postCampaignCooldownResponse,
+} from "@/lib/post-campaign-enqueue-guards";
 
 async function authorizeContestAccess(
   contestId: string,
@@ -14,6 +19,7 @@ async function authorizeContestAccess(
 ): Promise<
   | {
       ok: true;
+      isAdmin: boolean;
       contest: {
         id: string;
         advertiser_id: string;
@@ -45,6 +51,7 @@ async function authorizeContestAccess(
 
   return {
     ok: true,
+    isAdmin,
     contest: {
       ...contest,
       contest_based_details:
@@ -152,10 +159,35 @@ export async function POST(
       );
     }
 
+    const cooldownDenied = postCampaignCooldownResponse(
+      auth.contest.post_campaign_last_metrics_updated,
+      auth.isAdmin,
+    );
+    if (cooldownDenied) return cooldownDenied;
+
     const supabaseAdmin = createAdminSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
+
+    const platform = (auth.contest.platform ?? "").toLowerCase();
+    const activeRunTable = platform.includes("instagram")
+      ? "instagram_insights_refresh_runs"
+      : platform.includes("youtube")
+        ? "youtube_metrics_refresh_runs"
+        : platform.includes("tiktok")
+          ? "tiktok_metrics_refresh_runs"
+          : null;
+    if (
+      activeRunTable &&
+      (await hasActivePostCampaignMetricsRun(
+        supabaseAdmin,
+        activeRunTable,
+        contestId,
+      ))
+    ) {
+      return activePostCampaignRunResponse();
+    }
 
     const { synced } = await syncPostCampaignFromSubmissions(
       supabaseAdmin,

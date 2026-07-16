@@ -37,11 +37,6 @@ CREATE POLICY "post_campaign_metrics_advertisers_select"
 
 DROP POLICY IF EXISTS "post_campaign_metrics_creators_select"
   ON public.post_campaign_submission_metrics;
-CREATE POLICY "post_campaign_metrics_creators_select"
-  ON public.post_campaign_submission_metrics
-  FOR SELECT
-  TO authenticated
-  USING (auth.uid() = creator_id);
 
 -- ---------------------------------------------------------------------------
 -- Metrics refresh runs: one active run per (contest_id, metrics_target).
