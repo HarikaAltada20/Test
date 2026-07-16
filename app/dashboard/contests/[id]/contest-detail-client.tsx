@@ -25,6 +25,12 @@ import {
   postCampaignSnapshotToSubmission,
   type PostCampaignSubmissionSnapshot,
 } from "@/lib/post-campaign-submission-shape";
+import {
+  formatPostCampaignRefreshToastDescription,
+  getPostCampaignStatusPath,
+  isTerminalPostCampaignRunStatus,
+  isTrackedPostCampaignRun,
+} from "@/lib/post-campaign-refresh-client";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest";
@@ -7841,25 +7847,14 @@ export default function ContestDetailClient({
 
         // Same background queues as Submissions — poll until done, then reload overlay.
         if (result.queued) {
-          const platformLower = (
-            currentContest.platform ||
-            result.platform ||
-            ""
-          )
-            .toString()
-            .toLowerCase();
-          const isYoutube = platformLower.includes("youtube");
-          const isTiktok = platformLower.includes("tiktok");
-          const statusPath = isYoutube
-            ? "youtube-metrics-refresh/status"
-            : isTiktok
-              ? "tiktok-metrics-refresh/status"
-              : "instagram-insights-refresh/status";
-          const platformLabel = isYoutube
-            ? "YouTube"
-            : isTiktok
-              ? "TikTok"
-              : "Instagram";
+          const {
+            statusPath,
+            platformLabel,
+            isYoutube,
+            isTiktok,
+          } = getPostCampaignStatusPath(
+            currentContest.platform || result.platform,
+          );
 
           if (!isVideoContestFormat) {
             toast({
@@ -7888,18 +7883,6 @@ export default function ContestDetailClient({
           const started = Date.now();
           const maxMs = 600000;
 
-          const isTrackedPostCampaignRun = (run: {
-            id: string;
-            started_at?: string | null;
-          }) => {
-            if (activeRunId) return run.id === activeRunId;
-            if (!run.started_at) return false;
-            const runStartMs = new Date(run.started_at).getTime();
-            return (
-              !Number.isNaN(runStartMs) && runStartMs >= refreshStartedMs - 10_000
-            );
-          };
-
           const finishPostCampaignRefresh = async (
             run:
               | InstagramInsightsRefreshRunSummary
@@ -7923,7 +7906,7 @@ export default function ContestDetailClient({
             if (terminalStatus === "completed" && run) {
               toast({
                 title: `Post-campaign ${platformLabel} refresh completed`,
-                description: `Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}.`,
+                description: formatPostCampaignRefreshToastDescription(run),
                 duration: 10000,
                 variant: "success",
               });
@@ -7947,7 +7930,13 @@ export default function ContestDetailClient({
                   | YouTubeMetricsRefreshRunSummary
                   | TikTokMetricsRefreshRunSummary
                   | null;
-                if (run && isTrackedPostCampaignRun(run)) {
+                if (
+                  run &&
+                  isTrackedPostCampaignRun(run, {
+                    activeRunId,
+                    refreshStartedMs,
+                  })
+                ) {
                   if (isYoutube) {
                     setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
                   } else if (isTiktok) {
@@ -7956,11 +7945,7 @@ export default function ContestDetailClient({
                     setInstagramRun(run as InstagramInsightsRefreshRunSummary);
                   }
                   const st = run.status;
-                  if (
-                    st === "completed" ||
-                    st === "failed" ||
-                    st === "cancelled"
-                  ) {
+                  if (isTerminalPostCampaignRunStatus(st)) {
                     clearInterval(pollTimer);
                     await finishPostCampaignRefresh(run, st);
                     return;
@@ -7989,7 +7974,13 @@ export default function ContestDetailClient({
                         | YouTubeMetricsRefreshRunSummary
                         | TikTokMetricsRefreshRunSummary
                         | null;
-                      if (run2 && isTrackedPostCampaignRun(run2)) {
+                      if (
+                        run2 &&
+                        isTrackedPostCampaignRun(run2, {
+                          activeRunId,
+                          refreshStartedMs,
+                        })
+                      ) {
                         await finishPostCampaignRefresh(run2, run2.status);
                         return;
                       }
@@ -8419,18 +8410,6 @@ export default function ContestDetailClient({
       const started = Date.now();
       const maxMs = 600000;
 
-      const isTrackedPostCampaignRun = (run: {
-        id: string;
-        started_at?: string | null;
-      }) => {
-        if (activeRunId) return run.id === activeRunId;
-        if (!run.started_at) return false;
-        const runStartMs = new Date(run.started_at).getTime();
-        return (
-          !Number.isNaN(runStartMs) && runStartMs >= refreshStartedMs - 10_000
-        );
-      };
-
       const finishPostCampaignYoutubeRefresh = async (
         run: YouTubeMetricsRefreshRunSummary | null,
         terminalStatus: string,
@@ -8445,7 +8424,9 @@ export default function ContestDetailClient({
           );
           toast({
             title: "Post-campaign YouTube refresh completed",
-            description: `Scope: ${scope} · Success ${run.success_count ?? 0} · Temporary failure ${run.temporary_failure_count ?? 0} · Permanent failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}.`,
+            description: formatPostCampaignRefreshToastDescription(run, {
+              scope,
+            }),
             duration: 10000,
             variant: "success",
           });
@@ -8466,14 +8447,16 @@ export default function ContestDetailClient({
             if (sres.ok) {
               const sj = await sres.json();
               const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
-              if (run && isTrackedPostCampaignRun(run)) {
+              if (
+                run &&
+                isTrackedPostCampaignRun(run, {
+                  activeRunId,
+                  refreshStartedMs,
+                })
+              ) {
                 setYoutubeRun(run);
                 const st = run.status;
-                if (
-                  st === "completed" ||
-                  st === "failed" ||
-                  st === "cancelled"
-                ) {
+                if (isTerminalPostCampaignRunStatus(st)) {
                   clearInterval(pollTimer);
                   await finishPostCampaignYoutubeRefresh(run, st);
                   resolve();
@@ -8518,7 +8501,13 @@ export default function ContestDetailClient({
                     const run2 = sj2?.run as
                       | YouTubeMetricsRefreshRunSummary
                       | null;
-                    if (run2 && isTrackedPostCampaignRun(run2)) {
+                    if (
+                      run2 &&
+                      isTrackedPostCampaignRun(run2, {
+                        activeRunId,
+                        refreshStartedMs,
+                      })
+                    ) {
                       await finishPostCampaignYoutubeRefresh(run2, run2.status);
                       resolve();
                       return;

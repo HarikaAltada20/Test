@@ -13,6 +13,7 @@ import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import {
   activePostCampaignRunResponse,
+  assertNoCrossTargetActiveRun,
   hasActivePostCampaignMetricsRun,
   postCampaignCooldownResponse,
   postCampaignNextRefreshAvailable,
@@ -138,6 +139,14 @@ export async function POST(
     ) {
       return activePostCampaignRunResponse();
     }
+
+    const crossTargetBlocked = await assertNoCrossTargetActiveRun(
+      supabaseAdmin,
+      activeRunTable,
+      contestId,
+      "post_campaign",
+    );
+    if (crossTargetBlocked) return crossTargetBlocked;
 
     // Ensure overlay rows exist; do not reset refreshed metrics on existing rows.
     const { synced } = await syncPostCampaignFromSubmissions(

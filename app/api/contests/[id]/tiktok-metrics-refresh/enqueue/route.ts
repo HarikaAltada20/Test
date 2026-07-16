@@ -23,6 +23,7 @@ import {
 } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import {
+  assertNoCrossTargetActiveRun,
   assertPostCampaignEnqueueAccess,
   parseMetricsTarget,
   postCampaignCooldownResponse,
@@ -186,6 +187,14 @@ export async function POST(
       }).catch((e) =>
         console.warn("[tiktok-metrics-refresh] Trigger processor failed:", e)
       );
+
+    const crossTargetBlocked = await assertNoCrossTargetActiveRun(
+      supabaseAdmin,
+      "tiktok_metrics_refresh_runs",
+      contestId,
+      metricsTarget,
+    );
+    if (crossTargetBlocked) return crossTargetBlocked;
 
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin

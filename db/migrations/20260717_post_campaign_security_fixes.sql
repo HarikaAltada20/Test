@@ -5,6 +5,7 @@
 --   2) 20260716_admin_analytics_pc_daily_rpc.sql
 --   3) 20260717_post_campaign_security_fixes.sql (this file)
 -- App code that filters refresh runs by metrics_target requires this migration.
+-- post_campaign_last_synced_at is defined in 20260715_post_campaign_submission_metrics.sql.
 
 -- ---------------------------------------------------------------------------
 -- RLS: scope post-campaign overlay like submissions (not world-readable).

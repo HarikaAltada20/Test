@@ -5,13 +5,12 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   fetchPostCampaignMetrics,
   fetchPostCampaignMetricsCount,
-  fetchPostCampaignLastSyncedAt,
   syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
 import {
   activePostCampaignRunResponse,
+  claimPostCampaignSyncSlot,
   hasActivePostCampaignMetricsRun,
-  postCampaignCooldownResponse,
 } from "@/lib/post-campaign-enqueue-guards";
 
 async function authorizeContestAccess(
@@ -165,16 +164,13 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    // Prefer refresh timestamp; fall back to latest overlay synced_at so empty
-    // contests cannot spam sync before the first metrics refresh.
-    const cooldownAnchor =
-      auth.contest.post_campaign_last_metrics_updated ??
-      (await fetchPostCampaignLastSyncedAt(supabaseAdmin, contestId));
-    const cooldownDenied = postCampaignCooldownResponse(
-      cooldownAnchor,
+    // CAS claim sync slot (covers first-sync spam when refresh timestamp is null).
+    const syncClaimDenied = await claimPostCampaignSyncSlot(
+      supabaseAdmin,
+      contestId,
       auth.isAdmin,
     );
-    if (cooldownDenied) return cooldownDenied;
+    if (syncClaimDenied) return syncClaimDenied;
 
     const platform = (auth.contest.platform ?? "").toLowerCase();
     const activeRunTable = platform.includes("instagram")

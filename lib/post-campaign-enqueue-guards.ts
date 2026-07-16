@@ -6,6 +6,11 @@ import {
 
 export type MetricsRefreshTarget = "submissions" | "post_campaign";
 
+export type MetricsRunTable =
+  | "instagram_insights_refresh_runs"
+  | "youtube_metrics_refresh_runs"
+  | "tiktok_metrics_refresh_runs";
+
 export function parseMetricsTarget(raw: unknown): MetricsRefreshTarget {
   return raw === "post_campaign" ? "post_campaign" : "submissions";
 }
@@ -84,10 +89,72 @@ export function postCampaignCooldownResponse(
   );
 }
 
-type MetricsRunTable =
-  | "instagram_insights_refresh_runs"
-  | "youtube_metrics_refresh_runs"
-  | "tiktok_metrics_refresh_runs";
+function cooldownMsFor(isAdmin: boolean): number {
+  return isAdmin
+    ? METRICS_REFRESH_COOLDOWN_MS_ADMIN
+    : METRICS_REFRESH_COOLDOWN_MS_BRAND;
+}
+
+/**
+ * Claim a post-campaign sync slot by CAS-updating post_campaign_last_synced_at.
+ * Prevents concurrent/spam first syncs when refresh timestamp is still null.
+ * Returns 429/409 response when the slot cannot be claimed.
+ */
+export async function claimPostCampaignSyncSlot(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseAdmin: any,
+  contestId: string,
+  isAdmin: boolean,
+): Promise<NextResponse | null> {
+  const { data: contest, error } = await supabaseAdmin
+    .from("contests")
+    .select("post_campaign_last_metrics_updated, post_campaign_last_synced_at")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!contest) {
+    return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+  }
+
+  const cooldownAnchor =
+    contest.post_campaign_last_metrics_updated ??
+    contest.post_campaign_last_synced_at;
+  const cooldownDenied = postCampaignCooldownResponse(cooldownAnchor, isAdmin);
+  if (cooldownDenied) return cooldownDenied;
+
+  const nowIso = new Date().toISOString();
+  const cutoffIso = new Date(
+    Date.now() - cooldownMsFor(isAdmin),
+  ).toISOString();
+
+  // CAS: only claim if never synced/refreshed-recently, or last sync older than cooldown.
+  let query = supabaseAdmin
+    .from("contests")
+    .update({ post_campaign_last_synced_at: nowIso })
+    .eq("id", contestId);
+
+  if (contest.post_campaign_last_synced_at) {
+    query = query.lt("post_campaign_last_synced_at", cutoffIso);
+  } else {
+    query = query.is("post_campaign_last_synced_at", null);
+  }
+
+  const { data: claimed, error: claimError } = await query
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw new Error(claimError.message);
+  if (!claimed) {
+    return NextResponse.json(
+      {
+        error:
+          "A post-campaign sync is already in progress or was started recently. Please wait and try again.",
+        alreadyActive: true,
+      },
+      { status: 409 },
+    );
+  }
+  return null;
+}
 
 /** True when a post-campaign metrics queue run is already active for this contest. */
 export async function hasActivePostCampaignMetricsRun(
@@ -105,6 +172,42 @@ export async function hasActivePostCampaignMetricsRun(
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data != null;
+}
+
+/**
+ * Block enqueue when the *other* metrics_target already has an active run.
+ * Same-target active runs are handled by the existing alreadyActive path.
+ */
+export async function assertNoCrossTargetActiveRun(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseAdmin: any,
+  table: MetricsRunTable,
+  contestId: string,
+  requestedTarget: MetricsRefreshTarget,
+): Promise<NextResponse | null> {
+  const otherTarget: MetricsRefreshTarget =
+    requestedTarget === "post_campaign" ? "submissions" : "post_campaign";
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .select("id, metrics_target, status")
+    .eq("contest_id", contestId)
+    .eq("metrics_target", otherTarget)
+    .in("status", ["pending", "running"])
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  const otherLabel =
+    otherTarget === "post_campaign" ? "post-campaign" : "submissions";
+  return NextResponse.json(
+    {
+      error: `A ${otherLabel} metrics refresh is already in progress for this contest. Wait for it to finish before starting a ${requestedTarget === "post_campaign" ? "post-campaign" : "submissions"} refresh.`,
+      alreadyActive: true,
+      blockingTarget: otherTarget,
+      blockingRunId: data.id,
+    },
+    { status: 409 },
+  );
 }
 
 export function activePostCampaignRunResponse(): NextResponse {

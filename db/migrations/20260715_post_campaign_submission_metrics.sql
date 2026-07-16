@@ -9,8 +9,14 @@
 ALTER TABLE public.contests
   ADD COLUMN IF NOT EXISTS post_campaign_last_metrics_updated timestamp with time zone;
 
+ALTER TABLE public.contests
+  ADD COLUMN IF NOT EXISTS post_campaign_last_synced_at timestamp with time zone;
+
 COMMENT ON COLUMN public.contests.post_campaign_last_metrics_updated IS
   'Last time post-campaign submission metrics were refreshed (independent of submissions.last_metrics_updated).';
+
+COMMENT ON COLUMN public.contests.post_campaign_last_synced_at IS
+  'Last time submissions were synced into the post-campaign overlay (rate-limits sync, including first sync).';
 
 -- Append column via CREATE OR REPLACE (safe if prior definition matches 20260630).
 -- Avoid DROP VIEW: dependents keep working; REPLACE fails loudly if column order/types diverge.
@@ -77,11 +83,12 @@ SELECT
   contests.min_platform_earnings,
   contests.min_platform_views,
   contests.min_quality_score,
-  contests.post_campaign_last_metrics_updated
+  contests.post_campaign_last_metrics_updated,
+  contests.post_campaign_last_synced_at
 FROM public.contests;
 
 COMMENT ON VIEW public.contests_with_status IS
-  'All contest columns plus computed status. Includes trust/quality gates and post_campaign_last_metrics_updated.';
+  'All contest columns plus computed status. Includes trust/quality gates, post_campaign_last_metrics_updated, and post_campaign_last_synced_at.';
 
 -- Base table (no-op if an older metrics-only version already exists).
 CREATE TABLE IF NOT EXISTS public.post_campaign_submission_metrics (

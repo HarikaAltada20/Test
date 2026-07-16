@@ -18,6 +18,7 @@ import {
 } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import {
+  assertNoCrossTargetActiveRun,
   assertPostCampaignEnqueueAccess,
   parseMetricsTarget,
   postCampaignCooldownResponse,
@@ -143,6 +144,15 @@ export async function POST(
       }).catch((e) =>
         console.warn("[instagram-insights-refresh] Trigger processor failed:", e)
       );
+
+    // Serialize submissions vs post-campaign to avoid doubling platform API usage.
+    const crossTargetBlocked = await assertNoCrossTargetActiveRun(
+      supabaseAdmin,
+      "instagram_insights_refresh_runs",
+      contestId,
+      metricsTarget,
+    );
+    if (crossTargetBlocked) return crossTargetBlocked;
 
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin
