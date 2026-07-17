@@ -71,6 +71,30 @@ export function formatReelsSkipRate(
 }
 
 /**
+ * Avg watch % = avg watch time ÷ reel duration.
+ * Computed only — never stored. May exceed 100% when replays inflate avg watch.
+ */
+export function computeAvgWatchPercent(
+  avgWatchTimeMs: number | null | undefined,
+  durationSeconds: number | null | undefined,
+): number | null {
+  const ms = Number(avgWatchTimeMs);
+  const duration = Number(durationSeconds);
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  return (ms / 1000 / duration) * 100;
+}
+
+export function formatAvgWatchPercent(
+  avgWatchTimeMs: number | null | undefined,
+  durationSeconds: number | null | undefined,
+): string {
+  const pct = computeAvgWatchPercent(avgWatchTimeMs, durationSeconds);
+  if (pct == null) return "—";
+  return `${pct.toFixed(1)}%`;
+}
+
+/**
  * Whether to retry /insights with a narrower metric list.
  * Only for invalid/unsupported metric-list errors — never for permanent media,
  * token errors, rate limits, or generic temporary failures.

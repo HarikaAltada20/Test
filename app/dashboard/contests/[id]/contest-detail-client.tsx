@@ -198,7 +198,7 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
-import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
+import { formatReelsSkipRate, formatAvgWatchPercent } from "@/lib/instagram-clip-metrics";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
@@ -19111,6 +19111,20 @@ export default function ContestDetailClient({
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Avg Watch %
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        Average watch time ÷ reel duration.
+                                        Computed; not stored. May exceed 100%
+                                        with replays.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
                                           Skip rate (first 3s)
                                         </span>
                                       </TooltipTrigger>
@@ -20993,6 +21007,30 @@ export default function ContestDetailClient({
                                             formatClipDurationSeconds(
                                               reelSec > 0 ? reelSec : null,
                                             );
+                                          return label !== "—" ? (
+                                            <span className="font-bold">
+                                              {label}
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-slate-500"
+                                                  : "text-slate-400",
+                                              )}
+                                            >
+                                              —
+                                            </span>
+                                          );
+                                        })()}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {(() => {
+                                          const label = formatAvgWatchPercent(
+                                            (metrics as any).avg_watch_time_ms,
+                                            (metrics as any).duration_seconds,
+                                          );
                                           return label !== "—" ? (
                                             <span className="font-bold">
                                               {label}
