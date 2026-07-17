@@ -32,18 +32,12 @@ import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
-/** Core defaults only — never default optional metrics (reposts, reels_skip_rate). */
-const DEFAULT_STATS = {
-  reach: 0,
-  likes: 0,
-  comments: 0,
-  shares: 0,
-  saved: 0,
-  total_interactions: 0,
-  views: 0,
-  avg_watch_time_ms: 0,
-  total_watch_time_ms: 0,
-};
+
+/**
+ * Do NOT seed insight fields with 0.
+ * Partial Graph responses (or follow-up optional-metric calls) omit many fields;
+ * seeding defaults would overwrite previously stored real values on merge.
+ */
 
 export interface InstagramAccount {
   access_token: string;
@@ -72,16 +66,14 @@ interface InsightsData {
 
 /** Read a metric value from either values[] or total_value (Graph varies by metric). */
 function readInsightMetricValue(metric: {
-  values?: Array<{ value?: number | null }>;
-  total_value?: { value?: number | null };
+  values?: Array<{ value?: number | string | null }>;
+  total_value?: { value?: number | string | null };
 }): number | null {
-  const fromValues = metric.values?.[0]?.value;
-  if (fromValues != null && Number.isFinite(Number(fromValues))) {
-    return Number(fromValues);
-  }
-  const fromTotal = metric.total_value?.value;
-  if (fromTotal != null && Number.isFinite(Number(fromTotal))) {
-    return Number(fromTotal);
+  const candidates = [metric.values?.[0]?.value, metric.total_value?.value];
+  for (const candidate of candidates) {
+    if (candidate == null || candidate === "") continue;
+    const n = typeof candidate === "number" ? candidate : Number(candidate);
+    if (Number.isFinite(n)) return n;
   }
   return null;
 }
@@ -124,6 +116,65 @@ export function hasStatsChanged(
   return Object.keys(newStats).some(
     (key) => oldInstagram[key] !== newStats[key]
   );
+}
+
+/** Preserve prior value when a follow-up Graph call omits the key entirely. */
+const PRESERVE_IF_OMITTED_KEYS = [
+  "likes",
+  "comments",
+  "shares",
+  "saved",
+  "reach",
+  "total_interactions",
+  "views",
+  "reposts",
+  "reels_skip_rate",
+  "duration_seconds",
+] as const;
+
+/**
+ * Watch-time: Graph sometimes returns 0/omits these while other Reel metrics
+ * succeed — never wipe a prior positive value with 0/missing.
+ */
+const PRESERVE_IF_OMITTED_OR_ZERO_KEYS = [
+  "avg_watch_time_ms",
+  "total_watch_time_ms",
+] as const;
+
+/**
+ * Merge new IG stats onto previous.
+ * - Keys omitted from newStats keep previous values
+ * - Watch-time 0/missing does not wipe a prior positive value
+ * - Explicit Graph values (including real 0 for likes/reposts) are kept
+ */
+export function mergeInstagramStats(
+  prevIg: Record<string, unknown>,
+  newStats: Record<string, number>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...prevIg, ...newStats };
+
+  for (const key of PRESERVE_IF_OMITTED_KEYS) {
+    const nextMissing = !Object.prototype.hasOwnProperty.call(newStats, key);
+    if (!nextMissing) continue;
+    if (Object.prototype.hasOwnProperty.call(prevIg, key)) {
+      merged[key] = prevIg[key];
+    }
+  }
+
+  for (const key of PRESERVE_IF_OMITTED_OR_ZERO_KEYS) {
+    const prev = Number(prevIg[key]);
+    const nextMissing = !Object.prototype.hasOwnProperty.call(newStats, key);
+    const next = Number(newStats[key]);
+    if (
+      Number.isFinite(prev) &&
+      prev > 0 &&
+      (nextMissing || !Number.isFinite(next) || next <= 0)
+    ) {
+      merged[key] = prev;
+    }
+  }
+
+  return merged;
 }
 
 /** Refresh Instagram access token. Returns { access_token, expires_in? } or null. */
@@ -188,19 +239,41 @@ export async function fetchInsights(
     };
 
     // 1) Resolve media topology (safe fields only — never request video_duration).
+    // Also pull public engagement counts from the media object when available.
+    // Insights `reposts` can lag or stay 0 while media `reposts_count` matches
+    // the in-app profile-repost total Meta documents for IG Media.
     let mediaProductType: string | null = null;
     let cdnMediaUrl: string | null = null;
+    let mediaRepostsCount: number | null = null;
+    let mediaLikesCount: number | null = null;
+    let mediaCommentsCount: number | null = null;
+    let mediaSharesCount: number | null = null;
     try {
-      const mediaMetaUrl = `https://graph.instagram.com/${IG_GRAPH_VERSION}/${submission.video_id}?fields=media_type,media_product_type,media_url&access_token=${accessToken}`;
-      const mediaRes = await instagramGraphFetch(mediaMetaUrl, {
+      const mediaFieldsFull =
+        "media_type,media_product_type,media_url,reposts_count,like_count,comments_count,shares_count";
+      const mediaFieldsBasic = "media_type,media_product_type,media_url";
+      const mediaUrl = (fields: string) =>
+        `https://graph.instagram.com/${IG_GRAPH_VERSION}/${submission.video_id}?fields=${fields}&access_token=${accessToken}`;
+
+      let mediaRes = await instagramGraphFetch(mediaUrl(mediaFieldsFull), {
         headers: graphHeaders,
         usageAccumulator,
       });
+      if (!mediaRes.ok) {
+        mediaRes = await instagramGraphFetch(mediaUrl(mediaFieldsBasic), {
+          headers: graphHeaders,
+          usageAccumulator,
+        });
+      }
       if (mediaRes.ok) {
         const mediaJson = (await mediaRes.json().catch(() => ({}))) as {
           media_product_type?: string;
           media_type?: string;
           media_url?: string;
+          reposts_count?: number | string | null;
+          like_count?: number | string | null;
+          comments_count?: number | string | null;
+          shares_count?: number | string | null;
         };
         mediaProductType =
           mediaJson.media_product_type ??
@@ -208,6 +281,15 @@ export async function fetchInsights(
         if (typeof mediaJson.media_url === "string" && mediaJson.media_url) {
           cdnMediaUrl = mediaJson.media_url;
         }
+        const asFinite = (v: unknown): number | null => {
+          if (v == null || v === "") return null;
+          const n = typeof v === "number" ? v : Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+        mediaRepostsCount = asFinite(mediaJson.reposts_count);
+        mediaLikesCount = asFinite(mediaJson.like_count);
+        mediaCommentsCount = asFinite(mediaJson.comments_count);
+        mediaSharesCount = asFinite(mediaJson.shares_count);
       }
     } catch {
       // continue with feed-safe metrics
@@ -232,21 +314,18 @@ export async function fetchInsights(
       let primaryViews = 0;
       for (const metric of metricsData.data || []) {
         const raw = readInsightMetricValue(metric);
-        if (metric.name === "reposts" || metric.name === "reels_skip_rate") {
-          // Keep explicit 0; only skip when Graph omits the value entirely.
-          if (raw != null) stats[metric.name] = raw;
-          continue;
-        }
-        const value = raw ?? 0;
+        // Only write keys Graph actually returned — never invent 0s.
+        if (raw == null) continue;
+
         if (metric.name === "ig_reels_avg_watch_time") {
-          stats.avg_watch_time_ms = value;
+          stats.avg_watch_time_ms = raw;
         } else if (metric.name === "ig_reels_video_view_total_time") {
-          stats.total_watch_time_ms = value;
+          stats.total_watch_time_ms = raw;
         } else if (metric.name === "views") {
-          stats.views = value;
-          primaryViews = value;
+          stats.views = raw;
+          primaryViews = raw;
         } else {
-          stats[metric.name] = value;
+          stats[metric.name] = raw;
         }
       }
       return primaryViews;
@@ -307,7 +386,7 @@ export async function fetchInsights(
       };
     }
 
-    const stats: Record<string, number> = { ...DEFAULT_STATS };
+    const stats: Record<string, number> = {};
     let primaryViews = applyInsightMetrics(data, stats);
 
     // If skip/reposts were dropped (fallback) or omitted by Graph, fetch them alone.
@@ -356,9 +435,62 @@ export async function fetchInsights(
       }
     }
 
+    // If the main response omitted Reel watch-time metrics (or returned 0 while
+    // other Reel metrics like skip rate succeeded), fetch watch time alone.
+    const avgWatch = Number(stats.avg_watch_time_ms);
+    const totalWatch = Number(stats.total_watch_time_ms);
+    const needsWatchBackfill =
+      isReels &&
+      (!Object.prototype.hasOwnProperty.call(stats, "avg_watch_time_ms") ||
+        !Object.prototype.hasOwnProperty.call(stats, "total_watch_time_ms") ||
+        !Number.isFinite(avgWatch) ||
+        avgWatch <= 0 ||
+        !Number.isFinite(totalWatch) ||
+        totalWatch <= 0);
+    if (needsWatchBackfill) {
+      try {
+        const watchRes = await fetchWithMetrics(
+          "ig_reels_avg_watch_time,ig_reels_video_view_total_time",
+        );
+        if (watchRes.ok) {
+          const watchData = (await watchRes
+            .json()
+            .catch(() => null)) as InsightsData | null;
+          if (watchData?.data?.length) applyInsightMetrics(watchData, stats);
+        }
+      } catch {
+        // optional — ignore
+      }
+    }
+
     if (primaryViews === 0 && stats.reach > 0) {
       primaryViews = stats.reach;
     }
+
+    // Prefer the higher of Insights vs media-object counts. Insights can return
+    // 0/omit while the media object still has the public engagement total.
+    const preferHigherMediaCount = (
+      key: string,
+      mediaCount: number | null,
+    ) => {
+      if (mediaCount == null || !Number.isFinite(mediaCount) || mediaCount < 0) {
+        return;
+      }
+      const insightVal = Object.prototype.hasOwnProperty.call(stats, key)
+        ? Number(stats[key])
+        : null;
+      if (
+        insightVal == null ||
+        !Number.isFinite(insightVal) ||
+        mediaCount > insightVal
+      ) {
+        stats[key] = mediaCount;
+      }
+    };
+    preferHigherMediaCount("reposts", mediaRepostsCount);
+    preferHigherMediaCount("likes", mediaLikesCount);
+    preferHigherMediaCount("comments", mediaCommentsCount);
+    preferHigherMediaCount("shares", mediaSharesCount);
 
     const prevIg =
       submission.other_stats &&

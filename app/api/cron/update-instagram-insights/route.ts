@@ -12,6 +12,7 @@ import {
   fetchInsights as fetchInsightsShared,
   hasStatsChanged as hasStatsChangedShared,
   isTokenExpiring as isTokenExpiringShared,
+  mergeInstagramStats,
   refreshToken as refreshTokenShared,
 } from "@/lib/instagram-insights";
 import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-log";
@@ -456,7 +457,7 @@ export async function GET(request: Request) {
             views,
             other_stats: {
               ...prevOther,
-              instagram: { ...prevIg, ...stats },
+              instagram: mergeInstagramStats(prevIg, stats),
             },
             updated_at: new Date().toISOString(),
           });

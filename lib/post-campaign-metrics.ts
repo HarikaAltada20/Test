@@ -9,6 +9,7 @@ import dayjs from "dayjs";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import {
   fetchInsights,
+  mergeInstagramStats,
   refreshToken,
   isTokenExpiring,
   type InstagramAccount,
@@ -856,7 +857,7 @@ async function refreshInstagramPostCampaign(
           views: result.views,
           other_stats: {
             ...prevOther,
-            instagram: { ...prevIg, ...result.stats },
+            instagram: mergeInstagramStats(prevIg, result.stats),
           },
           last_insights_update: now,
           insights_status: "ok",

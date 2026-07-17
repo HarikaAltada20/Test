@@ -273,60 +273,94 @@ function getYouTubeThumbnailUrl(
 
 function buildInstagramStatsFromInsights(
   insightsData: {
-    data?: Array<{ name: string; values: { value: number }[] }>;
+    data?: Array<{
+      name: string;
+      values?: Array<{ value?: number | string | null }>;
+      total_value?: { value?: number | string | null };
+    }>;
   },
 ): { primaryViews: number; stats: Record<string, number> } {
   let primaryViews = 0;
-  const instagramApiMetrics: Record<string, number> = {};
+  const stats: Record<string, number> = {};
 
   if (insightsData?.data && Array.isArray(insightsData.data)) {
-    insightsData.data.forEach(
-      (metric: { name: string; values: { value: number }[] }) => {
-        const raw = metric.values[0]?.value;
-        if (raw == null) return;
-        const value = Number(raw) || 0;
-        if (metric.name === "ig_reels_avg_watch_time") {
-          instagramApiMetrics.avg_watch_time_ms = value;
-        } else if (metric.name === "ig_reels_video_view_total_time") {
-          instagramApiMetrics.total_watch_time_ms = value;
-        } else if (metric.name === "views") {
-          instagramApiMetrics.views = value;
-          primaryViews = value;
-        } else if (
-          metric.name === "reposts" ||
-          metric.name === "reels_skip_rate"
-        ) {
-          instagramApiMetrics[metric.name] = value;
-        } else {
-          instagramApiMetrics[metric.name] = value;
+    for (const metric of insightsData.data) {
+      const candidates = [metric.values?.[0]?.value, metric.total_value?.value];
+      let raw: number | null = null;
+      for (const candidate of candidates) {
+        if (candidate == null || candidate === "") continue;
+        const n = typeof candidate === "number" ? candidate : Number(candidate);
+        if (Number.isFinite(n)) {
+          raw = n;
+          break;
         }
-      },
-    );
+      }
+      // Only write keys Graph actually returned — never invent 0s.
+      if (raw == null) continue;
+
+      if (metric.name === "ig_reels_avg_watch_time") {
+        stats.avg_watch_time_ms = raw;
+      } else if (metric.name === "ig_reels_video_view_total_time") {
+        stats.total_watch_time_ms = raw;
+      } else if (metric.name === "views") {
+        stats.views = raw;
+        primaryViews = raw;
+      } else {
+        stats[metric.name] = raw;
+      }
+    }
   }
 
-  if (primaryViews === 0 && (instagramApiMetrics.reach || 0) > 0) {
-    primaryViews = instagramApiMetrics.reach;
+  if (primaryViews === 0 && (stats.reach || 0) > 0) {
+    primaryViews = stats.reach;
   }
 
-  // Core defaults only — omit optional metrics unless Graph returned them.
   // Duration is filled server-side on refresh (Graph has no video_duration field).
-  const defaultStats: Record<string, number> = {
-    reach: 0,
-    likes: 0,
-    comments: 0,
-    shares: 0,
-    saved: 0,
-    total_interactions: 0,
-    views: 0,
-  };
+  return { primaryViews, stats };
+}
 
-  return {
-    primaryViews,
-    stats: {
-      ...defaultStats,
-      ...instagramApiMetrics,
-    },
-  };
+/** Prefer media-object counts when Insights omits or under-reports them. */
+async function backfillInstagramMediaCounts(
+  mediaId: string,
+  accessToken: string,
+  stats: Record<string, number>,
+): Promise<void> {
+  try {
+    const fields =
+      "reposts_count,like_count,comments_count,shares_count";
+    const res = await fetch(
+      `https://graph.instagram.com/${IG_GRAPH_VERSION}/${mediaId}?fields=${fields}&access_token=${accessToken}`,
+    );
+    if (!res.ok) return;
+    const json = (await res.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    const asFinite = (v: unknown): number | null => {
+      if (v == null || v === "") return null;
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const preferHigher = (key: string, mediaCount: number | null) => {
+      if (mediaCount == null || mediaCount < 0) return;
+      const insightVal = Object.prototype.hasOwnProperty.call(stats, key)
+        ? Number(stats[key])
+        : null;
+      if (
+        insightVal == null ||
+        !Number.isFinite(insightVal) ||
+        mediaCount > insightVal
+      ) {
+        stats[key] = mediaCount;
+      }
+    };
+    preferHigher("reposts", asFinite(json.reposts_count));
+    preferHigher("likes", asFinite(json.like_count));
+    preferHigher("comments", asFinite(json.comments_count));
+    preferHigher("shares", asFinite(json.shares_count));
+  } catch {
+    // optional
+  }
 }
 
 export default function SubmitContentPage({
@@ -2333,6 +2367,11 @@ export default function SubmitContentPage({
 
     const { primaryViews, stats: finalInstagramStats } =
       buildInstagramStatsFromInsights(insightsData);
+    await backfillInstagramMediaCounts(
+      selectedReel.id,
+      instagramAccount.access_token,
+      finalInstagramStats,
+    );
 
     const submissionPayload = {
       contest_id: contestId,
@@ -2469,6 +2508,11 @@ export default function SubmitContentPage({
 
         const { primaryViews, stats: finalInstagramStats } =
           buildInstagramStatsFromInsights(insightsData);
+        await backfillInstagramMediaCounts(
+          reel.id,
+          instagramAccount.access_token,
+          finalInstagramStats,
+        );
 
         return await supabase
           .from("submissions")
