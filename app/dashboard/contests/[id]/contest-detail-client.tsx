@@ -198,6 +198,7 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
+import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
@@ -9648,6 +9649,11 @@ export default function ContestDetailClient({
         avg_watch_time_ms: igStats.avg_watch_time_ms || 0,
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
         duration_seconds: Number(igStats.duration_seconds) || 0,
+        reposts: Number(igStats.reposts) || 0,
+        reels_skip_rate:
+          igStats.reels_skip_rate != null
+            ? Number(igStats.reels_skip_rate)
+            : null,
       };
     } else if (platform.includes("tiktok")) {
       const t = stats.tiktok ?? ({} as Record<string, unknown>);
@@ -19038,6 +19044,9 @@ export default function ContestDetailClient({
                                     Shares
                                   </TableHead>
                                   <TableHead className="text-center">
+                                    Reposts
+                                  </TableHead>
+                                  <TableHead className="text-center">
                                     Saves
                                   </TableHead>
                                   <TableHead className="text-center">
@@ -19054,6 +19063,9 @@ export default function ContestDetailClient({
                                   </TableHead>
                                   <TableHead className="text-center">
                                     Reel duration
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Skip rate (first 3s)
                                   </TableHead>
                                   {isAdminView && (
                                     <TableHead className="text-center">
@@ -20860,6 +20872,11 @@ export default function ContestDetailClient({
                                       </TableCell>
                                       <TableCell className="text-center font-mono text-sm">
                                         {formatMetricValue(
+                                          (metrics as any).reposts,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
                                           (metrics as any).saves,
                                         )}
                                       </TableCell>
@@ -20921,6 +20938,32 @@ export default function ContestDetailClient({
                                           const label =
                                             formatClipDurationSeconds(
                                               reelSec > 0 ? reelSec : null,
+                                            );
+                                          return label !== "—" ? (
+                                            <span className="font-bold">
+                                              {label}
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-slate-500"
+                                                  : "text-slate-400",
+                                              )}
+                                            >
+                                              —
+                                            </span>
+                                          );
+                                        })()}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {(() => {
+                                          const skip = (metrics as any)
+                                            .reels_skip_rate;
+                                          const label =
+                                            formatReelsSkipRate(
+                                              skip == null ? null : Number(skip),
                                             );
                                           return label !== "—" ? (
                                             <span className="font-bold">

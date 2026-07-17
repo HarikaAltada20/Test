@@ -18,12 +18,17 @@ type CpmBudgetSubmissionRow = {
   earnings?: number | null;
   bonus_amount?: number | null;
 };
+import { parseInstagramVideoDuration } from "@/lib/instagram-clip-metrics";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
-const METRICS =
+/** Core metrics available across typical contest reels/posts. */
+const CORE_METRICS =
   "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+/** Optional newer metrics — may be unavailable on older Graph versions / non-reels. */
+const OPTIONAL_METRICS = "reposts,reels_skip_rate";
+const METRICS = `${CORE_METRICS},${OPTIONAL_METRICS}`;
 const DEFAULT_STATS = {
   reach: 0,
   likes: 0,
@@ -34,6 +39,7 @@ const DEFAULT_STATS = {
   views: 0,
   avg_watch_time_ms: 0,
   total_watch_time_ms: 0,
+  reposts: 0,
 };
 
 export interface InstagramAccount {
@@ -147,6 +153,7 @@ export function classifyInsightsError(
 
 /**
  * Fetch insights for one submission. Returns success with views/stats or error with classification.
+ * Duration is only fetched when not already stored (prefer submit-time capture).
  */
 export async function fetchInsights(
   submission: SubmissionForInsights,
@@ -154,27 +161,51 @@ export async function fetchInsights(
   usageAccumulator?: MetaGraphUsageAccumulator
 ): Promise<FetchInsightsResult> {
   try {
-    const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${METRICS}&access_token=${accessToken}`;
-    const response = await instagramGraphFetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      usageAccumulator,
-    });
+    const fetchWithMetrics = async (metricList: string) => {
+      const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${metricList}&access_token=${accessToken}`;
+      return instagramGraphFetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        usageAccumulator,
+      });
+    };
+
+    let response = await fetchWithMetrics(METRICS);
+    let errorBody: {
+      error?: { code?: number; error_subcode?: number; message?: string };
+    } = {};
 
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
+      errorBody = await response.json().catch(() => ({}));
       const code = errorBody?.error?.code ?? response.status;
       const errorSubcode = errorBody?.error?.error_subcode;
       const classification = classifyInsightsError(code, errorSubcode);
-      return {
-        kind: "error",
-        classification,
-        code,
-        error_subcode: errorSubcode,
-        message: errorBody?.error?.message,
-      };
+      // Newer metrics (reposts / reels_skip_rate) may not be available — retry without them.
+      if (classification === "temporary" || code === 100) {
+        const retry = await fetchWithMetrics(CORE_METRICS);
+        if (retry.ok) {
+          response = retry;
+          errorBody = {};
+        } else {
+          return {
+            kind: "error",
+            classification,
+            code,
+            error_subcode: errorSubcode,
+            message: errorBody?.error?.message,
+          };
+        }
+      } else {
+        return {
+          kind: "error",
+          classification,
+          code,
+          error_subcode: errorSubcode,
+          message: errorBody?.error?.message,
+        };
+      }
     }
 
     const data: InsightsData = await response.json();
@@ -186,9 +217,8 @@ export async function fetchInsights(
       };
     }
 
-    const stats = { ...DEFAULT_STATS };
+    const stats: Record<string, number> = { ...DEFAULT_STATS };
     let primaryViews = 0;
-    let durationSeconds: number | undefined;
 
     data.data.forEach((metric) => {
       const value = metric.values[0]?.value || 0;
@@ -199,8 +229,13 @@ export async function fetchInsights(
       } else if (metric.name === "views") {
         stats.views = value;
         primaryViews = value;
+      } else if (metric.name === "reels_skip_rate") {
+        // Only set when Graph returns a value (may be absent for low-view reels).
+        if (metric.values[0]?.value != null) {
+          stats.reels_skip_rate = Number(metric.values[0].value);
+        }
       } else {
-        (stats as Record<string, number>)[metric.name] = value;
+        stats[metric.name] = value;
       }
     });
 
@@ -208,34 +243,41 @@ export async function fetchInsights(
       primaryViews = stats.reach;
     }
 
-    // Best-effort clip length (not always available on IG Graph).
-    try {
-      const mediaUrl = `https://graph.instagram.com/${submission.video_id}?fields=media_type,media_product_type,video_duration&access_token=${accessToken}`;
-      const mediaRes = await instagramGraphFetch(mediaUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-        usageAccumulator,
-      });
-      if (mediaRes.ok) {
-        const mediaJson = (await mediaRes.json().catch(() => ({}))) as {
-          video_duration?: number | string;
-        };
-        const raw = mediaJson.video_duration;
-        const parsed =
-          typeof raw === "number"
-            ? raw
-            : typeof raw === "string"
-              ? Number.parseFloat(raw)
-              : NaN;
-        if (Number.isFinite(parsed) && parsed > 0) {
-          // Graph may return seconds (or occasionally ms for very large values).
-          durationSeconds = parsed > 6000 ? Math.round(parsed / 1000) : Math.round(parsed);
+    // Prefer duration already stored at submit; only call media API when missing.
+    const prevIg =
+      submission.other_stats &&
+      typeof submission.other_stats === "object" &&
+      submission.other_stats.instagram &&
+      typeof submission.other_stats.instagram === "object" &&
+      !Array.isArray(submission.other_stats.instagram)
+        ? (submission.other_stats.instagram as Record<string, unknown>)
+        : {};
+    const existingDuration = Number(prevIg.duration_seconds);
+    let durationSeconds: number | undefined =
+      Number.isFinite(existingDuration) && existingDuration > 0
+        ? existingDuration
+        : undefined;
+
+    if (durationSeconds == null) {
+      try {
+        const mediaUrl = `https://graph.instagram.com/${submission.video_id}?fields=media_type,media_product_type,video_duration&access_token=${accessToken}`;
+        const mediaRes = await instagramGraphFetch(mediaUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          },
+          usageAccumulator,
+        });
+        if (mediaRes.ok) {
+          const mediaJson = (await mediaRes.json().catch(() => ({}))) as {
+            video_duration?: number | string;
+          };
+          const parsed = parseInstagramVideoDuration(mediaJson.video_duration);
+          if (parsed != null) durationSeconds = parsed;
         }
+      } catch {
+        // optional field — ignore
       }
-    } catch {
-      // optional field — ignore
     }
 
     return {

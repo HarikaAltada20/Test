@@ -87,6 +87,7 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
+import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
 import {
   postContestStatusLocksSubmissionModeration,
   submissionModerationUiAllowed,
@@ -2580,6 +2581,16 @@ export function CreatorSubmissionsModal({
                             >
                               Shares
                             </TableHead>
+                            {!isTikTokContest && (
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Reposts
+                              </TableHead>
+                            )}
                             {/* Saves: Instagram only — not in TikTok Display API */}
                             {!isTikTokContest && (
                               <TableHead
@@ -2656,6 +2667,14 @@ export function CreatorSubmissionsModal({
                                   )}
                                 >
                                   Reel duration
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Skip rate (first 3s)
                                 </TableHead>
                               </>
                             )}
@@ -2912,8 +2931,8 @@ export function CreatorSubmissionsModal({
                               (isInstagramContest || isTikTokContest
                                 ? isTikTokContest
                                   ? 3
-                                  : 6
-                                : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
+                                  : 9
+                                : 0) + // TT: Shares + total engagement + engagement rate; IG: Shares, Reposts, Saves, Reach, Interactions, Avg/Total watch, Reel duration, Skip rate
                               2 + // Expected Reward, Reward Granted
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
@@ -3014,6 +3033,13 @@ export function CreatorSubmissionsModal({
                       const igReelDurationSeconds = Number(
                         (platformStats as any)?.duration_seconds ?? 0,
                       );
+                      const igReposts = Number(
+                        (platformStats as any)?.reposts ?? 0,
+                      );
+                      const igReelsSkipRate =
+                        (platformStats as any)?.reels_skip_rate != null
+                          ? Number((platformStats as any).reels_skip_rate)
+                          : null;
                       const ytEngagedViews = Number(
                         youtubeStats.engaged_views ?? 0,
                       );
@@ -4197,6 +4223,11 @@ export function CreatorSubmissionsModal({
                                   </TableCell>
                                   {!isTikTokContest && (
                                     <TableCell className="text-center font-mono">
+                                      {formatMetricValue(igReposts)}
+                                    </TableCell>
+                                  )}
+                                  {!isTikTokContest && (
+                                    <TableCell className="text-center font-mono">
                                       {formatMetricValue(saves)}
                                     </TableCell>
                                   )}
@@ -4266,6 +4297,9 @@ export function CreatorSubmissionsModal({
                                             ? igReelDurationSeconds
                                             : null,
                                         )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {formatReelsSkipRate(igReelsSkipRate)}
                                       </TableCell>
                                     </>
                                   )}

@@ -30,6 +30,7 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
+import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
 import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
 import ExcelJS from "exceljs";
 import {
@@ -372,6 +373,8 @@ export function buildSubmissionExportCellValue(
       return formatMetricValue(metrics.dislikes);
     case "shares":
       return formatMetricValue(metrics.shares);
+    case "reposts":
+      return formatMetricValue(metrics.reposts);
     case "avg_view_pct": {
       const pct = Number(metrics.avg_view_percentage);
       return pct > 0 ? `${pct.toFixed(1)}%` : EMPTY_CELL;
@@ -391,6 +394,14 @@ export function buildSubmissionExportCellValue(
       const sec = Number(metrics.duration_seconds);
       const label = formatClipDurationSeconds(
         Number.isFinite(sec) && sec > 0 ? sec : null,
+      );
+      return label === "—" ? EMPTY_CELL : label;
+    }
+    case "reels_skip_rate": {
+      const label = formatReelsSkipRate(
+        metrics.reels_skip_rate == null
+          ? null
+          : Number(metrics.reels_skip_rate),
       );
       return label === "—" ? EMPTY_CELL : label;
     }
