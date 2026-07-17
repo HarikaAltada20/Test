@@ -95,6 +95,15 @@ function cooldownMsFor(isAdmin: boolean): number {
     : METRICS_REFRESH_COOLDOWN_MS_BRAND;
 }
 
+export type PostCampaignSyncSlotClaim = {
+  /** Value before claim — restore via releasePostCampaignSyncSlot on sync failure. */
+  previousSyncedAt: string | null;
+};
+
+export type ClaimPostCampaignSyncSlotResult =
+  | { ok: true; claim: PostCampaignSyncSlotClaim }
+  | { ok: false; response: NextResponse };
+
 /**
  * Claim a post-campaign sync slot by CAS-updating post_campaign_last_synced_at.
  * Prevents concurrent/spam first syncs when refresh timestamp is still null.
@@ -105,7 +114,7 @@ export async function claimPostCampaignSyncSlot(
   supabaseAdmin: any,
   contestId: string,
   isAdmin: boolean,
-): Promise<NextResponse | null> {
+): Promise<ClaimPostCampaignSyncSlotResult> {
   const { data: contest, error } = await supabaseAdmin
     .from("contests")
     .select("post_campaign_last_metrics_updated, post_campaign_last_synced_at")
@@ -113,14 +122,22 @@ export async function claimPostCampaignSyncSlot(
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!contest) {
-    return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Contest not found" }, { status: 404 }),
+    };
   }
+
+  const previousSyncedAt =
+    (contest.post_campaign_last_synced_at as string | null | undefined) ?? null;
 
   const cooldownAnchor =
     contest.post_campaign_last_metrics_updated ??
     contest.post_campaign_last_synced_at;
   const cooldownDenied = postCampaignCooldownResponse(cooldownAnchor, isAdmin);
-  if (cooldownDenied) return cooldownDenied;
+  if (cooldownDenied) {
+    return { ok: false, response: cooldownDenied };
+  }
 
   const nowIso = new Date().toISOString();
   const cutoffIso = new Date(
@@ -144,16 +161,33 @@ export async function claimPostCampaignSyncSlot(
     .maybeSingle();
   if (claimError) throw new Error(claimError.message);
   if (!claimed) {
-    return NextResponse.json(
-      {
-        error:
-          "A post-campaign sync is already in progress or was started recently. Please wait and try again.",
-        alreadyActive: true,
-      },
-      { status: 409 },
-    );
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error:
+            "A post-campaign sync is already in progress or was started recently. Please wait and try again.",
+          alreadyActive: true,
+        },
+        { status: 409 },
+      ),
+    };
   }
-  return null;
+  return { ok: true, claim: { previousSyncedAt } };
+}
+
+/** Undo a sync slot claim when syncPostCampaignFromSubmissions fails. */
+export async function releasePostCampaignSyncSlot(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseAdmin: any,
+  contestId: string,
+  claim: PostCampaignSyncSlotClaim,
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("contests")
+    .update({ post_campaign_last_synced_at: claim.previousSyncedAt })
+    .eq("id", contestId);
+  if (error) throw new Error(error.message);
 }
 
 /** True when a post-campaign metrics queue run is already active for this contest. */

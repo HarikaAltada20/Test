@@ -159,6 +159,7 @@ import {
   submissionModerationUiAllowed,
   SUBMISSION_MODERATION_LOCKED_MESSAGE,
 } from "@/lib/post-contest-moderation-lock";
+import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
@@ -755,8 +756,8 @@ type YouTubeMetricsRefreshRunSummary = {
 interface ContestDetailClientProps {
   contest: Contest;
   initialSubmissions: Submission[] | null;
-  /** SSR-hydrated PC overlay (null = not prefetched; client will fetch). */
-  initialPostCampaignMetrics?: PostCampaignSubmissionSnapshot[] | null;
+  /** SSR count probe (null = not prefetched; client loads rows paginated). */
+  initialPostCampaignMetricsCount?: number | null;
   durationDays: number | null;
   contestId: string;
   isAdminView?: boolean;
@@ -1172,7 +1173,7 @@ function twitterCpmBonusGrantedDisplay(
 export default function ContestDetailClient({
   contest,
   initialSubmissions,
-  initialPostCampaignMetrics = null,
+  initialPostCampaignMetricsCount = null,
   durationDays,
   contestId,
   isAdminView = false,
@@ -1835,34 +1836,22 @@ export default function ContestDetailClient({
     useState<SubmissionsLeaderboardMode>("submissions");
   const [postCampaignMetricsById, setPostCampaignMetricsById] = useState<
     Record<string, PostCampaignSubmissionSnapshot>
-  >(() => {
-    const next: Record<string, PostCampaignSubmissionSnapshot> = {};
-    for (const row of initialPostCampaignMetrics ?? []) {
-      next[row.submission_id] = row;
-    }
-    return next;
-  });
+  >({});
   const [postCampaignLastMetricsUpdated, setPostCampaignLastMetricsUpdated] =
     useState<string | null>(
       currentContest.post_campaign_last_metrics_updated ?? null,
     );
-  // SSR already fetched PC overlay (including empty []) — skip loading flash.
+  // SSR count probe: 0 means empty overlay; null means client must load.
   const [postCampaignMetricsLoaded, setPostCampaignMetricsLoaded] = useState(
-    () => initialPostCampaignMetrics != null,
+    () => initialPostCampaignMetricsCount === 0,
   );
   const [isLoadingPostCampaignMetrics, setIsLoadingPostCampaignMetrics] =
     useState(false);
   // PC Submissions overlay is for ended video contests once review is underway
-  // (hidden while still in pending_review, when live submissions can still refresh).
-  // Twitter/X contests do not use post-campaign metrics overlay.
-  const isTwitterOrXContest =
-    (currentContest.platform?.toLowerCase() === "twitter" ||
-      currentContest.platform?.toLowerCase() === "x") &&
-    currentContest.contest_format === "text_image";
-  const showPostCampaignToggle =
-    !isTwitterOrXContest &&
-    currentContest.status === "ended" &&
-    currentContest.post_contest_status !== "pending_review";
+  // (hidden while still in pending_review or before post-contest status is set).
+  const showPostCampaignToggle = shouldShowPostCampaignSubmissionsToggle(
+    currentContest,
+  );
   const isPostCampaignLeaderboard =
     showPostCampaignToggle && submissionsLeaderboardMode === "post_campaign";
 
@@ -1877,14 +1866,27 @@ export default function ContestDetailClient({
 
   const applyPostCampaignMetricsPayload = (
     metrics: PostCampaignSubmissionSnapshot[],
+    options?: { merge?: boolean },
   ) => {
-    const next: typeof postCampaignMetricsById = {};
-    for (const row of metrics) {
-      next[row.submission_id] = row;
+    if (options?.merge) {
+      setPostCampaignMetricsById((prev) => {
+        const next = { ...prev };
+        for (const row of metrics) {
+          next[row.submission_id] = row;
+        }
+        return next;
+      });
+    } else {
+      const next: typeof postCampaignMetricsById = {};
+      for (const row of metrics) {
+        next[row.submission_id] = row;
+      }
+      setPostCampaignMetricsById(next);
     }
-    setPostCampaignMetricsById(next);
     setPostCampaignMetricsLoaded(true);
   };
+
+  const POST_CAMPAIGN_METRICS_PAGE_SIZE = 500;
 
   const hasPostCampaignData = Object.keys(postCampaignMetricsById).length > 0;
   const postCampaignLoadInFlightRef = useRef(false);
@@ -1933,45 +1935,74 @@ export default function ContestDetailClient({
         }
 
         const res = await fetch(
-          `/api/contests/${contestId}/post-campaign-submissions`,
+          `/api/contests/${contestId}/post-campaign-submissions?limit=${POST_CAMPAIGN_METRICS_PAGE_SIZE}&offset=0`,
         );
-        const data = await res.json().catch(() => ({}));
+        const firstPage = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(
-            data?.error || "Failed to load post-campaign metrics",
+            firstPage?.error || "Failed to load post-campaign metrics",
           );
         }
-        const metrics = Array.isArray(data.metrics) ? data.metrics : [];
-        if (data.post_campaign_last_metrics_updated !== undefined) {
-          setPostCampaignLastMetricsUpdated(
-            data.post_campaign_last_metrics_updated ?? null,
-          );
-        }
-        if (data.post_campaign_youtube_metrics_last_updated) {
-          setCurrentContest((prev) => {
-            const details =
-              (prev.contest_based_details as Record<string, unknown> | null) ||
-              {};
-            return {
+
+        const applyPageMeta = (data: Record<string, unknown>) => {
+          if (data.post_campaign_last_metrics_updated !== undefined) {
+            setPostCampaignLastMetricsUpdated(
+              (data.post_campaign_last_metrics_updated as string | null) ??
+                null,
+            );
+          }
+          if (data.post_campaign_youtube_metrics_last_updated) {
+            setCurrentContest((prev) => {
+              const details =
+                (prev.contest_based_details as Record<string, unknown> | null) ||
+                {};
+              return {
+                ...prev,
+                post_campaign_last_metrics_updated:
+                  (data.post_campaign_last_metrics_updated as
+                    | string
+                    | null
+                    | undefined) ?? prev.post_campaign_last_metrics_updated,
+                contest_based_details: {
+                  ...details,
+                  post_campaign_youtube_metrics_last_updated:
+                    data.post_campaign_youtube_metrics_last_updated,
+                } as Contest["contest_based_details"],
+              };
+            });
+          } else if (data.post_campaign_last_metrics_updated !== undefined) {
+            setCurrentContest((prev) => ({
               ...prev,
               post_campaign_last_metrics_updated:
-                data.post_campaign_last_metrics_updated ??
-                prev.post_campaign_last_metrics_updated,
-              contest_based_details: {
-                ...details,
-                post_campaign_youtube_metrics_last_updated:
-                  data.post_campaign_youtube_metrics_last_updated,
-              } as Contest["contest_based_details"],
-            };
-          });
-        } else if (data.post_campaign_last_metrics_updated !== undefined) {
-          setCurrentContest((prev) => ({
-            ...prev,
-            post_campaign_last_metrics_updated:
-              data.post_campaign_last_metrics_updated,
-          }));
+                data.post_campaign_last_metrics_updated as string | null,
+            }));
+          }
+        };
+
+        let offset = 0;
+        let hasMore = Boolean(firstPage.hasMore);
+        let pageMetrics = Array.isArray(firstPage.metrics)
+          ? firstPage.metrics
+          : [];
+        applyPageMeta(firstPage);
+        applyPostCampaignMetricsPayload(pageMetrics, { merge: false });
+        offset += POST_CAMPAIGN_METRICS_PAGE_SIZE;
+
+        while (hasMore) {
+          const pageRes = await fetch(
+            `/api/contests/${contestId}/post-campaign-submissions?limit=${POST_CAMPAIGN_METRICS_PAGE_SIZE}&offset=${offset}`,
+          );
+          const pageData = await pageRes.json().catch(() => ({}));
+          if (!pageRes.ok) {
+            throw new Error(
+              pageData?.error || "Failed to load post-campaign metrics",
+            );
+          }
+          pageMetrics = Array.isArray(pageData.metrics) ? pageData.metrics : [];
+          applyPostCampaignMetricsPayload(pageMetrics, { merge: true });
+          hasMore = Boolean(pageData.hasMore);
+          offset += POST_CAMPAIGN_METRICS_PAGE_SIZE;
         }
-        applyPostCampaignMetricsPayload(metrics);
       } catch (err) {
         if (!opts?.silent) {
           toast({
@@ -2010,17 +2041,22 @@ export default function ContestDetailClient({
           syncData?.error || "Failed to load submissions into post-campaign",
         );
       }
-      const metrics = Array.isArray(syncData.metrics) ? syncData.metrics : [];
       if (syncData.post_campaign_last_metrics_updated !== undefined) {
         setPostCampaignLastMetricsUpdated(
           syncData.post_campaign_last_metrics_updated ?? null,
         );
       }
-      applyPostCampaignMetricsPayload(metrics);
+      await loadPostCampaignMetrics({ force: true });
+      const syncedCount =
+        typeof syncData.synced === "number"
+          ? syncData.synced
+          : typeof syncData.count === "number"
+            ? syncData.count
+            : 0;
       toast({
         title: "Post-campaign data loaded",
-        description: `Copied ${syncData.synced ?? metrics.length} submission${
-          (syncData.synced ?? metrics.length) !== 1 ? "s" : ""
+        description: `Copied ${syncedCount} submission${
+          syncedCount !== 1 ? "s" : ""
         } from this contest. Use Refresh Metrics to update platform stats.`,
         variant: "success",
         duration: 6000,
@@ -7852,11 +7888,7 @@ export default function ContestDetailClient({
           );
         }
 
-        if (Array.isArray(result.metrics)) {
-          applyPostCampaignMetricsPayload(result.metrics);
-        }
-
-        // Same background queues as Submissions — poll until done, then reload overlay.
+        // Queued refresh loads overlay when the run completes (poll handler).
         if (result.queued) {
           const {
             statusPath,
@@ -7965,16 +7997,14 @@ export default function ContestDetailClient({
               }
               // Fallback: detect overlay timestamp bump
               const mres = await fetch(
-                `/api/contests/${contestId}/post-campaign-submissions`,
+                `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
               );
               if (mres.ok) {
                 const md = await mres.json();
                 const updated = md.post_campaign_last_metrics_updated ?? null;
                 if (updated && updated !== previousUpdated) {
                   clearInterval(pollTimer);
-                  applyPostCampaignMetricsPayload(
-                    Array.isArray(md.metrics) ? md.metrics : [],
-                  );
+                  await loadPostCampaignMetrics({ force: true, silent: true });
                   setPostCampaignLastMetricsUpdated(updated);
                   try {
                     const sres2 = await fetch(statusUrl);
@@ -8395,11 +8425,8 @@ export default function ContestDetailClient({
         result?.error || "Failed to refresh post-campaign metrics",
       );
     }
-    if (Array.isArray(result.metrics)) {
-      applyPostCampaignMetricsPayload(result.metrics);
-    }
 
-    // YouTube post-campaign analytics scopes also use the shared metrics queue.
+    // Queued refresh loads overlay when the run completes (poll handler).
     if (result.queued) {
       if (!isVideoContestFormat) {
         toast({

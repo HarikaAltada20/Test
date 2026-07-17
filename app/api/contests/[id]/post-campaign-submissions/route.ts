@@ -3,14 +3,16 @@ import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
-  fetchPostCampaignMetrics,
   fetchPostCampaignMetricsCount,
+  fetchPostCampaignMetricsPage,
+  POST_CAMPAIGN_METRICS_PAGE_SIZE,
   syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
 import {
   activePostCampaignRunResponse,
   claimPostCampaignSyncSlot,
   hasActivePostCampaignMetricsRun,
+  releasePostCampaignSyncSlot,
 } from "@/lib/post-campaign-enqueue-guards";
 
 async function authorizeContestAccess(
@@ -66,6 +68,28 @@ function isContestEnded(endDate: string | null): boolean {
   return new Date() >= new Date(endDate);
 }
 
+function parsePaginationParams(url: URL): {
+  limit: number;
+  offset: number;
+} | null {
+  const limitRaw = url.searchParams.get("limit");
+  const offsetRaw = url.searchParams.get("offset");
+  const limit = limitRaw
+    ? Number.parseInt(limitRaw, 10)
+    : POST_CAMPAIGN_METRICS_PAGE_SIZE;
+  const offset = offsetRaw ? Number.parseInt(offsetRaw, 10) : 0;
+  if (
+    !Number.isFinite(limit) ||
+    !Number.isFinite(offset) ||
+    limit < 1 ||
+    limit > 1000 ||
+    offset < 0
+  ) {
+    return null;
+  }
+  return { limit, offset };
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -106,22 +130,37 @@ export async function GET(
       });
     }
 
-    const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId, {
-      light: true,
-    });
+    const pagination = parsePaginationParams(url);
+    if (!pagination) {
+      return NextResponse.json(
+        { error: "Invalid limit or offset" },
+        { status: 400 },
+      );
+    }
+
+    const page = await fetchPostCampaignMetricsPage(
+      supabaseAdmin,
+      contestId,
+      {
+        light: true,
+        limit: pagination.limit,
+        offset: pagination.offset,
+      },
+    );
     const pcYt =
-      (
-        auth.contest.contest_based_details
-          ?.post_campaign_youtube_metrics_last_updated as
-          | Record<string, string>
-          | undefined
-      ) ?? null;
+      (auth.contest.contest_based_details
+        ?.post_campaign_youtube_metrics_last_updated as
+        | Record<string, string>
+        | undefined) ?? null;
     return NextResponse.json({
-      metrics,
+      metrics: page.rows,
+      count: page.total,
+      limit: page.limit,
+      offset: page.offset,
+      hasMore: page.hasMore,
       post_campaign_last_metrics_updated:
         auth.contest.post_campaign_last_metrics_updated,
       post_campaign_youtube_metrics_last_updated: pcYt,
-      count: metrics.length,
     });
   } catch (e) {
     console.error("[post-campaign-submissions GET]", e);
@@ -154,7 +193,10 @@ export async function POST(
 
     if (!isContestEnded(auth.contest.end_date)) {
       return NextResponse.json(
-        { error: "Post-campaign submissions are only available after the contest has ended." },
+        {
+          error:
+            "Post-campaign submissions are only available after the contest has ended.",
+        },
         { status: 400 },
       );
     }
@@ -163,14 +205,6 @@ export async function POST(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
-
-    // CAS claim sync slot (covers first-sync spam when refresh timestamp is null).
-    const syncClaimDenied = await claimPostCampaignSyncSlot(
-      supabaseAdmin,
-      contestId,
-      auth.isAdmin,
-    );
-    if (syncClaimDenied) return syncClaimDenied;
 
     const platform = (auth.contest.platform ?? "").toLowerCase();
     const activeRunTable = platform.includes("instagram")
@@ -191,19 +225,46 @@ export async function POST(
       return activePostCampaignRunResponse();
     }
 
-    const { synced } = await syncPostCampaignFromSubmissions(
+    // CAS claim sync slot (covers first-sync spam when refresh timestamp is null).
+    const slotResult = await claimPostCampaignSyncSlot(
       supabaseAdmin,
       contestId,
+      auth.isAdmin,
     );
-    const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId);
+    if (!slotResult.ok) return slotResult.response;
 
-    return NextResponse.json({
-      success: true,
-      synced,
-      metrics,
-      post_campaign_last_metrics_updated:
-        auth.contest.post_campaign_last_metrics_updated,
-    });
+    try {
+      const { synced } = await syncPostCampaignFromSubmissions(
+        supabaseAdmin,
+        contestId,
+      );
+      const count = await fetchPostCampaignMetricsCount(
+        supabaseAdmin,
+        contestId,
+      );
+
+      return NextResponse.json({
+        success: true,
+        synced,
+        count,
+        post_campaign_last_metrics_updated:
+          auth.contest.post_campaign_last_metrics_updated,
+      });
+    } catch (syncError) {
+      try {
+        await releasePostCampaignSyncSlot(
+          supabaseAdmin,
+          contestId,
+          slotResult.claim,
+        );
+      } catch (releaseError) {
+        console.error(
+          "[post-campaign-submissions POST] failed to release sync slot",
+          releaseError,
+        );
+      }
+      throw syncError;
+    }
   } catch (e) {
     console.error("[post-campaign-submissions POST]", e);
     return NextResponse.json(

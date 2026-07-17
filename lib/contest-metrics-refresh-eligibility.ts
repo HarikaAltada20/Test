@@ -14,6 +14,31 @@ export function isPostContestMetricsLocked(
   return LOCKED_POST_CONTEST_STATUSES.has(postContestStatus);
 }
 
+function isTwitterTextImageContest(contest: {
+  platform?: string | null;
+  contest_format?: string | null;
+}): boolean {
+  return (
+    (contest.platform?.toLowerCase() === "twitter" ||
+      contest.platform?.toLowerCase() === "x") &&
+    contest.contest_format === "text_image"
+  );
+}
+
+/** Submissions vs PC Submissions header toggle (ended video contests in post-campaign review). */
+export function shouldShowPostCampaignSubmissionsToggle(contest: {
+  status?: string | null;
+  post_contest_status?: string | null;
+  platform?: string | null;
+  contest_format?: string | null;
+}): boolean {
+  return (
+    !isTwitterTextImageContest(contest) &&
+    contest.status === "ended" &&
+    isPostContestMetricsLocked(contest.post_contest_status)
+  );
+}
+
 /** Contests eligible for scheduled (cron) metrics refresh. */
 export function isContestEligibleForScheduledMetricsRefresh(contest: {
   views_locked_at?: string | null;

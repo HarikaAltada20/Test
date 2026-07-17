@@ -10,8 +10,8 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
-import { fetchPostCampaignMetrics } from "@/lib/post-campaign-metrics";
-import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
+import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
+import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import {
   fetchLiveTrustMetricsByCreatorIds,
   getCreatorTrustScoreFromMetrics,
@@ -183,23 +183,20 @@ export default async function AdminContestDetailPage({
 
     // Same gate as PC Submissions toggle — preload so the tab is instant.
     const shouldPrefetchPostCampaign =
-      !isTwitterCampaign &&
-      contestData.status === "ended" &&
-      contestData.post_contest_status !== "pending_review";
+      shouldShowPostCampaignSubmissionsToggle(contestData);
 
-    let initialPostCampaignMetrics: PostCampaignSubmissionSnapshot[] | null =
-      null;
+    // Count-only prefetch — rows load paginated on the client to avoid large SSR payloads.
+    let initialPostCampaignMetricsCount: number | null = null;
     if (shouldPrefetchPostCampaign) {
       try {
         const admin = createAdminClient();
-        initialPostCampaignMetrics = await fetchPostCampaignMetrics(
+        initialPostCampaignMetricsCount = await fetchPostCampaignMetricsCount(
           admin,
           contestId,
-          { light: true },
         );
       } catch (err) {
         console.error(
-          `[Admin page.tsx] Failed to prefetch post-campaign metrics for ${contestId}:`,
+          `[Admin page.tsx] Failed to prefetch post-campaign metrics count for ${contestId}:`,
           err,
         );
       }
@@ -1097,7 +1094,7 @@ export default async function AdminContestDetailPage({
         <ContestDetailClient
           contest={contest}
           initialSubmissions={allSubmissions}
-          initialPostCampaignMetrics={initialPostCampaignMetrics}
+          initialPostCampaignMetricsCount={initialPostCampaignMetricsCount}
           durationDays={durationDays}
           contestId={contestId}
           isAdminView={true}

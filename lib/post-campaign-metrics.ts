@@ -301,6 +301,17 @@ export function postCampaignRowToSubmissionShape(
   return postCampaignSnapshotToSubmission(row);
 }
 
+/** Default page size for API/UI reads (PostgREST max is 1000). */
+export const POST_CAMPAIGN_METRICS_PAGE_SIZE = 500;
+
+export type PostCampaignMetricsPageResult = {
+  rows: PostCampaignMetricRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
 export async function fetchPostCampaignMetricsCount(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
@@ -312,6 +323,41 @@ export async function fetchPostCampaignMetricsCount(
     .eq("contest_id", contestId);
   if (error) throw new Error(error.message);
   return Number(count) || 0;
+}
+
+/** Paginated read — prefer this for API routes and UI loading. */
+export async function fetchPostCampaignMetricsPage(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+  options?: { light?: boolean; limit?: number; offset?: number },
+): Promise<PostCampaignMetricsPageResult> {
+  const limit = Math.min(
+    Math.max(options?.limit ?? POST_CAMPAIGN_METRICS_PAGE_SIZE, 1),
+    1000,
+  );
+  const offset = Math.max(options?.offset ?? 0, 0);
+  const select = options?.light
+    ? POST_CAMPAIGN_LIST_SELECT
+    : POST_CAMPAIGN_SUBMISSION_SELECT;
+
+  const { data, error, count } = await supabase
+    .from("post_campaign_submission_metrics")
+    .select(select, { count: "exact" })
+    .eq("contest_id", contestId)
+    .order("submission_id", { ascending: true })
+    .range(offset, offset + limit - 1);
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as PostCampaignMetricRow[];
+  const total = Number(count) || 0;
+  return {
+    rows,
+    total,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total,
+  };
 }
 
 /** Latest overlay synced_at for sync rate-limiting when refresh timestamp is still null. */
@@ -331,28 +377,24 @@ export async function fetchPostCampaignLastSyncedAt(
   return (data?.synced_at as string | null | undefined) ?? null;
 }
 
+/** Load all overlay rows (server-side refresh/sync only — use paginated API for UI). */
 export async function fetchPostCampaignMetrics(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   contestId: string,
   options?: { light?: boolean },
 ): Promise<PostCampaignMetricRow[]> {
-  const select = options?.light
-    ? POST_CAMPAIGN_LIST_SELECT
-    : POST_CAMPAIGN_SUBMISSION_SELECT;
   const all: PostCampaignMetricRow[] = [];
-  const pageSize = 1000;
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await supabase
-      .from("post_campaign_submission_metrics")
-      .select(select)
-      .eq("contest_id", contestId)
-      .order("submission_id", { ascending: true })
-      .range(offset, offset + pageSize - 1);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as PostCampaignMetricRow[];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
+  let offset = 0;
+  while (true) {
+    const page = await fetchPostCampaignMetricsPage(supabase, contestId, {
+      ...options,
+      limit: 1000,
+      offset,
+    });
+    all.push(...page.rows);
+    if (!page.hasMore) break;
+    offset += page.limit;
   }
   return all;
 }

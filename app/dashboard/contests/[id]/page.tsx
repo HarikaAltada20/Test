@@ -6,8 +6,8 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
-import { fetchPostCampaignMetrics } from "@/lib/post-campaign-metrics";
-import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
+import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
+import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -204,26 +204,22 @@ export default async function ContestDetailPage({
   // Same gate as PC Submissions toggle in the client — preload so the tab is
   // instant (mirrors how initialSubmissions hydrates the Submissions tab).
   const shouldPrefetchPostCampaign =
-    !isTwitterCampaign &&
-    contestData.status === "ended" &&
-    contestData.post_contest_status !== "pending_review";
+    shouldShowPostCampaignSubmissionsToggle(contestData);
 
-  let initialPostCampaignMetrics: PostCampaignSubmissionSnapshot[] | null =
-    null;
+  // Count-only prefetch — rows load paginated on the client to avoid large SSR payloads.
+  let initialPostCampaignMetricsCount: number | null = null;
   if (shouldPrefetchPostCampaign) {
     try {
       const admin = createAdminClient();
-      initialPostCampaignMetrics = await fetchPostCampaignMetrics(
+      initialPostCampaignMetricsCount = await fetchPostCampaignMetricsCount(
         admin,
         contestId,
-        { light: true },
       );
     } catch (err) {
       console.error(
-        `[page.tsx] Failed to prefetch post-campaign metrics for ${contestId}:`,
+        `[page.tsx] Failed to prefetch post-campaign metrics count for ${contestId}:`,
         err,
       );
-      // Leave null so the client falls back to its on-demand fetch.
     }
   }
 
@@ -1276,7 +1272,7 @@ export default async function ContestDetailPage({
       <ContestDetailClient
         contest={contest}
         initialSubmissions={allSubmissions}
-        initialPostCampaignMetrics={initialPostCampaignMetrics}
+        initialPostCampaignMetricsCount={initialPostCampaignMetricsCount}
         durationDays={durationDays}
         contestId={contestId}
         isAdminView={isAdmin}

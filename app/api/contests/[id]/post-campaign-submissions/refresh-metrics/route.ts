@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
-  fetchPostCampaignMetrics,
+  fetchPostCampaignMetricsCount,
   refreshPostCampaignMetrics,
   syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
@@ -185,7 +185,10 @@ export async function POST(
         );
       }
 
-      const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId);
+      const count = await fetchPostCampaignMetricsCount(
+        supabaseAdmin,
+        contestId,
+      );
       // Cooldown starts when the queue finishes (DB timestamp bump), not at enqueue.
       // Active-run guard blocks duplicate enqueues until then.
       const existingUpdated =
@@ -195,6 +198,7 @@ export async function POST(
         queued: true,
         refreshInProgress: true,
         synced,
+        count,
         message:
           enqueueData.alreadyActive
             ? `Post-campaign ${options.platformLabel} refresh already in progress. Metrics will update shortly.`
@@ -205,7 +209,6 @@ export async function POST(
         runId: enqueueData.runId,
         metricsTarget: "post_campaign",
         scope: options.body.scope ?? "basic",
-        metrics,
         post_campaign_last_metrics_updated: existingUpdated,
         nextRefreshAvailable: postCampaignNextRefreshAvailable(
           existingUpdated,
@@ -245,7 +248,7 @@ export async function POST(
       contest.platform,
       { scope, syncIfEmpty: false },
     );
-    const metrics = await fetchPostCampaignMetrics(supabaseAdmin, contestId);
+    const count = await fetchPostCampaignMetricsCount(supabaseAdmin, contestId);
 
     const reconnectHint =
       platform.includes("instagram") && result.failed > 0
@@ -261,7 +264,7 @@ export async function POST(
       scope,
       synced,
       success: updatedCount,
-      metrics,
+      count,
       contestId,
       contestTitle: contest.title,
       post_campaign_last_metrics_updated: result.post_campaign_last_metrics_updated,
