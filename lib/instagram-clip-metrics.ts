@@ -21,9 +21,13 @@ export const IG_BASE_INSIGHTS_METRICS =
 export const IG_REELS_INSIGHTS_METRICS =
   "reach,likes,comments,shares,saved,total_interactions,views,reposts,reels_skip_rate,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
 
-/** Reel metrics without skip/reposts (graceful degradation). */
+/** Reel metrics without skip rate (keep reposts + watch time). */
 export const IG_REELS_INSIGHTS_METRICS_CORE =
-  "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+  "reach,likes,comments,shares,saved,total_interactions,views,reposts,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+
+/** Optional metrics to fetch separately when omitted from the main response. */
+export const IG_OPTIONAL_REELS_METRICS = "reposts,reels_skip_rate";
+export const IG_OPTIONAL_FEED_METRICS = "reposts";
 
 export function insightsMetricsForMediaProductType(
   mediaProductType: string | null | undefined,
