@@ -1097,6 +1097,227 @@ function formatDurationSeconds(sec: number): string {
   return mm > 0 ? `${h}h ${mm}m` : `${h}h`;
 }
 
+function metricsRunProgressPercent(run: {
+  total_submissions?: number | null;
+  reviewed_count?: number | null;
+  total_batches?: number | null;
+  current_batch_index?: number | null;
+}): number {
+  const totalSubs = run.total_submissions ?? 0;
+  const reviewed = run.reviewed_count ?? 0;
+  const totalBatches = run.total_batches ?? 0;
+  const batchIndex = run.current_batch_index ?? 0;
+  const byReviewed =
+    totalSubs > 0 && reviewed > 0 ? (reviewed / totalSubs) * 100 : 0;
+  const byBatches =
+    totalBatches > 0 ? (batchIndex / totalBatches) * 100 : 0;
+  return Math.min(100, Math.max(0, Math.round(Math.max(byReviewed, byBatches))));
+}
+
+function InstagramRefreshProgressCard({
+  run,
+  completed,
+  isAdminView,
+  elapsedSeconds,
+}: {
+  run: InstagramInsightsRefreshRunSummary;
+  completed: boolean;
+  isAdminView: boolean;
+  elapsedSeconds: number | null;
+}) {
+  if (run.status !== "pending" && run.status !== "running") return null;
+  const pct = metricsRunProgressPercent(run);
+  return (
+    <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+          {completed ? "Insights refresh summary" : "Insights refresh in progress"}
+        </span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+          {isAdminView
+            ? `Batch ${run.current_batch_index ?? 0}/${run.total_batches ?? 1}`
+            : `${pct}%`}
+        </span>
+      </div>
+      {run.status === "running" && (
+        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+        <span>
+          Reviewed <strong>{run.reviewed_count ?? 0}</strong>
+          {" · "}
+          Processed <strong>{run.processed_submissions ?? 0}</strong> /{" "}
+          {run.total_submissions}
+        </span>
+        <span className="uppercase tracking-wide text-[10px]">{run.status}</span>
+      </div>
+      {isAdminView && (
+        <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
+          <span>
+            Success: <strong>{run.success_count}</strong>
+          </span>
+          <span>
+            Temporary failure: <strong>{run.temporary_failure_count}</strong>
+          </span>
+          <span>
+            Permanent failure: <strong>{run.permanent_failure_count}</strong>
+          </span>
+          <span>
+            Skipped: <strong>{run.skipped_recent_count}</strong>
+          </span>
+        </div>
+      )}
+      {elapsedSeconds != null && (
+        <>
+          <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+            <Clock className="h-3 w-3 shrink-0" />
+            <span>
+              {run.status === "running" ? "Elapsed" : "Duration"}:{" "}
+              <strong className="text-slate-700 dark:text-slate-300">
+                {formatDurationSeconds(elapsedSeconds)}
+              </strong>
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function YoutubeRefreshProgressCard({
+  run,
+  completed,
+  isAdminView,
+  elapsedSeconds,
+}: {
+  run: YouTubeMetricsRefreshRunSummary;
+  completed: boolean;
+  isAdminView: boolean;
+  elapsedSeconds: number | null;
+}) {
+  if (run.status !== "pending" && run.status !== "running") return null;
+  const pct = metricsRunProgressPercent(run);
+  return (
+    <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+          {completed
+            ? "YouTube refresh summary"
+            : "YouTube refresh in progress"}
+        </span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+          {isAdminView
+            ? `Batch ${run.current_batch_index ?? 0}/${run.total_batches ?? 1}`
+            : `${pct}%`}
+        </span>
+      </div>
+      {isAdminView && (
+        <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Scope:{" "}
+          <span className="font-semibold text-slate-700 dark:text-slate-200">
+            {run.scope}
+          </span>
+        </div>
+      )}
+      {run.status === "running" && (
+        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+          <div
+            className="h-full bg-[#6C43D0] transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+        <span>
+          Processed <b>{run.processed_submissions ?? 0}</b> /{" "}
+          {run.total_submissions}
+        </span>
+        <span className="uppercase tracking-wide text-[10px]">{run.status}</span>
+      </div>
+      {isAdminView && (
+        <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
+          <span>
+            Success: <b>{run.success_count}</b>
+          </span>
+          <span>
+            Temporary failure: <b>{run.temporary_failure_count}</b>
+          </span>
+          <span>
+            Permanent failure: <b>{run.permanent_failure_count}</b>
+          </span>
+          <span>
+            Skipped: <b>{run.skipped_recent_count}</b>
+          </span>
+        </div>
+      )}
+      {elapsedSeconds != null && (
+        <>
+          <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
+          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+            <Clock className="h-3 w-3 shrink-0" />
+            <span>
+              {run.status === "running" ? "Elapsed" : "Duration"}:{" "}
+              <strong className="text-slate-700 dark:text-slate-300">
+                {formatDurationSeconds(elapsedSeconds)}
+              </strong>
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function createPendingInstagramRefreshRun(
+  runId?: string,
+): InstagramInsightsRefreshRunSummary {
+  return {
+    id: runId || "pending",
+    status: "pending",
+    total_submissions: 0,
+    processed_submissions: 0,
+    success_count: 0,
+    permanent_failure_count: 0,
+    temporary_failure_count: 0,
+    skipped_recent_count: 0,
+    reviewed_count: 0,
+    current_batch_index: 0,
+    total_batches: 1,
+    started_at: new Date().toISOString(),
+    last_batch_completed_at: null,
+    finished_at: null,
+  };
+}
+
+function createPendingYoutubeRefreshRun(
+  runId?: string,
+  scope = "basic",
+): YouTubeMetricsRefreshRunSummary {
+  return {
+    id: runId || "pending",
+    status: "pending",
+    scope,
+    total_submissions: 0,
+    processed_submissions: 0,
+    success_count: 0,
+    permanent_failure_count: 0,
+    temporary_failure_count: 0,
+    skipped_recent_count: 0,
+    reviewed_count: 0,
+    current_batch_index: 0,
+    total_batches: 1,
+    started_at: new Date().toISOString(),
+    last_batch_completed_at: null,
+    finished_at: null,
+  };
+}
+
 type TwitterModerateSubmissionRefund = {
   cpmCents: number;
   bonusCents: number;
@@ -1798,29 +2019,6 @@ export default function ContestDetailClient({
     [schedulePostRefreshReload],
   );
 
-  // Rehydrate metrics refresh run on submissions tab; poll only while run is active.
-  useEffect(() => {
-    const metricsPlatform = resolveMetricsRefreshPlatform(
-      currentContest.platform,
-    );
-    if (activeTab !== "submissions" || !metricsPlatform) return;
-
-    const stop = startMetricsRunPolling({
-      contestId,
-      platform: metricsPlatform,
-      onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
-      onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
-    });
-
-    return stop;
-  }, [
-    activeTab,
-    applyHydratedMetricsRun,
-    contestId,
-    currentContest.id,
-    currentContest.platform,
-  ]);
-
   useEffect(() => {
     return () => {
       metricsRefreshManualPollStopRef.current?.();
@@ -1855,6 +2053,37 @@ export default function ContestDetailClient({
   );
   const isPostCampaignLeaderboard =
     showPostCampaignToggle && submissionsLeaderboardMode === "post_campaign";
+
+  // Rehydrate metrics refresh run on submissions tab; poll only while run is active.
+  // PC mode must poll metrics_target=post_campaign so a finished submissions run
+  // cannot clear the in-progress PC progress popup.
+  useEffect(() => {
+    const metricsPlatform = resolveMetricsRefreshPlatform(
+      currentContest.platform,
+    );
+    if (activeTab !== "submissions" || !metricsPlatform) return;
+
+    const metricsTarget = isPostCampaignLeaderboard
+      ? "post_campaign"
+      : "submissions";
+
+    const stop = startMetricsRunPolling({
+      contestId,
+      platform: metricsPlatform,
+      metricsTarget,
+      onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+      onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+    });
+
+    return stop;
+  }, [
+    activeTab,
+    applyHydratedMetricsRun,
+    contestId,
+    currentContest.id,
+    currentContest.platform,
+    isPostCampaignLeaderboard,
+  ]);
 
   useEffect(() => {
     if (
@@ -7929,13 +8158,16 @@ export default function ContestDetailClient({
 
           for (const run of queuedRuns) {
             if (run.platform === "youtube") {
+              setYoutubeRun(createPendingYoutubeRefreshRun(run.runId));
               setShowYoutubeRunPopup(true);
               setYoutubeRunCompleted(false);
             } else if (run.platform === "tiktok") {
               setShowTiktokRunPopup(true);
               setTiktokRunCompleted(false);
             } else {
+              setInstagramRun(createPendingInstagramRefreshRun(run.runId));
               setShowInstagramRunPopup(true);
+              setInstagramRunCompleted(false);
             }
           }
 
@@ -16279,6 +16511,32 @@ export default function ContestDetailClient({
                                           ? `Wait ${cooldownInfo.remainingMinutes}m`
                                           : "Refresh Metrics"}
                                     </button>
+                                    {currentContest.platform
+                                      ?.toLowerCase()
+                                      .includes("instagram") &&
+                                      showInstagramRunPopup &&
+                                      instagramRun && (
+                                        <InstagramRefreshProgressCard
+                                          run={instagramRun}
+                                          completed={instagramRunCompleted}
+                                          isAdminView={isAdminView}
+                                          elapsedSeconds={refreshElapsedSeconds}
+                                        />
+                                      )}
+                                    {currentContest.platform
+                                      ?.toLowerCase()
+                                      .includes("youtube") &&
+                                      showYoutubeRunPopup &&
+                                      youtubeRun && (
+                                        <YoutubeRefreshProgressCard
+                                          run={youtubeRun}
+                                          completed={youtubeRunCompleted}
+                                          isAdminView={isAdminView}
+                                          elapsedSeconds={
+                                            youtubeRefreshElapsedSeconds
+                                          }
+                                        />
+                                      )}
                                   </>
                                 );
                               })()}
@@ -16609,6 +16867,32 @@ export default function ContestDetailClient({
                                       ? `Wait ${cooldownInfo.remainingMinutes}m`
                                       : "Refresh Metrics"}
                                 </button>
+                                {currentContest.platform
+                                  ?.toLowerCase()
+                                  .includes("instagram") &&
+                                  showInstagramRunPopup &&
+                                  instagramRun && (
+                                    <InstagramRefreshProgressCard
+                                      run={instagramRun}
+                                      completed={instagramRunCompleted}
+                                      isAdminView={isAdminView}
+                                      elapsedSeconds={refreshElapsedSeconds}
+                                    />
+                                  )}
+                                {currentContest.platform
+                                  ?.toLowerCase()
+                                  .includes("youtube") &&
+                                  showYoutubeRunPopup &&
+                                  youtubeRun && (
+                                    <YoutubeRefreshProgressCard
+                                      run={youtubeRun}
+                                      completed={youtubeRunCompleted}
+                                      isAdminView={isAdminView}
+                                      elapsedSeconds={
+                                        youtubeRefreshElapsedSeconds
+                                      }
+                                    />
+                                  )}
                               </>
                             );
                           }
@@ -16771,6 +17055,16 @@ export default function ContestDetailClient({
                                         : "Never"}
                                     </span>
                                   </div>
+                                  {showYoutubeRunPopup && youtubeRun && (
+                                    <YoutubeRefreshProgressCard
+                                      run={youtubeRun}
+                                      completed={youtubeRunCompleted}
+                                      isAdminView={isAdminView}
+                                      elapsedSeconds={
+                                        youtubeRefreshElapsedSeconds
+                                      }
+                                    />
+                                  )}
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       type="button"
@@ -17059,159 +17353,6 @@ export default function ContestDetailClient({
                           );
                         })()}
                       </div>
-                      {currentContest.platform
-                        ?.toLowerCase()
-                        .includes("instagram") &&
-                        showInstagramRunPopup &&
-                        instagramRun &&
-                        (instagramRun.status === "pending" ||
-                          instagramRun.status === "running") && (
-                          <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                {instagramRunCompleted
-                                  ? "Insights refresh summary"
-                                  : "Insights refresh in progress"}
-                              </span>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                {isAdminView
-                                  ? `Batch ${instagramRun.current_batch_index ?? 0}/${instagramRun.total_batches ?? 1}`
-                                  : `${(() => {
-                                      const totalSubs =
-                                        instagramRun.total_submissions ?? 0;
-                                      const reviewed =
-                                        instagramRun.reviewed_count ?? 0;
-                                      const totalBatches =
-                                        instagramRun.total_batches ?? 0;
-                                      const batchIndex =
-                                        instagramRun.current_batch_index ?? 0;
-                                      const byReviewed =
-                                        totalSubs > 0 && reviewed > 0
-                                          ? (reviewed / totalSubs) * 100
-                                          : 0;
-                                      const byBatches =
-                                        totalBatches > 0
-                                          ? (batchIndex / totalBatches) * 100
-                                          : 0;
-                                      return Math.min(
-                                        100,
-                                        Math.max(
-                                          0,
-                                          Math.round(
-                                            Math.max(byReviewed, byBatches),
-                                          ),
-                                        ),
-                                      );
-                                    })()}%`}
-                              </span>
-                            </div>
-                            {/* <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
-                            
-                                <span>
-                                  Batches completed:{" "}
-                                  {instagramRun.current_batch_index ?? 0}
-                                </span>
-                              </div> */}
-                            {instagramRun.status === "running" && (
-                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                {(() => {
-                                  const totalSubs =
-                                    instagramRun.total_submissions ?? 0;
-                                  const reviewed =
-                                    instagramRun.reviewed_count ?? 0;
-                                  const totalBatches =
-                                    instagramRun.total_batches ?? 0;
-                                  const batchIndex =
-                                    instagramRun.current_batch_index ?? 0;
-
-                                  const byReviewed =
-                                    totalSubs > 0 && reviewed > 0
-                                      ? (reviewed / totalSubs) * 100
-                                      : 0;
-                                  const byBatches =
-                                    totalBatches > 0
-                                      ? (batchIndex / totalBatches) * 100
-                                      : 0;
-                                  const pct = Math.max(byReviewed, byBatches);
-
-                                  return (
-                                    <div
-                                      className="h-full bg-emerald-500 transition-all"
-                                      style={{
-                                        width: `${Math.min(
-                                          100,
-                                          Math.max(0, Math.round(pct)),
-                                        )}%`,
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                            )}
-                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
-                              <span>
-                                Reviewed{" "}
-                                <strong>
-                                  {instagramRun.reviewed_count ?? 0}
-                                </strong>
-                                {" · "}
-                                Processed{" "}
-                                <strong>
-                                  {instagramRun.processed_submissions ?? 0}
-                                </strong>{" "}
-                                / {instagramRun.total_submissions}
-                              </span>
-                              <span className="uppercase tracking-wide text-[10px]">
-                                {instagramRun.status}
-                              </span>
-                            </div>
-                            {isAdminView && (
-                              <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
-                                <span>
-                                  Success:{" "}
-                                  <strong>{instagramRun.success_count}</strong>
-                                </span>
-                                <span>
-                                  Temporary failure:{" "}
-                                  <strong>
-                                    {instagramRun.temporary_failure_count}
-                                  </strong>
-                                </span>
-                                <span>
-                                  Permanent failure:{" "}
-                                  <strong>
-                                    {instagramRun.permanent_failure_count}
-                                  </strong>
-                                </span>
-                                <span>
-                                  Skipped:{" "}
-                                  <strong>
-                                    {instagramRun.skipped_recent_count}
-                                  </strong>
-                                </span>
-                              </div>
-                            )}
-                            {refreshElapsedSeconds != null && (
-                              <>
-                                <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
-                                <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
-                                  <Clock className="h-3 w-3 shrink-0" />
-                                  <span>
-                                    {instagramRun.status === "running"
-                                      ? "Elapsed"
-                                      : "Duration"}
-                                    :{" "}
-                                    <strong className="text-slate-700 dark:text-slate-300">
-                                      {formatDurationSeconds(
-                                        refreshElapsedSeconds,
-                                      )}
-                                    </strong>
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
                       {(currentContest.platform?.toLowerCase() === "twitter" ||
                         currentContest.platform?.toLowerCase() === "x") &&
                         showTwitterRunPopup &&
@@ -17469,146 +17610,6 @@ export default function ContestDetailClient({
                                     <strong className="text-slate-700 dark:text-slate-300">
                                       {formatDurationSeconds(
                                         tiktokRefreshElapsedSeconds,
-                                      )}
-                                    </strong>
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      {currentContest.platform
-                        ?.toLowerCase()
-                        .includes("youtube") &&
-                        showYoutubeRunPopup &&
-                        youtubeRun &&
-                        (youtubeRun.status === "pending" ||
-                          youtubeRun.status === "running") && (
-                          <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                {youtubeRunCompleted
-                                  ? "YouTube refresh summary"
-                                  : "YouTube refresh in progress"}
-                              </span>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                {isAdminView
-                                  ? `Batch ${youtubeRun.current_batch_index ?? 0}/${youtubeRun.total_batches ?? 1}`
-                                  : `${(() => {
-                                      const totalSubs =
-                                        youtubeRun.total_submissions ?? 0;
-                                      const reviewed =
-                                        youtubeRun.reviewed_count ?? 0;
-                                      const totalBatches =
-                                        youtubeRun.total_batches ?? 1;
-                                      const batchIndex =
-                                        youtubeRun.current_batch_index ?? 0;
-                                      const byReviewed =
-                                        totalSubs > 0 && reviewed > 0
-                                          ? (reviewed / totalSubs) * 100
-                                          : 0;
-                                      const byBatches =
-                                        totalBatches > 0
-                                          ? (batchIndex / totalBatches) * 100
-                                          : 0;
-                                      return Math.min(
-                                        100,
-                                        Math.max(
-                                          0,
-                                          Math.round(
-                                            Math.max(byReviewed, byBatches),
-                                          ),
-                                        ),
-                                      );
-                                    })()}%`}
-                              </span>
-                            </div>
-                            {isAdminView && (
-                              <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                Scope:{" "}
-                                <span className="font-semibold text-slate-700 dark:text-slate-200">
-                                  {youtubeRun.scope}
-                                </span>
-                              </div>
-                            )}
-                            {youtubeRun.status === "running" && (
-                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                {(() => {
-                                  const totalSubs =
-                                    youtubeRun.total_submissions ?? 0;
-                                  const reviewed =
-                                    youtubeRun.reviewed_count ?? 0;
-                                  const totalBatches =
-                                    youtubeRun.total_batches ?? 1;
-                                  const batchIndex =
-                                    youtubeRun.current_batch_index ?? 0;
-
-                                  const byReviewed =
-                                    totalSubs > 0 && reviewed > 0
-                                      ? (reviewed / totalSubs) * 100
-                                      : 0;
-                                  const byBatches =
-                                    totalBatches > 0
-                                      ? (batchIndex / totalBatches) * 100
-                                      : 0;
-                                  const pct = Math.max(byReviewed, byBatches);
-
-                                  return (
-                                    <div
-                                      className="h-full bg-[#6C43D0] transition-all"
-                                      style={{
-                                        width: `${Math.min(
-                                          100,
-                                          Math.max(0, Math.round(pct)),
-                                        )}%`,
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                            )}
-                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
-                              <span>
-                                Processed{" "}
-                                <b>{youtubeRun.processed_submissions ?? 0}</b> /{" "}
-                                {youtubeRun.total_submissions}
-                              </span>
-                              <span className="uppercase tracking-wide text-[10px]">
-                                {youtubeRun.status}
-                              </span>
-                            </div>
-                            {isAdminView && (
-                              <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
-                                <span>
-                                  Success: <b>{youtubeRun.success_count}</b>
-                                </span>
-                                <span>
-                                  Temporary failure:{" "}
-                                  <b>{youtubeRun.temporary_failure_count}</b>
-                                </span>
-                                <span>
-                                  Permanent failure:{" "}
-                                  <b>{youtubeRun.permanent_failure_count}</b>
-                                </span>
-                                <span>
-                                  Skipped:{" "}
-                                  <b>{youtubeRun.skipped_recent_count}</b>
-                                </span>
-                              </div>
-                            )}
-                            {youtubeRefreshElapsedSeconds != null && (
-                              <>
-                                <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
-                                <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
-                                  <Clock className="h-3 w-3 shrink-0" />
-                                  <span>
-                                    {youtubeRun.status === "running"
-                                      ? "Elapsed"
-                                      : "Duration"}
-                                    :{" "}
-                                    <strong className="text-slate-700 dark:text-slate-300">
-                                      {formatDurationSeconds(
-                                        youtubeRefreshElapsedSeconds,
                                       )}
                                     </strong>
                                   </span>
