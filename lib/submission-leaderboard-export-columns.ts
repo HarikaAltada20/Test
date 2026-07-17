@@ -57,6 +57,7 @@ export const SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS = [
   "avg_watch_time",
   "total_watch_time",
   "reel_duration",
+  "avg_watch_pct",
   "reels_skip_rate",
   "insights_status",
 ] as const;
@@ -155,6 +156,7 @@ export const SUBMISSION_EXPORT_COLUMN_LABELS: Record<
   avg_watch_time: "Avg Watch Time",
   total_watch_time: "Total Watch Time",
   reel_duration: "Reel duration",
+  avg_watch_pct: "Avg Watch %",
   reels_skip_rate: "Skip rate (first 3s)",
   total_interactions: "Total Engagement",
   engagement_rate: "Engagement Rate",

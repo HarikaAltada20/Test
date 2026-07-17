@@ -87,7 +87,7 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
-import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
+import { formatReelsSkipRate, formatAvgWatchPercent } from "@/lib/instagram-clip-metrics";
 import {
   postContestStatusLocksSubmissionModeration,
   submissionModerationUiAllowed,
@@ -2698,6 +2698,25 @@ export function CreatorSubmissionsModal({
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                        Avg Watch %
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs text-left">
+                                      Average watch time ÷ reel duration.
+                                      Computed; not stored. May exceed 100% with
+                                      replays.
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help underline decoration-dotted underline-offset-2">
                                         Skip rate (first 3s)
                                       </span>
                                     </TooltipTrigger>
@@ -2963,8 +2982,8 @@ export function CreatorSubmissionsModal({
                               (isInstagramContest || isTikTokContest
                                 ? isTikTokContest
                                   ? 3
-                                  : 9
-                                : 0) + // TT: Shares + total engagement + engagement rate; IG: Shares, Reposts, Saves, Reach, Interactions, Avg/Total watch, Reel duration, Skip rate
+                                  : 10
+                                : 0) + // TT: Shares + total engagement + engagement rate; IG: Shares, Reposts, Saves, Reach, Interactions, Avg/Total watch, Reel duration, Avg Watch %, Skip rate
                               2 + // Expected Reward, Reward Granted
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
@@ -4328,6 +4347,14 @@ export function CreatorSubmissionsModal({
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
                                         {formatClipDurationSeconds(
+                                          igReelDurationSeconds > 0
+                                            ? igReelDurationSeconds
+                                            : null,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {formatAvgWatchPercent(
+                                          avgWatchTimeMs,
                                           igReelDurationSeconds > 0
                                             ? igReelDurationSeconds
                                             : null,

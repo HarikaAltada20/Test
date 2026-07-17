@@ -30,7 +30,7 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
-import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
+import { formatReelsSkipRate, formatAvgWatchPercent } from "@/lib/instagram-clip-metrics";
 import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
 import ExcelJS from "exceljs";
 import {
@@ -394,6 +394,17 @@ export function buildSubmissionExportCellValue(
       const sec = Number(metrics.duration_seconds);
       const label = formatClipDurationSeconds(
         Number.isFinite(sec) && sec > 0 ? sec : null,
+      );
+      return label === "—" ? EMPTY_CELL : label;
+    }
+    case "avg_watch_pct": {
+      const label = formatAvgWatchPercent(
+        metrics.avg_watch_time_ms == null
+          ? null
+          : Number(metrics.avg_watch_time_ms),
+        metrics.duration_seconds == null
+          ? null
+          : Number(metrics.duration_seconds),
       );
       return label === "—" ? EMPTY_CELL : label;
     }
