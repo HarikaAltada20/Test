@@ -188,6 +188,7 @@ export async function fetchInsights(
 
     const stats = { ...DEFAULT_STATS };
     let primaryViews = 0;
+    let durationSeconds: number | undefined;
 
     data.data.forEach((metric) => {
       const value = metric.values[0]?.value || 0;
@@ -207,7 +208,44 @@ export async function fetchInsights(
       primaryViews = stats.reach;
     }
 
-    return { kind: "success", views: primaryViews, stats };
+    // Best-effort clip length (not always available on IG Graph).
+    try {
+      const mediaUrl = `https://graph.instagram.com/${submission.video_id}?fields=media_type,media_product_type,video_duration&access_token=${accessToken}`;
+      const mediaRes = await instagramGraphFetch(mediaUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        usageAccumulator,
+      });
+      if (mediaRes.ok) {
+        const mediaJson = (await mediaRes.json().catch(() => ({}))) as {
+          video_duration?: number | string;
+        };
+        const raw = mediaJson.video_duration;
+        const parsed =
+          typeof raw === "number"
+            ? raw
+            : typeof raw === "string"
+              ? Number.parseFloat(raw)
+              : NaN;
+        if (Number.isFinite(parsed) && parsed > 0) {
+          // Graph may return seconds (or occasionally ms for very large values).
+          durationSeconds = parsed > 6000 ? Math.round(parsed / 1000) : Math.round(parsed);
+        }
+      }
+    } catch {
+      // optional field — ignore
+    }
+
+    return {
+      kind: "success",
+      views: primaryViews,
+      stats: {
+        ...stats,
+        ...(durationSeconds != null ? { duration_seconds: durationSeconds } : {}),
+      },
+    };
   } catch (error: unknown) {
     console.error(
       `[instagram-insights] Fetch exception for submission ${submission.id}:`,

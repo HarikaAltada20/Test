@@ -435,15 +435,23 @@ export async function POST(
 
         if (result.kind === "success") {
           const { views, stats } = result;
+          const prevOther =
+            ((sub.other_stats as Record<string, unknown>) || {}) as Record<
+              string,
+              unknown
+            >;
+          const prevIg =
+            prevOther.instagram &&
+            typeof prevOther.instagram === "object" &&
+            !Array.isArray(prevOther.instagram)
+              ? (prevOther.instagram as Record<string, unknown>)
+              : {};
           submissionUpdates.push({
             id: sub.id,
             views,
             other_stats: {
-              ...(((sub.other_stats as Record<string, unknown>) || {}) as Record<
-                string,
-                unknown
-              >),
-              instagram: stats,
+              ...prevOther,
+              instagram: { ...prevIg, ...stats },
             },
             last_insights_update: now,
             insights_status: "ok",

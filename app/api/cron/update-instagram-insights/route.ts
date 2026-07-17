@@ -530,10 +530,21 @@ export async function GET(request: Request) {
             stats
           )
         ) {
+          const prevOther =
+            (submission.other_stats as Record<string, unknown>) || {};
+          const prevIg =
+            prevOther.instagram &&
+            typeof prevOther.instagram === "object" &&
+            !Array.isArray(prevOther.instagram)
+              ? (prevOther.instagram as Record<string, unknown>)
+              : {};
           updates.push({
             id: submission.id,
             views,
-            other_stats: { ...submission.other_stats, instagram: stats },
+            other_stats: {
+              ...prevOther,
+              instagram: { ...prevIg, ...stats },
+            },
             updated_at: new Date().toISOString(),
           });
         }
