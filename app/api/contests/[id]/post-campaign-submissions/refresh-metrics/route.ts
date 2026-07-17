@@ -18,6 +18,14 @@ import {
   postCampaignCooldownResponse,
   postCampaignNextRefreshAvailable,
 } from "@/lib/post-campaign-enqueue-guards";
+import {
+  metricsRunTableForPlatform,
+  postCampaignEnqueuePathForPlatform,
+  postCampaignPlatformLabel,
+  postCampaignStatusPathForPlatform,
+  resolvePostCampaignRefreshPlatforms,
+  type PostCampaignVideoPlatform,
+} from "@/lib/post-campaign-platforms";
 
 const YT_SCOPES: YouTubeRefreshScope[] = [
   "basic",
@@ -38,6 +46,17 @@ function resolveBaseUrl(request: Request): string {
       : `https://${process.env.NEXT_PUBLIC_APP_URL}`;
   }
   return "http://localhost:3000";
+}
+
+function isQueueEnabledForPlatform(platform: PostCampaignVideoPlatform): boolean {
+  switch (platform) {
+    case "instagram":
+      return isInstagramInsightsQueueEnabled();
+    case "youtube":
+      return isYouTubeMetricsQueueEnabled();
+    case "tiktok":
+      return isTikTokMetricsQueueEnabled();
+  }
 }
 
 export async function POST(
@@ -79,10 +98,14 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const contestPlatforms = resolvePostCampaignRefreshPlatforms({
+      contestPlatform: contest.platform,
+    });
+
     if (
       scope !== "basic" &&
       !isAdmin &&
-      (contest.platform ?? "").toLowerCase().includes("youtube")
+      contestPlatforms.includes("youtube")
     ) {
       return NextResponse.json(
         { error: "Admin access required for this analytics scope" },
@@ -100,12 +123,7 @@ export async function POST(
       );
     }
 
-    const platform = (contest.platform ?? "").toLowerCase();
-    if (
-      !platform.includes("instagram") &&
-      !platform.includes("youtube") &&
-      !platform.includes("tiktok")
-    ) {
+    if (contestPlatforms.length === 0) {
       return NextResponse.json(
         {
           error: `Post-campaign metrics refresh not supported for platform: ${contest.platform}`,
@@ -125,29 +143,6 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const activeRunTable = platform.includes("instagram")
-      ? "instagram_insights_refresh_runs"
-      : platform.includes("youtube")
-        ? "youtube_metrics_refresh_runs"
-        : "tiktok_metrics_refresh_runs";
-    if (
-      await hasActivePostCampaignMetricsRun(
-        supabaseAdmin,
-        activeRunTable,
-        contestId,
-      )
-    ) {
-      return activePostCampaignRunResponse();
-    }
-
-    const crossTargetBlocked = await assertNoCrossTargetActiveRun(
-      supabaseAdmin,
-      activeRunTable,
-      contestId,
-      "post_campaign",
-    );
-    if (crossTargetBlocked) return crossTargetBlocked;
-
     // Ensure overlay rows exist; do not reset refreshed metrics on existing rows.
     const { synced } = await syncPostCampaignFromSubmissions(
       supabaseAdmin,
@@ -155,90 +150,142 @@ export async function POST(
       { overwriteMetrics: false },
     );
 
+    const { data: overlayPlatformRows, error: overlayPlatformError } =
+      await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .select("platform")
+        .eq("contest_id", contestId);
+    if (overlayPlatformError) {
+      throw new Error(overlayPlatformError.message);
+    }
+
+    const platforms = resolvePostCampaignRefreshPlatforms({
+      contestPlatform: contest.platform,
+      rowPlatforms: (overlayPlatformRows ?? []).map(
+        (row: { platform: string | null }) => row.platform,
+      ),
+    });
+
+    if (platforms.length === 0) {
+      return NextResponse.json(
+        {
+          error: `Post-campaign metrics refresh not supported for platform: ${contest.platform}`,
+        },
+        { status: 400 },
+      );
+    }
+
+    for (const p of platforms) {
+      const runTable = metricsRunTableForPlatform(p);
+      if (
+        await hasActivePostCampaignMetricsRun(
+          supabaseAdmin,
+          runTable,
+          contestId,
+        )
+      ) {
+        return activePostCampaignRunResponse();
+      }
+      const crossTargetBlocked = await assertNoCrossTargetActiveRun(
+        supabaseAdmin,
+        runTable,
+        contestId,
+        "post_campaign",
+      );
+      if (crossTargetBlocked) return crossTargetBlocked;
+    }
+
     const baseUrl = resolveBaseUrl(request);
     const cookieHeader = request.headers.get("cookie");
 
-    const enqueueQueuedRefresh = async (options: {
-      platformLabel: string;
-      enqueuePath: string;
-      body: Record<string, unknown>;
-    }) => {
-      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}${options.enqueuePath}`;
-      const enqueueRes = await fetch(enqueueUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify(options.body),
-      });
-      const enqueueData = await enqueueRes.json().catch(() => ({}));
-      if (!enqueueRes.ok) {
-        return NextResponse.json(
-          {
-            error:
-              enqueueData?.error ??
-              `Failed to start ${options.platformLabel} post-campaign refresh`,
+    const queueTargets = platforms.filter((p) => isQueueEnabledForPlatform(p));
+
+    if (queueTargets.length > 0) {
+      const runs: Array<{
+        platform: PostCampaignVideoPlatform;
+        platformLabel: string;
+        runId: string | undefined;
+        alreadyActive: boolean;
+        statusPath: string;
+      }> = [];
+
+      for (const target of queueTargets) {
+        const enqueueUrl = `${baseUrl.replace(/\/$/, "")}${postCampaignEnqueuePathForPlatform(
+          contestId,
+          target,
+        )}`;
+        const enqueueBody: Record<string, unknown> = {
+          metricsTarget: "post_campaign",
+        };
+        if (target === "youtube") {
+          enqueueBody.scope = scope;
+        }
+
+        const enqueueRes = await fetch(enqueueUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
           },
-          { status: enqueueRes.status },
-        );
+          credentials: "include",
+          body: JSON.stringify(enqueueBody),
+        });
+        const enqueueData = await enqueueRes.json().catch(() => ({}));
+        if (!enqueueRes.ok) {
+          return NextResponse.json(
+            {
+              error:
+                enqueueData?.error ??
+                `Failed to start ${postCampaignPlatformLabel(target)} post-campaign refresh`,
+            },
+            { status: enqueueRes.status },
+          );
+        }
+
+        runs.push({
+          platform: target,
+          platformLabel: postCampaignPlatformLabel(target),
+          runId:
+            typeof enqueueData.runId === "string"
+              ? enqueueData.runId
+              : undefined,
+          alreadyActive: Boolean(enqueueData.alreadyActive),
+          statusPath: postCampaignStatusPathForPlatform(target),
+        });
       }
 
       const count = await fetchPostCampaignMetricsCount(
         supabaseAdmin,
         contestId,
       );
-      // Cooldown starts when the queue finishes (DB timestamp bump), not at enqueue.
-      // Active-run guard blocks duplicate enqueues until then.
       const existingUpdated =
         contest.post_campaign_last_metrics_updated ?? null;
+      const labels = runs.map((r) => r.platformLabel).join(", ");
+      const anyAlreadyActive = runs.some((r) => r.alreadyActive);
+
       return NextResponse.json({
         success: true,
         queued: true,
         refreshInProgress: true,
         synced,
         count,
-        message:
-          enqueueData.alreadyActive
-            ? `Post-campaign ${options.platformLabel} refresh already in progress. Metrics will update shortly.`
-            : `Copied ${synced} submissions into post-campaign. ${options.platformLabel} refresh started (same queue as Submissions). Metrics update in the background.`,
+        message: anyAlreadyActive
+          ? `Post-campaign refresh already in progress for ${labels}. Metrics will update shortly.`
+          : `Copied ${synced} submissions into post-campaign. ${labels} refresh started (same queue as Submissions). Metrics update in the background.`,
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
-        runId: enqueueData.runId,
+        platforms: queueTargets,
+        runs,
+        // Back-compat for older clients that poll a single runId/statusPath.
+        runId: runs[0]?.runId,
         metricsTarget: "post_campaign",
-        scope: options.body.scope ?? "basic",
+        scope,
         post_campaign_last_metrics_updated: existingUpdated,
         nextRefreshAvailable: postCampaignNextRefreshAvailable(
           existingUpdated,
           isAdmin,
         ),
-      });
-    };
-
-    // Instagram / YouTube / TikTok: same background queue as Submissions, overlay only.
-    if (platform.includes("instagram") && isInstagramInsightsQueueEnabled()) {
-      return enqueueQueuedRefresh({
-        platformLabel: "Instagram",
-        enqueuePath: `/api/contests/${contestId}/instagram-insights-refresh/enqueue`,
-        body: { metricsTarget: "post_campaign" },
-      });
-    }
-
-    if (platform.includes("youtube") && isYouTubeMetricsQueueEnabled()) {
-      return enqueueQueuedRefresh({
-        platformLabel: "YouTube",
-        enqueuePath: `/api/contests/${contestId}/youtube-metrics-refresh/enqueue`,
-        body: { scope, metricsTarget: "post_campaign" },
-      });
-    }
-
-    if (platform.includes("tiktok") && isTikTokMetricsQueueEnabled()) {
-      return enqueueQueuedRefresh({
-        platformLabel: "TikTok",
-        enqueuePath: `/api/contests/${contestId}/tiktok-metrics-refresh/enqueue`,
-        body: { metricsTarget: "post_campaign" },
       });
     }
 
@@ -251,7 +298,7 @@ export async function POST(
     const count = await fetchPostCampaignMetricsCount(supabaseAdmin, contestId);
 
     const reconnectHint =
-      platform.includes("instagram") && result.failed > 0
+      platforms.includes("instagram") && result.failed > 0
         ? " Failed rows usually mean creators need to reconnect Instagram (invalid/expired token). Previous metrics were kept for those rows."
         : "";
 
@@ -260,11 +307,12 @@ export async function POST(
 
     return NextResponse.json({
       ...resultRest,
-      message: `Post-campaign metrics refreshed (${scope}) for ${contest.platform}. Synced ${synced}, updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}.${reconnectHint}`,
+      message: `Post-campaign metrics refreshed (${scope}) for ${platforms.join(", ")}. Synced ${synced}, updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}.${reconnectHint}`,
       scope,
       synced,
       success: updatedCount,
       count,
+      platforms,
       contestId,
       contestTitle: contest.title,
       post_campaign_last_metrics_updated: result.post_campaign_last_metrics_updated,

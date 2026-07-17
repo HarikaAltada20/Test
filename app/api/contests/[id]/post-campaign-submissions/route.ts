@@ -14,6 +14,10 @@ import {
   hasActivePostCampaignMetricsRun,
   releasePostCampaignSyncSlot,
 } from "@/lib/post-campaign-enqueue-guards";
+import {
+  metricsRunTableForPlatform,
+  resolvePostCampaignRefreshPlatforms,
+} from "@/lib/post-campaign-platforms";
 
 async function authorizeContestAccess(
   contestId: string,
@@ -206,23 +210,19 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const platform = (auth.contest.platform ?? "").toLowerCase();
-    const activeRunTable = platform.includes("instagram")
-      ? "instagram_insights_refresh_runs"
-      : platform.includes("youtube")
-        ? "youtube_metrics_refresh_runs"
-        : platform.includes("tiktok")
-          ? "tiktok_metrics_refresh_runs"
-          : null;
-    if (
-      activeRunTable &&
-      (await hasActivePostCampaignMetricsRun(
-        supabaseAdmin,
-        activeRunTable,
-        contestId,
-      ))
-    ) {
-      return activePostCampaignRunResponse();
+    const platforms = resolvePostCampaignRefreshPlatforms({
+      contestPlatform: auth.contest.platform,
+    });
+    for (const p of platforms) {
+      if (
+        await hasActivePostCampaignMetricsRun(
+          supabaseAdmin,
+          metricsRunTableForPlatform(p),
+          contestId,
+        )
+      ) {
+        return activePostCampaignRunResponse();
+      }
     }
 
     // CAS claim sync slot (covers first-sync spam when refresh timestamp is null).

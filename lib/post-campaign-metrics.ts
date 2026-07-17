@@ -29,6 +29,11 @@ import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
 import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
 import { postCampaignSnapshotToSubmission } from "@/lib/post-campaign-submission-shape";
 import { buildPostCampaignExistingRowPatch } from "@/lib/post-campaign-sync-patch";
+import {
+  classifyPostCampaignSubmissionPlatform,
+  resolvePostCampaignRefreshPlatforms,
+  type PostCampaignVideoPlatform,
+} from "@/lib/post-campaign-platforms";
 
 export type { PostCampaignSubmissionSnapshot };
 export { postCampaignSnapshotToSubmission };
@@ -1104,41 +1109,64 @@ export async function refreshPostCampaignMetrics(
     );
   }
 
-  const platformKey = (platform ?? "").toLowerCase();
+  const targets = resolvePostCampaignRefreshPlatforms({
+    contestPlatform: platform,
+    rowPlatforms: existing.map((row) => row.platform),
+  });
+
+  if (targets.length === 0) {
+    throw new Error(
+      `Post-campaign metrics refresh not supported for platform: ${platform}`,
+    );
+  }
+
+  const rowsForPlatform = (
+    target: PostCampaignVideoPlatform,
+  ): SubmissionSourceRow[] => {
+    const matched = existing.filter(
+      (row) => classifyPostCampaignSubmissionPlatform(row.platform) === target,
+    );
+    if (matched.length > 0) return matched;
+    // Single-target contests often store a generic/null row platform — refresh all.
+    if (targets.length === 1) return existing;
+    return [];
+  };
+
   let success = 0;
   let failed = 0;
   let skipped = 0;
 
-  if (platformKey.includes("instagram")) {
-    const r = await refreshInstagramPostCampaign(
-      supabaseAdmin,
-      contestId,
-      existing,
-    );
-    success = r.success;
-    failed = r.failed;
-    skipped = r.skipped;
-  } else if (platformKey.includes("youtube")) {
-    const r = await refreshYouTubePostCampaign(
-      supabaseAdmin,
-      contestId,
-      existing,
-      scope,
-    );
-    success = r.success;
-    failed = r.failed;
-  } else if (platformKey.includes("tiktok")) {
-    const r = await refreshTikTokPostCampaign(
-      supabaseAdmin,
-      contestId,
-      existing,
-    );
-    success = r.success;
-    failed = r.failed;
-  } else {
-    throw new Error(
-      `Post-campaign metrics refresh not supported for platform: ${platform}`,
-    );
+  for (const target of targets) {
+    const subset = rowsForPlatform(target);
+    if (subset.length === 0) continue;
+
+    if (target === "instagram") {
+      const r = await refreshInstagramPostCampaign(
+        supabaseAdmin,
+        contestId,
+        subset,
+      );
+      success += r.success;
+      failed += r.failed;
+      skipped += r.skipped;
+    } else if (target === "youtube") {
+      const r = await refreshYouTubePostCampaign(
+        supabaseAdmin,
+        contestId,
+        subset,
+        scope,
+      );
+      success += r.success;
+      failed += r.failed;
+    } else if (target === "tiktok") {
+      const r = await refreshTikTokPostCampaign(
+        supabaseAdmin,
+        contestId,
+        subset,
+      );
+      success += r.success;
+      failed += r.failed;
+    }
   }
 
   const now = new Date().toISOString();
@@ -1146,7 +1174,7 @@ export async function refreshPostCampaignMetrics(
     post_campaign_last_metrics_updated: now,
   };
 
-  if (platformKey.includes("youtube") && scope !== "basic") {
+  if (targets.includes("youtube") && scope !== "basic") {
     const { data: contestRow } = await supabaseAdmin
       .from("contests")
       .select("contest_based_details")
@@ -1172,7 +1200,7 @@ export async function refreshPostCampaignMetrics(
     success,
     failed,
     skipped,
-    platform: platformKey,
+    platform: targets.join(","),
     post_campaign_last_metrics_updated: now,
   };
 }

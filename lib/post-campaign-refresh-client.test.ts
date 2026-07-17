@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   formatPostCampaignRefreshToastDescription,
   getPostCampaignStatusPath,
+  getPostCampaignStatusPaths,
   isTerminalPostCampaignRunStatus,
   isTrackedPostCampaignRun,
 } from "./post-campaign-refresh-client";
@@ -92,5 +93,28 @@ describe("getPostCampaignStatusPath", () => {
       getPostCampaignStatusPath("instagram").platformLabel,
       "Instagram",
     );
+  });
+
+  it("prefers first platform in hybrid strings (not Instagram-first)", () => {
+    assert.equal(
+      getPostCampaignStatusPath("youtube,instagram").statusPath,
+      "youtube-metrics-refresh/status",
+    );
+    assert.equal(
+      getPostCampaignStatusPath("instagram,youtube").platformLabel,
+      "Instagram",
+    );
+  });
+});
+
+describe("getPostCampaignStatusPaths", () => {
+  it("returns all hybrid platforms in order", () => {
+    const paths = getPostCampaignStatusPaths("youtube,tiktok");
+    assert.deepEqual(
+      paths.map((p) => p.platform),
+      ["youtube", "tiktok"],
+    );
+    assert.equal(paths[0].statusPath, "youtube-metrics-refresh/status");
+    assert.equal(paths[1].statusPath, "tiktok-metrics-refresh/status");
   });
 });

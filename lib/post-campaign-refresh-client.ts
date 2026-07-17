@@ -3,6 +3,14 @@
  * Kept out of contest-detail-client so unit tests can cover them.
  */
 
+import {
+  parsePostCampaignVideoPlatforms,
+  postCampaignPlatformLabel,
+  postCampaignStatusPathForPlatform,
+  primaryPostCampaignVideoPlatform,
+  type PostCampaignVideoPlatform,
+} from "@/lib/post-campaign-platforms";
+
 export type PostCampaignRefreshRunCounts = {
   success_count?: number | null;
   temporary_failure_count?: number | null;
@@ -44,6 +52,42 @@ export function formatPostCampaignRefreshToastDescription(
   return counts;
 }
 
+export type PostCampaignStatusPathInfo = {
+  platform: PostCampaignVideoPlatform;
+  statusPath: string;
+  platformLabel: "YouTube" | "TikTok" | "Instagram";
+  isYoutube: boolean;
+  isTiktok: boolean;
+};
+
+function statusInfoFor(
+  platform: PostCampaignVideoPlatform,
+): PostCampaignStatusPathInfo {
+  return {
+    platform,
+    statusPath: postCampaignStatusPathForPlatform(platform),
+    platformLabel: postCampaignPlatformLabel(platform),
+    isYoutube: platform === "youtube",
+    isTiktok: platform === "tiktok",
+  };
+}
+
+/**
+ * Resolve status polling target(s) for a contest platform string.
+ * Hybrid contests return one entry per platform (order preserved).
+ * Legacy single-entry helper keeps the primary platform for older callers.
+ */
+export function getPostCampaignStatusPaths(
+  platform: string | null | undefined,
+): PostCampaignStatusPathInfo[] {
+  const parsed = parsePostCampaignVideoPlatforms(platform);
+  if (parsed.length === 0) {
+    // Preserve prior default when platform is missing/unknown.
+    return [statusInfoFor("instagram")];
+  }
+  return parsed.map(statusInfoFor);
+}
+
 export function getPostCampaignStatusPath(
   platform: string | null | undefined,
 ): {
@@ -52,17 +96,13 @@ export function getPostCampaignStatusPath(
   isYoutube: boolean;
   isTiktok: boolean;
 } {
-  const platformLower = (platform ?? "").toString().toLowerCase();
-  const isYoutube = platformLower.includes("youtube");
-  const isTiktok = platformLower.includes("tiktok");
+  const primary =
+    primaryPostCampaignVideoPlatform(platform) ?? "instagram";
+  const info = statusInfoFor(primary);
   return {
-    isYoutube,
-    isTiktok,
-    platformLabel: isYoutube ? "YouTube" : isTiktok ? "TikTok" : "Instagram",
-    statusPath: isYoutube
-      ? "youtube-metrics-refresh/status"
-      : isTiktok
-        ? "tiktok-metrics-refresh/status"
-        : "instagram-insights-refresh/status",
+    statusPath: info.statusPath,
+    platformLabel: info.platformLabel,
+    isYoutube: info.isYoutube,
+    isTiktok: info.isTiktok,
   };
 }

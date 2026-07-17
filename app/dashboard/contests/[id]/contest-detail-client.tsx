@@ -28,6 +28,7 @@ import {
 import {
   formatPostCampaignRefreshToastDescription,
   getPostCampaignStatusPath,
+  getPostCampaignStatusPaths,
   isTerminalPostCampaignRunStatus,
   isTrackedPostCampaignRun,
 } from "@/lib/post-campaign-refresh-client";
@@ -7890,41 +7891,82 @@ export default function ContestDetailClient({
 
         // Queued refresh loads overlay when the run completes (poll handler).
         if (result.queued) {
-          const {
-            statusPath,
-            platformLabel,
-            isYoutube,
-            isTiktok,
-          } = getPostCampaignStatusPath(
-            currentContest.platform || result.platform,
-          );
+          type QueuedRun = {
+            platform: string;
+            platformLabel: string;
+            runId?: string;
+            statusPath: string;
+          };
+
+          const queuedRuns: QueuedRun[] = Array.isArray(result.runs)
+            ? (result.runs as QueuedRun[]).filter(
+                (r) => r && typeof r.statusPath === "string",
+              )
+            : getPostCampaignStatusPaths(
+                currentContest.platform || result.platform,
+              ).map((info) => ({
+                platform: info.platform,
+                platformLabel: info.platformLabel,
+                runId:
+                  typeof result.runId === "string" ? result.runId : undefined,
+                statusPath: info.statusPath,
+              }));
+
+          const platformLabels = queuedRuns
+            .map((r) => r.platformLabel)
+            .join(", ");
 
           if (!isVideoContestFormat) {
             toast({
               title: "Post-campaign refresh started",
               description:
                 result.message ||
-                `Refreshing ${platformLabel} metrics in the background…`,
+                `Refreshing ${platformLabels || "platform"} metrics in the background…`,
               variant: "success",
               duration: 6000,
             });
           }
-          if (isYoutube) {
-            setShowYoutubeRunPopup(true);
-            setYoutubeRunCompleted(false);
-          } else if (isTiktok) {
-            setShowTiktokRunPopup(true);
-            setTiktokRunCompleted(false);
-          } else {
-            setShowInstagramRunPopup(true);
+
+          for (const run of queuedRuns) {
+            if (run.platform === "youtube") {
+              setShowYoutubeRunPopup(true);
+              setYoutubeRunCompleted(false);
+            } else if (run.platform === "tiktok") {
+              setShowTiktokRunPopup(true);
+              setTiktokRunCompleted(false);
+            } else {
+              setShowInstagramRunPopup(true);
+            }
           }
+
           const previousUpdated = postCampaignLastMetricsUpdated;
-          const activeRunId =
-            typeof result.runId === "string" ? result.runId : undefined;
           const refreshStartedMs = Date.now();
-          const statusUrl = `/api/contests/${contestId}/${statusPath}?metricsTarget=post_campaign`;
           const started = Date.now();
           const maxMs = 600000;
+          const pendingRunIds = new Set(
+            queuedRuns
+              .map((r) => r.runId)
+              .filter((id): id is string => typeof id === "string"),
+          );
+          // If enqueue didn't return runIds, wait until every status path is terminal.
+          const pendingStatusPaths = new Set(
+            queuedRuns.map((r) => r.statusPath),
+          );
+
+          const clearPlatformPopups = () => {
+            for (const run of queuedRuns) {
+              if (run.platform === "youtube") {
+                setShowYoutubeRunPopup(false);
+                setYoutubeRunCompleted(true);
+              } else if (run.platform === "tiktok") {
+                setShowTiktokRunPopup(false);
+                setTiktokRunCompleted(true);
+              } else {
+                setShowInstagramRunPopup(false);
+                setInstagramRunCompleted(true);
+              }
+            }
+          };
 
           const finishPostCampaignRefresh = async (
             run:
@@ -7934,21 +7976,12 @@ export default function ContestDetailClient({
               | null,
             terminalStatus: string,
           ) => {
-            if (isYoutube) {
-              setShowYoutubeRunPopup(false);
-              setYoutubeRunCompleted(true);
-            } else if (isTiktok) {
-              setShowTiktokRunPopup(false);
-              setTiktokRunCompleted(true);
-            } else {
-              setShowInstagramRunPopup(false);
-              setInstagramRunCompleted(true);
-            }
+            clearPlatformPopups();
             await loadPostCampaignMetrics({ force: true });
             setIsRefreshingMetrics(false);
             if (terminalStatus === "completed" && run) {
               toast({
-                title: `Post-campaign ${platformLabel} refresh completed`,
+                title: `Post-campaign ${platformLabels || "metrics"} refresh completed`,
                 description: formatPostCampaignRefreshToastDescription(run),
                 duration: 10000,
                 variant: "success",
@@ -7965,8 +7998,21 @@ export default function ContestDetailClient({
               return;
             }
             try {
-              const sres = await fetch(statusUrl);
-              if (sres.ok) {
+              let allTerminal = true;
+              let lastCompletedRun:
+                | InstagramInsightsRefreshRunSummary
+                | YouTubeMetricsRefreshRunSummary
+                | TikTokMetricsRefreshRunSummary
+                | null = null;
+              let lastTerminalStatus = "completed";
+
+              for (const queued of queuedRuns) {
+                const statusUrl = `/api/contests/${contestId}/${queued.statusPath}?metricsTarget=post_campaign`;
+                const sres = await fetch(statusUrl);
+                if (!sres.ok) {
+                  allTerminal = false;
+                  continue;
+                }
                 const sj = await sres.json();
                 const run = sj?.run as
                   | InstagramInsightsRefreshRunSummary
@@ -7974,27 +8020,50 @@ export default function ContestDetailClient({
                   | TikTokMetricsRefreshRunSummary
                   | null;
                 if (
-                  run &&
-                  isTrackedPostCampaignRun(run, {
-                    activeRunId,
+                  !run ||
+                  !isTrackedPostCampaignRun(run, {
+                    activeRunId: queued.runId,
                     refreshStartedMs,
                   })
                 ) {
-                  if (isYoutube) {
-                    setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
-                  } else if (isTiktok) {
-                    setTiktokRun(run as TikTokMetricsRefreshRunSummary);
-                  } else {
-                    setInstagramRun(run as InstagramInsightsRefreshRunSummary);
-                  }
-                  const st = run.status;
-                  if (isTerminalPostCampaignRunStatus(st)) {
-                    clearInterval(pollTimer);
-                    await finishPostCampaignRefresh(run, st);
-                    return;
-                  }
+                  allTerminal = false;
+                  continue;
                 }
+
+                if (queued.platform === "youtube") {
+                  setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                } else if (queued.platform === "tiktok") {
+                  setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                } else {
+                  setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                }
+
+                const st = run.status;
+                if (!isTerminalPostCampaignRunStatus(st)) {
+                  allTerminal = false;
+                  continue;
+                }
+
+                lastCompletedRun = run;
+                lastTerminalStatus = st;
+                if (queued.runId) pendingRunIds.delete(queued.runId);
+                pendingStatusPaths.delete(queued.statusPath);
               }
+
+              const trackedDone =
+                pendingRunIds.size === 0 &&
+                (queuedRuns.every((r) => r.runId) ||
+                  pendingStatusPaths.size === 0);
+
+              if (allTerminal && trackedDone) {
+                clearInterval(pollTimer);
+                await finishPostCampaignRefresh(
+                  lastCompletedRun,
+                  lastTerminalStatus,
+                );
+                return;
+              }
+
               // Fallback: detect overlay timestamp bump
               const mres = await fetch(
                 `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
@@ -8003,37 +8072,15 @@ export default function ContestDetailClient({
                 const md = await mres.json();
                 const updated = md.post_campaign_last_metrics_updated ?? null;
                 if (updated && updated !== previousUpdated) {
-                  clearInterval(pollTimer);
-                  await loadPostCampaignMetrics({ force: true, silent: true });
-                  setPostCampaignLastMetricsUpdated(updated);
-                  try {
-                    const sres2 = await fetch(statusUrl);
-                    if (sres2.ok) {
-                      const sj2 = await sres2.json();
-                      const run2 = sj2?.run as
-                        | InstagramInsightsRefreshRunSummary
-                        | YouTubeMetricsRefreshRunSummary
-                        | TikTokMetricsRefreshRunSummary
-                        | null;
-                      if (
-                        run2 &&
-                        isTrackedPostCampaignRun(run2, {
-                          activeRunId,
-                          refreshStartedMs,
-                        })
-                      ) {
-                        await finishPostCampaignRefresh(run2, run2.status);
-                        return;
-                      }
-                    }
-                  } catch {
-                    // ignore and fall through to reload below
+                  // Only finish early when every queued platform looks terminal.
+                  if (allTerminal) {
+                    clearInterval(pollTimer);
+                    await finishPostCampaignRefresh(
+                      lastCompletedRun,
+                      lastTerminalStatus,
+                    );
+                    return;
                   }
-                  setIsRefreshingMetrics(false);
-                  if (isYoutube) setShowYoutubeRunPopup(false);
-                  else if (isTiktok) setShowTiktokRunPopup(false);
-                  else setShowInstagramRunPopup(false);
-                  schedulePostRefreshReload();
                 }
               }
             } catch {
