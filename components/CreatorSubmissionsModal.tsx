@@ -2683,8 +2683,9 @@ export function CreatorSubmissionsModal({
                                       </span>
                                     </TooltipTrigger>
                                     <TooltipContent className="max-w-xs text-left">
-                                      Clip length. Filled at submit, or on the
-                                      next metrics refresh if missing.
+                                      Clip length from the video file on metrics
+                                      refresh (Graph has no duration field). May
+                                      be blank until refresh.
                                     </TooltipContent>
                                   </Tooltip>
                                 </TableHead>
@@ -3064,9 +3065,12 @@ export function CreatorSubmissionsModal({
                       const igReelDurationSeconds = Number(
                         (platformStats as any)?.duration_seconds ?? 0,
                       );
-                      const igReposts = Number(
-                        (platformStats as any)?.reposts ?? 0,
-                      );
+                      const igRepostsRaw = (platformStats as any)?.reposts;
+                      const igReposts =
+                        igRepostsRaw != null &&
+                        Number.isFinite(Number(igRepostsRaw))
+                          ? Number(igRepostsRaw)
+                          : null;
                       const igReelsSkipRate =
                         (platformStats as any)?.reels_skip_rate != null
                           ? Number((platformStats as any).reels_skip_rate)

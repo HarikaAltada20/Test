@@ -1139,7 +1139,7 @@ function InstagramRefreshProgressCard({
   if (run.status !== "pending" && run.status !== "running") return null;
   const pct = metricsRunProgressPercent(run);
   return (
-    <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+    <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
           {completed ? "Insights refresh summary" : "Insights refresh in progress"}
@@ -1168,7 +1168,7 @@ function InstagramRefreshProgressCard({
         <span className="uppercase tracking-wide text-[10px]">{run.status}</span>
       </div>
       {isAdminView && (
-        <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
           <span>
             Success: <strong>{run.success_count}</strong>
           </span>
@@ -1215,7 +1215,7 @@ function YoutubeRefreshProgressCard({
   if (run.status !== "pending" && run.status !== "running") return null;
   const pct = metricsRunProgressPercent(run);
   return (
-    <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+    <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
           {completed
@@ -9658,10 +9658,19 @@ export default function ContestDetailClient({
         total_interactions: igStats.total_interactions || 0,
         avg_watch_time_ms: igStats.avg_watch_time_ms || 0,
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
-        duration_seconds: Number(igStats.duration_seconds) || 0,
-        reposts: Number(igStats.reposts) || 0,
+        duration_seconds:
+          igStats.duration_seconds != null &&
+          Number.isFinite(Number(igStats.duration_seconds)) &&
+          Number(igStats.duration_seconds) > 0
+            ? Number(igStats.duration_seconds)
+            : null,
+        reposts:
+          igStats.reposts != null && Number.isFinite(Number(igStats.reposts))
+            ? Number(igStats.reposts)
+            : null,
         reels_skip_rate:
-          igStats.reels_skip_rate != null
+          igStats.reels_skip_rate != null &&
+          Number.isFinite(Number(igStats.reels_skip_rate))
             ? Number(igStats.reels_skip_rate)
             : null,
       };
@@ -17364,6 +17373,7 @@ export default function ContestDetailClient({
                             </div>
                           );
                         })()}
+                      </div>
                       {currentContest.platform
                         ?.toLowerCase()
                         .includes("instagram") &&
@@ -17394,7 +17404,7 @@ export default function ContestDetailClient({
                         twitterRun &&
                         (twitterRun.status === "pending" ||
                           twitterRun.status === "running") && (
-                          <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                          <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                                 {twitterRunCompleted
@@ -17525,7 +17535,7 @@ export default function ContestDetailClient({
                         tiktokRun &&
                         (tiktokRun.status === "pending" ||
                           tiktokRun.status === "running") && (
-                          <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                          <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                                 {tiktokRunCompleted
@@ -17653,7 +17663,6 @@ export default function ContestDetailClient({
                             )}
                           </div>
                         )}
-                    </div>
                     </div>
                   </CardContent>
                 </div>
@@ -19089,8 +19098,9 @@ export default function ContestDetailClient({
                                         </span>
                                       </TooltipTrigger>
                                       <TooltipContent className="max-w-xs text-left">
-                                        Clip length. Filled at submit, or on the
-                                        next metrics refresh if missing.
+                                        Clip length from the video file on
+                                        metrics refresh (Graph has no duration
+                                        field). May be blank until refresh.
                                       </TooltipContent>
                                     </Tooltip>
                                   </TableHead>

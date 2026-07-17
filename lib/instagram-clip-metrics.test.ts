@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   formatReelsSkipRate,
+  insightsMetricsForMediaProductType,
   parseInstagramVideoDuration,
   shouldRetryInsightsWithoutOptionalMetrics,
 } from "./instagram-clip-metrics";
@@ -34,6 +35,18 @@ describe("formatReelsSkipRate", () => {
   });
 });
 
+describe("insightsMetricsForMediaProductType", () => {
+  it("uses reel metrics only for REELS", () => {
+    const reels = insightsMetricsForMediaProductType("REELS");
+    assert.match(reels, /reels_skip_rate/);
+    assert.match(reels, /ig_reels_avg_watch_time/);
+    const feed = insightsMetricsForMediaProductType("FEED");
+    assert.doesNotMatch(feed, /reels_skip_rate/);
+    assert.doesNotMatch(feed, /ig_reels_/);
+    assert.match(feed, /reposts/);
+  });
+});
+
 describe("shouldRetryInsightsWithoutOptionalMetrics", () => {
   it("does not retry permanent media (100/33)", () => {
     assert.equal(
@@ -51,6 +64,13 @@ describe("shouldRetryInsightsWithoutOptionalMetrics", () => {
       shouldRetryInsightsWithoutOptionalMetrics({
         code: 100,
         message: "(#100) Invalid metric: reels_skip_rate",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldRetryInsightsWithoutOptionalMetrics({
+        code: 100,
+        message: "(#100) Tried accessing nonexisting field",
       }),
       true,
     );
