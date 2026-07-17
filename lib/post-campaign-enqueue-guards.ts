@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import {
   METRICS_REFRESH_COOLDOWN_MS_ADMIN,
   METRICS_REFRESH_COOLDOWN_MS_BRAND,
-  METRICS_RUN_STALE_MS,
 } from "@/lib/constants";
+import {
+  isMetricsRunStale,
+  metricsRunHeartbeatAgeMs,
+  STALE_METRICS_RUN_MS,
+  type MetricsRunHeartbeat,
+} from "@/lib/metrics-run-stale";
 
 export type MetricsRefreshTarget = "submissions" | "post_campaign";
 
@@ -12,40 +17,8 @@ export type MetricsRunTable =
   | "youtube_metrics_refresh_runs"
   | "tiktok_metrics_refresh_runs";
 
-/**
- * If a run has no heartbeat for this long, treat it as stuck.
- * Same window as UI button disable (`METRICS_RUN_STALE_MS` in constants).
- */
-export const STALE_METRICS_RUN_MS = METRICS_RUN_STALE_MS;
-
-export type MetricsRunHeartbeat = {
-  started_at?: string | null;
-  updated_at?: string | null;
-  last_batch_completed_at?: string | null;
-};
-
-function heartbeatMs(run: MetricsRunHeartbeat): number | null {
-  const progressTimes = [run.last_batch_completed_at, run.updated_at]
-    .map((v) => (v ? new Date(v).getTime() : NaN))
-    .filter((t) => Number.isFinite(t));
-  if (progressTimes.length > 0) return Math.max(...progressTimes);
-  if (run.started_at) {
-    const started = new Date(run.started_at).getTime();
-    if (Number.isFinite(started)) return started;
-  }
-  return null;
-}
-
-/** True when the run has not progressed recently enough to still count as active. */
-export function isMetricsRunStale(
-  run: MetricsRunHeartbeat,
-  nowMs: number = Date.now(),
-  staleAfterMs: number = STALE_METRICS_RUN_MS,
-): boolean {
-  const heartbeat = heartbeatMs(run);
-  if (heartbeat == null) return true;
-  return nowMs - heartbeat >= staleAfterMs;
-}
+export { isMetricsRunStale, STALE_METRICS_RUN_MS };
+export type { MetricsRunHeartbeat };
 
 /**
  * Mark stale pending/running rows as failed so a stuck queue cannot brick refresh forever.
@@ -85,13 +58,12 @@ export async function abandonStaleActiveMetricsRuns(
   if (staleRows.length === 0) return 0;
 
   for (const row of staleRows) {
-    const hb = heartbeatMs(row);
     console.warn("[metrics-refresh] Abandoned stale run", {
       table,
       contestId,
       runId: row.id,
       metricsTarget: metricsTarget ?? null,
-      ageMs: hb == null ? null : nowMs - hb,
+      ageMs: metricsRunHeartbeatAgeMs(row, nowMs),
       started_at: row.started_at ?? null,
       updated_at: row.updated_at ?? null,
       last_batch_completed_at: row.last_batch_completed_at ?? null,

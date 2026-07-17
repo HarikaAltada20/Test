@@ -13,8 +13,8 @@ import {
   getMetricsRefreshCooldownInfoBrand,
   getMetricsRefreshCooldownInfoAdmin,
   formatRemainingTime,
-  METRICS_RUN_STALE_MS,
 } from "@/lib/constants";
+import { isMetricsRunStale } from "@/lib/metrics-run-stale";
 import {
   isActiveMetricsRun,
   isTerminalMetricsRunStatus,
@@ -705,6 +705,7 @@ type InstagramInsightsRefreshRunSummary = {
   current_batch_index: number;
   total_batches: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
 };
@@ -719,6 +720,7 @@ type TwitterMetricsRefreshRunSummary = {
   processed_participants: number;
   tweets_upserted: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
   error_message?: string | null;
@@ -737,6 +739,7 @@ type TikTokMetricsRefreshRunSummary = {
   current_batch_index: number;
   total_batches: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
   error_message?: string | null;
@@ -756,6 +759,7 @@ type YouTubeMetricsRefreshRunSummary = {
   current_batch_index: number;
   total_batches: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
   error_message?: string | null;
@@ -1135,7 +1139,7 @@ function InstagramRefreshProgressCard({
   if (run.status !== "pending" && run.status !== "running") return null;
   const pct = metricsRunProgressPercent(run);
   return (
-    <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+    <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
           {completed ? "Insights refresh summary" : "Insights refresh in progress"}
@@ -1164,7 +1168,7 @@ function InstagramRefreshProgressCard({
         <span className="uppercase tracking-wide text-[10px]">{run.status}</span>
       </div>
       {isAdminView && (
-        <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
           <span>
             Success: <strong>{run.success_count}</strong>
           </span>
@@ -1211,7 +1215,7 @@ function YoutubeRefreshProgressCard({
   if (run.status !== "pending" && run.status !== "running") return null;
   const pct = metricsRunProgressPercent(run);
   return (
-    <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+    <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
           {completed
@@ -1297,6 +1301,7 @@ function createPendingInstagramRefreshRun(
     current_batch_index: 0,
     total_batches: 1,
     started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     last_batch_completed_at: null,
     finished_at: null,
   };
@@ -1320,6 +1325,7 @@ function createPendingYoutubeRefreshRun(
     current_batch_index: 0,
     total_batches: 1,
     started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     last_batch_completed_at: null,
     finished_at: null,
   };
@@ -2328,10 +2334,14 @@ export default function ContestDetailClient({
       | null
       | undefined,
   ) => {
-    if (!run || run.status !== "running" || !run.started_at) return false;
-    const startedAtMs = new Date(run.started_at).getTime();
-    if (!Number.isFinite(startedAtMs)) return false;
-    return Date.now() - startedAtMs < METRICS_RUN_STALE_MS;
+    // Disable while pending/running AND heartbeat is still fresh (same as server abandon).
+    if (!run || (run.status !== "running" && run.status !== "pending"))
+      return false;
+    return !isMetricsRunStale({
+      started_at: run.started_at,
+      updated_at: run.updated_at ?? null,
+      last_batch_completed_at: run.last_batch_completed_at,
+    });
   };
   const hasRecentRunningRun =
     isRunWithinDisableWindow(instagramRun) ||
@@ -9648,10 +9658,19 @@ export default function ContestDetailClient({
         total_interactions: igStats.total_interactions || 0,
         avg_watch_time_ms: igStats.avg_watch_time_ms || 0,
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
-        duration_seconds: Number(igStats.duration_seconds) || 0,
-        reposts: Number(igStats.reposts) || 0,
+        duration_seconds:
+          igStats.duration_seconds != null &&
+          Number.isFinite(Number(igStats.duration_seconds)) &&
+          Number(igStats.duration_seconds) > 0
+            ? Number(igStats.duration_seconds)
+            : null,
+        reposts:
+          igStats.reposts != null && Number.isFinite(Number(igStats.reposts))
+            ? Number(igStats.reposts)
+            : null,
         reels_skip_rate:
-          igStats.reels_skip_rate != null
+          igStats.reels_skip_rate != null &&
+          Number.isFinite(Number(igStats.reels_skip_rate))
             ? Number(igStats.reels_skip_rate)
             : null,
       };
@@ -17354,6 +17373,7 @@ export default function ContestDetailClient({
                             </div>
                           );
                         })()}
+                      </div>
                       {currentContest.platform
                         ?.toLowerCase()
                         .includes("instagram") &&
@@ -17384,7 +17404,7 @@ export default function ContestDetailClient({
                         twitterRun &&
                         (twitterRun.status === "pending" ||
                           twitterRun.status === "running") && (
-                          <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                          <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                                 {twitterRunCompleted
@@ -17515,7 +17535,7 @@ export default function ContestDetailClient({
                         tiktokRun &&
                         (tiktokRun.status === "pending" ||
                           tiktokRun.status === "running") && (
-                          <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                          <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                                 {tiktokRunCompleted
@@ -17643,7 +17663,6 @@ export default function ContestDetailClient({
                             )}
                           </div>
                         )}
-                    </div>
                     </div>
                   </CardContent>
                 </div>
@@ -19044,7 +19063,17 @@ export default function ContestDetailClient({
                                     Shares
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Reposts
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Reposts
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        Profile reposts (minus deleted).
+                                        Different from Shares.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   <TableHead className="text-center">
                                     Saves
@@ -19062,10 +19091,32 @@ export default function ContestDetailClient({
                                     Total Watch Time
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Reel duration
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Reel duration
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        Clip length from the video file on
+                                        metrics refresh (Graph has no duration
+                                        field). May be blank until refresh.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Skip rate (first 3s)
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Skip rate (first 3s)
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        % of initial views that skipped in the
+                                        first 3 seconds. Estimated; may be blank
+                                        for low-view reels.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   {isAdminView && (
                                     <TableHead className="text-center">

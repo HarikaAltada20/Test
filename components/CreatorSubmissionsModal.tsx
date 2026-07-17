@@ -2588,7 +2588,17 @@ export function CreatorSubmissionsModal({
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                 )}
                               >
-                                Reposts
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                      Reposts
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs text-left">
+                                    Profile reposts (minus deleted). Different
+                                    from Shares.
+                                  </TooltipContent>
+                                </Tooltip>
                               </TableHead>
                             )}
                             {/* Saves: Instagram only — not in TikTok Display API */}
@@ -2666,7 +2676,18 @@ export function CreatorSubmissionsModal({
                                     isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                   )}
                                 >
-                                  Reel duration
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                        Reel duration
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs text-left">
+                                      Clip length from the video file on metrics
+                                      refresh (Graph has no duration field). May
+                                      be blank until refresh.
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </TableHead>
                                 <TableHead
                                   className={cn(
@@ -2674,7 +2695,18 @@ export function CreatorSubmissionsModal({
                                     isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                   )}
                                 >
-                                  Skip rate (first 3s)
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                        Skip rate (first 3s)
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs text-left">
+                                      % of initial views that skipped in the
+                                      first 3 seconds. Estimated; may be blank
+                                      for low-view reels.
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </TableHead>
                               </>
                             )}
@@ -3033,9 +3065,12 @@ export function CreatorSubmissionsModal({
                       const igReelDurationSeconds = Number(
                         (platformStats as any)?.duration_seconds ?? 0,
                       );
-                      const igReposts = Number(
-                        (platformStats as any)?.reposts ?? 0,
-                      );
+                      const igRepostsRaw = (platformStats as any)?.reposts;
+                      const igReposts =
+                        igRepostsRaw != null &&
+                        Number.isFinite(Number(igRepostsRaw))
+                          ? Number(igRepostsRaw)
+                          : null;
                       const igReelsSkipRate =
                         (platformStats as any)?.reels_skip_rate != null
                           ? Number((platformStats as any).reels_skip_rate)

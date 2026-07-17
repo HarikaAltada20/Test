@@ -18,17 +18,19 @@ type CpmBudgetSubmissionRow = {
   earnings?: number | null;
   bonus_amount?: number | null;
 };
-import { parseInstagramVideoDuration } from "@/lib/instagram-clip-metrics";
+import {
+  coreInsightsMetricsForMediaProductType,
+  IG_BASE_INSIGHTS_METRICS,
+  IG_GRAPH_VERSION,
+  insightsMetricsForMediaProductType,
+  shouldRetryInsightsWithoutOptionalMetrics,
+} from "@/lib/instagram-clip-metrics";
+import { fetchMp4DurationSeconds } from "@/lib/mp4-duration-from-url";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
-/** Core metrics available across typical contest reels/posts. */
-const CORE_METRICS =
-  "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
-/** Optional newer metrics — may be unavailable on older Graph versions / non-reels. */
-const OPTIONAL_METRICS = "reposts,reels_skip_rate";
-const METRICS = `${CORE_METRICS},${OPTIONAL_METRICS}`;
+/** Core defaults only — never default optional metrics (reposts, reels_skip_rate). */
 const DEFAULT_STATS = {
   reach: 0,
   likes: 0,
@@ -39,7 +41,6 @@ const DEFAULT_STATS = {
   views: 0,
   avg_watch_time_ms: 0,
   total_watch_time_ms: 0,
-  reposts: 0,
 };
 
 export interface InstagramAccount {
@@ -153,7 +154,8 @@ export function classifyInsightsError(
 
 /**
  * Fetch insights for one submission. Returns success with views/stats or error with classification.
- * Duration is only fetched when not already stored (prefer submit-time capture).
+ * - Resolves media_product_type first so Reel-only metrics are not requested on FEED/IMAGE.
+ * - Duration is NOT from Graph `video_duration` (unsupported); use cached value or MP4 via media_url.
  */
 export async function fetchInsights(
   submission: SubmissionForInsights,
@@ -161,18 +163,76 @@ export async function fetchInsights(
   usageAccumulator?: MetaGraphUsageAccumulator
 ): Promise<FetchInsightsResult> {
   try {
+    const graphHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    };
+
+    // 1) Resolve media topology (safe fields only — never request video_duration).
+    let mediaProductType: string | null = null;
+    let cdnMediaUrl: string | null = null;
+    try {
+      const mediaMetaUrl = `https://graph.instagram.com/${IG_GRAPH_VERSION}/${submission.video_id}?fields=media_type,media_product_type,media_url&access_token=${accessToken}`;
+      const mediaRes = await instagramGraphFetch(mediaMetaUrl, {
+        headers: graphHeaders,
+        usageAccumulator,
+      });
+      if (mediaRes.ok) {
+        const mediaJson = (await mediaRes.json().catch(() => ({}))) as {
+          media_product_type?: string;
+          media_type?: string;
+          media_url?: string;
+        };
+        mediaProductType =
+          mediaJson.media_product_type ??
+          (mediaJson.media_type === "VIDEO" ? "REELS" : null);
+        if (typeof mediaJson.media_url === "string" && mediaJson.media_url) {
+          cdnMediaUrl = mediaJson.media_url;
+        }
+      }
+    } catch {
+      // continue with feed-safe metrics
+    }
+
+    const primaryMetrics = insightsMetricsForMediaProductType(mediaProductType);
+    const fallbackMetrics =
+      coreInsightsMetricsForMediaProductType(mediaProductType);
+
     const fetchWithMetrics = async (metricList: string) => {
-      const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${metricList}&access_token=${accessToken}`;
+      const url = `https://graph.instagram.com/${IG_GRAPH_VERSION}/${submission.video_id}/insights?metric=${metricList}&access_token=${accessToken}`;
       return instagramGraphFetch(url, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
+        headers: graphHeaders,
         usageAccumulator,
       });
     };
 
-    let response = await fetchWithMetrics(METRICS);
+    const applyInsightMetrics = (
+      metricsData: InsightsData,
+      stats: Record<string, number>,
+    ): number => {
+      let primaryViews = 0;
+      for (const metric of metricsData.data || []) {
+        const raw = metric.values[0]?.value;
+        if (metric.name === "reposts" || metric.name === "reels_skip_rate") {
+          if (raw != null) stats[metric.name] = Number(raw);
+          continue;
+        }
+        const value = raw || 0;
+        if (metric.name === "ig_reels_avg_watch_time") {
+          stats.avg_watch_time_ms = value;
+        } else if (metric.name === "ig_reels_video_view_total_time") {
+          stats.total_watch_time_ms = value;
+        } else if (metric.name === "views") {
+          stats.views = value;
+          primaryViews = value;
+        } else {
+          stats[metric.name] = value;
+        }
+      }
+      return primaryViews;
+    };
+
+    let response = await fetchWithMetrics(primaryMetrics);
     let errorBody: {
       error?: { code?: number; error_subcode?: number; message?: string };
     } = {};
@@ -182,9 +242,17 @@ export async function fetchInsights(
       const code = errorBody?.error?.code ?? response.status;
       const errorSubcode = errorBody?.error?.error_subcode;
       const classification = classifyInsightsError(code, errorSubcode);
-      // Newer metrics (reposts / reels_skip_rate) may not be available — retry without them.
-      if (classification === "temporary" || code === 100) {
-        const retry = await fetchWithMetrics(CORE_METRICS);
+      if (
+        shouldRetryInsightsWithoutOptionalMetrics({
+          code,
+          error_subcode: errorSubcode,
+          message: errorBody?.error?.message,
+        })
+      ) {
+        let retry = await fetchWithMetrics(fallbackMetrics);
+        if (!retry.ok && fallbackMetrics !== IG_BASE_INSIGHTS_METRICS) {
+          retry = await fetchWithMetrics(IG_BASE_INSIGHTS_METRICS);
+        }
         if (retry.ok) {
           response = retry;
           errorBody = {};
@@ -218,32 +286,12 @@ export async function fetchInsights(
     }
 
     const stats: Record<string, number> = { ...DEFAULT_STATS };
-    let primaryViews = 0;
-
-    data.data.forEach((metric) => {
-      const value = metric.values[0]?.value || 0;
-      if (metric.name === "ig_reels_avg_watch_time") {
-        stats.avg_watch_time_ms = value;
-      } else if (metric.name === "ig_reels_video_view_total_time") {
-        stats.total_watch_time_ms = value;
-      } else if (metric.name === "views") {
-        stats.views = value;
-        primaryViews = value;
-      } else if (metric.name === "reels_skip_rate") {
-        // Only set when Graph returns a value (may be absent for low-view reels).
-        if (metric.values[0]?.value != null) {
-          stats.reels_skip_rate = Number(metric.values[0].value);
-        }
-      } else {
-        stats[metric.name] = value;
-      }
-    });
+    let primaryViews = applyInsightMetrics(data, stats);
 
     if (primaryViews === 0 && stats.reach > 0) {
       primaryViews = stats.reach;
     }
 
-    // Prefer duration already stored at submit; only call media API when missing.
     const prevIg =
       submission.other_stats &&
       typeof submission.other_stats === "object" &&
@@ -258,26 +306,10 @@ export async function fetchInsights(
         ? existingDuration
         : undefined;
 
-    if (durationSeconds == null) {
-      try {
-        const mediaUrl = `https://graph.instagram.com/${submission.video_id}?fields=media_type,media_product_type,video_duration&access_token=${accessToken}`;
-        const mediaRes = await instagramGraphFetch(mediaUrl, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          },
-          usageAccumulator,
-        });
-        if (mediaRes.ok) {
-          const mediaJson = (await mediaRes.json().catch(() => ({}))) as {
-            video_duration?: number | string;
-          };
-          const parsed = parseInstagramVideoDuration(mediaJson.video_duration);
-          if (parsed != null) durationSeconds = parsed;
-        }
-      } catch {
-        // optional field — ignore
-      }
+    // Official Graph has no video_duration — parse MP4 from media_url when missing.
+    if (durationSeconds == null && cdnMediaUrl) {
+      const parsed = await fetchMp4DurationSeconds(cdnMediaUrl);
+      if (parsed != null) durationSeconds = parsed;
     }
 
     return {

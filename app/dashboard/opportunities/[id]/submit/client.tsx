@@ -40,7 +40,12 @@ import {
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
-import { parseInstagramVideoDuration } from "@/lib/instagram-clip-metrics";
+import {
+  IG_GRAPH_VERSION,
+  IG_REELS_INSIGHTS_METRICS,
+  IG_REELS_INSIGHTS_METRICS_CORE,
+  shouldRetryInsightsWithoutOptionalMetrics,
+} from "@/lib/instagram-clip-metrics";
 import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -233,8 +238,6 @@ interface InstagramReel {
   caption?: string;
   timestamp: string;
   permalink: string;
-  /** Clip length in seconds when Graph returns video_duration. */
-  video_duration?: number | null;
   // Potentially add insights here if fetched early, or keep them separate until submission
 }
 
@@ -265,15 +268,13 @@ function getYouTubeThumbnailUrl(
   );
 }
 
-/** Insights metrics requested at IG submit (aligned with refresh; optional metrics may be omitted by Graph). */
-const IG_SUBMIT_INSIGHTS_METRICS =
-  "reach,likes,comments,shares,saved,total_interactions,views,reposts,reels_skip_rate,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+/** Insights metrics requested at IG submit (Reels only — matches media picker filter). */
+// IG_GRAPH_VERSION / metric lists imported from instagram-clip-metrics
 
 function buildInstagramStatsFromInsights(
   insightsData: {
     data?: Array<{ name: string; values: { value: number }[] }>;
   },
-  reel?: InstagramReel | null,
 ): { primaryViews: number; stats: Record<string, number> } {
   let primaryViews = 0;
   const instagramApiMetrics: Record<string, number> = {};
@@ -291,6 +292,11 @@ function buildInstagramStatsFromInsights(
         } else if (metric.name === "views") {
           instagramApiMetrics.views = value;
           primaryViews = value;
+        } else if (
+          metric.name === "reposts" ||
+          metric.name === "reels_skip_rate"
+        ) {
+          instagramApiMetrics[metric.name] = value;
         } else {
           instagramApiMetrics[metric.name] = value;
         }
@@ -302,11 +308,8 @@ function buildInstagramStatsFromInsights(
     primaryViews = instagramApiMetrics.reach;
   }
 
-  const durationSeconds =
-    reel?.video_duration != null && reel.video_duration > 0
-      ? reel.video_duration
-      : null;
-
+  // Core defaults only — omit optional metrics unless Graph returned them.
+  // Duration is filled server-side on refresh (Graph has no video_duration field).
   const defaultStats: Record<string, number> = {
     reach: 0,
     likes: 0,
@@ -315,7 +318,6 @@ function buildInstagramStatsFromInsights(
     saved: 0,
     total_interactions: 0,
     views: 0,
-    reposts: 0,
   };
 
   return {
@@ -323,7 +325,6 @@ function buildInstagramStatsFromInsights(
     stats: {
       ...defaultStats,
       ...instagramApiMetrics,
-      ...(durationSeconds != null ? { duration_seconds: durationSeconds } : {}),
     },
   };
 }
@@ -2293,7 +2294,7 @@ export default function SubmitContentPage({
     setMessage("Fetching Instagram Reel insights...");
 
     const insightsRes = await fetch(
-      `https://graph.instagram.com/${selectedReel.id}/insights?metric=${IG_SUBMIT_INSIGHTS_METRICS}&access_token=${instagramAccount.access_token}`,
+      `https://graph.instagram.com/${IG_GRAPH_VERSION}/${selectedReel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS}&access_token=${instagramAccount.access_token}`,
     );
     const insightsData = await insightsRes.json();
 
@@ -2303,11 +2304,21 @@ export default function SubmitContentPage({
           "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.",
         );
       }
+      const err = insightsData.error || {};
+      if (
+        !shouldRetryInsightsWithoutOptionalMetrics({
+          code: err.code,
+          error_subcode: err.error_subcode,
+          message: err.message,
+        })
+      ) {
+        throw new Error(
+          err.message || "Failed to fetch Instagram Reel insights.",
+        );
+      }
       // Retry without optional metrics if Graph rejects the metric list.
-      const coreMetrics =
-        "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
       const retryRes = await fetch(
-        `https://graph.instagram.com/${selectedReel.id}/insights?metric=${coreMetrics}&access_token=${instagramAccount.access_token}`,
+        `https://graph.instagram.com/${IG_GRAPH_VERSION}/${selectedReel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS_CORE}&access_token=${instagramAccount.access_token}`,
       );
       const retryData = await retryRes.json();
       if (!retryRes.ok || retryData.error) {
@@ -2321,7 +2332,7 @@ export default function SubmitContentPage({
     }
 
     const { primaryViews, stats: finalInstagramStats } =
-      buildInstagramStatsFromInsights(insightsData, selectedReel);
+      buildInstagramStatsFromInsights(insightsData);
 
     const submissionPayload = {
       contest_id: contestId,
@@ -2420,7 +2431,7 @@ export default function SubmitContentPage({
       try {
         // Fetch insights for each reel
         let insightsRes = await fetch(
-          `https://graph.instagram.com/${reel.id}/insights?metric=${IG_SUBMIT_INSIGHTS_METRICS}&access_token=${instagramAccount.access_token}`,
+          `https://graph.instagram.com/${IG_GRAPH_VERSION}/${reel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS}&access_token=${instagramAccount.access_token}`,
         );
         let insightsData = await insightsRes.json();
 
@@ -2432,10 +2443,20 @@ export default function SubmitContentPage({
               }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`,
             );
           }
-          const coreMetrics =
-            "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+          const err = insightsData.error || {};
+          if (
+            !shouldRetryInsightsWithoutOptionalMetrics({
+              code: err.code,
+              error_subcode: err.error_subcode,
+              message: err.message,
+            })
+          ) {
+            throw new Error(
+              err.message || "Failed to fetch Instagram Reel insights.",
+            );
+          }
           insightsRes = await fetch(
-            `https://graph.instagram.com/${reel.id}/insights?metric=${coreMetrics}&access_token=${instagramAccount.access_token}`,
+            `https://graph.instagram.com/${IG_GRAPH_VERSION}/${reel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS_CORE}&access_token=${instagramAccount.access_token}`,
           );
           insightsData = await insightsRes.json();
           if (!insightsRes.ok || insightsData.error) {
@@ -2447,7 +2468,7 @@ export default function SubmitContentPage({
         }
 
         const { primaryViews, stats: finalInstagramStats } =
-          buildInstagramStatsFromInsights(insightsData, reel);
+          buildInstagramStatsFromInsights(insightsData);
 
         return await supabase
           .from("submissions")
@@ -2953,9 +2974,9 @@ export default function SubmitContentPage({
       try {
         // Instagram /media returns ~25 items per page; paginate to fetch ALL reels (no archiving workaround needed)
         const fields =
-          "id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp,video_duration";
+          "id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp,media_url";
         let nextUrl: string | null =
-          `https://graph.instagram.com/${igBusinessAccountID}/media?fields=${fields}&access_token=${accessToken}&limit=50`;
+          `https://graph.instagram.com/${IG_GRAPH_VERSION}/${igBusinessAccountID}/media?fields=${fields}&access_token=${accessToken}&limit=50`;
         const allMediaItems: any[] = [];
 
         while (nextUrl) {
@@ -3033,7 +3054,6 @@ export default function SubmitContentPage({
               caption: item.caption || item.video_title, // Use caption, fallback to video_title if available
               timestamp: item.timestamp,
               permalink: item.permalink,
-              video_duration: parseInstagramVideoDuration(item.video_duration),
             });
           } else {
           }

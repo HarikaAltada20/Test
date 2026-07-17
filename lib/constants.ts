@@ -40,7 +40,7 @@ export const METRICS_REFRESH_COOLDOWN_MS_ADMIN =
 
 /**
  * Shared metrics-run freshness window (5 minutes).
- * - UI: disable refresh buttons while a run is `running` and started within this window.
+ * - UI: disable refresh while a run is `pending`/`running` and heartbeat is fresh.
  * - Server: abandon pending/running runs whose heartbeat (last_batch_completed_at /
  *   updated_at, else started_at) is older than this.
  */
