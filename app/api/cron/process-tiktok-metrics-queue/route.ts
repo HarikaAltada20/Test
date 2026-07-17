@@ -162,6 +162,16 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     };
     const enqueueResult = await enqueueTikTokMetricsJob(nextJob);
     if (enqueueResult.error) {
+      console.error(
+        "[process-tiktok-metrics-queue] Failed to enqueue next batch",
+        {
+          contestId: job.contestId,
+          runId: job.runId,
+          batchIndex: job.batchIndex,
+          metricsTarget: job.metricsTarget ?? "submissions",
+          error: enqueueResult.error,
+        },
+      );
       const now = new Date().toISOString();
       await supabaseAdmin
         .from("tiktok_metrics_refresh_runs")
@@ -183,6 +193,13 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         { status: 500 },
       );
     }
+    console.info("[process-tiktok-metrics-queue] Enqueued next batch", {
+      contestId: job.contestId,
+      runId: job.runId,
+      batchIndex: job.batchIndex,
+      nextBatchIndex: job.batchIndex + 1,
+      metricsTarget: job.metricsTarget ?? "submissions",
+    });
     
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-tiktok-metrics-queue`, {
@@ -206,6 +223,38 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchIndex: job.batchIndex,
       hasMore: true,
     });
+  }
+
+  if (hasMore && batchData.nextCursor == null) {
+    console.error(
+      "[process-tiktok-metrics-queue] Queue stall: hasMore without nextCursor",
+      {
+        contestId: job.contestId,
+        runId: job.runId,
+        batchIndex: job.batchIndex,
+        metricsTarget: job.metricsTarget ?? "submissions",
+      },
+    );
+    const now = new Date().toISOString();
+    await supabaseAdmin
+      .from("tiktok_metrics_refresh_runs")
+      .update({
+        status: "failed",
+        finished_at: now,
+        updated_at: now,
+        error_message: "Queue stall: hasMore without nextCursor",
+      })
+      .eq("id", job.runId)
+      .eq("status", "running");
+    return NextResponse.json(
+      {
+        processed: 1,
+        contestId: job.contestId,
+        runId: job.runId,
+        error: "Queue stall: hasMore without nextCursor",
+      },
+      { status: 500 },
+    );
   }
 
   if (!hasMore) {

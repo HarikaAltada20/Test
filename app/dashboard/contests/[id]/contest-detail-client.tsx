@@ -13,6 +13,7 @@ import {
   getMetricsRefreshCooldownInfoBrand,
   getMetricsRefreshCooldownInfoAdmin,
   formatRemainingTime,
+  METRICS_RUN_STALE_MS,
 } from "@/lib/constants";
 import {
   isActiveMetricsRun,
@@ -2312,7 +2313,6 @@ export default function ContestDetailClient({
   const [isRefreshingCore, setIsRefreshingCore] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isRefreshingAllStandard, setIsRefreshingAllStandard] = useState(false);
-  const RUN_DISABLE_WINDOW_MS = 5 * 60 * 1000;
   const isRunWithinDisableWindow = (
     run:
       | InstagramInsightsRefreshRunSummary
@@ -2325,7 +2325,7 @@ export default function ContestDetailClient({
     if (!run || run.status !== "running" || !run.started_at) return false;
     const startedAtMs = new Date(run.started_at).getTime();
     if (!Number.isFinite(startedAtMs)) return false;
-    return Date.now() - startedAtMs < RUN_DISABLE_WINDOW_MS;
+    return Date.now() - startedAtMs < METRICS_RUN_STALE_MS;
   };
   const hasRecentRunningRun =
     isRunWithinDisableWindow(instagramRun) ||

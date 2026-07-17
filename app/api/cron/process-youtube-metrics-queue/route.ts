@@ -260,6 +260,16 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     };
     const enqueueNext = await enqueueYouTubeMetricsJob(nextJob);
     if (enqueueNext.error) {
+      console.error(
+        "[process-youtube-metrics-queue] Failed to enqueue next batch",
+        {
+          contestId: job.contestId,
+          runId: job.runId,
+          batchIndex: job.batchIndex,
+          metricsTarget: job.metricsTarget ?? "submissions",
+          error: enqueueNext.error,
+        },
+      );
       const supabaseAdmin = createAdminSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -285,6 +295,13 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         { status: 500 }
       );
     }
+    console.info("[process-youtube-metrics-queue] Enqueued next batch", {
+      contestId: job.contestId,
+      runId: job.runId,
+      batchIndex: job.batchIndex,
+      nextBatchIndex: job.batchIndex + 1,
+      metricsTarget: job.metricsTarget ?? "submissions",
+    });
     // Remove only after the continuation job is safely queued to avoid gaps.
     await removeFromProcessingYouTube(rawJobString);
     const doFetch = () =>
@@ -308,6 +325,43 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchIndex: job.batchIndex,
       hasMore: true,
     });
+  }
+
+  if (hasMore && batchData.nextCursor == null) {
+    console.error(
+      "[process-youtube-metrics-queue] Queue stall: hasMore without nextCursor",
+      {
+        contestId: job.contestId,
+        runId: job.runId,
+        batchIndex: job.batchIndex,
+        metricsTarget: job.metricsTarget ?? "submissions",
+      },
+    );
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const now = new Date().toISOString();
+    await supabaseAdmin
+      .from("youtube_metrics_refresh_runs")
+      .update({
+        status: "failed",
+        error_message: "Queue stall: hasMore without nextCursor",
+        finished_at: now,
+        updated_at: now,
+      })
+      .eq("id", job.runId)
+      .eq("status", "running");
+    await removeFromProcessingYouTube(rawJobString);
+    return NextResponse.json(
+      {
+        processed: 1,
+        contestId: job.contestId,
+        runId: job.runId,
+        error: "Queue stall: hasMore without nextCursor",
+      },
+      { status: 500 },
+    );
   }
 
   if (!hasMore) {

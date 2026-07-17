@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   METRICS_REFRESH_COOLDOWN_MS_ADMIN,
   METRICS_REFRESH_COOLDOWN_MS_BRAND,
+  METRICS_RUN_STALE_MS,
 } from "@/lib/constants";
 
 export type MetricsRefreshTarget = "submissions" | "post_campaign";
@@ -13,9 +14,9 @@ export type MetricsRunTable =
 
 /**
  * If a run has no heartbeat for this long, treat it as stuck.
- * Matches the UI "re-enable after ~5m" escape hatch with margin for slow batches.
+ * Same window as UI button disable (`METRICS_RUN_STALE_MS` in constants).
  */
-export const STALE_METRICS_RUN_MS = 10 * 60 * 1000;
+export const STALE_METRICS_RUN_MS = METRICS_RUN_STALE_MS;
 
 export type MetricsRunHeartbeat = {
   started_at?: string | null;
@@ -23,21 +24,26 @@ export type MetricsRunHeartbeat = {
   last_batch_completed_at?: string | null;
 };
 
+function heartbeatMs(run: MetricsRunHeartbeat): number | null {
+  const progressTimes = [run.last_batch_completed_at, run.updated_at]
+    .map((v) => (v ? new Date(v).getTime() : NaN))
+    .filter((t) => Number.isFinite(t));
+  if (progressTimes.length > 0) return Math.max(...progressTimes);
+  if (run.started_at) {
+    const started = new Date(run.started_at).getTime();
+    if (Number.isFinite(started)) return started;
+  }
+  return null;
+}
+
 /** True when the run has not progressed recently enough to still count as active. */
 export function isMetricsRunStale(
   run: MetricsRunHeartbeat,
   nowMs: number = Date.now(),
   staleAfterMs: number = STALE_METRICS_RUN_MS,
 ): boolean {
-  const candidates = [
-    run.last_batch_completed_at,
-    run.updated_at,
-    run.started_at,
-  ]
-    .map((v) => (v ? new Date(v).getTime() : NaN))
-    .filter((t) => Number.isFinite(t));
-  if (candidates.length === 0) return true;
-  const heartbeat = Math.max(...candidates);
+  const heartbeat = heartbeatMs(run);
+  if (heartbeat == null) return true;
   return nowMs - heartbeat >= staleAfterMs;
 }
 
@@ -57,6 +63,7 @@ export async function abandonStaleActiveMetricsRuns(
 ): Promise<number> {
   const metricsTarget = options?.metricsTarget;
   const staleAfterMs = options?.staleAfterMs ?? STALE_METRICS_RUN_MS;
+  const nowMs = Date.now();
 
   let query = supabaseAdmin
     .from(table)
@@ -72,11 +79,26 @@ export async function abandonStaleActiveMetricsRuns(
   const rows = (data ?? []) as Array<
     MetricsRunHeartbeat & { id: string; status: string }
   >;
-  const staleIds = rows
-    .filter((row) => isMetricsRunStale(row, Date.now(), staleAfterMs))
-    .map((row) => row.id);
-  if (staleIds.length === 0) return 0;
+  const staleRows = rows.filter((row) =>
+    isMetricsRunStale(row, nowMs, staleAfterMs),
+  );
+  if (staleRows.length === 0) return 0;
 
+  for (const row of staleRows) {
+    const hb = heartbeatMs(row);
+    console.warn("[metrics-refresh] Abandoned stale run", {
+      table,
+      contestId,
+      runId: row.id,
+      metricsTarget: metricsTarget ?? null,
+      ageMs: hb == null ? null : nowMs - hb,
+      started_at: row.started_at ?? null,
+      updated_at: row.updated_at ?? null,
+      last_batch_completed_at: row.last_batch_completed_at ?? null,
+    });
+  }
+
+  const staleIds = staleRows.map((row) => row.id);
   const now = new Date().toISOString();
   const { error: updateError } = await supabaseAdmin
     .from(table)

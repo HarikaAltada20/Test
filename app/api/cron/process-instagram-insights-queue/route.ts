@@ -145,7 +145,50 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       cursor: batchData.nextCursor,
       metricsTarget: job.metricsTarget ?? "submissions",
     };
-    await enqueueInstagramInsightsJob(nextJob);
+    const enqueueNext = await enqueueInstagramInsightsJob(nextJob);
+    if (enqueueNext?.error) {
+      console.error(
+        "[process-instagram-insights-queue] Failed to enqueue next batch",
+        {
+          contestId: job.contestId,
+          runId: job.runId,
+          batchIndex: job.batchIndex,
+          metricsTarget: job.metricsTarget ?? "submissions",
+          error: enqueueNext.error,
+        },
+      );
+      const supabaseAdmin = createAdminSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("instagram_insights_refresh_runs")
+        .update({
+          status: "failed",
+          error_message: `Failed to enqueue next batch: ${enqueueNext.error}`,
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", job.runId);
+      return NextResponse.json(
+        {
+          processed: 1,
+          contestId: job.contestId,
+          runId: job.runId,
+          error: "Failed to enqueue next batch",
+          details: enqueueNext.error,
+        },
+        { status: 500 },
+      );
+    }
+    console.info("[process-instagram-insights-queue] Enqueued next batch", {
+      contestId: job.contestId,
+      runId: job.runId,
+      batchIndex: job.batchIndex,
+      nextBatchIndex: job.batchIndex + 1,
+      metricsTarget: job.metricsTarget ?? "submissions",
+    });
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-instagram-insights-queue`, {
         method: "POST",
@@ -167,6 +210,42 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchIndex: job.batchIndex,
       hasMore: true,
     });
+  }
+
+  if (hasMore && batchData.nextCursor == null) {
+    console.error(
+      "[process-instagram-insights-queue] Queue stall: hasMore without nextCursor",
+      {
+        contestId: job.contestId,
+        runId: job.runId,
+        batchIndex: job.batchIndex,
+        metricsTarget: job.metricsTarget ?? "submissions",
+      },
+    );
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const now = new Date().toISOString();
+    await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .update({
+        status: "failed",
+        error_message: "Queue stall: hasMore without nextCursor",
+        finished_at: now,
+        updated_at: now,
+      })
+      .eq("id", job.runId)
+      .eq("status", "running");
+    return NextResponse.json(
+      {
+        processed: 1,
+        contestId: job.contestId,
+        runId: job.runId,
+        error: "Queue stall: hasMore without nextCursor",
+      },
+      { status: 500 },
+    );
   }
 
   if (!hasMore) {

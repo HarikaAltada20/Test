@@ -123,6 +123,13 @@ export async function POST(
       metricsTarget,
     });
 
+    // Heartbeat so long-running batches are not treated as stale mid-work.
+    await supabaseAdmin
+      .from("tiktok_metrics_refresh_runs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", runId)
+      .eq("status", "running");
+
     const { data: contest } = await supabaseAdmin
       .from("contests")
       .select("id, views_locked_at, post_contest_status")

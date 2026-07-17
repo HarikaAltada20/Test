@@ -18,45 +18,79 @@ describe("isMetricsRunStale", () => {
     assert.equal(isMetricsRunStale({}), true);
   });
 
-  it("is not stale when heartbeat is recent", () => {
+  it("is not stale when started_at heartbeat is recent (fallback)", () => {
     const now = Date.now();
     assert.equal(
       isMetricsRunStale(
         { started_at: new Date(now - 60_000).toISOString() },
         now,
-        10 * 60_000,
+        5 * 60_000,
       ),
       false,
     );
   });
 
-  it("is stale when all heartbeats are older than threshold", () => {
+  it("is stale when progress heartbeats are older than threshold", () => {
+    const now = Date.now();
+    assert.equal(
+      isMetricsRunStale(
+        {
+          started_at: new Date(now - 30 * 60_000).toISOString(),
+          last_batch_completed_at: new Date(now - 10 * 60_000).toISOString(),
+          updated_at: new Date(now - 10 * 60_000).toISOString(),
+        },
+        now,
+        5 * 60_000,
+      ),
+      true,
+    );
+  });
+
+  it("uses newest of last_batch_completed_at and updated_at", () => {
     const now = Date.now();
     assert.equal(
       isMetricsRunStale(
         {
           started_at: new Date(now - 30 * 60_000).toISOString(),
           last_batch_completed_at: new Date(now - 20 * 60_000).toISOString(),
+          updated_at: new Date(now - 30_000).toISOString(),
+        },
+        now,
+        5 * 60_000,
+      ),
+      false,
+    );
+  });
+
+  it("ignores old started_at when progress heartbeats exist", () => {
+    const now = Date.now();
+    // started_at is fresh but must not override stale progress timestamps
+    assert.equal(
+      isMetricsRunStale(
+        {
+          started_at: new Date(now - 10_000).toISOString(),
+          last_batch_completed_at: new Date(now - 20 * 60_000).toISOString(),
           updated_at: new Date(now - 20 * 60_000).toISOString(),
         },
         now,
-        10 * 60_000,
+        5 * 60_000,
       ),
       true,
     );
   });
 
-  it("uses the newest heartbeat", () => {
+  it("defaults to METRICS_RUN_STALE_MS (5 minutes)", () => {
     const now = Date.now();
     assert.equal(
-      isMetricsRunStale(
-        {
-          started_at: new Date(now - 30 * 60_000).toISOString(),
-          updated_at: new Date(now - 30_000).toISOString(),
-        },
-        now,
-        10 * 60_000,
-      ),
+      isMetricsRunStale({
+        updated_at: new Date(now - 6 * 60_000).toISOString(),
+      }, now),
+      true,
+    );
+    assert.equal(
+      isMetricsRunStale({
+        updated_at: new Date(now - 2 * 60_000).toISOString(),
+      }, now),
       false,
     );
   });
