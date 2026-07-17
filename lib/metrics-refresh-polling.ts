@@ -39,18 +39,28 @@ export function resolveMetricsRefreshPlatform(
   return null;
 }
 
+export type MetricsRefreshTarget = "submissions" | "post_campaign";
+
 export function getMetricsRefreshStatusUrl(
   contestId: string,
   platform: MetricsRefreshPlatform,
+  metricsTarget: MetricsRefreshTarget = "submissions",
 ): string {
-  return `/api/contests/${contestId}/${STATUS_PATH[platform]}/status`;
+  const base = `/api/contests/${contestId}/${STATUS_PATH[platform]}/status`;
+  if (metricsTarget === "post_campaign") {
+    return `${base}?metricsTarget=post_campaign`;
+  }
+  return base;
 }
 
 export async function fetchMetricsRunStatus<T extends MetricsRefreshRun>(
   contestId: string,
   platform: MetricsRefreshPlatform,
+  metricsTarget: MetricsRefreshTarget = "submissions",
 ): Promise<T | null> {
-  const res = await fetch(getMetricsRefreshStatusUrl(contestId, platform));
+  const res = await fetch(
+    getMetricsRefreshStatusUrl(contestId, platform, metricsTarget),
+  );
   if (!res.ok) return null;
   const data = await res.json().catch(() => ({}));
   return (data?.run as T | null) ?? null;
@@ -73,6 +83,8 @@ export function isTerminalMetricsRunStatus(
 export type StartMetricsRunPollingOptions<T extends MetricsRefreshRun> = {
   contestId: string;
   platform: MetricsRefreshPlatform;
+  /** Which metrics table the run targets. Defaults to submissions. */
+  metricsTarget?: MetricsRefreshTarget;
   intervalMs?: number;
   /** Stop polling after this many ms (manual refresh flows). */
   maxMs?: number;
@@ -92,6 +104,7 @@ export function startMetricsRunPolling<T extends MetricsRefreshRun>(
   const {
     contestId,
     platform,
+    metricsTarget = "submissions",
     intervalMs = 3000,
     maxMs,
     onRun,
@@ -134,7 +147,11 @@ export function startMetricsRunPolling<T extends MetricsRefreshRun>(
     }
 
     try {
-      const run = await fetchMetricsRunStatus<T>(contestId, platform);
+      const run = await fetchMetricsRunStatus<T>(
+        contestId,
+        platform,
+        metricsTarget,
+      );
       if (disposed) return;
 
       onRun(run);
