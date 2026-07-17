@@ -844,12 +844,19 @@ async function refreshInstagramPostCampaign(
 
       if (result.kind === "success") {
         success += 1;
+        const prevOther = parseOtherStats(sub.other_stats);
+        const prevIg =
+          prevOther.instagram &&
+          typeof prevOther.instagram === "object" &&
+          !Array.isArray(prevOther.instagram)
+            ? (prevOther.instagram as Record<string, unknown>)
+            : {};
         updates.push({
           submission_id: sub.id,
           views: result.views,
           other_stats: {
-            ...parseOtherStats(sub.other_stats),
-            instagram: result.stats,
+            ...prevOther,
+            instagram: { ...prevIg, ...result.stats },
           },
           last_insights_update: now,
           insights_status: "ok",

@@ -26,6 +26,11 @@ import {
   buildCreatorProfileUrl,
   resolveExportContentUrl,
 } from "@/lib/report-export-links";
+import {
+  buildYouTubeContentViewUrl,
+  formatClipDurationSeconds,
+} from "@/lib/youtube-url";
+import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
 import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
 import ExcelJS from "exceljs";
 import {
@@ -298,7 +303,21 @@ export function buildSubmissionExportCellValue(
         ctx.platform,
         submission.video_id as string | null | undefined,
       );
-      return resolved ?? String(submission.content_link || EMPTY_CELL);
+      const link = resolved ?? String(submission.content_link || EMPTY_CELL);
+      if (
+        String(ctx.platform || "")
+          .toLowerCase()
+          .includes("youtube")
+      ) {
+        const durationSeconds = Number(metrics.duration_seconds);
+        return buildYouTubeContentViewUrl(
+          link === EMPTY_CELL ? String(submission.content_link || "") : link,
+          Number.isFinite(durationSeconds) && durationSeconds > 0
+            ? durationSeconds
+            : null,
+        );
+      }
+      return link;
     }
     case "video_title":
       return String(submission.video_title || EMPTY_CELL);
@@ -354,6 +373,8 @@ export function buildSubmissionExportCellValue(
       return formatMetricValue(metrics.dislikes);
     case "shares":
       return formatMetricValue(metrics.shares);
+    case "reposts":
+      return formatMetricValue(metrics.reposts);
     case "avg_view_pct": {
       const pct = Number(metrics.avg_view_percentage);
       return pct > 0 ? `${pct.toFixed(1)}%` : EMPTY_CELL;
@@ -367,6 +388,22 @@ export function buildSubmissionExportCellValue(
     case "avg_duration": {
       const sec = Number(metrics.avg_view_duration_seconds);
       return sec > 0 ? `${sec}s` : EMPTY_CELL;
+    }
+    case "clip_duration":
+    case "reel_duration": {
+      const sec = Number(metrics.duration_seconds);
+      const label = formatClipDurationSeconds(
+        Number.isFinite(sec) && sec > 0 ? sec : null,
+      );
+      return label === "—" ? EMPTY_CELL : label;
+    }
+    case "reels_skip_rate": {
+      const label = formatReelsSkipRate(
+        metrics.reels_skip_rate == null
+          ? null
+          : Number(metrics.reels_skip_rate),
+      );
+      return label === "—" ? EMPTY_CELL : label;
     }
     case "engaged_views":
       return formatMetricValue(metrics.engaged_views);
@@ -581,11 +618,25 @@ export function buildLeaderboardExportMatrix(
         rewardCtx,
       );
       if (col === "content_link") {
-        return resolveExportContentUrl(
+        const resolved = resolveExportContentUrl(
           String(submission.content_link || ""),
           rewardCtx.platform,
           submission.video_id as string | null | undefined,
         );
+        if (
+          String(rewardCtx.platform || "")
+            .toLowerCase()
+            .includes("youtube")
+        ) {
+          const durationSeconds = Number(metrics.duration_seconds);
+          return buildYouTubeContentViewUrl(
+            resolved || String(submission.content_link || ""),
+            Number.isFinite(durationSeconds) && durationSeconds > 0
+              ? durationSeconds
+              : null,
+          );
+        }
+        return resolved;
       }
       if (col === "creator_username") {
         return buildCreatorProfileUrl(display, rewardCtx.platform);

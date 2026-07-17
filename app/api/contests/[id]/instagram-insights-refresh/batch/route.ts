@@ -121,6 +121,13 @@ export async function POST(
       metricsTarget,
     });
 
+    // Heartbeat so long-running batches are not treated as stale mid-work.
+    await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", runId)
+      .eq("status", "running");
+
     const { data: contest } = await supabaseAdmin
       .from("contests")
       .select("id, views_locked_at, post_contest_status")
@@ -428,15 +435,23 @@ export async function POST(
 
         if (result.kind === "success") {
           const { views, stats } = result;
+          const prevOther =
+            ((sub.other_stats as Record<string, unknown>) || {}) as Record<
+              string,
+              unknown
+            >;
+          const prevIg =
+            prevOther.instagram &&
+            typeof prevOther.instagram === "object" &&
+            !Array.isArray(prevOther.instagram)
+              ? (prevOther.instagram as Record<string, unknown>)
+              : {};
           submissionUpdates.push({
             id: sub.id,
             views,
             other_stats: {
-              ...(((sub.other_stats as Record<string, unknown>) || {}) as Record<
-                string,
-                unknown
-              >),
-              instagram: stats,
+              ...prevOther,
+              instagram: { ...prevIg, ...stats },
             },
             last_insights_update: now,
             insights_status: "ok",

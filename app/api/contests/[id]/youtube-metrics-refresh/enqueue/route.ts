@@ -21,6 +21,7 @@ import {
 import { isQStashEnabled, triggerProcessYouTubeMetricsQueue } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import {
+  abandonStaleActiveMetricsRuns,
   assertNoCrossTargetActiveRun,
   assertPostCampaignEnqueueAccess,
   parseMetricsTarget,
@@ -221,9 +222,18 @@ export async function POST(
     );
     if (crossTargetBlocked) return crossTargetBlocked;
 
+    await abandonStaleActiveMetricsRuns(
+      supabaseAdmin,
+      "youtube_metrics_refresh_runs",
+      contestId,
+      { metricsTarget },
+    );
+
     const { data: existingRun } = await supabaseAdmin
       .from("youtube_metrics_refresh_runs")
-      .select("id, status, total_submissions, total_batches, scope, metrics_target")
+      .select(
+        "id, status, total_submissions, total_batches, scope, metrics_target, started_at, updated_at, last_batch_completed_at",
+      )
       .eq("contest_id", contestId)
       .eq("metrics_target", metricsTarget)
       .in("status", ["pending", "running"])

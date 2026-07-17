@@ -139,6 +139,13 @@ export async function POST(
       scope: run.scope,
     });
 
+    // Heartbeat so long-running batches are not treated as stale mid-work.
+    await supabaseAdmin
+      .from("youtube_metrics_refresh_runs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", runId)
+      .eq("status", "running");
+
     const scope = run.scope as YouTubeRefreshScope;
 
     const { data: contest } = await supabaseAdmin

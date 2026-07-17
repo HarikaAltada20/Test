@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { extractYoutubeId } from "@/lib/youtube-api";
+import { parseYouTubeIso8601Duration } from "@/lib/youtube-url";
 import {
   getVideoAnalytics,
   getVideoTrafficSources,
@@ -34,6 +35,7 @@ export type PrefetchedBasic = {
   viewCount: number;
   likeCount: number;
   commentCount: number;
+  durationSeconds?: number | null;
   isPrivate?: boolean;
 };
 
@@ -188,7 +190,7 @@ async function fetchBasicFromDataApi(
   const youtube = google.youtube("v3");
   try {
     const response = await youtube.videos.list({
-      part: ["statistics", "status"],
+      part: ["statistics", "status", "contentDetails"],
       id: [videoId],
       access_token: accessToken,
     });
@@ -200,6 +202,9 @@ async function fetchBasicFromDataApi(
     }
 
     const isPrivate = item.status?.privacyStatus === "private";
+    const durationSeconds = parseYouTubeIso8601Duration(
+      item.contentDetails?.duration ?? null,
+    );
 
     if (!stats) {
       return { stats: undefined, isPrivate };
@@ -210,6 +215,7 @@ async function fetchBasicFromDataApi(
         viewCount: parseInt(stats.viewCount || "0", 10),
         likeCount: parseInt(stats.likeCount || "0", 10),
         commentCount: parseInt(stats.commentCount || "0", 10),
+        durationSeconds,
       },
       isPrivate,
     };
@@ -223,12 +229,17 @@ function buildYoutubeMetricsFromBasic(
   rawLikes: number,
   rawComments: number,
   existingYT: Record<string, unknown>,
-  now: string
+  now: string,
+  durationSeconds?: number | null,
 ): Record<string, unknown> {
   const youtubeMetrics: Record<string, unknown> = {
     views: rawViews,
     likes: rawLikes,
     comments: rawComments,
+    duration_seconds:
+      typeof durationSeconds === "number" && durationSeconds > 0
+        ? durationSeconds
+        : existingYT.duration_seconds || undefined,
     estimated_minutes_watched: existingYT.estimated_minutes_watched || undefined,
     avg_view_duration_seconds: existingYT.avg_view_duration_seconds || undefined,
     avg_view_percentage: existingYT.avg_view_percentage || undefined,
@@ -427,7 +438,8 @@ export async function updateYouTubeSubmissionForScope(
       basic.likeCount,
       basic.commentCount,
       existingStats,
-      now
+      now,
+      basic.durationSeconds,
     );
     Object.assign(updates, mergedBasic);
   } else if (needsBasic && !basic) {
@@ -740,7 +752,7 @@ export async function fetchYouTubeBasicStatsByVideoId(
     const chunk = unique.slice(i, i + 50);
     try {
       const response = await youtube.videos.list({
-        part: ["statistics", "status"],
+        part: ["statistics", "status", "contentDetails"],
         id: chunk,
         access_token: accessToken,
       });
@@ -751,6 +763,9 @@ export async function fetchYouTubeBasicStatsByVideoId(
           viewCount: parseInt(stats.viewCount || "0", 10),
           likeCount: parseInt(stats.likeCount || "0", 10),
           commentCount: parseInt(stats.commentCount || "0", 10),
+          durationSeconds: parseYouTubeIso8601Duration(
+            video.contentDetails?.duration ?? null,
+          ),
           isPrivate: video.status?.privacyStatus === "private",
         });
       }

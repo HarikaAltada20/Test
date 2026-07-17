@@ -38,6 +38,14 @@ export const METRICS_REFRESH_COOLDOWN_MS_BRAND =
 export const METRICS_REFRESH_COOLDOWN_MS_ADMIN =
   METRICS_REFRESH_COOLDOWN_MINUTES_ADMIN * 60 * 1000;
 
+/**
+ * Shared metrics-run freshness window (5 minutes).
+ * - UI: disable refresh buttons while a run is `running` and started within this window.
+ * - Server: abandon pending/running runs whose heartbeat (last_batch_completed_at /
+ *   updated_at, else started_at) is older than this.
+ */
+export const METRICS_RUN_STALE_MS = 5 * 60 * 1000;
+
 // Daily challenge leaderboard refresh cooldowns.
 export const DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR = 30 * 60 * 1000; // 30 minutes
 export const DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN = 1 * 60 * 1000; // 1 minute

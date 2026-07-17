@@ -35,6 +35,7 @@ const BASIC_ONLY_KEYS = new Set([
   "views",
   "likes",
   "comments",
+  "duration_seconds",
   "analytics_needs_reauth",
   "last_basic_update",
   "insights_error",

@@ -84,6 +84,11 @@ import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
 import {
+  buildYouTubeContentViewUrl,
+  formatClipDurationSeconds,
+} from "@/lib/youtube-url";
+import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
+import {
   postContestStatusLocksSubmissionModeration,
   submissionModerationUiAllowed,
   SUBMISSION_MODERATION_LOCKED_MESSAGE,
@@ -1235,6 +1240,31 @@ export function CreatorSubmissionsModal({
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
   const isVideoContest = contest?.contest_format !== "text_image";
+
+  const getSubmissionContentViewHref = (submission: Submission) => {
+    const link = submission.content_link || "";
+    if (!link) return "#";
+    const platform = (
+      submission.platform ||
+      contest?.platform ||
+      ""
+    ).toLowerCase();
+    const isYouTube =
+      platform.includes("youtube") || /youtu\.?be/i.test(link);
+    if (!isYouTube) return link;
+    const ytStats =
+      (submission.other_stats as any)?.youtube ||
+      submission.other_stats ||
+      {};
+    const durationSeconds = Number(ytStats.duration_seconds);
+    return buildYouTubeContentViewUrl(
+      link,
+      Number.isFinite(durationSeconds) && durationSeconds > 0
+        ? durationSeconds
+        : null,
+    );
+  };
+
   const canEditQualityScore = isVideoContest && !isPostCampaignView;
   // Post-campaign overlay is metrics-only — no verify/reject/pending/paid.
   const showSelectionCheckboxes = !isPostCampaignView;
@@ -1337,6 +1367,7 @@ export function CreatorSubmissionsModal({
           "avg_view_pct",
           "watch_time",
           "avg_duration",
+          "clip_duration",
           "engaged_views",
           "subs_gained",
           "bot_score",
@@ -2479,6 +2510,16 @@ export function CreatorSubmissionsModal({
                             Avg Duration
                           </TableHead>
                         )}
+                        {isYouTubeContest && showYtColumn("clip_duration") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Total duration of clip
+                          </TableHead>
+                        )}
                         {isYouTubeContest && showYtColumn("engaged_views") && (
                           <TableHead
                             className={cn(
@@ -2540,6 +2581,16 @@ export function CreatorSubmissionsModal({
                             >
                               Shares
                             </TableHead>
+                            {!isTikTokContest && (
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Reposts
+                              </TableHead>
+                            )}
                             {/* Saves: Instagram only — not in TikTok Display API */}
                             {!isTikTokContest && (
                               <TableHead
@@ -2608,6 +2659,22 @@ export function CreatorSubmissionsModal({
                                   )}
                                 >
                                   Total Watch Time
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Reel duration
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Skip rate (first 3s)
                                 </TableHead>
                               </>
                             )}
@@ -2864,8 +2931,8 @@ export function CreatorSubmissionsModal({
                               (isInstagramContest || isTikTokContest
                                 ? isTikTokContest
                                   ? 3
-                                  : 6
-                                : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
+                                  : 9
+                                : 0) + // TT: Shares + total engagement + engagement rate; IG: Shares, Reposts, Saves, Reach, Interactions, Avg/Total watch, Reel duration, Skip rate
                               2 + // Expected Reward, Reward Granted
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
@@ -2960,6 +3027,19 @@ export function CreatorSubmissionsModal({
                       const ytAvgDurationSeconds = Number(
                         youtubeStats.avg_view_duration_seconds ?? 0,
                       );
+                      const ytClipDurationSeconds = Number(
+                        youtubeStats.duration_seconds ?? 0,
+                      );
+                      const igReelDurationSeconds = Number(
+                        (platformStats as any)?.duration_seconds ?? 0,
+                      );
+                      const igReposts = Number(
+                        (platformStats as any)?.reposts ?? 0,
+                      );
+                      const igReelsSkipRate =
+                        (platformStats as any)?.reels_skip_rate != null
+                          ? Number((platformStats as any).reels_skip_rate)
+                          : null;
                       const ytEngagedViews = Number(
                         youtubeStats.engaged_views ?? 0,
                       );
@@ -3801,7 +3881,9 @@ export function CreatorSubmissionsModal({
                                     {submission.content_link && (
                                       <div className="flex items-center gap-2">
                                         <a
-                                          href={submission.content_link}
+                                          href={getSubmissionContentViewHref(
+                                            submission,
+                                          )}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="text-xs text-blue-600 hover:underline flex items-center gap-1"
@@ -3902,6 +3984,16 @@ export function CreatorSubmissionsModal({
                                     {ytAvgDurationSeconds > 0
                                       ? `${ytAvgDurationSeconds}s`
                                       : "—"}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("clip_duration") && (
+                                  <TableCell className="text-center font-mono">
+                                    {formatClipDurationSeconds(
+                                      ytClipDurationSeconds > 0
+                                        ? ytClipDurationSeconds
+                                        : null,
+                                    )}
                                   </TableCell>
                                 )}
                               {isYouTubeContest &&
@@ -4131,6 +4223,11 @@ export function CreatorSubmissionsModal({
                                   </TableCell>
                                   {!isTikTokContest && (
                                     <TableCell className="text-center font-mono">
+                                      {formatMetricValue(igReposts)}
+                                    </TableCell>
+                                  )}
+                                  {!isTikTokContest && (
+                                    <TableCell className="text-center font-mono">
                                       {formatMetricValue(saves)}
                                     </TableCell>
                                   )}
@@ -4193,6 +4290,16 @@ export function CreatorSubmissionsModal({
                                             total
                                           </span>
                                         </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {formatClipDurationSeconds(
+                                          igReelDurationSeconds > 0
+                                            ? igReelDurationSeconds
+                                            : null,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {formatReelsSkipRate(igReelsSkipRate)}
                                       </TableCell>
                                     </>
                                   )}
@@ -4829,7 +4936,9 @@ export function CreatorSubmissionsModal({
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem asChild>
                                       <a
-                                        href={submission.content_link}
+                                        href={getSubmissionContentViewHref(
+                                          submission,
+                                        )}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center"

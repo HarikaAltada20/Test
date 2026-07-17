@@ -13,6 +13,7 @@ import {
   getMetricsRefreshCooldownInfoBrand,
   getMetricsRefreshCooldownInfoAdmin,
   formatRemainingTime,
+  METRICS_RUN_STALE_MS,
 } from "@/lib/constants";
 import {
   isActiveMetricsRun,
@@ -193,6 +194,11 @@ import type { CreatorExportContext } from "@/lib/creator-leaderboard-export";
 import { getSubmissionExportDefaultColumnIds } from "@/lib/submission-leaderboard-export-columns";
 import { getCreatorExportDefaultColumnIds } from "@/lib/creator-leaderboard-export-columns";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
+import {
+  buildYouTubeContentViewUrl,
+  formatClipDurationSeconds,
+} from "@/lib/youtube-url";
+import { formatReelsSkipRate } from "@/lib/instagram-clip-metrics";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
@@ -276,6 +282,7 @@ const YT_TABLE_COLUMNS = [
   { id: "avg_view_pct", label: "Avg View %" },
   { id: "watch_time", label: "Watch Time" },
   { id: "avg_duration", label: "Avg Duration" },
+  { id: "clip_duration", label: "Total duration of clip" },
   { id: "engaged_views", label: "Engaged Views" },
   { id: "subs_gained", label: "Subs Gained" },
   { id: "bot_score", label: "Bot Score" },
@@ -2312,7 +2319,6 @@ export default function ContestDetailClient({
   const [isRefreshingCore, setIsRefreshingCore] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isRefreshingAllStandard, setIsRefreshingAllStandard] = useState(false);
-  const RUN_DISABLE_WINDOW_MS = 5 * 60 * 1000;
   const isRunWithinDisableWindow = (
     run:
       | InstagramInsightsRefreshRunSummary
@@ -2325,7 +2331,7 @@ export default function ContestDetailClient({
     if (!run || run.status !== "running" || !run.started_at) return false;
     const startedAtMs = new Date(run.started_at).getTime();
     if (!Number.isFinite(startedAtMs)) return false;
-    return Date.now() - startedAtMs < RUN_DISABLE_WINDOW_MS;
+    return Date.now() - startedAtMs < METRICS_RUN_STALE_MS;
   };
   const hasRecentRunningRun =
     isRunWithinDisableWindow(instagramRun) ||
@@ -2741,6 +2747,28 @@ export default function ContestDetailClient({
       }
     } catch (_) {}
   }, []);
+
+  // Insert Total duration of clip after Avg Duration for saved YouTube column prefs
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isYouTube =
+      currentContest?.platform?.toLowerCase().includes("youtube") ?? false;
+    if (!isYouTube) return;
+    setYtVisibleColumns((prev) => {
+      if (prev.includes("clip_duration")) return prev;
+      const idx = prev.indexOf("avg_duration");
+      const next = [...prev];
+      if (idx >= 0) next.splice(idx + 1, 0, "clip_duration");
+      else next.push("clip_duration");
+      try {
+        localStorage.setItem(
+          YT_VISIBLE_COLUMNS_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch (_) {}
+      return next;
+    });
+  }, [currentContest?.id, currentContest?.platform]);
 
   // Insert Adjusted Reward after Expected for saved YouTube column prefs when contest has reward adjustment
   useEffect(() => {
@@ -9438,10 +9466,9 @@ export default function ContestDetailClient({
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
     // Post-campaign leaderboard can refresh after review lock; submissions stay locked.
+    // Active-run disable applies to both Submissions and PC (same UX).
     const isLocked = isPostCampaignLeaderboard ? false : ytPostContestLocked;
-    const runInProgress = isPostCampaignLeaderboard
-      ? false
-      : hasRecentRunningRun;
+    const runInProgress = hasRecentRunningRun;
 
     const isDisabled =
       isRefreshingMetrics ||
@@ -9535,13 +9562,42 @@ export default function ContestDetailClient({
     return <Share2 className="h-6 w-6 text-gray-600 flex-shrink-0" />;
   };
 
+  const getSubmissionContentViewHref = (submission: Submission) => {
+    const platform = (
+      submission.platform ||
+      currentContest?.platform ||
+      ""
+    ).toLowerCase();
+    const link = submission.content_link || "";
+    const isYouTube =
+      platform.includes("youtube") || /youtu\.?be/i.test(link);
+    if (isYouTube) {
+      const ytStats =
+        (submission.other_stats as any)?.youtube ||
+        submission.other_stats ||
+        {};
+      const durationSeconds = Number(ytStats.duration_seconds);
+      return buildYouTubeContentViewUrl(
+        link,
+        Number.isFinite(durationSeconds) && durationSeconds > 0
+          ? durationSeconds
+          : null,
+      );
+    }
+    return link || "#";
+  };
+
   function extractPlatformMetrics(submission: Submission) {
-    const platform = submission.platform?.toLowerCase();
+    const platform = (
+      submission.platform ||
+      currentContest?.platform ||
+      ""
+    ).toLowerCase();
     const stats = submission.other_stats || {};
     const baseViews = submission.views || 0;
 
     // Extract platform-specific metrics
-    if (platform?.includes("youtube")) {
+    if (platform.includes("youtube")) {
       const youtubeStats = stats.youtube || stats;
       return {
         views: baseViews,
@@ -9556,6 +9612,7 @@ export default function ContestDetailClient({
           youtubeStats.videos_removed_from_playlists || 0,
         estimated_minutes_watched: youtubeStats.estimated_minutes_watched || 0,
         avg_view_duration_seconds: youtubeStats.avg_view_duration_seconds || 0,
+        duration_seconds: Number(youtubeStats.duration_seconds) || 0,
         avg_view_percentage: youtubeStats.avg_view_percentage || 0,
         engaged_views: youtubeStats.engaged_views || 0,
         traffic_sources: youtubeStats.traffic_sources || null,
@@ -9571,7 +9628,7 @@ export default function ContestDetailClient({
         last_traffic_update: youtubeStats.last_traffic_update || null,
         last_demographics_update: youtubeStats.last_demographics_update || null,
       };
-    } else if (platform?.includes("instagram")) {
+    } else if (platform.includes("instagram")) {
       const igStats = stats.instagram || stats;
       const igViews = Number(igStats.views ?? 0);
       const reach = Number(igStats.reach ?? 0);
@@ -9591,8 +9648,14 @@ export default function ContestDetailClient({
         total_interactions: igStats.total_interactions || 0,
         avg_watch_time_ms: igStats.avg_watch_time_ms || 0,
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
+        duration_seconds: Number(igStats.duration_seconds) || 0,
+        reposts: Number(igStats.reposts) || 0,
+        reels_skip_rate:
+          igStats.reels_skip_rate != null
+            ? Number(igStats.reels_skip_rate)
+            : null,
       };
-    } else if (platform?.includes("tiktok")) {
+    } else if (platform.includes("tiktok")) {
       const t = stats.tiktok ?? ({} as Record<string, unknown>);
       const fromStats = Number(t.view_count ?? t.views ?? NaN);
       const views =
@@ -9614,7 +9677,7 @@ export default function ContestDetailClient({
         engagement_rate,
         last_updated: t.last_updated ?? null,
       };
-    } else if (platform?.includes("twitter")) {
+    } else if (platform.includes("twitter") || platform === "x") {
       const twitterStats = stats.twitter || stats;
       return {
         views: baseViews,
@@ -16453,7 +16516,9 @@ export default function ContestDetailClient({
                                   getRefreshButtonState();
                                 const syncDisabled =
                                   isLoadingPostCampaignMetrics ||
-                                  isRefreshingMetrics;
+                                  isRefreshingMetrics ||
+                                  hasRecentRunningRun ||
+                                  postRefreshReloadPending;
                                 return (
                                   <>
                                     {isPostCampaignLeaderboard && (
@@ -16511,32 +16576,6 @@ export default function ContestDetailClient({
                                           ? `Wait ${cooldownInfo.remainingMinutes}m`
                                           : "Refresh Metrics"}
                                     </button>
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("instagram") &&
-                                      showInstagramRunPopup &&
-                                      instagramRun && (
-                                        <InstagramRefreshProgressCard
-                                          run={instagramRun}
-                                          completed={instagramRunCompleted}
-                                          isAdminView={isAdminView}
-                                          elapsedSeconds={refreshElapsedSeconds}
-                                        />
-                                      )}
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube") &&
-                                      showYoutubeRunPopup &&
-                                      youtubeRun && (
-                                        <YoutubeRefreshProgressCard
-                                          run={youtubeRun}
-                                          completed={youtubeRunCompleted}
-                                          isAdminView={isAdminView}
-                                          elapsedSeconds={
-                                            youtubeRefreshElapsedSeconds
-                                          }
-                                        />
-                                      )}
                                   </>
                                 );
                               })()}
@@ -16809,7 +16848,9 @@ export default function ContestDetailClient({
                             }
                             const syncDisabled =
                               isLoadingPostCampaignMetrics ||
-                              isRefreshingMetrics;
+                              isRefreshingMetrics ||
+                              hasRecentRunningRun ||
+                              postRefreshReloadPending;
                             return (
                               <>
                                 {isPostCampaignLeaderboard && (
@@ -16867,32 +16908,6 @@ export default function ContestDetailClient({
                                       ? `Wait ${cooldownInfo.remainingMinutes}m`
                                       : "Refresh Metrics"}
                                 </button>
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("instagram") &&
-                                  showInstagramRunPopup &&
-                                  instagramRun && (
-                                    <InstagramRefreshProgressCard
-                                      run={instagramRun}
-                                      completed={instagramRunCompleted}
-                                      isAdminView={isAdminView}
-                                      elapsedSeconds={refreshElapsedSeconds}
-                                    />
-                                  )}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube") &&
-                                  showYoutubeRunPopup &&
-                                  youtubeRun && (
-                                    <YoutubeRefreshProgressCard
-                                      run={youtubeRun}
-                                      completed={youtubeRunCompleted}
-                                      isAdminView={isAdminView}
-                                      elapsedSeconds={
-                                        youtubeRefreshElapsedSeconds
-                                      }
-                                    />
-                                  )}
                               </>
                             );
                           }
@@ -16927,8 +16942,7 @@ export default function ContestDetailClient({
                           const anyRefreshInProgress =
                             isRefreshingMetrics ||
                             disabledDetail ||
-                            (!isPostCampaignLeaderboard &&
-                              hasRecentRunningRun) ||
+                            hasRecentRunningRun ||
                             postRefreshReloadPending;
                           const cooldownDisabled = !cooldownInfo.canRefresh;
                           const cooldownLabel = `Wait ${cooldownInfo.remainingMinutes}m`;
@@ -16986,14 +17000,12 @@ export default function ContestDetailClient({
                                         }
                                         disabled={
                                           isLoadingPostCampaignMetrics ||
-                                          isRefreshingMetrics ||
-                                          disabledDetail
+                                          anyRefreshInProgress
                                         }
                                         className={cn(
                                           "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
                                           isLoadingPostCampaignMetrics ||
-                                            isRefreshingMetrics ||
-                                            disabledDetail
+                                            anyRefreshInProgress
                                             ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
                                             : isDark
                                               ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
@@ -17055,16 +17067,6 @@ export default function ContestDetailClient({
                                         : "Never"}
                                     </span>
                                   </div>
-                                  {showYoutubeRunPopup && youtubeRun && (
-                                    <YoutubeRefreshProgressCard
-                                      run={youtubeRun}
-                                      completed={youtubeRunCompleted}
-                                      isAdminView={isAdminView}
-                                      elapsedSeconds={
-                                        youtubeRefreshElapsedSeconds
-                                      }
-                                    />
-                                  )}
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       type="button"
@@ -17352,7 +17354,30 @@ export default function ContestDetailClient({
                             </div>
                           );
                         })()}
-                      </div>
+                      {currentContest.platform
+                        ?.toLowerCase()
+                        .includes("instagram") &&
+                        showInstagramRunPopup &&
+                        instagramRun && (
+                          <InstagramRefreshProgressCard
+                            run={instagramRun}
+                            completed={instagramRunCompleted}
+                            isAdminView={isAdminView}
+                            elapsedSeconds={refreshElapsedSeconds}
+                          />
+                        )}
+                      {currentContest.platform
+                        ?.toLowerCase()
+                        .includes("youtube") &&
+                        showYoutubeRunPopup &&
+                        youtubeRun && (
+                          <YoutubeRefreshProgressCard
+                            run={youtubeRun}
+                            completed={youtubeRunCompleted}
+                            isAdminView={isAdminView}
+                            elapsedSeconds={youtubeRefreshElapsedSeconds}
+                          />
+                        )}
                       {(currentContest.platform?.toLowerCase() === "twitter" ||
                         currentContest.platform?.toLowerCase() === "x") &&
                         showTwitterRunPopup &&
@@ -17618,6 +17643,7 @@ export default function ContestDetailClient({
                             )}
                           </div>
                         )}
+                    </div>
                     </div>
                   </CardContent>
                 </div>
@@ -19018,6 +19044,9 @@ export default function ContestDetailClient({
                                     Shares
                                   </TableHead>
                                   <TableHead className="text-center">
+                                    Reposts
+                                  </TableHead>
+                                  <TableHead className="text-center">
                                     Saves
                                   </TableHead>
                                   <TableHead className="text-center">
@@ -19031,6 +19060,12 @@ export default function ContestDetailClient({
                                   </TableHead>
                                   <TableHead className="text-center">
                                     Total Watch Time
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Reel duration
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Skip rate (first 3s)
                                   </TableHead>
                                   {isAdminView && (
                                     <TableHead className="text-center">
@@ -19071,6 +19106,13 @@ export default function ContestDetailClient({
                                         Avg Duration
                                       </TableHead>
                                     )}
+                                  {ytVisibleColumns.includes(
+                                    "clip_duration",
+                                  ) && (
+                                    <TableHead className="text-center">
+                                      Total duration of clip
+                                    </TableHead>
+                                  )}
                                   {canSeeCore &&
                                     ytVisibleColumns.includes(
                                       "engaged_views",
@@ -20159,7 +20201,9 @@ export default function ContestDetailClient({
                                         {submission.video_thumbnail_url && (
                                           <div className="flex items-center gap-2 mt-1">
                                             <a
-                                              href={submission.content_link}
+                                              href={getSubmissionContentViewHref(
+                                                submission,
+                                              )}
                                               target="_blank"
                                               rel="noopener noreferrer"
                                               className={cn(
@@ -20828,6 +20872,11 @@ export default function ContestDetailClient({
                                       </TableCell>
                                       <TableCell className="text-center font-mono text-sm">
                                         {formatMetricValue(
+                                          (metrics as any).reposts,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
                                           (metrics as any).saves,
                                         )}
                                       </TableCell>
@@ -20880,6 +20929,59 @@ export default function ContestDetailClient({
                                             total
                                           </span>
                                         </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {(() => {
+                                          const reelSec = Number(
+                                            (metrics as any).duration_seconds,
+                                          );
+                                          const label =
+                                            formatClipDurationSeconds(
+                                              reelSec > 0 ? reelSec : null,
+                                            );
+                                          return label !== "—" ? (
+                                            <span className="font-bold">
+                                              {label}
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-slate-500"
+                                                  : "text-slate-400",
+                                              )}
+                                            >
+                                              —
+                                            </span>
+                                          );
+                                        })()}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {(() => {
+                                          const skip = (metrics as any)
+                                            .reels_skip_rate;
+                                          const label =
+                                            formatReelsSkipRate(
+                                              skip == null ? null : Number(skip),
+                                            );
+                                          return label !== "—" ? (
+                                            <span className="font-bold">
+                                              {label}
+                                            </span>
+                                          ) : (
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-slate-500"
+                                                  : "text-slate-400",
+                                              )}
+                                            >
+                                              —
+                                            </span>
+                                          );
+                                        })()}
                                       </TableCell>
                                       {isAdminView && (
                                         <TableCell className="text-center">
@@ -21070,6 +21172,38 @@ export default function ContestDetailClient({
                                             )}
                                           </TableCell>
                                         )}
+                                      {ytVisibleColumns.includes(
+                                        "clip_duration",
+                                      ) && (
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {(() => {
+                                            const clipSec = Number(
+                                              (metrics as any)
+                                                .duration_seconds,
+                                            );
+                                            const label =
+                                              formatClipDurationSeconds(
+                                                clipSec > 0 ? clipSec : null,
+                                              );
+                                            return label !== "—" ? (
+                                              <span className="font-bold">
+                                                {label}
+                                              </span>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                —
+                                              </span>
+                                            );
+                                          })()}
+                                        </TableCell>
+                                      )}
                                       {canSeeCore &&
                                         ytVisibleColumns.includes(
                                           "engaged_views",
@@ -22579,7 +22713,9 @@ export default function ContestDetailClient({
                                         )}
                                         <DropdownMenuItem asChild>
                                           <a
-                                            href={submission.content_link}
+                                            href={getSubmissionContentViewHref(
+                                              submission,
+                                            )}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="flex items-center"
