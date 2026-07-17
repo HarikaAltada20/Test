@@ -1,4 +1,4 @@
--- Precomputed daily rollups for admin analytics (submissions + PC overlay).
+﻿-- Precomputed daily rollups for admin analytics (submissions + PC overlay).
 -- Analytics reads thousands of rollup rows, not millions of source rows.
 --
 -- DEPLOY ORDER: run after 20260718_pc_metrics_admin_analytics_scale.sql.
@@ -6,7 +6,7 @@
 -- large prod. Incremental triggers keep rollups current after deploy.
 
 -- ---------------------------------------------------------------------------
--- Rollup tables (contest × day × status × platform)
+-- Rollup tables (contest ├ù day ├ù status ├ù platform)
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS public.admin_analytics_submission_daily_rollup (
@@ -175,37 +175,55 @@ BEGIN
     RETURN;
   END IF;
 
-  INSERT INTO public.admin_analytics_submission_daily_rollup AS r (
-    contest_id,
-    day_key,
-    status,
-    platform,
-    submission_count,
-    views_sum,
-    likes_sum,
-    comments_sum,
-    shares_sum,
-    payouts_cents_sum
-  )
-  VALUES (
-    p_contest_id,
-    p_day_key,
-    p_status,
-    p_platform,
-    p_count_delta,
-    p_views_delta,
-    p_likes_delta,
-    p_comments_delta,
-    p_shares_delta,
-    p_payouts_delta
-  )
-  ON CONFLICT (contest_id, day_key, status, platform) DO UPDATE SET
+  UPDATE public.admin_analytics_submission_daily_rollup AS r
+  SET
     submission_count = GREATEST(0, r.submission_count + p_count_delta),
     views_sum = GREATEST(0, r.views_sum + p_views_delta),
     likes_sum = GREATEST(0, r.likes_sum + p_likes_delta),
     comments_sum = GREATEST(0, r.comments_sum + p_comments_delta),
     shares_sum = GREATEST(0, r.shares_sum + p_shares_delta),
-    payouts_cents_sum = GREATEST(0, r.payouts_cents_sum + p_payouts_delta);
+    payouts_cents_sum = GREATEST(0, r.payouts_cents_sum + p_payouts_delta)
+  WHERE r.contest_id = p_contest_id
+    AND r.day_key = p_day_key
+    AND r.status = p_status
+    AND r.platform = p_platform;
+
+  IF NOT FOUND THEN
+    -- Subtracting from a missing bucket is a no-op (nothing to remove).
+    IF p_count_delta < 0
+      OR p_views_delta < 0
+      OR p_likes_delta < 0
+      OR p_comments_delta < 0
+      OR p_shares_delta < 0
+      OR p_payouts_delta < 0 THEN
+      RETURN;
+    END IF;
+
+    INSERT INTO public.admin_analytics_submission_daily_rollup (
+      contest_id,
+      day_key,
+      status,
+      platform,
+      submission_count,
+      views_sum,
+      likes_sum,
+      comments_sum,
+      shares_sum,
+      payouts_cents_sum
+    )
+    VALUES (
+      p_contest_id,
+      p_day_key,
+      p_status,
+      p_platform,
+      p_count_delta,
+      p_views_delta,
+      p_likes_delta,
+      p_comments_delta,
+      p_shares_delta,
+      p_payouts_delta
+    );
+  END IF;
 
   DELETE FROM public.admin_analytics_submission_daily_rollup
   WHERE contest_id = p_contest_id
@@ -248,37 +266,55 @@ BEGIN
     RETURN;
   END IF;
 
-  INSERT INTO public.admin_analytics_pc_daily_rollup AS r (
-    contest_id,
-    day_key,
-    status,
-    platform,
-    submission_count,
-    views_sum,
-    likes_sum,
-    comments_sum,
-    shares_sum,
-    payouts_cents_sum
-  )
-  VALUES (
-    p_contest_id,
-    p_day_key,
-    p_status,
-    p_platform,
-    p_count_delta,
-    p_views_delta,
-    p_likes_delta,
-    p_comments_delta,
-    p_shares_delta,
-    p_payouts_delta
-  )
-  ON CONFLICT (contest_id, day_key, status, platform) DO UPDATE SET
+  UPDATE public.admin_analytics_pc_daily_rollup AS r
+  SET
     submission_count = GREATEST(0, r.submission_count + p_count_delta),
     views_sum = GREATEST(0, r.views_sum + p_views_delta),
     likes_sum = GREATEST(0, r.likes_sum + p_likes_delta),
     comments_sum = GREATEST(0, r.comments_sum + p_comments_delta),
     shares_sum = GREATEST(0, r.shares_sum + p_shares_delta),
-    payouts_cents_sum = GREATEST(0, r.payouts_cents_sum + p_payouts_delta);
+    payouts_cents_sum = GREATEST(0, r.payouts_cents_sum + p_payouts_delta)
+  WHERE r.contest_id = p_contest_id
+    AND r.day_key = p_day_key
+    AND r.status = p_status
+    AND r.platform = p_platform;
+
+  IF NOT FOUND THEN
+    -- Subtracting from a missing bucket is a no-op (nothing to remove).
+    IF p_count_delta < 0
+      OR p_views_delta < 0
+      OR p_likes_delta < 0
+      OR p_comments_delta < 0
+      OR p_shares_delta < 0
+      OR p_payouts_delta < 0 THEN
+      RETURN;
+    END IF;
+
+    INSERT INTO public.admin_analytics_pc_daily_rollup (
+      contest_id,
+      day_key,
+      status,
+      platform,
+      submission_count,
+      views_sum,
+      likes_sum,
+      comments_sum,
+      shares_sum,
+      payouts_cents_sum
+    )
+    VALUES (
+      p_contest_id,
+      p_day_key,
+      p_status,
+      p_platform,
+      p_count_delta,
+      p_views_delta,
+      p_likes_delta,
+      p_comments_delta,
+      p_shares_delta,
+      p_payouts_delta
+    );
+  END IF;
 
   DELETE FROM public.admin_analytics_pc_daily_rollup
   WHERE contest_id = p_contest_id

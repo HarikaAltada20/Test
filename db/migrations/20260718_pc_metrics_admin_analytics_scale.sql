@@ -1,4 +1,4 @@
--- PC admin analytics scale: index + single-scan overview RPC.
+﻿-- PC admin analytics scale: index + single-scan overview RPC.
 --
 -- DEPLOY ORDER: run after 20260717_post_campaign_security_fixes.sql.
 -- On large prod tables, prefer CREATE INDEX CONCURRENTLY outside a
