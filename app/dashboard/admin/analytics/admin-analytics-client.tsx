@@ -88,21 +88,12 @@ type AnalyticsSourcePayload = {
   selectedCampaignCount?: number;
 };
 
-type AnalyticsPayload = {
-  from: string;
-  to: string;
-  platforms: AdminAnalyticsPlatform[];
-  types?: AdminAnalyticsContestType[];
-  statuses?: string[];
-  advertiserIds?: string[];
-  summary: AdminAnalyticsSummary;
-  series: AdminAnalyticsSeriesPoint[];
-  viewsByStatus?: AdminAnalyticsViewsByStatus;
-  pc?: AnalyticsSourcePayload;
-  campaigns: CampaignOption[];
-  allAdvertisers?: AdminAnalyticsAdvertiserOption[];
-  allCampaigns: CampaignOption[];
-  selectedCampaignCount: number;
+type CachedSourcePayload = AnalyticsSourcePayload & {
+  filterKey: string;
+};
+
+type SharedAnalyticsMeta = {
+  allAdvertisers: AdminAnalyticsAdvertiserOption[];
 };
 
 const PLATFORM_META: Record<
@@ -326,8 +317,12 @@ export default function AdminAnalyticsClient() {
   const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
   const [dataSource, setDataSource] =
     useState<AnalyticsDataSource>("submissions");
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<AnalyticsPayload | null>(null);
+  const [submissionsCache, setSubmissionsCache] =
+    useState<CachedSourcePayload | null>(null);
+  const [pcCache, setPcCache] = useState<CachedSourcePayload | null>(null);
+  const [sharedMeta, setSharedMeta] = useState<SharedAnalyticsMeta | null>(
+    null,
+  );
 
   const typesParam = useMemo(() => {
     if (contestTypes.length === 0) return "__none__";
@@ -355,12 +350,86 @@ export default function AdminAnalyticsClient() {
     return [...selectedContestIds].sort().join(",");
   }, [selectedContestIds]);
 
+  const filterKey = useMemo(
+    () =>
+      [
+        dateRange.from.toISOString(),
+        dateRange.to.toISOString(),
+        platformsParam,
+        typesParam,
+        statusesParam,
+        advertiserIdsParam,
+        contestIdsParam,
+      ].join("|"),
+    [
+      dateRange.from,
+      dateRange.to,
+      platformsParam,
+      typesParam,
+      statusesParam,
+      advertiserIdsParam,
+      contestIdsParam,
+    ],
+  );
+
+  const activeCache =
+    dataSource === "pc_submissions" ? pcCache : submissionsCache;
+  const metricsLoading =
+    !activeCache || activeCache.filterKey !== filterKey;
+
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
 
-    const run = async () => {
-      setLoading(true);
+    const applyResponse = (
+      source: AnalyticsDataSource,
+      json: {
+        summary: AdminAnalyticsSummary;
+        series: AdminAnalyticsSeriesPoint[];
+        viewsByStatus?: AdminAnalyticsViewsByStatus;
+        allCampaigns: CampaignOption[];
+        selectedCampaignCount: number;
+        allAdvertisers?: AdminAnalyticsAdvertiserOption[];
+        pc?: AnalyticsSourcePayload;
+      },
+    ) => {
+      if (source === "pc_submissions") {
+        const pc = json.pc;
+        if (!pc) return;
+        setPcCache({
+          summary: pc.summary,
+          series: pc.series,
+          viewsByStatus: pc.viewsByStatus,
+          allCampaigns: pc.allCampaigns ?? [],
+          selectedCampaignCount:
+            pc.selectedCampaignCount ?? pc.allCampaigns?.length ?? 0,
+          filterKey,
+        });
+      } else {
+        setSubmissionsCache({
+          summary: json.summary,
+          series: json.series,
+          viewsByStatus: json.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS,
+          allCampaigns: json.allCampaigns,
+          selectedCampaignCount: json.selectedCampaignCount,
+          filterKey,
+        });
+      }
+      if (json.allAdvertisers) {
+        setSharedMeta({ allAdvertisers: json.allAdvertisers });
+      }
+    };
+
+    const fetchSource = async (
+      source: AnalyticsDataSource,
+      signal: AbortSignal,
+    ) => {
+      const cached =
+        source === "pc_submissions"
+          ? pcCache?.filterKey === filterKey
+          : submissionsCache?.filterKey === filterKey;
+      if (cached) return;
+
       try {
         const params = new URLSearchParams({
           from: dateRange.from.toISOString(),
@@ -368,6 +437,7 @@ export default function AdminAnalyticsClient() {
           platforms: platformsParam,
           types: typesParam,
           statuses: statusesParam,
+          source,
         });
         if (advertiserIdsParam) {
           params.set("advertiserIds", advertiserIdsParam);
@@ -377,32 +447,40 @@ export default function AdminAnalyticsClient() {
         }
         const res = await fetch(
           `/api/admin/analytics/overview?${params.toString()}`,
-          { signal: controller.signal, cache: "no-store" },
+          { signal, cache: "no-store" },
         );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to load analytics");
         }
-        const json = (await res.json()) as AnalyticsPayload;
-        if (active) setData(json);
+        const json = await res.json();
+        if (!active) return;
+        applyResponse(source, json);
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (signal.aborted) return;
         console.error(err);
         toast.error(
           err instanceof Error ? err.message : "Failed to load analytics",
         );
-      } finally {
-        if (active) setLoading(false);
       }
     };
 
-    void run();
+    const cachedForActive =
+      dataSource === "pc_submissions"
+        ? pcCache?.filterKey === filterKey
+        : submissionsCache?.filterKey === filterKey;
+
+    if (!cachedForActive) {
+      void fetchSource(dataSource, controller.signal);
+    }
 
     return () => {
       active = false;
       controller.abort();
     };
   }, [
+    filterKey,
+    dataSource,
     dateRange.from,
     dateRange.to,
     platformsParam,
@@ -412,27 +490,13 @@ export default function AdminAnalyticsClient() {
     contestIdsParam,
   ]);
 
-  const summary =
-    dataSource === "pc_submissions"
-      ? (data?.pc?.summary ?? EMPTY_SUMMARY)
-      : (data?.summary ?? EMPTY_SUMMARY);
-  const series =
-    dataSource === "pc_submissions"
-      ? (data?.pc?.series ?? [])
-      : (data?.series ?? []);
-  const allAdvertisers = data?.allAdvertisers ?? [];
-  const allCampaigns =
-    dataSource === "pc_submissions"
-      ? (data?.pc?.allCampaigns ?? [])
-      : (data?.allCampaigns ?? []);
+  const summary = activeCache?.summary ?? EMPTY_SUMMARY;
+  const series = activeCache?.series ?? [];
+  const allAdvertisers = sharedMeta?.allAdvertisers ?? [];
+  const allCampaigns = activeCache?.allCampaigns ?? [];
   const selectedCampaignCount =
-    dataSource === "pc_submissions"
-      ? (data?.pc?.selectedCampaignCount ?? allCampaigns.length)
-      : (data?.selectedCampaignCount ?? allCampaigns.length);
-  const viewsByStatus =
-    dataSource === "pc_submissions"
-      ? (data?.pc?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS)
-      : (data?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS);
+    activeCache?.selectedCampaignCount ?? allCampaigns.length;
+  const viewsByStatus = activeCache?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS;
 
   // Drop advertiser/campaign picks that are no longer in the current scope
   useEffect(() => {
@@ -1166,7 +1230,7 @@ export default function AdminAnalyticsClient() {
                 </span>
               </div>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {loading ? "…" : summary.views.toLocaleString()}
+                {metricsLoading ? "…" : summary.views.toLocaleString()}
               </p>
             </div>
           )}
@@ -1197,7 +1261,7 @@ export default function AdminAnalyticsClient() {
                 </span>
               </div>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {loading
+                {metricsLoading
                   ? "…"
                   : formatCurrencyFromCents(summary.totalPayoutsCents)}
               </p>
@@ -1230,7 +1294,7 @@ export default function AdminAnalyticsClient() {
                 </span>
               </div>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {loading ? "…" : formatCpmDisplay(summary.effectiveCpm)}
+                {metricsLoading ? "…" : formatCpmDisplay(summary.effectiveCpm)}
               </p>
             </div>
           )}
@@ -1264,7 +1328,7 @@ export default function AdminAnalyticsClient() {
                   </span>
                 </div>
                 <span className="text-lg font-semibold text-orange-400">
-                  {loading ? "…" : `${summary.approvalRate}%`}
+                  {metricsLoading ? "…" : `${summary.approvalRate}%`}
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -1278,7 +1342,7 @@ export default function AdminAnalyticsClient() {
                     Total
                   </p>
                   <p className="text-lg font-semibold">
-                    {loading
+                    {metricsLoading
                       ? "…"
                       : summary.totalSubmissions.toLocaleString()}
                   </p>
@@ -1293,7 +1357,7 @@ export default function AdminAnalyticsClient() {
                     Approved
                   </p>
                   <p className="text-lg font-semibold">
-                    {loading
+                    {metricsLoading
                       ? "…"
                       : summary.approvedSubmissions.toLocaleString()}
                   </p>
@@ -1345,7 +1409,7 @@ export default function AdminAnalyticsClient() {
                   </span>
                 </div>
                 <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
-                  {loading ? "…" : value.toLocaleString()}
+                  {metricsLoading ? "…" : value.toLocaleString()}
                 </p>
               </div>
             );
@@ -1373,7 +1437,7 @@ export default function AdminAnalyticsClient() {
                     : `${selectedContestIds.length} Campaigns`}
             </p>
             <p className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-              {loading ? "…" : chartTotal.toLocaleString()}
+              {metricsLoading ? "…" : chartTotal.toLocaleString()}
             </p>
           </div>
 
@@ -1406,12 +1470,12 @@ export default function AdminAnalyticsClient() {
         </div>
 
         <div className="relative h-[320px] w-full sm:h-[380px]">
-          {loading && (
+          {metricsLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-inherit/40">
               <Loader2 className="h-7 w-7 animate-spin text-[#7F39EC]" />
             </div>
           )}
-          {!loading && series.length === 0 ? (
+          {!metricsLoading && series.length === 0 ? (
             <div
               className={cn(
                 "flex h-full items-center justify-center text-sm",

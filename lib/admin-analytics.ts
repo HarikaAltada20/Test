@@ -654,7 +654,8 @@ function normalizeSqlDayKey(dayKey: string): string {
  * Build analytics summary + cumulative series from Postgres daily rollups
  * (no per-submission rows in memory).
  * Call once for submissions (`admin_analytics_daily`) and once for PC overlay
- * (`admin_analytics_pc_daily`) — same row shape.
+ * (`admin_analytics_pc_overview`) — same row shape. Both read precomputed
+ * daily rollup tables when migration 20260719 is applied.
  */
 export function aggregateAdminAnalyticsFromDailyRows(input: {
   contests: AdminAnalyticsContest[];

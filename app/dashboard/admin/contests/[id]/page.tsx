@@ -10,6 +10,8 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
+import { fetchPostCampaignMetrics } from "@/lib/post-campaign-metrics";
+import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
 import {
   fetchLiveTrustMetricsByCreatorIds,
   getCreatorTrustScoreFromMetrics,
@@ -178,6 +180,30 @@ export default async function AdminContestDetailPage({
       (contestData.platform?.toLowerCase() === "twitter" ||
         contestData.platform?.toLowerCase() === "x") &&
       contestData.contest_format === "text_image";
+
+    // Same gate as PC Submissions toggle — preload so the tab is instant.
+    const shouldPrefetchPostCampaign =
+      !isTwitterCampaign &&
+      contestData.status === "ended" &&
+      contestData.post_contest_status !== "pending_review";
+
+    let initialPostCampaignMetrics: PostCampaignSubmissionSnapshot[] | null =
+      null;
+    if (shouldPrefetchPostCampaign) {
+      try {
+        const admin = createAdminClient();
+        initialPostCampaignMetrics = await fetchPostCampaignMetrics(
+          admin,
+          contestId,
+          { light: true },
+        );
+      } catch (err) {
+        console.error(
+          `[Admin page.tsx] Failed to prefetch post-campaign metrics for ${contestId}:`,
+          err,
+        );
+      }
+    }
 
     console.log(`[Admin page.tsx] Contest detection:`, {
       platform: contestData.platform,
@@ -1071,6 +1097,7 @@ export default async function AdminContestDetailPage({
         <ContestDetailClient
           contest={contest}
           initialSubmissions={allSubmissions}
+          initialPostCampaignMetrics={initialPostCampaignMetrics}
           durationDays={durationDays}
           contestId={contestId}
           isAdminView={true}

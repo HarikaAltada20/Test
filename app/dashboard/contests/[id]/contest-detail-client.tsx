@@ -755,6 +755,8 @@ type YouTubeMetricsRefreshRunSummary = {
 interface ContestDetailClientProps {
   contest: Contest;
   initialSubmissions: Submission[] | null;
+  /** SSR-hydrated PC overlay (null = not prefetched; client will fetch). */
+  initialPostCampaignMetrics?: PostCampaignSubmissionSnapshot[] | null;
   durationDays: number | null;
   contestId: string;
   isAdminView?: boolean;
@@ -1170,6 +1172,7 @@ function twitterCpmBonusGrantedDisplay(
 export default function ContestDetailClient({
   contest,
   initialSubmissions,
+  initialPostCampaignMetrics = null,
   durationDays,
   contestId,
   isAdminView = false,
@@ -1832,13 +1835,21 @@ export default function ContestDetailClient({
     useState<SubmissionsLeaderboardMode>("submissions");
   const [postCampaignMetricsById, setPostCampaignMetricsById] = useState<
     Record<string, PostCampaignSubmissionSnapshot>
-  >({});
+  >(() => {
+    const next: Record<string, PostCampaignSubmissionSnapshot> = {};
+    for (const row of initialPostCampaignMetrics ?? []) {
+      next[row.submission_id] = row;
+    }
+    return next;
+  });
   const [postCampaignLastMetricsUpdated, setPostCampaignLastMetricsUpdated] =
     useState<string | null>(
       currentContest.post_campaign_last_metrics_updated ?? null,
     );
-  const [postCampaignMetricsLoaded, setPostCampaignMetricsLoaded] =
-    useState(false);
+  // SSR already fetched PC overlay (including empty []) — skip loading flash.
+  const [postCampaignMetricsLoaded, setPostCampaignMetricsLoaded] = useState(
+    () => initialPostCampaignMetrics != null,
+  );
   const [isLoadingPostCampaignMetrics, setIsLoadingPostCampaignMetrics] =
     useState(false);
   // PC Submissions overlay is for ended video contests once review is underway
@@ -5655,12 +5666,12 @@ export default function ContestDetailClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPostCampaignToggle, contestId]);
 
-  // When PC Submissions is selected before prefetch finishes, show loading and
-  // join the same in-flight request (no duplicate fetch).
+  // When PC Submissions is selected before prefetch finishes, join the same
+  // in-flight request without flashing the Loading screen (SSR usually already hydrated).
   useEffect(() => {
     if (!isPostCampaignLeaderboard) return;
     if (postCampaignMetricsLoaded) return;
-    void loadPostCampaignMetrics();
+    void loadPostCampaignMetrics({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPostCampaignLeaderboard, postCampaignMetricsLoaded]);
 
@@ -11053,9 +11064,9 @@ export default function ContestDetailClient({
                   type="button"
                   onClick={() => {
                     setSubmissionsLeaderboardMode("post_campaign");
-                    // Already cached after first load — don't re-fetch/block every toggle click.
+                    // Already cached after first load / SSR — never block the tab with Loading.
                     if (!postCampaignMetricsLoaded) {
-                      void loadPostCampaignMetrics();
+                      void loadPostCampaignMetrics({ silent: true });
                     }
                   }}
                   className={cn(
@@ -16009,7 +16020,7 @@ export default function ContestDetailClient({
                       isDark ? "text-white" : "text-slate-900",
                     )}
                   >
-                    {!postCampaignMetricsLoaded || isLoadingPostCampaignMetrics
+                    {isLoadingPostCampaignMetrics
                       ? "Loading…"
                       : "No Post Campaign Submissions Yet"}
                   </h3>
@@ -16019,12 +16030,11 @@ export default function ContestDetailClient({
                       isDark ? "text-white/80" : "text-slate-600",
                     )}
                   >
-                    {!postCampaignMetricsLoaded || isLoadingPostCampaignMetrics
+                    {isLoadingPostCampaignMetrics
                       ? "Loading post-campaign submissions"
                       : "Click Refresh to copy all submissions from this contest into Post Campaign Submission."}
                   </p>
-                  {postCampaignMetricsLoaded &&
-                    !isLoadingPostCampaignMetrics && (
+                  {!isLoadingPostCampaignMetrics && (
                       <button
                         type="button"
                         onClick={() => void syncPostCampaignSubmissions()}
