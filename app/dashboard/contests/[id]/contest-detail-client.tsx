@@ -19070,8 +19070,11 @@ export default function ContestDetailClient({
                                         </span>
                                       </TooltipTrigger>
                                       <TooltipContent className="max-w-xs text-left">
-                                        Profile reposts (minus deleted).
-                                        Different from Shares.
+                                        Profile reposts (minus deleted) from
+                                        Instagram Graph. Different from Shares;
+                                        Story/DM shares are not included. The
+                                        in-app button count can be higher than
+                                        this API value.
                                       </TooltipContent>
                                     </Tooltip>
                                   </TableHead>

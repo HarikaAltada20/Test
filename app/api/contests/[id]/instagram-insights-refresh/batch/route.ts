@@ -10,6 +10,7 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import {
   refreshToken,
   fetchInsights,
+  mergeInstagramStats,
   isTokenExpiring,
   type InstagramAccount,
   type SubmissionForInsights,
@@ -451,7 +452,7 @@ export async function POST(
             views,
             other_stats: {
               ...prevOther,
-              instagram: { ...prevIg, ...stats },
+              instagram: mergeInstagramStats(prevIg, stats),
             },
             last_insights_update: now,
             insights_status: "ok",
