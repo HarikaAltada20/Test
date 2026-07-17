@@ -27,3 +27,33 @@ export function formatReelsSkipRate(
   if (pct > 100) return "—";
   return `${pct.toFixed(1)}%`;
 }
+
+/**
+ * Whether to retry /insights without optional metrics (reposts, reels_skip_rate).
+ * Only for invalid/unsupported metric-list errors — never for permanent media,
+ * token errors, rate limits, or generic temporary failures.
+ */
+export function shouldRetryInsightsWithoutOptionalMetrics(error: {
+  code?: number;
+  error_subcode?: number;
+  message?: string;
+}): boolean {
+  const code = error.code;
+  const subcode = error.error_subcode;
+  // permanent_media (100/33) and account_token (190)
+  if (code === 100 && subcode === 33) return false;
+  if (code === 190) return false;
+
+  const message = String(error.message || "").toLowerCase();
+  const looksLikeInvalidMetric =
+    /metric|reposts|reels_skip_rate|invalid parameter|nonexisting field|unsupported/.test(
+      message,
+    );
+
+  // Graph often uses code 100 for invalid params; exclude permanent_media above.
+  if (code === 100 && subcode !== 33) {
+    return looksLikeInvalidMetric || !message;
+  }
+
+  return looksLikeInvalidMetric;
+}

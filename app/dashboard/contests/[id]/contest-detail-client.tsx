@@ -13,8 +13,8 @@ import {
   getMetricsRefreshCooldownInfoBrand,
   getMetricsRefreshCooldownInfoAdmin,
   formatRemainingTime,
-  METRICS_RUN_STALE_MS,
 } from "@/lib/constants";
+import { isMetricsRunStale } from "@/lib/metrics-run-stale";
 import {
   isActiveMetricsRun,
   isTerminalMetricsRunStatus,
@@ -705,6 +705,7 @@ type InstagramInsightsRefreshRunSummary = {
   current_batch_index: number;
   total_batches: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
 };
@@ -719,6 +720,7 @@ type TwitterMetricsRefreshRunSummary = {
   processed_participants: number;
   tweets_upserted: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
   error_message?: string | null;
@@ -737,6 +739,7 @@ type TikTokMetricsRefreshRunSummary = {
   current_batch_index: number;
   total_batches: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
   error_message?: string | null;
@@ -756,6 +759,7 @@ type YouTubeMetricsRefreshRunSummary = {
   current_batch_index: number;
   total_batches: number;
   started_at: string;
+  updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
   error_message?: string | null;
@@ -1297,6 +1301,7 @@ function createPendingInstagramRefreshRun(
     current_batch_index: 0,
     total_batches: 1,
     started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     last_batch_completed_at: null,
     finished_at: null,
   };
@@ -1320,6 +1325,7 @@ function createPendingYoutubeRefreshRun(
     current_batch_index: 0,
     total_batches: 1,
     started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     last_batch_completed_at: null,
     finished_at: null,
   };
@@ -2328,10 +2334,14 @@ export default function ContestDetailClient({
       | null
       | undefined,
   ) => {
-    if (!run || run.status !== "running" || !run.started_at) return false;
-    const startedAtMs = new Date(run.started_at).getTime();
-    if (!Number.isFinite(startedAtMs)) return false;
-    return Date.now() - startedAtMs < METRICS_RUN_STALE_MS;
+    // Disable while pending/running AND heartbeat is still fresh (same as server abandon).
+    if (!run || (run.status !== "running" && run.status !== "pending"))
+      return false;
+    return !isMetricsRunStale({
+      started_at: run.started_at,
+      updated_at: run.updated_at ?? null,
+      last_batch_completed_at: run.last_batch_completed_at,
+    });
   };
   const hasRecentRunningRun =
     isRunWithinDisableWindow(instagramRun) ||
@@ -19044,7 +19054,17 @@ export default function ContestDetailClient({
                                     Shares
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Reposts
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Reposts
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        Profile reposts (minus deleted).
+                                        Different from Shares.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   <TableHead className="text-center">
                                     Saves
@@ -19062,10 +19082,31 @@ export default function ContestDetailClient({
                                     Total Watch Time
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Reel duration
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Reel duration
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        Clip length. Filled at submit, or on the
+                                        next metrics refresh if missing.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   <TableHead className="text-center">
-                                    Skip rate (first 3s)
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                          Skip rate (first 3s)
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-left">
+                                        % of initial views that skipped in the
+                                        first 3 seconds. Estimated; may be blank
+                                        for low-view reels.
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </TableHead>
                                   {isAdminView && (
                                     <TableHead className="text-center">

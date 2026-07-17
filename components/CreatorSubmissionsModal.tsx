@@ -2588,7 +2588,17 @@ export function CreatorSubmissionsModal({
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                 )}
                               >
-                                Reposts
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                      Reposts
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs text-left">
+                                    Profile reposts (minus deleted). Different
+                                    from Shares.
+                                  </TooltipContent>
+                                </Tooltip>
                               </TableHead>
                             )}
                             {/* Saves: Instagram only — not in TikTok Display API */}
@@ -2666,7 +2676,17 @@ export function CreatorSubmissionsModal({
                                     isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                   )}
                                 >
-                                  Reel duration
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                        Reel duration
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs text-left">
+                                      Clip length. Filled at submit, or on the
+                                      next metrics refresh if missing.
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </TableHead>
                                 <TableHead
                                   className={cn(
@@ -2674,7 +2694,18 @@ export function CreatorSubmissionsModal({
                                     isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                   )}
                                 >
-                                  Skip rate (first 3s)
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help underline decoration-dotted underline-offset-2">
+                                        Skip rate (first 3s)
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs text-left">
+                                      % of initial views that skipped in the
+                                      first 3 seconds. Estimated; may be blank
+                                      for low-view reels.
+                                    </TooltipContent>
+                                  </Tooltip>
                                 </TableHead>
                               </>
                             )}

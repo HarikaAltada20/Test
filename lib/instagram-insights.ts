@@ -18,7 +18,10 @@ type CpmBudgetSubmissionRow = {
   earnings?: number | null;
   bonus_amount?: number | null;
 };
-import { parseInstagramVideoDuration } from "@/lib/instagram-clip-metrics";
+import {
+  parseInstagramVideoDuration,
+  shouldRetryInsightsWithoutOptionalMetrics,
+} from "@/lib/instagram-clip-metrics";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
@@ -183,7 +186,13 @@ export async function fetchInsights(
       const errorSubcode = errorBody?.error?.error_subcode;
       const classification = classifyInsightsError(code, errorSubcode);
       // Newer metrics (reposts / reels_skip_rate) may not be available — retry without them.
-      if (classification === "temporary" || code === 100) {
+      if (
+        shouldRetryInsightsWithoutOptionalMetrics({
+          code,
+          error_subcode: errorSubcode,
+          message: errorBody?.error?.message,
+        })
+      ) {
         const retry = await fetchWithMetrics(CORE_METRICS);
         if (retry.ok) {
           response = retry;

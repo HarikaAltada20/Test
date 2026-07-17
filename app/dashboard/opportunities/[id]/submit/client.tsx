@@ -40,7 +40,10 @@ import {
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
-import { parseInstagramVideoDuration } from "@/lib/instagram-clip-metrics";
+import {
+  parseInstagramVideoDuration,
+  shouldRetryInsightsWithoutOptionalMetrics,
+} from "@/lib/instagram-clip-metrics";
 import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -2303,6 +2306,18 @@ export default function SubmitContentPage({
           "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.",
         );
       }
+      const err = insightsData.error || {};
+      if (
+        !shouldRetryInsightsWithoutOptionalMetrics({
+          code: err.code,
+          error_subcode: err.error_subcode,
+          message: err.message,
+        })
+      ) {
+        throw new Error(
+          err.message || "Failed to fetch Instagram Reel insights.",
+        );
+      }
       // Retry without optional metrics if Graph rejects the metric list.
       const coreMetrics =
         "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
@@ -2430,6 +2445,18 @@ export default function SubmitContentPage({
             throw new Error(
               `"${reel.caption || "Instagram Reel"
               }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`,
+            );
+          }
+          const err = insightsData.error || {};
+          if (
+            !shouldRetryInsightsWithoutOptionalMetrics({
+              code: err.code,
+              error_subcode: err.error_subcode,
+              message: err.message,
+            })
+          ) {
+            throw new Error(
+              err.message || "Failed to fetch Instagram Reel insights.",
             );
           }
           const coreMetrics =
