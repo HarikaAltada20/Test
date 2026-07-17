@@ -11,6 +11,88 @@ export type MetricsRunTable =
   | "youtube_metrics_refresh_runs"
   | "tiktok_metrics_refresh_runs";
 
+/**
+ * If a run has no heartbeat for this long, treat it as stuck.
+ * Matches the UI "re-enable after ~5m" escape hatch with margin for slow batches.
+ */
+export const STALE_METRICS_RUN_MS = 10 * 60 * 1000;
+
+export type MetricsRunHeartbeat = {
+  started_at?: string | null;
+  updated_at?: string | null;
+  last_batch_completed_at?: string | null;
+};
+
+/** True when the run has not progressed recently enough to still count as active. */
+export function isMetricsRunStale(
+  run: MetricsRunHeartbeat,
+  nowMs: number = Date.now(),
+  staleAfterMs: number = STALE_METRICS_RUN_MS,
+): boolean {
+  const candidates = [
+    run.last_batch_completed_at,
+    run.updated_at,
+    run.started_at,
+  ]
+    .map((v) => (v ? new Date(v).getTime() : NaN))
+    .filter((t) => Number.isFinite(t));
+  if (candidates.length === 0) return true;
+  const heartbeat = Math.max(...candidates);
+  return nowMs - heartbeat >= staleAfterMs;
+}
+
+/**
+ * Mark stale pending/running rows as failed so a stuck queue cannot brick refresh forever.
+ * Returns how many rows were abandoned.
+ */
+export async function abandonStaleActiveMetricsRuns(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseAdmin: any,
+  table: MetricsRunTable,
+  contestId: string,
+  options?: {
+    metricsTarget?: MetricsRefreshTarget;
+    staleAfterMs?: number;
+  },
+): Promise<number> {
+  const metricsTarget = options?.metricsTarget;
+  const staleAfterMs = options?.staleAfterMs ?? STALE_METRICS_RUN_MS;
+
+  let query = supabaseAdmin
+    .from(table)
+    .select("id, started_at, updated_at, last_batch_completed_at, status")
+    .eq("contest_id", contestId)
+    .in("status", ["pending", "running"]);
+  if (metricsTarget) {
+    query = query.eq("metrics_target", metricsTarget);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<
+    MetricsRunHeartbeat & { id: string; status: string }
+  >;
+  const staleIds = rows
+    .filter((row) => isMetricsRunStale(row, Date.now(), staleAfterMs))
+    .map((row) => row.id);
+  if (staleIds.length === 0) return 0;
+
+  const now = new Date().toISOString();
+  const { error: updateError } = await supabaseAdmin
+    .from(table)
+    .update({
+      status: "failed",
+      error_message:
+        "Abandoned: no batch progress for too long (stale metrics refresh run)",
+      finished_at: now,
+      updated_at: now,
+    })
+    .in("id", staleIds)
+    .in("status", ["pending", "running"]);
+  if (updateError) throw new Error(updateError.message);
+  return staleIds.length;
+}
+
 export function parseMetricsTarget(raw: unknown): MetricsRefreshTarget {
   return raw === "post_campaign" ? "post_campaign" : "submissions";
 }
@@ -197,6 +279,9 @@ export async function hasActivePostCampaignMetricsRun(
   table: MetricsRunTable,
   contestId: string,
 ): Promise<boolean> {
+  await abandonStaleActiveMetricsRuns(supabaseAdmin, table, contestId, {
+    metricsTarget: "post_campaign",
+  });
   const { data, error } = await supabaseAdmin
     .from(table)
     .select("id")
@@ -211,6 +296,7 @@ export async function hasActivePostCampaignMetricsRun(
 /**
  * Block enqueue when the *other* metrics_target already has an active run.
  * Same-target active runs are handled by the existing alreadyActive path.
+ * Stale cross-target runs are abandoned first so a stuck job cannot brick both targets.
  */
 export async function assertNoCrossTargetActiveRun(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,6 +307,9 @@ export async function assertNoCrossTargetActiveRun(
 ): Promise<NextResponse | null> {
   const otherTarget: MetricsRefreshTarget =
     requestedTarget === "post_campaign" ? "submissions" : "post_campaign";
+  await abandonStaleActiveMetricsRuns(supabaseAdmin, table, contestId, {
+    metricsTarget: otherTarget,
+  });
   const { data, error } = await supabaseAdmin
     .from(table)
     .select("id, metrics_target, status")

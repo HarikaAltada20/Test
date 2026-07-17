@@ -9438,10 +9438,9 @@ export default function ContestDetailClient({
   // Helper function to determine if refresh should be disabled and why
   const getRefreshButtonState = () => {
     // Post-campaign leaderboard can refresh after review lock; submissions stay locked.
+    // Active-run disable applies to both Submissions and PC (same UX).
     const isLocked = isPostCampaignLeaderboard ? false : ytPostContestLocked;
-    const runInProgress = isPostCampaignLeaderboard
-      ? false
-      : hasRecentRunningRun;
+    const runInProgress = hasRecentRunningRun;
 
     const isDisabled =
       isRefreshingMetrics ||
@@ -16453,7 +16452,9 @@ export default function ContestDetailClient({
                                   getRefreshButtonState();
                                 const syncDisabled =
                                   isLoadingPostCampaignMetrics ||
-                                  isRefreshingMetrics;
+                                  isRefreshingMetrics ||
+                                  hasRecentRunningRun ||
+                                  postRefreshReloadPending;
                                 return (
                                   <>
                                     {isPostCampaignLeaderboard && (
@@ -16511,32 +16512,6 @@ export default function ContestDetailClient({
                                           ? `Wait ${cooldownInfo.remainingMinutes}m`
                                           : "Refresh Metrics"}
                                     </button>
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("instagram") &&
-                                      showInstagramRunPopup &&
-                                      instagramRun && (
-                                        <InstagramRefreshProgressCard
-                                          run={instagramRun}
-                                          completed={instagramRunCompleted}
-                                          isAdminView={isAdminView}
-                                          elapsedSeconds={refreshElapsedSeconds}
-                                        />
-                                      )}
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube") &&
-                                      showYoutubeRunPopup &&
-                                      youtubeRun && (
-                                        <YoutubeRefreshProgressCard
-                                          run={youtubeRun}
-                                          completed={youtubeRunCompleted}
-                                          isAdminView={isAdminView}
-                                          elapsedSeconds={
-                                            youtubeRefreshElapsedSeconds
-                                          }
-                                        />
-                                      )}
                                   </>
                                 );
                               })()}
@@ -16809,7 +16784,9 @@ export default function ContestDetailClient({
                             }
                             const syncDisabled =
                               isLoadingPostCampaignMetrics ||
-                              isRefreshingMetrics;
+                              isRefreshingMetrics ||
+                              hasRecentRunningRun ||
+                              postRefreshReloadPending;
                             return (
                               <>
                                 {isPostCampaignLeaderboard && (
@@ -16867,32 +16844,6 @@ export default function ContestDetailClient({
                                       ? `Wait ${cooldownInfo.remainingMinutes}m`
                                       : "Refresh Metrics"}
                                 </button>
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("instagram") &&
-                                  showInstagramRunPopup &&
-                                  instagramRun && (
-                                    <InstagramRefreshProgressCard
-                                      run={instagramRun}
-                                      completed={instagramRunCompleted}
-                                      isAdminView={isAdminView}
-                                      elapsedSeconds={refreshElapsedSeconds}
-                                    />
-                                  )}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube") &&
-                                  showYoutubeRunPopup &&
-                                  youtubeRun && (
-                                    <YoutubeRefreshProgressCard
-                                      run={youtubeRun}
-                                      completed={youtubeRunCompleted}
-                                      isAdminView={isAdminView}
-                                      elapsedSeconds={
-                                        youtubeRefreshElapsedSeconds
-                                      }
-                                    />
-                                  )}
                               </>
                             );
                           }
@@ -16927,8 +16878,7 @@ export default function ContestDetailClient({
                           const anyRefreshInProgress =
                             isRefreshingMetrics ||
                             disabledDetail ||
-                            (!isPostCampaignLeaderboard &&
-                              hasRecentRunningRun) ||
+                            hasRecentRunningRun ||
                             postRefreshReloadPending;
                           const cooldownDisabled = !cooldownInfo.canRefresh;
                           const cooldownLabel = `Wait ${cooldownInfo.remainingMinutes}m`;
@@ -16986,14 +16936,12 @@ export default function ContestDetailClient({
                                         }
                                         disabled={
                                           isLoadingPostCampaignMetrics ||
-                                          isRefreshingMetrics ||
-                                          disabledDetail
+                                          anyRefreshInProgress
                                         }
                                         className={cn(
                                           "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
                                           isLoadingPostCampaignMetrics ||
-                                            isRefreshingMetrics ||
-                                            disabledDetail
+                                            anyRefreshInProgress
                                             ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
                                             : isDark
                                               ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
@@ -17055,16 +17003,6 @@ export default function ContestDetailClient({
                                         : "Never"}
                                     </span>
                                   </div>
-                                  {showYoutubeRunPopup && youtubeRun && (
-                                    <YoutubeRefreshProgressCard
-                                      run={youtubeRun}
-                                      completed={youtubeRunCompleted}
-                                      isAdminView={isAdminView}
-                                      elapsedSeconds={
-                                        youtubeRefreshElapsedSeconds
-                                      }
-                                    />
-                                  )}
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       type="button"
@@ -17352,7 +17290,30 @@ export default function ContestDetailClient({
                             </div>
                           );
                         })()}
-                      </div>
+                      {currentContest.platform
+                        ?.toLowerCase()
+                        .includes("instagram") &&
+                        showInstagramRunPopup &&
+                        instagramRun && (
+                          <InstagramRefreshProgressCard
+                            run={instagramRun}
+                            completed={instagramRunCompleted}
+                            isAdminView={isAdminView}
+                            elapsedSeconds={refreshElapsedSeconds}
+                          />
+                        )}
+                      {currentContest.platform
+                        ?.toLowerCase()
+                        .includes("youtube") &&
+                        showYoutubeRunPopup &&
+                        youtubeRun && (
+                          <YoutubeRefreshProgressCard
+                            run={youtubeRun}
+                            completed={youtubeRunCompleted}
+                            isAdminView={isAdminView}
+                            elapsedSeconds={youtubeRefreshElapsedSeconds}
+                          />
+                        )}
                       {(currentContest.platform?.toLowerCase() === "twitter" ||
                         currentContest.platform?.toLowerCase() === "x") &&
                         showTwitterRunPopup &&
@@ -17618,6 +17579,7 @@ export default function ContestDetailClient({
                             )}
                           </div>
                         )}
+                    </div>
                     </div>
                   </CardContent>
                 </div>

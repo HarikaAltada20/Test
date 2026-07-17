@@ -18,6 +18,7 @@ import {
 } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import {
+  abandonStaleActiveMetricsRuns,
   assertNoCrossTargetActiveRun,
   assertPostCampaignEnqueueAccess,
   parseMetricsTarget,
@@ -153,6 +154,13 @@ export async function POST(
       metricsTarget,
     );
     if (crossTargetBlocked) return crossTargetBlocked;
+
+    await abandonStaleActiveMetricsRuns(
+      supabaseAdmin,
+      "instagram_insights_refresh_runs",
+      contestId,
+      { metricsTarget },
+    );
 
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin

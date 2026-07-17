@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   assertPostCampaignEnqueueAccess,
+  isMetricsRunStale,
   isMetricsTargetMismatch,
   parseMetricsTarget,
   postCampaignCooldownResponse,
@@ -11,6 +12,55 @@ import {
   buildPostCampaignExistingRowPatch,
   POST_CAMPAIGN_PRESERVED_METRIC_KEYS,
 } from "./post-campaign-sync-patch";
+
+describe("isMetricsRunStale", () => {
+  it("treats missing timestamps as stale", () => {
+    assert.equal(isMetricsRunStale({}), true);
+  });
+
+  it("is not stale when heartbeat is recent", () => {
+    const now = Date.now();
+    assert.equal(
+      isMetricsRunStale(
+        { started_at: new Date(now - 60_000).toISOString() },
+        now,
+        10 * 60_000,
+      ),
+      false,
+    );
+  });
+
+  it("is stale when all heartbeats are older than threshold", () => {
+    const now = Date.now();
+    assert.equal(
+      isMetricsRunStale(
+        {
+          started_at: new Date(now - 30 * 60_000).toISOString(),
+          last_batch_completed_at: new Date(now - 20 * 60_000).toISOString(),
+          updated_at: new Date(now - 20 * 60_000).toISOString(),
+        },
+        now,
+        10 * 60_000,
+      ),
+      true,
+    );
+  });
+
+  it("uses the newest heartbeat", () => {
+    const now = Date.now();
+    assert.equal(
+      isMetricsRunStale(
+        {
+          started_at: new Date(now - 30 * 60_000).toISOString(),
+          updated_at: new Date(now - 30_000).toISOString(),
+        },
+        now,
+        10 * 60_000,
+      ),
+      false,
+    );
+  });
+});
 
 describe("parseMetricsTarget", () => {
   it("accepts post_campaign", () => {

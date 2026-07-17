@@ -12,9 +12,8 @@ import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue"
 import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import {
-  activePostCampaignRunResponse,
+  abandonStaleActiveMetricsRuns,
   assertNoCrossTargetActiveRun,
-  hasActivePostCampaignMetricsRun,
   postCampaignCooldownResponse,
   postCampaignNextRefreshAvailable,
 } from "@/lib/post-campaign-enqueue-guards";
@@ -179,15 +178,11 @@ export async function POST(
 
     for (const p of platforms) {
       const runTable = metricsRunTableForPlatform(p);
-      if (
-        await hasActivePostCampaignMetricsRun(
-          supabaseAdmin,
-          runTable,
-          contestId,
-        )
-      ) {
-        return activePostCampaignRunResponse();
-      }
+      // Stuck runs (no heartbeat) are abandoned so retry is not bricked forever.
+      // Fresh active runs are handled by platform enqueue (re-trigger processor).
+      await abandonStaleActiveMetricsRuns(supabaseAdmin, runTable, contestId, {
+        metricsTarget: "post_campaign",
+      });
       const crossTargetBlocked = await assertNoCrossTargetActiveRun(
         supabaseAdmin,
         runTable,
