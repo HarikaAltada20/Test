@@ -3,9 +3,9 @@ import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
+  fetchAllPostCampaignPlatformValues,
   fetchPostCampaignMetricsCount,
   refreshPostCampaignMetrics,
-  syncPostCampaignFromSubmissions,
 } from "@/lib/post-campaign-metrics";
 import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
 import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue";
@@ -143,27 +143,29 @@ export async function POST(
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    // Ensure overlay rows exist; do not reset refreshed metrics on existing rows.
-    const { synced } = await syncPostCampaignFromSubmissions(
+    // Refresh Metrics must not sync from submissions — Sync is a separate explicit action.
+    const existingCount = await fetchPostCampaignMetricsCount(
       supabaseAdmin,
       contestId,
-      { overwriteMetrics: false },
     );
-
-    const { data: overlayPlatformRows, error: overlayPlatformError } =
-      await supabaseAdmin
-        .from("post_campaign_submission_metrics")
-        .select("platform")
-        .eq("contest_id", contestId);
-    if (overlayPlatformError) {
-      throw new Error(overlayPlatformError.message);
+    if (existingCount === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No post-campaign submissions to refresh. Sync from Submissions first to copy contest submissions.",
+        },
+        { status: 400 },
+      );
     }
+
+    const overlayPlatformRows = await fetchAllPostCampaignPlatformValues(
+      supabaseAdmin,
+      contestId,
+    );
 
     const platforms = resolvePostCampaignRefreshPlatforms({
       contestPlatform: contest.platform,
-      rowPlatforms: (overlayPlatformRows ?? []).map(
-        (row: { platform: string | null }) => row.platform,
-      ),
+      rowPlatforms: overlayPlatformRows,
     });
 
     if (platforms.length === 0) {
@@ -254,10 +256,7 @@ export async function POST(
         });
       }
 
-      const count = await fetchPostCampaignMetricsCount(
-        supabaseAdmin,
-        contestId,
-      );
+      const count = existingCount;
       const existingUpdated =
         contest.post_campaign_last_metrics_updated ?? null;
       const labels = runs.map((r) => r.platformLabel).join(", ");
@@ -267,11 +266,10 @@ export async function POST(
         success: true,
         queued: true,
         refreshInProgress: true,
-        synced,
         count,
         message: anyAlreadyActive
           ? `Post-campaign refresh already in progress for ${labels}. Metrics will update shortly.`
-          : `Copied ${synced} submissions into post-campaign. ${labels} refresh started (same queue as Submissions). Metrics update in the background.`,
+          : `${labels} post-campaign metrics refresh started. Metrics update in the background.`,
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
@@ -307,9 +305,8 @@ export async function POST(
 
     return NextResponse.json({
       ...resultRest,
-      message: `Post-campaign metrics refreshed (${scope}) for ${platforms.join(", ")}. Synced ${synced}, updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}.${reconnectHint}`,
+      message: `Post-campaign metrics refreshed (${scope}) for ${platforms.join(", ")}. Updated ${updatedCount}, failed ${result.failed}${result.skipped ? `, skipped ${result.skipped}` : ""}.${reconnectHint}`,
       scope,
-      synced,
       success: updatedCount,
       count,
       platforms,

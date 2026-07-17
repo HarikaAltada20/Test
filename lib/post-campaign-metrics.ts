@@ -404,6 +404,63 @@ export async function fetchPostCampaignMetrics(
   return all;
 }
 
+/**
+ * All overlay submission_ids for a contest (paginated).
+ * Required: PostgREST returns at most ~1000 rows per request without `.range()`.
+ */
+export async function fetchAllPostCampaignSubmissionIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const limit = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("post_campaign_submission_metrics")
+      .select("submission_id")
+      .eq("contest_id", contestId)
+      .order("submission_id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Array<{ submission_id: string }>;
+    for (const row of rows) {
+      if (row?.submission_id) ids.add(String(row.submission_id));
+    }
+    if (rows.length < limit) break;
+    offset += limit;
+  }
+  return ids;
+}
+
+/** Platform values on overlay rows (paginated; for refresh platform resolution). */
+export async function fetchAllPostCampaignPlatformValues(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+): Promise<Array<string | null>> {
+  const platforms: Array<string | null> = [];
+  const limit = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("post_campaign_submission_metrics")
+      .select("platform")
+      .eq("contest_id", contestId)
+      .order("submission_id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Array<{ platform: string | null }>;
+    for (const row of rows) {
+      platforms.push(row?.platform ?? null);
+    }
+    if (rows.length < limit) break;
+    offset += limit;
+  }
+  return platforms;
+}
+
 /** Copy submission rows into post-campaign snapshot (insert missing; update snapshot fields). */
 export async function syncPostCampaignFromSubmissions(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -427,16 +484,9 @@ export async function syncPostCampaignFromSubmissions(
     );
   }
 
-  const { data: existingRows, error: existingError } = await supabaseAdmin
-    .from("post_campaign_submission_metrics")
-    .select("submission_id")
-    .eq("contest_id", contestId);
-  if (existingError) throw new Error(existingError.message);
-
-  const existingIds = new Set(
-    (existingRows ?? []).map(
-      (r: { submission_id: string }) => r.submission_id,
-    ),
+  const existingIds = await fetchAllPostCampaignSubmissionIds(
+    supabaseAdmin,
+    contestId,
   );
 
   const now = new Date().toISOString();
@@ -1105,7 +1155,7 @@ export async function refreshPostCampaignMetrics(
 
   if (existing.length === 0) {
     throw new Error(
-      "No post-campaign submissions to refresh. Click Refresh first to copy contest submissions.",
+      "No post-campaign submissions to refresh. Sync from Submissions first to copy contest submissions.",
     );
   }
 

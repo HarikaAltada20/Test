@@ -8107,7 +8107,7 @@ export default function ContestDetailClient({
           title: "Post-campaign metrics updated",
           description:
             result.message ||
-            `Synced ${result.synced ?? 0} · Success ${result.success ?? 0} · Failed ${result.failed ?? 0}${result.skipped ? ` · Skipped ${result.skipped}` : ""}.`,
+            `Success ${result.success ?? 0} · Failed ${result.failed ?? 0}${result.skipped ? ` · Skipped ${result.skipped}` : ""}.`,
           variant: "success",
           duration: 8000,
         });
@@ -16219,35 +16219,67 @@ export default function ContestDetailClient({
                               (() => {
                                 const { isDisabled, disabledReason } =
                                   getRefreshButtonState();
+                                const syncDisabled =
+                                  isLoadingPostCampaignMetrics ||
+                                  isRefreshingMetrics;
                                 return (
-                                  <button
-                                    onClick={handleRefreshMetrics}
-                                    disabled={isDisabled}
-                                    className={cn(
-                                      "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
-                                      isDisabled
-                                        ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                        : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                  <>
+                                    {isPostCampaignLeaderboard && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void syncPostCampaignSubmissions()
+                                        }
+                                        disabled={syncDisabled}
+                                        className={cn(
+                                          "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
+                                          syncDisabled
+                                            ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
+                                            : isDark
+                                              ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
+                                              : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+                                        )}
+                                        title="Copy status, paid, and earnings from Submissions into Post Campaign (keeps refreshed views)."
+                                      >
+                                        {isLoadingPostCampaignMetrics ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="h-4 w-4" />
+                                        )}
+                                        {isLoadingPostCampaignMetrics
+                                          ? "Syncing..."
+                                          : "Sync from Submissions"}
+                                      </button>
                                     )}
-                                    title={
-                                      disabledReason ||
-                                      (isPostCampaignLeaderboard
-                                        ? "Refresh post-campaign metrics (does not change Submissions)"
-                                        : "Refresh metrics and leaderboard")
-                                    }
-                                  >
-                                    {isRefreshingMetrics ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <RefreshCw className="h-4 w-4" />
-                                    )}
-                                    {isRefreshingMetrics ||
-                                    postRefreshReloadPending
-                                      ? "Updating..."
-                                      : !cooldownInfo.canRefresh
-                                        ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                        : "Refresh Metrics"}
-                                  </button>
+                                    <button
+                                      onClick={handleRefreshMetrics}
+                                      disabled={isDisabled}
+                                      className={cn(
+                                        "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                        isDisabled
+                                          ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
+                                          : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                      )}
+                                      title={
+                                        disabledReason ||
+                                        (isPostCampaignLeaderboard
+                                          ? "Refresh post-campaign metrics only (does not sync from Submissions)"
+                                          : "Refresh metrics and leaderboard")
+                                      }
+                                    >
+                                      {isRefreshingMetrics ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                      )}
+                                      {isRefreshingMetrics ||
+                                      postRefreshReloadPending
+                                        ? "Updating..."
+                                        : !cooldownInfo.canRefresh
+                                          ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                          : "Refresh Metrics"}
+                                    </button>
+                                  </>
                                 );
                               })()}
                             {isAdminView && !isPostCampaignLeaderboard && (
@@ -16517,34 +16549,67 @@ export default function ContestDetailClient({
                             if (!isAdminView) {
                               return null;
                             }
+                            const syncDisabled =
+                              isLoadingPostCampaignMetrics ||
+                              isRefreshingMetrics;
                             return (
-                              <button
-                                onClick={handleRefreshMetrics}
-                                disabled={isDisabled}
-                                className={cn(
-                                  "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
-                                  isDisabled
-                                    ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
-                                    : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                              <>
+                                {isPostCampaignLeaderboard && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void syncPostCampaignSubmissions()
+                                    }
+                                    disabled={syncDisabled}
+                                    className={cn(
+                                      "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
+                                      syncDisabled
+                                        ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
+                                        : isDark
+                                          ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
+                                          : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+                                    )}
+                                    title="Copy status, paid, and earnings from Submissions into Post Campaign (keeps refreshed views)."
+                                  >
+                                    {isLoadingPostCampaignMetrics ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-4 w-4" />
+                                    )}
+                                    {isLoadingPostCampaignMetrics
+                                      ? "Syncing..."
+                                      : "Sync from Submissions"}
+                                  </button>
                                 )}
-                                title={
-                                  disabledReason ||
-                                  (isPostCampaignLeaderboard
-                                    ? "Refresh post-campaign metrics (does not change Submissions)"
-                                    : "Refresh metrics and leaderboard")
-                                }
-                              >
-                                {isRefreshingMetrics ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <RefreshCw className="h-4 w-4" />
-                                )}
-                                {isRefreshingMetrics || postRefreshReloadPending
-                                  ? "Updating..."
-                                  : !cooldownInfo.canRefresh
-                                    ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                    : "Refresh Metrics"}
-                              </button>
+                                <button
+                                  onClick={handleRefreshMetrics}
+                                  disabled={isDisabled}
+                                  className={cn(
+                                    "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all",
+                                    isDisabled
+                                      ? "bg-gray-400 text-white cursor-not-allowed opacity-60"
+                                      : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                                  )}
+                                  title={
+                                    disabledReason ||
+                                    (isPostCampaignLeaderboard
+                                      ? "Refresh post-campaign metrics only (does not sync from Submissions)"
+                                      : "Refresh metrics and leaderboard")
+                                  }
+                                >
+                                  {isRefreshingMetrics ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="h-4 w-4" />
+                                  )}
+                                  {isRefreshingMetrics ||
+                                  postRefreshReloadPending
+                                    ? "Updating..."
+                                    : !cooldownInfo.canRefresh
+                                      ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                      : "Refresh Metrics"}
+                                </button>
+                              </>
                             );
                           }
 
@@ -16628,6 +16693,41 @@ export default function ContestDetailClient({
                               {/* Section A — Primary actions */}
                               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                                 <div className="flex flex-wrap items-start gap-3">
+                                  {isPostCampaignLeaderboard && (
+                                    <div className="flex flex-col items-start gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void syncPostCampaignSubmissions()
+                                        }
+                                        disabled={
+                                          isLoadingPostCampaignMetrics ||
+                                          isRefreshingMetrics ||
+                                          disabledDetail
+                                        }
+                                        className={cn(
+                                          "flex items-center py-2 px-4 gap-2 rounded-2xl transition-all border",
+                                          isLoadingPostCampaignMetrics ||
+                                            isRefreshingMetrics ||
+                                            disabledDetail
+                                            ? "bg-gray-400 text-white cursor-not-allowed opacity-60 border-transparent"
+                                            : isDark
+                                              ? "border-slate-600 bg-slate-800 text-white hover:bg-slate-700"
+                                              : "border-[#D1B7F9] bg-white text-[#4A00BE] hover:bg-purple-50",
+                                        )}
+                                        title="Copy status, paid, and earnings from Submissions into Post Campaign (keeps refreshed views)."
+                                      >
+                                        {isLoadingPostCampaignMetrics ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="h-4 w-4" />
+                                        )}
+                                        {isLoadingPostCampaignMetrics
+                                          ? "Syncing..."
+                                          : "Sync from Submissions"}
+                                      </button>
+                                    </div>
+                                  )}
                                   <div className="flex flex-col items-start gap-1">
                                     <button
                                       onClick={handleRefreshMetrics}
@@ -16640,7 +16740,9 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         disabledReason ||
-                                        "Views, likes, comments from YouTube Data API"
+                                        (isPostCampaignLeaderboard
+                                          ? "Refresh post-campaign basic metrics only (does not sync from Submissions)"
+                                          : "Views, likes, comments from YouTube Data API")
                                       }
                                     >
                                       {isRefreshingMetrics ? (
