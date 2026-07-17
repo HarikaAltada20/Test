@@ -22,6 +22,8 @@ import {
   coreInsightsMetricsForMediaProductType,
   IG_BASE_INSIGHTS_METRICS,
   IG_GRAPH_VERSION,
+  IG_OPTIONAL_FEED_METRICS,
+  IG_OPTIONAL_REELS_METRICS,
   insightsMetricsForMediaProductType,
   shouldRetryInsightsWithoutOptionalMetrics,
 } from "@/lib/instagram-clip-metrics";
@@ -63,8 +65,25 @@ export interface SubmissionForInsights {
 interface InsightsData {
   data: Array<{
     name: string;
-    values: Array<{ value: number }>;
+    values?: Array<{ value?: number | null }>;
+    total_value?: { value?: number | null };
   }>;
+}
+
+/** Read a metric value from either values[] or total_value (Graph varies by metric). */
+function readInsightMetricValue(metric: {
+  values?: Array<{ value?: number | null }>;
+  total_value?: { value?: number | null };
+}): number | null {
+  const fromValues = metric.values?.[0]?.value;
+  if (fromValues != null && Number.isFinite(Number(fromValues))) {
+    return Number(fromValues);
+  }
+  const fromTotal = metric.total_value?.value;
+  if (fromTotal != null && Number.isFinite(Number(fromTotal))) {
+    return Number(fromTotal);
+  }
+  return null;
 }
 
 export type FetchInsightsSuccess = {
@@ -212,12 +231,13 @@ export async function fetchInsights(
     ): number => {
       let primaryViews = 0;
       for (const metric of metricsData.data || []) {
-        const raw = metric.values[0]?.value;
+        const raw = readInsightMetricValue(metric);
         if (metric.name === "reposts" || metric.name === "reels_skip_rate") {
-          if (raw != null) stats[metric.name] = Number(raw);
+          // Keep explicit 0; only skip when Graph omits the value entirely.
+          if (raw != null) stats[metric.name] = raw;
           continue;
         }
-        const value = raw || 0;
+        const value = raw ?? 0;
         if (metric.name === "ig_reels_avg_watch_time") {
           stats.avg_watch_time_ms = value;
         } else if (metric.name === "ig_reels_video_view_total_time") {
@@ -236,6 +256,7 @@ export async function fetchInsights(
     let errorBody: {
       error?: { code?: number; error_subcode?: number; message?: string };
     } = {};
+    let usedFallback = false;
 
     if (!response.ok) {
       errorBody = await response.json().catch(() => ({}));
@@ -256,6 +277,7 @@ export async function fetchInsights(
         if (retry.ok) {
           response = retry;
           errorBody = {};
+          usedFallback = true;
         } else {
           return {
             kind: "error",
@@ -287,6 +309,52 @@ export async function fetchInsights(
 
     const stats: Record<string, number> = { ...DEFAULT_STATS };
     let primaryViews = applyInsightMetrics(data, stats);
+
+    // If skip/reposts were dropped (fallback) or omitted by Graph, fetch them alone.
+    const isReels = String(mediaProductType || "").toUpperCase() === "REELS";
+    const missingReposts = !Object.prototype.hasOwnProperty.call(
+      stats,
+      "reposts",
+    );
+    const missingSkip =
+      isReels &&
+      !Object.prototype.hasOwnProperty.call(stats, "reels_skip_rate");
+    if (missingReposts || missingSkip || usedFallback) {
+      const optionalMetrics = isReels
+        ? IG_OPTIONAL_REELS_METRICS
+        : IG_OPTIONAL_FEED_METRICS;
+      try {
+        const optionalRes = await fetchWithMetrics(optionalMetrics);
+        if (optionalRes.ok) {
+          const optionalData = (await optionalRes
+            .json()
+            .catch(() => null)) as InsightsData | null;
+          if (optionalData?.data?.length) {
+            applyInsightMetrics(optionalData, stats);
+          }
+        } else if (isReels) {
+          // One bad optional metric shouldn't block the other.
+          const skipOnly = await fetchWithMetrics("reels_skip_rate");
+          if (skipOnly.ok) {
+            const skipData = (await skipOnly
+              .json()
+              .catch(() => null)) as InsightsData | null;
+            if (skipData?.data?.length) applyInsightMetrics(skipData, stats);
+          }
+          const repostsOnly = await fetchWithMetrics("reposts");
+          if (repostsOnly.ok) {
+            const repostsData = (await repostsOnly
+              .json()
+              .catch(() => null)) as InsightsData | null;
+            if (repostsData?.data?.length) {
+              applyInsightMetrics(repostsData, stats);
+            }
+          }
+        }
+      } catch {
+        // optional — ignore
+      }
+    }
 
     if (primaryViews === 0 && stats.reach > 0) {
       primaryViews = stats.reach;
