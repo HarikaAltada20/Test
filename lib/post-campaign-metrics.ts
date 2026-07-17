@@ -28,7 +28,6 @@ import { extractTikTokVideoIdFromLink } from "@/lib/tiktok/extract-video-id";
 import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
 import type { PostCampaignSubmissionSnapshot } from "@/lib/post-campaign-submission-shape";
 import { postCampaignSnapshotToSubmission } from "@/lib/post-campaign-submission-shape";
-import { buildPostCampaignExistingRowPatch } from "@/lib/post-campaign-sync-patch";
 import {
   classifyPostCampaignSubmissionPlatform,
   resolvePostCampaignRefreshPlatforms,
@@ -470,6 +469,71 @@ export async function syncPostCampaignFromSubmissions(
 ): Promise<{ synced: number; inserted: number; updated: number }> {
   const overwriteMetrics = options?.overwriteMetrics === true;
 
+  const rpcResult = await trySyncPostCampaignViaRpc(
+    supabaseAdmin,
+    contestId,
+    overwriteMetrics,
+  );
+  if (rpcResult) return rpcResult;
+
+  return syncPostCampaignFromSubmissionsClient(
+    supabaseAdmin,
+    contestId,
+    overwriteMetrics,
+  );
+}
+
+/**
+ * Prefer set-based Postgres RPC (one round-trip; scales to 5k+ rows).
+ * Returns null when the function is not deployed yet so callers can fall back.
+ */
+async function trySyncPostCampaignViaRpc(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseAdmin: any,
+  contestId: string,
+  overwriteMetrics: boolean,
+): Promise<{ synced: number; inserted: number; updated: number } | null> {
+  const { data, error } = await supabaseAdmin.rpc(
+    "sync_post_campaign_from_submissions",
+    {
+      p_contest_id: contestId,
+      p_overwrite_metrics: overwriteMetrics,
+    },
+  );
+  if (error) {
+    const code = (error as { code?: string }).code ?? "";
+    const msg = (error.message ?? "").toLowerCase();
+    const missingRpc =
+      code === "PGRST202" ||
+      code === "42883" ||
+      msg.includes("could not find the function") ||
+      (msg.includes("function") && msg.includes("does not exist")) ||
+      msg.includes("schema cache");
+    if (missingRpc) return null;
+    throw new Error(error.message);
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") {
+    return { synced: 0, inserted: 0, updated: 0 };
+  }
+  return {
+    synced: Number((row as { synced?: unknown }).synced) || 0,
+    inserted: Number((row as { inserted?: unknown }).inserted) || 0,
+    updated: Number((row as { updated?: unknown }).updated) || 0,
+  };
+}
+
+/**
+ * Client-side fallback when RPC is not deployed: paginated ID set + chunked upserts
+ * (preserves overlay metrics unless overwriteMetrics).
+ */
+async function syncPostCampaignFromSubmissionsClient(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabaseAdmin: any,
+  contestId: string,
+  overwriteMetrics: boolean,
+): Promise<{ synced: number; inserted: number; updated: number }> {
   const { data: submissions, error } =
     await fetchContestSubmissionsAllPages<SubmissionSourceRow>(
       supabaseAdmin,
@@ -484,60 +548,111 @@ export async function syncPostCampaignFromSubmissions(
     );
   }
 
-  const existingIds = await fetchAllPostCampaignSubmissionIds(
+  const existingMetricsById = await fetchAllPostCampaignMetricsForSync(
     supabaseAdmin,
     contestId,
   );
 
   const now = new Date().toISOString();
-  const toInsert: Record<string, unknown>[] = [];
-  const toUpdateSnapshot: Array<{
-    submission_id: string;
-    patch: Record<string, unknown>;
-  }> = [];
+  const rows: Record<string, unknown>[] = [];
 
   for (const sub of submissions ?? []) {
-    if (!existingIds.has(sub.id)) {
-      toInsert.push(mapSubmissionToPostCampaignRow(sub, contestId, now));
+    const existing = existingMetricsById.get(sub.id);
+    if (!existing) {
+      rows.push(mapSubmissionToPostCampaignRow(sub, contestId, now));
       continue;
     }
-    toUpdateSnapshot.push({
-      submission_id: sub.id,
-      patch: buildPostCampaignExistingRowPatch(
-        mapSubmissionToPostCampaignSnapshotFields(sub, contestId, now),
-        {
+    const snapshot = mapSubmissionToPostCampaignSnapshotFields(
+      sub,
+      contestId,
+      now,
+    );
+    const metrics = overwriteMetrics
+      ? {
           views: sub.views ?? 0,
           other_stats: parseOtherStats(sub.other_stats),
           last_insights_update: sub.last_insights_update,
           insights_status: sub.insights_status,
-        },
-        overwriteMetrics,
-      ),
+        }
+      : {
+          views: existing.views,
+          other_stats: existing.other_stats,
+          last_insights_update: existing.last_insights_update,
+          insights_status: existing.insights_status,
+        };
+    rows.push({
+      submission_id: sub.id,
+      ...snapshot,
+      ...metrics,
     });
   }
 
   const CHUNK = 200;
-  for (let i = 0; i < toInsert.length; i += CHUNK) {
-    const chunk = toInsert.slice(i, i + CHUNK);
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
     const { error: upsertError } = await supabaseAdmin
       .from("post_campaign_submission_metrics")
       .upsert(chunk, { onConflict: "submission_id" });
     if (upsertError) throw new Error(upsertError.message);
   }
 
-  await mapLimit(toUpdateSnapshot, 10, async ({ submission_id, patch }) => {
-    const { error: updateError } = await supabaseAdmin
-      .from("post_campaign_submission_metrics")
-      .update(patch)
-      .eq("submission_id", submission_id);
-    if (updateError) throw new Error(updateError.message);
-  });
+  const synced = (submissions ?? []).length;
+  let inserted = 0;
+  let updated = 0;
+  for (const sub of submissions ?? []) {
+    if (existingMetricsById.has(sub.id)) updated += 1;
+    else inserted += 1;
+  }
 
-  return {
-    synced: (submissions ?? []).length,
-    inserted: toInsert.length,
-    updated: toUpdateSnapshot.length,
-  };
+  return { synced, inserted, updated };
+}
+
+type ExistingPcMetrics = {
+  views: number | null;
+  other_stats: Record<string, unknown> | null;
+  last_insights_update: string | null;
+  insights_status: string | null;
+};
+
+/** Paginated load of overlay metrics needed to preserve views on client-side sync upsert. */
+async function fetchAllPostCampaignMetricsForSync(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+): Promise<Map<string, ExistingPcMetrics>> {
+  const map = new Map<string, ExistingPcMetrics>();
+  const limit = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("post_campaign_submission_metrics")
+      .select(
+        "submission_id, views, other_stats, last_insights_update, insights_status",
+      )
+      .eq("contest_id", contestId)
+      .order("submission_id", { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as Array<{
+      submission_id: string;
+      views: number | null;
+      other_stats: unknown;
+      last_insights_update: string | null;
+      insights_status: string | null;
+    }>;
+    for (const row of rows) {
+      if (!row?.submission_id) continue;
+      map.set(String(row.submission_id), {
+        views: row.views,
+        other_stats: parseOtherStats(row.other_stats),
+        last_insights_update: row.last_insights_update,
+        insights_status: row.insights_status,
+      });
+    }
+    if (rows.length < limit) break;
+    offset += limit;
+  }
+  return map;
 }
 
 async function loadPostCampaignSubmissionsForRefresh(
