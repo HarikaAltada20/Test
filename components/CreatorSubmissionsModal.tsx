@@ -186,6 +186,11 @@ interface CreatorSubmissionsModalProps {
   bonusCapSubmissions?: Submission[];
   /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
   parentBulkActionLoading?: boolean;
+  /**
+   * Post-campaign overlay: metrics-only — hide verify/reject/pending/paid actions
+   * and selection checkboxes (same as PC leaderboard table).
+   */
+  isPostCampaignView?: boolean;
   /** Called after a submission quality score is saved (updates parent list + creator aggregates). */
   onQualityScoreUpdated?: (payload: {
     submissionId: string;
@@ -223,6 +228,7 @@ export function CreatorSubmissionsModal({
   canSeeDemographics = false,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
+  isPostCampaignView = false,
   onQualityScoreUpdated,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
@@ -1229,15 +1235,23 @@ export function CreatorSubmissionsModal({
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
   const isVideoContest = contest?.contest_format !== "text_image";
-  const canEditQualityScore = isVideoContest;
-  const showBulkModerationActions = submissionModerationUiAllowed(
-    contest?.post_contest_status,
-    { forBulkBar: true },
-  );
+  const canEditQualityScore = isVideoContest && !isPostCampaignView;
+  // Post-campaign overlay is metrics-only — no verify/reject/pending/paid.
+  const showSelectionCheckboxes = !isPostCampaignView;
+  const showBulkModerationActions =
+    !isPostCampaignView &&
+    submissionModerationUiAllowed(contest?.post_contest_status, {
+      forBulkBar: true,
+    });
   const showRowModerationActions = (submission: (typeof submissions)[number]) =>
+    !isPostCampaignView &&
     submissionModerationUiAllowed(contest?.post_contest_status, {
       isPaidRow: submissionIsPaidRow(submission),
     });
+  const showPaymentActions =
+    !isPostCampaignView &&
+    isAdminView &&
+    contest?.post_contest_status === "verification_complete";
   const qualityEditFirstSubmission = qualityEditSubmissionIds[0]
     ? submissions.find((s) => s.id === qualityEditSubmissionIds[0]) ?? null
     : null;
@@ -1849,7 +1863,7 @@ export function CreatorSubmissionsModal({
             </div>
 
             {/* Bulk Actions Bar */}
-            {selectedSubmissions.size > 0 && (
+            {showSelectionCheckboxes && selectedSubmissions.size > 0 && (
               <div
                 className={cn(
                   "border-b p-2 sm:p-3",
@@ -1944,9 +1958,8 @@ export function CreatorSubmissionsModal({
                       </>
                     )}
 
-                  {contest?.post_contest_status === "verification_complete" &&
+                  {showPaymentActions &&
                     contest?.post_contest_status !== "payouts_processed" &&
-                    isAdminView &&
                     !isTwitterLeaderboardContest && (
                       <>
                         <Tooltip>
@@ -2139,25 +2152,27 @@ export function CreatorSubmissionsModal({
                   )}
                 >
                   <TableRow className="border-b-2">
-                    <TableHead
-                      className={cn(
-                        "w-12",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                      )}
-                    >
-                      <Checkbox
-                        checked={
-                          filteredSubmissions.length > 0 &&
-                          filteredSubmissions.every((s) =>
-                            selectedSubmissions.has(s.id),
-                          )
-                        }
-                        onCheckedChange={() =>
-                          handleSelectAll(filteredSubmissions)
-                        }
-                        aria-label="Select all submissions in current tab"
-                      />
-                    </TableHead>
+                    {showSelectionCheckboxes && (
+                      <TableHead
+                        className={cn(
+                          "w-12",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                      >
+                        <Checkbox
+                          checked={
+                            filteredSubmissions.length > 0 &&
+                            filteredSubmissions.every((s) =>
+                              selectedSubmissions.has(s.id),
+                            )
+                          }
+                          onCheckedChange={() =>
+                            handleSelectAll(filteredSubmissions)
+                          }
+                          aria-label="Select all submissions in current tab"
+                        />
+                      </TableHead>
+                    )}
                     <TableHead
                       className={cn(
                         "w-12",
@@ -2829,7 +2844,8 @@ export function CreatorSubmissionsModal({
                     <TableRow>
                       <TableCell
                         colSpan={
-                          isTwitterTextImageContest
+                          (showSelectionCheckboxes ? 0 : -1) +
+                          (isTwitterTextImageContest
                             ? 18 + // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
@@ -2871,7 +2887,7 @@ export function CreatorSubmissionsModal({
                                 isYouTubeContest)
                                 ? 1
                                 : 0) + // Insights status (admin only)
-                              4 // Status, Rejection reason, Submitted, Actions
+                              4) // Status, Rejection reason, Submitted, Actions
                         }
                         className={cn(
                           "text-center py-8",
@@ -3244,18 +3260,20 @@ export function CreatorSubmissionsModal({
                             isDeletedTweet && "opacity-60",
                           )}
                         >
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedSubmissions.has(submission.id)}
-                              onCheckedChange={(checked) =>
-                                handleCheckboxChange(
-                                  submission.id,
-                                  checked as boolean,
-                                )
-                              }
-                              aria-label={`Select submission ${index + 1}`}
-                            />
-                          </TableCell>
+                          {showSelectionCheckboxes && (
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedSubmissions.has(submission.id)}
+                                onCheckedChange={(checked) =>
+                                  handleCheckboxChange(
+                                    submission.id,
+                                    checked as boolean,
+                                  )
+                                }
+                                aria-label={`Select submission ${index + 1}`}
+                              />
+                            </TableCell>
+                          )}
                           <TableCell
                             className={cn(
                               "font-medium",
@@ -4652,12 +4670,10 @@ export function CreatorSubmissionsModal({
                                   )}
 
                                 {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
-                                {contest?.post_contest_status ===
-                                  "verification_complete" &&
+                                {showPaymentActions &&
                                   getNormalizedSubmissionStatus(submission) ===
                                     "verified" &&
                                   !submission.paid &&
-                                  isAdminView &&
                                   !isTwitterLeaderboardContest && (
                                     <>
                                       <DropdownMenuSeparator />
@@ -4727,9 +4743,7 @@ export function CreatorSubmissionsModal({
                                     </>
                                   )}
 
-                                {contest?.post_contest_status ===
-                                  "verification_complete" &&
-                                  isAdminView &&
+                                {showPaymentActions &&
                                   !isTwitterLeaderboardContest &&
                                   isTwitterCpmContest &&
                                   isTwitterTweet &&
@@ -4752,9 +4766,7 @@ export function CreatorSubmissionsModal({
                                 {/* Non-Twitter contests: allow paying bonus
                                     after the standard reward has already been
                                     paid (mirrors Twitter CPM behavior above). */}
-                                {contest?.post_contest_status ===
-                                  "verification_complete" &&
-                                  isAdminView &&
+                                {showPaymentActions &&
                                   !isTwitterLeaderboardContest &&
                                   !isTwitterCpmContest &&
                                   !isTwitterTweet &&
@@ -4774,11 +4786,9 @@ export function CreatorSubmissionsModal({
                                     </>
                                   )}
 
-                                {contest?.post_contest_status ===
-                                  "verification_complete" &&
+                                {showPaymentActions &&
                                   contest?.post_contest_status !==
-                                    "payouts_processed" &&
-                                  isAdminView && (
+                                    "payouts_processed" && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

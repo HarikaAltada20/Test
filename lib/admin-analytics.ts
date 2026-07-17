@@ -117,6 +117,7 @@ export type AdminAnalyticsSeriesPoint = {
   likes: number;
   comments: number;
   shares: number;
+  submissions: number;
   pendingViews: number;
   verifiedViews: number;
   paidViews: number;
@@ -580,6 +581,7 @@ export function aggregateAdminAnalytics(input: {
     cumLikes += day.likes;
     cumComments += day.comments;
     cumShares += day.shares;
+    // Legacy path: use flat total submission count on every point (no daily bucket).
     cumPending += day.pendingViews;
     cumVerified += day.verifiedViews;
     cumPaid += day.paidViews;
@@ -591,6 +593,7 @@ export function aggregateAdminAnalytics(input: {
       likes: cumLikes,
       comments: cumComments,
       shares: cumShares,
+      submissions: totalSubmissions,
       pendingViews: cumPending,
       verifiedViews: cumVerified,
       paidViews: cumPaid,
@@ -650,6 +653,9 @@ function normalizeSqlDayKey(dayKey: string): string {
 /**
  * Build analytics summary + cumulative series from Postgres daily rollups
  * (no per-submission rows in memory).
+ * Call once for submissions (`admin_analytics_daily`) and once for PC overlay
+ * (`admin_analytics_pc_overview`) — same row shape. Both read precomputed
+ * daily rollup tables when migration 20260719 is applied.
  */
 export function aggregateAdminAnalyticsFromDailyRows(input: {
   contests: AdminAnalyticsContest[];
@@ -804,6 +810,7 @@ export function aggregateAdminAnalyticsFromDailyRows(input: {
   let cumLikes = 0;
   let cumComments = 0;
   let cumShares = 0;
+  let cumSubs = 0;
   let cumPending = 0;
   let cumVerified = 0;
   let cumPaid = 0;
@@ -814,6 +821,7 @@ export function aggregateAdminAnalyticsFromDailyRows(input: {
     cumLikes += day.likes;
     cumComments += day.comments;
     cumShares += day.shares;
+    cumSubs += day.totalSubmissions;
     cumPending += day.pendingViews;
     cumVerified += day.verifiedViews;
     cumPaid += day.paidViews;
@@ -825,6 +833,7 @@ export function aggregateAdminAnalyticsFromDailyRows(input: {
       likes: cumLikes,
       comments: cumComments,
       shares: cumShares,
+      submissions: cumSubs,
       pendingViews: cumPending,
       verifiedViews: cumVerified,
       paidViews: cumPaid,

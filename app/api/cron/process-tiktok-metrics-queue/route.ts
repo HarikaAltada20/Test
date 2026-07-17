@@ -111,6 +111,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         batchSize: job.batchSize,
         totalBatches: job.totalBatches,
         cursor: job.cursor,
+        metricsTarget: job.metricsTarget ?? "submissions",
       }),
     });
   } catch (err) {
@@ -157,6 +158,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchSize: job.batchSize,
       totalBatches: job.totalBatches,
       cursor: batchData.nextCursor,
+      metricsTarget: job.metricsTarget ?? "submissions",
     };
     const enqueueResult = await enqueueTikTokMetricsJob(nextJob);
     if (enqueueResult.error) {
@@ -213,14 +215,15 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .update({ status: "completed", finished_at: now, updated_at: now })
       .eq("id", job.runId);
 
-    // Bump contest last_metrics_updated on run completion
+    const isPostCampaignTarget = job.metricsTarget === "post_campaign";
     await supabaseAdmin
       .from("contests")
-      .update({ last_metrics_updated: now })
+      .update(
+        isPostCampaignTarget
+          ? { post_campaign_last_metrics_updated: now }
+          : { last_metrics_updated: now },
+      )
       .eq("id", job.contestId);
-      
-      // Note: we don't have separate CPM budget rollup for TikTok yet, 
-      // but if we did, we'd call it here.
   }
 
   return NextResponse.json({

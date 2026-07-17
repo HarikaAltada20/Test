@@ -6,6 +6,8 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
+import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
+import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -166,6 +168,17 @@ export default async function ContestDetailPage({
     };
   }
 
+  let postCampaignLastMetricsUpdated: string | null = null;
+  {
+    const { data: pcRow } = await supabase
+      .from("contests")
+      .select("post_campaign_last_metrics_updated")
+      .eq("id", contestId)
+      .maybeSingle();
+    postCampaignLastMetricsUpdated =
+      pcRow?.post_campaign_last_metrics_updated ?? null;
+  }
+
   // Additional security check: if contest doesn't belong to user and user is not admin, deny access
   if (!isAdmin && contestData.advertiser_id !== user.id) {
     console.log(
@@ -187,6 +200,28 @@ export default async function ContestDetailPage({
     (contestData.platform?.toLowerCase() === "twitter" ||
       contestData.platform?.toLowerCase() === "x") &&
     contestData.contest_format === "text_image";
+
+  // Same gate as PC Submissions toggle in the client — preload so the tab is
+  // instant (mirrors how initialSubmissions hydrates the Submissions tab).
+  const shouldPrefetchPostCampaign =
+    shouldShowPostCampaignSubmissionsToggle(contestData);
+
+  // Count-only prefetch — rows load paginated on the client to avoid large SSR payloads.
+  let initialPostCampaignMetricsCount: number | null = null;
+  if (shouldPrefetchPostCampaign) {
+    try {
+      const admin = createAdminClient();
+      initialPostCampaignMetricsCount = await fetchPostCampaignMetricsCount(
+        admin,
+        contestId,
+      );
+    } catch (err) {
+      console.error(
+        `[page.tsx] Failed to prefetch post-campaign metrics count for ${contestId}:`,
+        err,
+      );
+    }
+  }
 
   console.log(`[page.tsx] Contest detection:`, {
     platform: contestData.platform,
@@ -612,6 +647,7 @@ export default async function ContestDetailPage({
     contest_type: contestData.contest_type,
     contest_based_details: contestData.contest_based_details,
     last_metrics_updated: contestData.last_metrics_updated,
+    post_campaign_last_metrics_updated: postCampaignLastMetricsUpdated,
     // Add other moderation fields for completeness
     submitted_for_approval_at: contestData.submitted_for_approval_at,
     approved_at: contestData.approved_at,
@@ -1236,6 +1272,7 @@ export default async function ContestDetailPage({
       <ContestDetailClient
         contest={contest}
         initialSubmissions={allSubmissions}
+        initialPostCampaignMetricsCount={initialPostCampaignMetricsCount}
         durationDays={durationDays}
         contestId={contestId}
         isAdminView={isAdmin}

@@ -102,6 +102,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         batchSize: job.batchSize,
         totalBatches: job.totalBatches,
         cursor: job.cursor,
+        metricsTarget: job.metricsTarget ?? "submissions",
       }),
     });
   } catch (err) {
@@ -142,6 +143,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchSize: job.batchSize,
       totalBatches: job.totalBatches,
       cursor: batchData.nextCursor,
+      metricsTarget: job.metricsTarget ?? "submissions",
     };
     await enqueueInstagramInsightsJob(nextJob);
     const doFetch = () =>
@@ -178,16 +180,27 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .update({ status: "completed", finished_at: now, updated_at: now })
       .eq("id", job.runId);
 
-    // Budget rollup can be expensive; do it once per run, after completion.
-    await updateCpmContestBudgets(supabaseAdmin, job.contestId);
-
-    // Always bump contest last_metrics_updated on run completion to avoid instant repeated refresh calls (cooldown).
+    // Bump the correct cooldown timestamp for the metrics target.
+    const isPostCampaignTarget = job.metricsTarget === "post_campaign";
     await supabaseAdmin
       .from("contests")
-      .update({ last_metrics_updated: now })
+      .update(
+        isPostCampaignTarget
+          ? { post_campaign_last_metrics_updated: now }
+          : { last_metrics_updated: now },
+      )
       .eq("id", job.contestId);
 
-    revalidateLeaderboardCache(job.contestId);
+    // Overlay refresh must not recalculate live contest budgets / leaderboard.
+    if (!isPostCampaignTarget) {
+      await updateCpmContestBudgets(supabaseAdmin, job.contestId);
+      revalidateLeaderboardCache(job.contestId);
+    } else {
+      console.info(
+        "[process-instagram-insights-queue] post_campaign run completed",
+        { contestId: job.contestId, runId: job.runId },
+      );
+    }
   }
 
   return NextResponse.json({

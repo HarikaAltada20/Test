@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   isInstagramInsightsQueueEnabled,
   enqueueInstagramInsightsJob,
@@ -16,6 +17,12 @@ import {
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import {
+  assertNoCrossTargetActiveRun,
+  assertPostCampaignEnqueueAccess,
+  parseMetricsTarget,
+  postCampaignCooldownResponse,
+} from "@/lib/post-campaign-enqueue-guards";
 
 const BATCH_SIZE = 100;
 
@@ -26,6 +33,7 @@ export async function POST(
   try {
     const cronAuth = request.headers.get("Authorization") === `Bearer ${process.env.CRON_SECRET}`;
     let user: { id: string } | null = null;
+    let isAdmin = false;
     if (!cronAuth) {
       const supabase = await createClient();
       const { data: { user: u } } = await supabase.auth.getUser();
@@ -33,7 +41,12 @@ export async function POST(
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
+      ({ isAdmin } = await verifyAdminAccess());
     }
+
+    const body = await request.json().catch(() => ({}));
+    const metricsTarget = parseMetricsTarget(body?.metricsTarget);
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
 
     const { id: contestId } = await params;
     if (!contestId) {
@@ -47,7 +60,7 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, views_locked_at, post_contest_status")
+      .select("id, platform, advertiser_id, views_locked_at, post_contest_status, end_date, post_campaign_last_metrics_updated")
       .eq("id", contestId)
       .single();
 
@@ -60,25 +73,51 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (contest.views_locked_at) {
+
+    // Submissions refresh stays locked after review; post-campaign overlay can still refresh.
+    if (!isPostCampaignTarget) {
+      if (contest.views_locked_at) {
+        return NextResponse.json(
+          { error: "Contest is finalized; refresh not allowed" },
+          { status: 400 }
+        );
+      }
+      if (
+        contest.post_contest_status === "in_review" ||
+        contest.post_contest_status === "verification_complete" ||
+        contest.post_contest_status === "payouts_processed"
+      ) {
+        return NextResponse.json(
+          { error: "Metrics are locked after contest review begins. No further refresh allowed." },
+          { status: 400 }
+        );
+      }
+    } else if (!contest.end_date || new Date() < new Date(contest.end_date)) {
       return NextResponse.json(
-        { error: "Contest is finalized; refresh not allowed" },
-        { status: 400 }
-      );
-    }
-    // Hard lock: once in review, verification complete, or payouts processed, do not refresh
-    if (
-      contest.post_contest_status === "in_review" ||
-      contest.post_contest_status === "verification_complete" ||
-      contest.post_contest_status === "payouts_processed"
-    ) {
-      return NextResponse.json(
-        { error: "Metrics are locked after contest review begins. No further refresh allowed." },
-        { status: 400 }
+        {
+          error:
+            "Post-campaign metrics refresh is only available after the contest has ended.",
+        },
+        { status: 400 },
       );
     }
 
-    // Any authenticated user (creator, brand, admin) may enqueue; run data is non-sensitive.
+    const accessDenied = assertPostCampaignEnqueueAccess(
+      isPostCampaignTarget,
+      cronAuth,
+      user?.id,
+      contest.advertiser_id,
+      isAdmin,
+    );
+    if (accessDenied) return accessDenied;
+
+    if (isPostCampaignTarget && !cronAuth) {
+      const cooldownDenied = postCampaignCooldownResponse(
+        contest.post_campaign_last_metrics_updated,
+        isAdmin,
+      );
+      if (cooldownDenied) return cooldownDenied;
+    }
 
     if (!isInstagramInsightsQueueEnabled()) {
       return NextResponse.json(
@@ -106,11 +145,21 @@ export async function POST(
         console.warn("[instagram-insights-refresh] Trigger processor failed:", e)
       );
 
+    // Serialize submissions vs post-campaign to avoid doubling platform API usage.
+    const crossTargetBlocked = await assertNoCrossTargetActiveRun(
+      supabaseAdmin,
+      "instagram_insights_refresh_runs",
+      contestId,
+      metricsTarget,
+    );
+    if (crossTargetBlocked) return crossTargetBlocked;
+
     // Check for existing active run
     const { data: existingRun } = await supabaseAdmin
       .from("instagram_insights_refresh_runs")
-      .select("id, status, total_submissions, total_batches")
+      .select("id, status, total_submissions, total_batches, metrics_target")
       .eq("contest_id", contestId)
+      .eq("metrics_target", metricsTarget)
       .in("status", ["pending", "running"])
       .maybeSingle();
 
@@ -133,20 +182,34 @@ export async function POST(
         total_submissions: existingRun.total_submissions,
         total_batches: existingRun.total_batches,
         processorTriggered: true,
+        metricsTarget,
       });
     }
 
-    // Count eligible submissions (instagram, has video_id, not rejected; permanent_failure only after 24h)
-    const { count: eligibleCount } = await supabaseAdmin
-      .from("submissions")
-      .select("*", { count: "exact", head: true })
-      .eq("contest_id", contestId)
-      .eq("platform", "instagram")
-      .neq("status", "rejected")
-      .not("video_id", "is", null)
-      .or(insightsRefreshInsightsStatusOrFilter());
+    // Count eligible rows from submissions or post-campaign overlay
+    let totalEligible = 0;
+    if (isPostCampaignTarget) {
+      const { count } = await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .ilike("platform", "%instagram%")
+        .neq("status", "rejected")
+        .not("video_id", "is", null)
+        .or(insightsRefreshInsightsStatusOrFilter());
+      totalEligible = count ?? 0;
+    } else {
+      const { count } = await supabaseAdmin
+        .from("submissions")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("platform", "instagram")
+        .neq("status", "rejected")
+        .not("video_id", "is", null)
+        .or(insightsRefreshInsightsStatusOrFilter());
+      totalEligible = count ?? 0;
+    }
 
-    const totalEligible = eligibleCount ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));
     const runStartedAt = new Date().toISOString();
 
@@ -154,6 +217,7 @@ export async function POST(
       .from("instagram_insights_refresh_runs")
       .insert({
         contest_id: contestId,
+        metrics_target: metricsTarget,
         status: "running",
         total_submissions: totalEligible,
         processed_submissions: 0,
@@ -174,6 +238,7 @@ export async function POST(
           .from("instagram_insights_refresh_runs")
           .select("id, status")
           .eq("contest_id", contestId)
+          .eq("metrics_target", metricsTarget)
           .in("status", ["pending", "running"])
           .maybeSingle();
         if (again) {
@@ -181,6 +246,7 @@ export async function POST(
             runId: again.id,
             status: again.status,
             alreadyActive: true,
+            metricsTarget,
           });
         }
       }
@@ -192,13 +258,14 @@ export async function POST(
     }
 
     const runId = newRun.id;
+
     const firstJob: InstagramInsightsJob = {
       contestId,
       runId,
       batchIndex: 0,
       batchSize: BATCH_SIZE,
       totalBatches: totalBatches,
-      // no cursor for first batch
+      metricsTarget,
     };
 
     const enqueueResult = await enqueueInstagramInsightsJob(firstJob);
@@ -221,11 +288,20 @@ export async function POST(
       doFetch();
     }
 
+    console.info("[instagram-insights-refresh enqueue] created run", {
+      contestId,
+      runId,
+      metricsTarget,
+      totalEligible,
+      totalBatches,
+    });
+
     return NextResponse.json({
       runId,
       status: "running",
       total_submissions: totalEligible,
       total_batches: totalBatches,
+      metricsTarget,
     });
   } catch (e) {
     console.error("[instagram-insights-refresh enqueue]", e);

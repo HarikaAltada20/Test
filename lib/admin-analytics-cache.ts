@@ -28,6 +28,8 @@ export const ADMIN_ANALYTICS_CACHE_SECONDS = 30 * 60;
 
 export const ADMIN_ANALYTICS_CACHE_TAG = "admin-analytics-overview";
 
+export type AdminAnalyticsSource = "submissions" | "pc_submissions";
+
 export type AdminAnalyticsOverviewParams = {
   fromIso: string;
   toIso: string;
@@ -38,6 +40,8 @@ export type AdminAnalyticsOverviewParams = {
   contestIds: string[] | null;
   /** null = all; [] = none; [...] = specific */
   advertiserIds: string[] | null;
+  /** Fetch only the active tab's aggregates (submissions vs PC overlay). */
+  source: AdminAnalyticsSource;
 };
 
 export type AdminAnalyticsOverviewResult = {
@@ -47,9 +51,26 @@ export type AdminAnalyticsOverviewResult = {
   types: AdminAnalyticsContestType[];
   statuses: AdminAnalyticsBaseStatus[];
   advertiserIds: string[];
+  source: AdminAnalyticsSource;
+  /** Locked post-review submissions metrics (populated when source=submissions). */
   summary: AdminAnalyticsSummary;
   series: AdminAnalyticsSeriesPoint[];
   viewsByStatus: AdminAnalyticsViewsByStatus;
+  /** Post-campaign overlay metrics (populated when source=pc_submissions). */
+  pc: {
+    summary: AdminAnalyticsSummary;
+    series: AdminAnalyticsSeriesPoint[];
+    viewsByStatus: AdminAnalyticsViewsByStatus;
+    /** Campaigns that have PC overlay rows in range (for PC tab filter). */
+    allCampaigns: {
+      id: string;
+      title: string;
+      platform: string | null;
+      contest_type: string | null;
+      advertiser_id: string | null;
+    }[];
+    selectedCampaignCount: number;
+  };
   campaigns: { id: string; title: string }[];
   allAdvertisers: AdminAnalyticsAdvertiserOption[];
   allCampaigns: {
@@ -62,7 +83,65 @@ export type AdminAnalyticsOverviewResult = {
   selectedCampaignCount: number;
 };
 
-async function fetchAllContests(
+const EMPTY_ANALYTICS_SUMMARY: AdminAnalyticsSummary = {
+  views: 0,
+  filteredViews: 0,
+  likes: 0,
+  comments: 0,
+  shares: 0,
+  totalPayoutsCents: 0,
+  effectiveCpm: null,
+  totalSubmissions: 0,
+  approvedSubmissions: 0,
+  approvalRate: 0,
+};
+
+const EMPTY_VIEWS_BY_STATUS: AdminAnalyticsViewsByStatus = {
+  all: 0,
+  pending: 0,
+  verified: 0,
+  paid: 0,
+  rejected: 0,
+  notRejected: 0,
+  verifiedPaid: 0,
+};
+
+/** Contest catalog for filter dropdowns — separate from per-filter overview cache. */
+const ADMIN_ANALYTICS_CONTESTS_CACHE_SECONDS = 30 * 60;
+
+type ContestCatalogRow = {
+  id: string;
+  title: string | null;
+  platform: string | null;
+  contest_type: string | null;
+  contest_based_details: unknown;
+  payment_details: unknown;
+  moderation_status: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  advertiser_id: string | null;
+  company_name: string | null;
+};
+
+function mapContestCatalogRow(row: ContestCatalogRow): AdminAnalyticsContest {
+  return {
+    id: String(row.id),
+    title: row.title,
+    platform: row.platform,
+    contest_type: row.contest_type,
+    contest_based_details: row.contest_based_details,
+    payment_details: row.payment_details,
+    moderation_status: row.moderation_status,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    advertiser_id: row.advertiser_id,
+    advertiser_profiles: row.company_name
+      ? { company_name: row.company_name }
+      : null,
+  };
+}
+
+async function fetchAllContestsPaginated(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<AdminAnalyticsContest[]> {
   const CHUNK = 1000;
@@ -83,6 +162,40 @@ async function fetchAllContests(
     from += CHUNK;
   }
   return all;
+}
+
+async function fetchAnalyticsContests(
+  supabase: ReturnType<typeof createAdminClient>,
+): Promise<AdminAnalyticsContest[]> {
+  const { data, error } = await supabase.rpc("admin_analytics_contest_catalog");
+  if (!error) {
+    return ((data ?? []) as ContestCatalogRow[]).map(mapContestCatalogRow);
+  }
+
+  const code = (error as { code?: string }).code ?? "";
+  const msg = (error.message ?? "").toLowerCase();
+  const missingRpc =
+    code === "PGRST202" ||
+    code === "42883" ||
+    msg.includes("could not find the function") ||
+    (msg.includes("function") && msg.includes("does not exist")) ||
+    msg.includes("schema cache");
+  if (!missingRpc) {
+    throw new Error(`Failed to load contest catalog: ${error.message}`);
+  }
+
+  return fetchAllContestsPaginated(supabase);
+}
+
+async function getCachedAdminAnalyticsContests(): Promise<AdminAnalyticsContest[]> {
+  return unstable_cache(
+    async () => fetchAnalyticsContests(createAdminClient()),
+    [ADMIN_ANALYTICS_CACHE_TAG, "contest-catalog-v1"],
+    {
+      revalidate: ADMIN_ANALYTICS_CONTESTS_CACHE_SECONDS,
+      tags: [ADMIN_ANALYTICS_CACHE_TAG],
+    },
+  )();
 }
 
 function mergeDailyRows(
@@ -150,7 +263,7 @@ async function fetchAnalyticsDailyRows(
         msg.includes("schema cache");
       if (missingRpc) {
         throw new Error(
-          "Admin analytics RPCs are not deployed yet. Apply SUPABASE migration 20260714_admin_analytics_daily_rpc.sql before using this page.",
+          "Admin analytics RPCs are not deployed yet. Apply migrations 20260714_admin_analytics_daily_rpc.sql and 20260719_admin_analytics_daily_rollups.sql before using this page.",
         );
       }
       throw new Error(
@@ -161,6 +274,110 @@ async function fetchAnalyticsDailyRows(
   }
 
   return mergeDailyRows(chunks);
+}
+
+type PcAnalyticsOverviewRpcPayload = {
+  daily?: (AdminAnalyticsDailySqlRow & { contest_id?: string })[];
+  contest_ids?: string[];
+};
+
+function parsePcOverviewRpcPayload(
+  raw: unknown,
+): {
+  dailyRows: (AdminAnalyticsDailySqlRow & { contest_id?: string })[];
+  contestIds: Set<string>;
+} {
+  const payload =
+    typeof raw === "string"
+      ? (JSON.parse(raw) as PcAnalyticsOverviewRpcPayload)
+      : ((raw ?? {}) as PcAnalyticsOverviewRpcPayload);
+  const dailyRows: (AdminAnalyticsDailySqlRow & { contest_id?: string })[] = [];
+  const contestIds = new Set<string>();
+  for (const row of payload.daily ?? []) {
+    const contestId = String(row.contest_id ?? "");
+    if (contestId) contestIds.add(contestId);
+    dailyRows.push({
+      contest_id: contestId || undefined,
+      day_key: row.day_key,
+      status: row.status,
+      submission_count: row.submission_count,
+      views_sum: row.views_sum,
+      likes_sum: row.likes_sum,
+      comments_sum: row.comments_sum,
+      shares_sum: row.shares_sum,
+      payouts_cents_sum: row.payouts_cents_sum,
+    });
+  }
+  for (const id of payload.contest_ids ?? []) {
+    const normalized = String(id ?? "");
+    if (normalized) contestIds.add(normalized);
+  }
+  return { dailyRows, contestIds };
+}
+
+/**
+ * PC overlay metrics + campaign IDs in one DB scan (admin_analytics_pc_overview).
+ * Scans the full type/platform/advertiser scope; metrics rows are filtered to
+ * scopedContestIds when a campaign filter is active.
+ */
+async function fetchPcAnalyticsOverview(
+  supabase: ReturnType<typeof createAdminClient>,
+  scopeContestIds: string[],
+  scopedContestIds: string[],
+  fromIso: string,
+  toIso: string,
+): Promise<{
+  dailyRows: AdminAnalyticsDailySqlRow[];
+  contestIds: Set<string>;
+}> {
+  if (scopeContestIds.length === 0) {
+    return { dailyRows: [], contestIds: new Set() };
+  }
+
+  const scopedSet = new Set(scopedContestIds);
+  const CONTEST_ID_CHUNK = 500;
+  const dailyChunks: AdminAnalyticsDailySqlRow[] = [];
+  const contestIdSet = new Set<string>();
+
+  for (let i = 0; i < scopeContestIds.length; i += CONTEST_ID_CHUNK) {
+    const idChunk = scopeContestIds.slice(i, i + CONTEST_ID_CHUNK);
+    const { data, error } = await supabase.rpc("admin_analytics_pc_overview", {
+      p_from: fromIso,
+      p_to: toIso,
+      p_contest_ids: idChunk,
+    });
+    if (error) {
+      const code = (error as { code?: string }).code ?? "";
+      const msg = (error.message ?? "").toLowerCase();
+      const missingRpc =
+        code === "PGRST202" ||
+        code === "42883" ||
+        msg.includes("could not find the function") ||
+        (msg.includes("function") && msg.includes("does not exist")) ||
+        msg.includes("schema cache");
+      if (missingRpc) {
+        throw new Error(
+          "Admin analytics PC RPCs are not deployed yet. Apply migrations 20260718_pc_metrics_admin_analytics_scale.sql and 20260719_admin_analytics_daily_rollups.sql before using the PC Submissions tab.",
+        );
+      }
+      throw new Error(
+        `Failed to aggregate PC admin analytics: ${error.message}`,
+      );
+    }
+    const parsed = parsePcOverviewRpcPayload(data);
+    for (const id of parsed.contestIds) contestIdSet.add(id);
+    for (const row of parsed.dailyRows) {
+      const contestId = String(row.contest_id ?? "");
+      if (contestId && !scopedSet.has(contestId)) continue;
+      const { contest_id: _contestId, ...rollup } = row;
+      dailyChunks.push(rollup);
+    }
+  }
+
+  return {
+    dailyRows: mergeDailyRows(dailyChunks),
+    contestIds: contestIdSet,
+  };
 }
 
 async function fetchAdvertiserUsers(
@@ -219,7 +436,7 @@ async function loadAdminAnalyticsOverview(
   }
 
   const supabase = createAdminClient();
-  const contests = await fetchAllContests(supabase);
+  const contests = await getCachedAdminAnalyticsContests();
 
   const videoApprovedContests = contests.filter(
     (c) =>
@@ -258,22 +475,64 @@ async function loadAdminAnalyticsOverview(
           .filter((c) => params.contestIds!.includes(c.id))
           .map((c) => c.id);
 
-  const dailyRows = await fetchAnalyticsDailyRows(
-    supabase,
-    scopedContestIds,
-    from.toISOString(),
-    to.toISOString(),
-  );
+  const includeSubmissions = params.source === "submissions";
+  const includePc = params.source === "pc_submissions";
 
-  const aggregated = aggregateAdminAnalyticsFromDailyRows({
+  let dailyRows: AdminAnalyticsDailySqlRow[] = [];
+  let pcDailyRows: AdminAnalyticsDailySqlRow[] = [];
+  let pcContestIdSet = new Set<string>();
+
+  if (includeSubmissions) {
+    dailyRows = await fetchAnalyticsDailyRows(
+      supabase,
+      scopedContestIds,
+      from.toISOString(),
+      to.toISOString(),
+    );
+  } else if (includePc) {
+    const contestsForScopeIds = contestsForScope.map((c) => c.id);
+    const pcOverview = await fetchPcAnalyticsOverview(
+      supabase,
+      contestsForScopeIds,
+      scopedContestIds,
+      from.toISOString(),
+      to.toISOString(),
+    );
+    pcDailyRows = pcOverview.dailyRows;
+    pcContestIdSet = pcOverview.contestIds;
+  }
+
+  const aggregateInputBase = {
     contests: contestsForScope,
-    dailyRows,
     from,
     to,
     contestIds: params.contestIds,
     advertiserIds: params.advertiserIds,
     statuses: params.statuses,
-  });
+  };
+
+  const aggregated = includeSubmissions
+    ? aggregateAdminAnalyticsFromDailyRows({
+        ...aggregateInputBase,
+        dailyRows,
+      })
+    : {
+        summary: EMPTY_ANALYTICS_SUMMARY,
+        series: [] as AdminAnalyticsSeriesPoint[],
+        viewsByStatus: EMPTY_VIEWS_BY_STATUS,
+        campaigns: [] as { id: string; title: string }[],
+      };
+  const pcAggregated = includePc
+    ? aggregateAdminAnalyticsFromDailyRows({
+        ...aggregateInputBase,
+        dailyRows: pcDailyRows,
+      })
+    : {
+        summary: EMPTY_ANALYTICS_SUMMARY,
+        series: [] as AdminAnalyticsSeriesPoint[],
+        viewsByStatus: EMPTY_VIEWS_BY_STATUS,
+        campaigns: [] as { id: string; title: string }[],
+      };
 
   const advertiserIdsForLabels = [
     ...new Set(
@@ -301,6 +560,15 @@ async function loadAdminAnalyticsOverview(
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 
+  const pcAllCampaigns = includePc
+    ? allCampaigns.filter((c) => pcContestIdSet.has(c.id))
+    : [];
+  const pcSelectedCampaignCount = includePc
+    ? params.contestIds == null
+      ? pcAllCampaigns.length
+      : pcAllCampaigns.filter((c) => params.contestIds!.includes(c.id)).length
+    : 0;
+
   return {
     from: from.toISOString(),
     to: to.toISOString(),
@@ -308,9 +576,17 @@ async function loadAdminAnalyticsOverview(
     types: params.contestTypes,
     statuses: params.statuses,
     advertiserIds: params.advertiserIds ?? [],
+    source: params.source,
     summary: aggregated.summary,
     series: aggregated.series,
     viewsByStatus: aggregated.viewsByStatus,
+    pc: {
+      summary: pcAggregated.summary,
+      series: pcAggregated.series,
+      viewsByStatus: pcAggregated.viewsByStatus,
+      allCampaigns: pcAllCampaigns,
+      selectedCampaignCount: pcSelectedCampaignCount,
+    },
     campaigns: aggregated.campaigns,
     allAdvertisers,
     allCampaigns,
@@ -327,6 +603,8 @@ function normalizeListKey(ids: string[] | null): string {
 function buildCacheKeyParts(params: AdminAnalyticsOverviewParams): string[] {
   return [
     ADMIN_ANALYTICS_CACHE_TAG,
+    "v7-daily-rollups",
+    params.source,
     params.fromIso,
     params.toIso,
     [...params.platforms].sort().join(","),
@@ -350,6 +628,7 @@ function canonicalizeParams(
       params.contestIds == null ? null : [...params.contestIds].sort(),
     advertiserIds:
       params.advertiserIds == null ? null : [...params.advertiserIds].sort(),
+    source: params.source,
   };
 }
 
@@ -432,4 +711,11 @@ export function parseContestTypesParam(
     .map((p) => p.trim().toLowerCase())
     .filter(isAdminAnalyticsContestType);
   return parts;
+}
+
+export function parseSourceParam(raw: string | null): AdminAnalyticsSource {
+  if (raw?.trim().toLowerCase() === "pc_submissions") {
+    return "pc_submissions";
+  }
+  return "submissions";
 }

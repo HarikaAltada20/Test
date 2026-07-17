@@ -54,8 +54,13 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
-import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
-import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
+import {
+  computeBudgetFilledCents,
+  computeBudgetPaidCents,
+  getBudgetTileMode,
+  getPoolBudgetSpentCentsForDisplay,
+  type BudgetTileSubmission,
+} from "@/lib/contest-budget-tile-metrics";
 import {
   fetchContestSubmissionsAllPages,
   fetchContestTwitterTweetsAllPages,
@@ -1245,14 +1250,34 @@ export default function OpportunitiesPage({
                 }),
               );
 
-              const milestoneDetails =
-                contest.contest_based_details.milestone_contest;
+              const budgetSubs: BudgetTileSubmission[] = submissionRecords.map(
+                (submission) => ({
+                  id: submission.id,
+                  creator_id: submission.creator_id,
+                  created_at: submission.created_at,
+                  status: submission.status,
+                  paid: submission.paid,
+                  paid_at: submission.paid_at,
+                  earnings: submission.earnings,
+                  views: submission.views,
+                  platform: submission.platform,
+                  other_stats: submission.other_stats,
+                  bonus_paid: submission.bonus_paid,
+                  bonus_amount: submission.bonus_amount,
+                }),
+              );
 
+              const tileInput = {
+                contest_type: contest.contest_type,
+                post_contest_status: contest.post_contest_status,
+                max_earnings_per_creator: contest.max_earnings_per_creator,
+                contest_based_details: updatedContest.contest_based_details,
+              };
+              const mode = getBudgetTileMode(contest.post_contest_status);
               const milestoneBudgetSpentCents =
-                computeMilestoneContestExpectedSpendCents(
-                  submissionRecords,
-                  milestoneDetails,
-                );
+                mode === "paid"
+                  ? computeBudgetPaidCents(tileInput, budgetSubs)
+                  : computeBudgetFilledCents(tileInput, budgetSubs);
 
               updatedContest = {
                 ...updatedContest,
@@ -2439,7 +2464,7 @@ export default function OpportunitiesPage({
                 );
               })()}
 
-            {/* Milestone budget_spent: computeMilestoneContestExpectedSpendCents in fetchData */}
+            {/* Milestone budget_spent: paid vs filled in fetchData (see contest-budget-tile-metrics) */}
             {!dualUnifiedBudget &&
               isMilestoneContestType(contest.contest_type) &&
               contest.contest_based_details?.milestone_contest

@@ -24,4 +24,4 @@ if (-not (Test-Path $diffDir)) {
 git diff "main...$branch" | Out-File -FilePath $diffFile -Encoding utf8
 
 Write-Host "Diff created at $diffFile"
-code $diffFile
+# code $diffFile

@@ -70,6 +70,8 @@ import { Input } from "@/components/ui/input";
 
 type ChartMetric = "views" | "likes" | "comments" | "shares";
 
+type AnalyticsDataSource = "submissions" | "pc_submissions";
+
 type CampaignOption = {
   id: string;
   title: string;
@@ -78,20 +80,20 @@ type CampaignOption = {
   advertiser_id?: string | null;
 };
 
-type AnalyticsPayload = {
-  from: string;
-  to: string;
-  platforms: AdminAnalyticsPlatform[];
-  types?: AdminAnalyticsContestType[];
-  statuses?: string[];
-  advertiserIds?: string[];
+type AnalyticsSourcePayload = {
   summary: AdminAnalyticsSummary;
   series: AdminAnalyticsSeriesPoint[];
-  viewsByStatus?: AdminAnalyticsViewsByStatus;
-  campaigns: CampaignOption[];
-  allAdvertisers?: AdminAnalyticsAdvertiserOption[];
-  allCampaigns: CampaignOption[];
-  selectedCampaignCount: number;
+  viewsByStatus: AdminAnalyticsViewsByStatus;
+  allCampaigns?: CampaignOption[];
+  selectedCampaignCount?: number;
+};
+
+type CachedSourcePayload = AnalyticsSourcePayload & {
+  filterKey: string;
+};
+
+type SharedAnalyticsMeta = {
+  allAdvertisers: AdminAnalyticsAdvertiserOption[];
 };
 
 const PLATFORM_META: Record<
@@ -105,6 +107,11 @@ const PLATFORM_META: Record<
   tiktok: { label: "TikTok", icon: FaTiktok },
   instagram: { label: "Instagram", icon: FaInstagram },
 };
+
+const DATA_SOURCE_TABS: { id: AnalyticsDataSource; label: string }[] = [
+  { id: "submissions", label: "Submissions" },
+  { id: "pc_submissions", label: "PC Submissions" },
+];
 
 const CHART_TABS: { id: ChartMetric; label: string }[] = [
   { id: "views", label: "Views" },
@@ -308,8 +315,14 @@ export default function AdminAnalyticsClient() {
     DEFAULT_VISIBLE_CARDS,
   );
   const [chartMetric, setChartMetric] = useState<ChartMetric>("views");
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<AnalyticsPayload | null>(null);
+  const [dataSource, setDataSource] =
+    useState<AnalyticsDataSource>("submissions");
+  const [submissionsCache, setSubmissionsCache] =
+    useState<CachedSourcePayload | null>(null);
+  const [pcCache, setPcCache] = useState<CachedSourcePayload | null>(null);
+  const [sharedMeta, setSharedMeta] = useState<SharedAnalyticsMeta | null>(
+    null,
+  );
 
   const typesParam = useMemo(() => {
     if (contestTypes.length === 0) return "__none__";
@@ -337,12 +350,86 @@ export default function AdminAnalyticsClient() {
     return [...selectedContestIds].sort().join(",");
   }, [selectedContestIds]);
 
+  const filterKey = useMemo(
+    () =>
+      [
+        dateRange.from.toISOString(),
+        dateRange.to.toISOString(),
+        platformsParam,
+        typesParam,
+        statusesParam,
+        advertiserIdsParam,
+        contestIdsParam,
+      ].join("|"),
+    [
+      dateRange.from,
+      dateRange.to,
+      platformsParam,
+      typesParam,
+      statusesParam,
+      advertiserIdsParam,
+      contestIdsParam,
+    ],
+  );
+
+  const activeCache =
+    dataSource === "pc_submissions" ? pcCache : submissionsCache;
+  const metricsLoading =
+    !activeCache || activeCache.filterKey !== filterKey;
+
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
 
-    const run = async () => {
-      setLoading(true);
+    const applyResponse = (
+      source: AnalyticsDataSource,
+      json: {
+        summary: AdminAnalyticsSummary;
+        series: AdminAnalyticsSeriesPoint[];
+        viewsByStatus?: AdminAnalyticsViewsByStatus;
+        allCampaigns: CampaignOption[];
+        selectedCampaignCount: number;
+        allAdvertisers?: AdminAnalyticsAdvertiserOption[];
+        pc?: AnalyticsSourcePayload;
+      },
+    ) => {
+      if (source === "pc_submissions") {
+        const pc = json.pc;
+        if (!pc) return;
+        setPcCache({
+          summary: pc.summary,
+          series: pc.series,
+          viewsByStatus: pc.viewsByStatus,
+          allCampaigns: pc.allCampaigns ?? [],
+          selectedCampaignCount:
+            pc.selectedCampaignCount ?? pc.allCampaigns?.length ?? 0,
+          filterKey,
+        });
+      } else {
+        setSubmissionsCache({
+          summary: json.summary,
+          series: json.series,
+          viewsByStatus: json.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS,
+          allCampaigns: json.allCampaigns,
+          selectedCampaignCount: json.selectedCampaignCount,
+          filterKey,
+        });
+      }
+      if (json.allAdvertisers) {
+        setSharedMeta({ allAdvertisers: json.allAdvertisers });
+      }
+    };
+
+    const fetchSource = async (
+      source: AnalyticsDataSource,
+      signal: AbortSignal,
+    ) => {
+      const cached =
+        source === "pc_submissions"
+          ? pcCache?.filterKey === filterKey
+          : submissionsCache?.filterKey === filterKey;
+      if (cached) return;
+
       try {
         const params = new URLSearchParams({
           from: dateRange.from.toISOString(),
@@ -350,6 +437,7 @@ export default function AdminAnalyticsClient() {
           platforms: platformsParam,
           types: typesParam,
           statuses: statusesParam,
+          source,
         });
         if (advertiserIdsParam) {
           params.set("advertiserIds", advertiserIdsParam);
@@ -359,32 +447,40 @@ export default function AdminAnalyticsClient() {
         }
         const res = await fetch(
           `/api/admin/analytics/overview?${params.toString()}`,
-          { signal: controller.signal, cache: "no-store" },
+          { signal, cache: "no-store" },
         );
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || "Failed to load analytics");
         }
-        const json = (await res.json()) as AnalyticsPayload;
-        if (active) setData(json);
+        const json = await res.json();
+        if (!active) return;
+        applyResponse(source, json);
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (signal.aborted) return;
         console.error(err);
         toast.error(
           err instanceof Error ? err.message : "Failed to load analytics",
         );
-      } finally {
-        if (active) setLoading(false);
       }
     };
 
-    void run();
+    const cachedForActive =
+      dataSource === "pc_submissions"
+        ? pcCache?.filterKey === filterKey
+        : submissionsCache?.filterKey === filterKey;
+
+    if (!cachedForActive) {
+      void fetchSource(dataSource, controller.signal);
+    }
 
     return () => {
       active = false;
       controller.abort();
     };
   }, [
+    filterKey,
+    dataSource,
     dateRange.from,
     dateRange.to,
     platformsParam,
@@ -394,11 +490,13 @@ export default function AdminAnalyticsClient() {
     contestIdsParam,
   ]);
 
-  const summary = data?.summary ?? EMPTY_SUMMARY;
-  const series = data?.series ?? [];
-  const allAdvertisers = data?.allAdvertisers ?? [];
-  const allCampaigns = data?.allCampaigns ?? [];
-  const viewsByStatus = data?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS;
+  const summary = activeCache?.summary ?? EMPTY_SUMMARY;
+  const series = activeCache?.series ?? [];
+  const allAdvertisers = sharedMeta?.allAdvertisers ?? [];
+  const allCampaigns = activeCache?.allCampaigns ?? [];
+  const selectedCampaignCount =
+    activeCache?.selectedCampaignCount ?? allCampaigns.length;
+  const viewsByStatus = activeCache?.viewsByStatus ?? EMPTY_VIEWS_BY_STATUS;
 
   // Drop advertiser/campaign picks that are no longer in the current scope
   useEffect(() => {
@@ -414,12 +512,14 @@ export default function AdminAnalyticsClient() {
 
   useEffect(() => {
     setSelectedContestIds((prev) => {
-      if (prev === null || prev.length === 0 || allCampaigns.length === 0) {
-        return prev;
-      }
+      if (prev === null || prev.length === 0) return prev;
+      if (allCampaigns.length === 0) return prev;
       const valid = new Set(allCampaigns.map((c) => c.id));
       const next = prev.filter((id) => valid.has(id));
-      return next.length === prev.length ? prev : next;
+      if (next.length === prev.length) return prev;
+      // Source switch dropped every pick — fall back to all campaigns for this tab
+      if (next.length === 0) return null;
+      return next;
     });
   }, [allCampaigns]);
 
@@ -453,7 +553,7 @@ export default function AdminAnalyticsClient() {
 
   const campaignButtonLabel =
     selectedContestIds === null
-      ? `${data?.selectedCampaignCount ?? allCampaigns.length} campaigns`
+      ? `${selectedCampaignCount} campaigns`
       : selectedContestIds.length === 0
         ? "No campaigns"
         : `${selectedContestIds.length} campaign${selectedContestIds.length === 1 ? "" : "s"}`;
@@ -726,35 +826,6 @@ export default function AdminAnalyticsClient() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          {/* Platform toggles */}
-          <div className="flex items-center gap-1.5">
-            {ADMIN_ANALYTICS_PLATFORMS.map((key) => {
-              const meta = PLATFORM_META[key];
-              const Icon = meta.icon;
-              const active = platforms.includes(key);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  title={meta.label}
-                  onClick={() => togglePlatform(key)}
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-xl border transition-all",
-                    active
-                      ? isDark
-                        ? "border-[#7F39EC] bg-[#7F39EC]/25 text-white"
-                        : "border-[#7F39EC] bg-[#7F39EC]/15 text-[#4A00BE]"
-                      : isDark
-                        ? "border-white/10 bg-[#1a1a1a] text-white/70 hover:bg-white/10"
-                        : "border-black/10 bg-white text-black/60 hover:bg-black/5",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
-              );
-            })}
-          </div>
-
           <AdminDateRangePicker
             isDark={isDark}
             value={dateRange}
@@ -1062,6 +1133,63 @@ export default function AdminAnalyticsClient() {
         </div>
       </div>
 
+      {/* Submissions vs PC Submissions — drives all cards + graph */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div
+          className={cn(
+            "inline-flex flex-wrap gap-1 rounded-full border p-1",
+            isDark
+              ? "border-white/10 bg-[#0d0d0d]"
+              : "border-black/10 bg-[#f5f5f5]",
+          )}
+        >
+          {DATA_SOURCE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setDataSource(tab.id)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                dataSource === tab.id
+                  ? "border border-black/80 bg-[#7F39EC] text-white"
+                  : isDark
+                    ? "text-white/60 hover:text-white"
+                    : "text-black/55 hover:text-black",
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {ADMIN_ANALYTICS_PLATFORMS.map((key) => {
+            const meta = PLATFORM_META[key];
+            const Icon = meta.icon;
+            const active = platforms.includes(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                title={meta.label}
+                onClick={() => togglePlatform(key)}
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl border transition-all",
+                  active
+                    ? isDark
+                      ? "border-[#7F39EC] bg-[#7F39EC]/25 text-white"
+                      : "border-[#7F39EC] bg-[#7F39EC]/15 text-[#4A00BE]"
+                    : isDark
+                      ? "border-white/10 bg-[#1a1a1a] text-white/70 hover:bg-white/10"
+                      : "border-black/10 bg-white text-black/60 hover:bg-black/5",
+                )}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Metric cards */}
       {visibleTopCards.length > 0 && (
         <div
@@ -1102,7 +1230,7 @@ export default function AdminAnalyticsClient() {
                 </span>
               </div>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {loading ? "…" : summary.views.toLocaleString()}
+                {metricsLoading ? "…" : summary.views.toLocaleString()}
               </p>
             </div>
           )}
@@ -1133,7 +1261,7 @@ export default function AdminAnalyticsClient() {
                 </span>
               </div>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {loading
+                {metricsLoading
                   ? "…"
                   : formatCurrencyFromCents(summary.totalPayoutsCents)}
               </p>
@@ -1166,7 +1294,7 @@ export default function AdminAnalyticsClient() {
                 </span>
               </div>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {loading ? "…" : formatCpmDisplay(summary.effectiveCpm)}
+                {metricsLoading ? "…" : formatCpmDisplay(summary.effectiveCpm)}
               </p>
             </div>
           )}
@@ -1194,11 +1322,13 @@ export default function AdminAnalyticsClient() {
                       isDark ? "text-white/60" : "text-black/55",
                     )}
                   >
-                    Submissions
+                    {dataSource === "pc_submissions"
+                      ? "PC Submissions"
+                      : "Submissions"}
                   </span>
                 </div>
                 <span className="text-lg font-semibold text-orange-400">
-                  {loading ? "…" : `${summary.approvalRate}%`}
+                  {metricsLoading ? "…" : `${summary.approvalRate}%`}
                 </span>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -1212,7 +1342,7 @@ export default function AdminAnalyticsClient() {
                     Total
                   </p>
                   <p className="text-lg font-semibold">
-                    {loading
+                    {metricsLoading
                       ? "…"
                       : summary.totalSubmissions.toLocaleString()}
                   </p>
@@ -1227,7 +1357,7 @@ export default function AdminAnalyticsClient() {
                     Approved
                   </p>
                   <p className="text-lg font-semibold">
-                    {loading
+                    {metricsLoading
                       ? "…"
                       : summary.approvedSubmissions.toLocaleString()}
                   </p>
@@ -1279,7 +1409,7 @@ export default function AdminAnalyticsClient() {
                   </span>
                 </div>
                 <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
-                  {loading ? "…" : value.toLocaleString()}
+                  {metricsLoading ? "…" : value.toLocaleString()}
                 </p>
               </div>
             );
@@ -1307,7 +1437,7 @@ export default function AdminAnalyticsClient() {
                     : `${selectedContestIds.length} Campaigns`}
             </p>
             <p className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-              {loading ? "…" : chartTotal.toLocaleString()}
+              {metricsLoading ? "…" : chartTotal.toLocaleString()}
             </p>
           </div>
 
@@ -1340,12 +1470,12 @@ export default function AdminAnalyticsClient() {
         </div>
 
         <div className="relative h-[320px] w-full sm:h-[380px]">
-          {loading && (
+          {metricsLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-inherit/40">
               <Loader2 className="h-7 w-7 animate-spin text-[#7F39EC]" />
             </div>
           )}
-          {!loading && series.length === 0 ? (
+          {!metricsLoading && series.length === 0 ? (
             <div
               className={cn(
                 "flex h-full items-center justify-center text-sm",

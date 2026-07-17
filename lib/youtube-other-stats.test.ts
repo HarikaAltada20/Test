@@ -11,6 +11,7 @@ import {
   isContestPublished,
   isPostContestMetricsLocked,
   postContestStatusLocksViews,
+  shouldShowPostCampaignSubmissionsToggle,
 } from "./contest-metrics-refresh-eligibility";
 
 describe("youtube-other-stats", () => {
@@ -112,5 +113,52 @@ describe("contest-metrics-refresh-eligibility", () => {
     assert.equal(isContestPublished("published"), true);
     assert.equal(isContestPublished("draft"), false);
     assert.equal(isContestPublished(null), false);
+  });
+
+  it("shows PC submissions toggle only after post-campaign review starts", () => {
+    const tiktokEnded = {
+      status: "ended",
+      platform: "tiktok",
+      contest_format: "video",
+    };
+    assert.equal(
+      shouldShowPostCampaignSubmissionsToggle({
+        ...tiktokEnded,
+        post_contest_status: null,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldShowPostCampaignSubmissionsToggle({
+        ...tiktokEnded,
+        post_contest_status: "pending_review",
+      }),
+      false,
+    );
+    assert.equal(
+      shouldShowPostCampaignSubmissionsToggle({
+        ...tiktokEnded,
+        post_contest_status: "in_review",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldShowPostCampaignSubmissionsToggle({
+        status: "active",
+        platform: "tiktok",
+        contest_format: "video",
+        post_contest_status: "in_review",
+      }),
+      false,
+    );
+    assert.equal(
+      shouldShowPostCampaignSubmissionsToggle({
+        status: "ended",
+        platform: "twitter",
+        contest_format: "text_image",
+        post_contest_status: "in_review",
+      }),
+      false,
+    );
   });
 });

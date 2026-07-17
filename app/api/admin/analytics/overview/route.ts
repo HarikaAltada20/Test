@@ -6,6 +6,7 @@ import {
   parseContestTypesParam,
   parseIdListParam,
   parsePlatformsParam,
+  parseSourceParam,
   parseStatusesParam,
 } from "@/lib/admin-analytics-cache";
 
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     const statuses = parseStatusesParam(searchParams.get("statuses"));
     const contestIds = parseIdListParam(searchParams.get("contestIds"));
     const advertiserIds = parseIdListParam(searchParams.get("advertiserIds"));
+    const source = parseSourceParam(searchParams.get("source"));
 
     const now = new Date();
     const defaultFrom = new Date(now);
@@ -53,6 +55,7 @@ export async function GET(request: NextRequest) {
       statuses,
       contestIds,
       advertiserIds,
+      source,
     });
 
     return NextResponse.json(result, {
