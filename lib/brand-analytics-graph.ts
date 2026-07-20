@@ -272,6 +272,149 @@ export function buildBrandAnalyticsGraph(input: {
   };
 }
 
+type DailyGraphInput = {
+  dailyRows: {
+    day_key: string;
+    status: string;
+    views_sum: number;
+    likes_sum: number;
+    comments_sum: number;
+    shares_sum: number;
+  }[];
+  twitterDaily?: {
+    day_key: string;
+    status: string;
+    views_sum: number;
+    likes_sum: number;
+    comments_sum: number;
+    shares_sum: number;
+  }[];
+  from: Date;
+  to: Date;
+  activeFilter?: string;
+};
+
+/** Build graph series from Postgres daily rollups (no per-submission rows). */
+export function buildBrandAnalyticsGraphFromDailyRows(
+  input: DailyGraphInput,
+): { summary: BrandAnalyticsGraphSummary; series: BrandAnalyticsSeriesPoint[] } {
+  const activeFilter = input.activeFilter ?? "all";
+  const daily = new Map<string, DailyBucket>();
+
+  const cursor = new Date(input.from);
+  cursor.setUTCHours(12, 0, 0, 0);
+  const end = new Date(input.to);
+  end.setUTCHours(12, 0, 0, 0);
+  while (cursor <= end) {
+    const key = cursor.toISOString().slice(0, 10);
+    daily.set(key, emptyDaily());
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  const addRow = (
+    dayKeyRaw: string,
+    status: string | null | undefined,
+    views: number,
+    likes: number,
+    comments: number,
+    shares: number,
+    isTwitter = false,
+  ) => {
+    const matches = isTwitter
+      ? matchesTwitterStatus(status, activeFilter)
+      : matchesStatusFilter(status, activeFilter);
+    if (!matches) return;
+    const key = dayKeyRaw.slice(0, 10);
+    if (!key) return;
+    const bucket = daily.get(key) ?? emptyDaily();
+    bucket.views += views;
+    bucket.likes += likes;
+    bucket.comments += comments;
+    bucket.shares += shares;
+    addStatusViews(bucket, normalizeSubmissionStatus(status), views);
+    daily.set(key, bucket);
+  };
+
+  for (const row of input.dailyRows) {
+    addRow(
+      String(row.day_key),
+      row.status,
+      Number(row.views_sum) || 0,
+      Number(row.likes_sum) || 0,
+      Number(row.comments_sum) || 0,
+      Number(row.shares_sum) || 0,
+    );
+  }
+
+  for (const row of input.twitterDaily ?? []) {
+    addRow(
+      String(row.day_key),
+      row.status,
+      Number(row.views_sum) || 0,
+      Number(row.likes_sum) || 0,
+      Number(row.comments_sum) || 0,
+      Number(row.shares_sum) || 0,
+      true,
+    );
+  }
+
+  const sortedKeys = Array.from(daily.keys()).sort();
+  let cumViews = 0;
+  let cumLikes = 0;
+  let cumComments = 0;
+  let cumShares = 0;
+  let cumPending = 0;
+  let cumVerified = 0;
+  let cumPaid = 0;
+  let cumRejected = 0;
+
+  const series: BrandAnalyticsSeriesPoint[] = sortedKeys.map((key) => {
+    const day = daily.get(key)!;
+    cumViews += day.views;
+    cumLikes += day.likes;
+    cumComments += day.comments;
+    cumShares += day.shares;
+    cumPending += day.pendingViews;
+    cumVerified += day.verifiedViews;
+    cumPaid += day.paidViews;
+    cumRejected += day.rejectedViews;
+    return {
+      date: key,
+      label: formatDayLabel(key),
+      views: cumViews,
+      likes: cumLikes,
+      comments: cumComments,
+      shares: cumShares,
+      pendingViews: cumPending,
+      verifiedViews: cumVerified,
+      paidViews: cumPaid,
+      rejectedViews: cumRejected,
+    };
+  });
+
+  const last = series[series.length - 1];
+  return {
+    summary: {
+      views: last?.views ?? 0,
+      likes: last?.likes ?? 0,
+      comments: last?.comments ?? 0,
+      shares: last?.shares ?? 0,
+    },
+    series,
+  };
+}
+
+function addStatusViews(
+  bucket: DailyBucket,
+  status: AdminAnalyticsBaseStatus | "unknown",
+  views: number,
+) {
+  if (status === "pending") bucket.pendingViews += views;
+  else if (status === "verified") bucket.verifiedViews += views;
+  else if (status === "paid") bucket.paidViews += views;
+  else if (status === "rejected") bucket.rejectedViews += views;
+}
+
 export function normalizeBrandPlatformKey(contest: {
   platform?: string | null;
   contest_based_details?: unknown;

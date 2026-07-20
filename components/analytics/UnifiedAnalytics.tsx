@@ -466,7 +466,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
     return "text-gray-600";
   };
 
-  const getMetricValue = (metricId: string) => {
+  const getMetricValue = (metricId: string): string | number => {
     if (!analyticsData?.overview) return 0;
     const o = analyticsData.overview;
 
@@ -523,6 +523,15 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       default:
         return 0;
     }
+  };
+
+  /** Same loading UX as admin analytics: show "…" while refetching. */
+  const metricsLoading = loading;
+
+  const formatMetricTileValue = (value: string | number): string => {
+    if (metricsLoading) return "…";
+    if (typeof value === "number") return value.toLocaleString();
+    return value;
   };
 
   const toggleMetricTile = (metricId: string) => {
@@ -1213,6 +1222,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         {enabledTiles.map((tile) => {
           const Icon = tile.icon;
           const value = getMetricValue(tile.id);
+          const displayValue = formatMetricTileValue(value);
 
           return (
             <div
@@ -1247,10 +1257,9 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   className={cn(
                     "text-2xl font-bold mb-2",
                     isDark ? "text-white" : "text-gray-900",
-                    loading && "opacity-60",
                   )}
                 >
-                  {value}
+                  {displayValue}
                 </div>
                 <p
                   className={cn(
