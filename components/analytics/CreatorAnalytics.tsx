@@ -330,7 +330,7 @@ export default function CreatorAnalytics({
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1 className="text-md font-medium">Total Payouts</h1>
+            <h1 className="text-md font-medium">Total Earnings</h1>
             <div
               className={cn(
                 "w-10 h-10 flex items-center justify-center rounded-full",

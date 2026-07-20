@@ -2,9 +2,14 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 import { parseBrandAnalyticsContext } from "@/lib/brand-analytics-context";
-import { getCachedBrandAnalyticsBundle } from "@/lib/brand-analytics-cache";
+import {
+  getCachedBrandAnalyticsBundle,
+  resolveBrandMetricPlatformScope,
+  twitterContestIdsWithRollupActivity,
+} from "@/lib/brand-analytics-cache";
 import { buildBrandDetailedResponse } from "@/lib/brand-analytics-response";
-import { sumTwitterLeaderboardPayoutsCents } from "@/lib/brand-analytics-payouts";
+import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
+import { resolveBrandTwitterPayoutsCents } from "@/lib/brand-analytics-payouts";
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,28 +42,27 @@ export async function GET(request: NextRequest) {
 
     const bundle = await getCachedBrandAnalyticsBundle(parsed.ctx);
 
-    let twitterLeaderboardPayoutsCents = 0;
-    if (bundle.twitterContestIds.length > 0) {
+    const platformScope = resolveBrandMetricPlatformScope(parsed.ctx);
+    let twitterPayoutsCents = 0;
+    const twitterContestIds = platformScope.includeTwitter
+      ? twitterContestIdsWithRollupActivity(bundle.twitterContestRollup)
+      : [];
+    if (twitterContestIds.length > 0) {
       const admin = createAdminClient();
-      const { data: leaderboard } = await admin
-        .from("twitter_campaign_leaderboard")
-        .select("earnings")
-        .in("contest_id", bundle.twitterContestIds);
-      twitterLeaderboardPayoutsCents = sumTwitterLeaderboardPayoutsCents(
-        leaderboard ?? [],
+      twitterPayoutsCents = await resolveBrandTwitterPayoutsCents(
+        admin,
+        twitterContestIds,
+        parsed.ctx,
       );
     }
 
     return NextResponse.json(
-      buildBrandDetailedResponse(bundle, twitterLeaderboardPayoutsCents),
+      buildBrandDetailedResponse(bundle, twitterPayoutsCents),
     );
   } catch (error) {
     console.error("Brand detailed analytics error:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: brandAnalyticsClientErrorMessage(error) },
       { status: 500 },
     );
   }

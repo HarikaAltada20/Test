@@ -1,9 +1,15 @@
 import { fetchBrandPcSubmissionsAsAnalyticsRows } from "@/lib/brand-analytics-pc-submissions";
+import type { BrandAnalyticsQueryContext } from "@/lib/brand-analytics-cache";
 
 type PayoutSubmissionRow = {
   status?: string | null;
   earnings?: number | null;
   bonus_amount?: number | null;
+};
+
+type TwitterPayoutStatusFilter = {
+  submissionStatus?: string | null;
+  notRejected?: boolean;
 };
 
 /** Gross payout for one video/PC submission (earnings + bonus when paid). */
@@ -33,6 +39,127 @@ export function sumTwitterLeaderboardPayoutsCents(
   );
 }
 
+function applyTwitterModerationStatusFilter<
+  T extends { neq: Function; in: Function; eq: Function },
+>(query: T, statusFilter?: TwitterPayoutStatusFilter): T {
+  const status = statusFilter?.submissionStatus?.trim().toLowerCase() ?? null;
+  if (statusFilter?.notRejected) {
+    return query.neq("moderation_status", "rejected") as T;
+  }
+  if (status && status !== "all") {
+    if (status === "verifiedpaid") {
+      return query.in("moderation_status", ["verified", "paid"]) as T;
+    }
+    return query.eq("moderation_status", status) as T;
+  }
+  return query;
+}
+
+/** Sum tweet earnings in a date range, optionally filtered by moderation status. */
+export async function fetchTwitterPayoutsCentsFromTweets(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestIds: string[],
+  dateFrom: Date,
+  dateTo: Date,
+  statusFilter?: TwitterPayoutStatusFilter,
+  creatorId?: string,
+): Promise<number> {
+  const byCreator = await fetchTwitterEarningsCentsByCreator(
+    supabase,
+    contestIds,
+    dateFrom,
+    dateTo,
+    statusFilter,
+    creatorId,
+  );
+  let totalCents = 0;
+  for (const earnings of byCreator.values()) {
+    totalCents += earnings;
+  }
+  return totalCents;
+}
+
+/** Per-creator tweet earnings in a date range (not leaderboard totals). */
+export async function fetchTwitterEarningsCentsByCreator(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestIds: string[],
+  dateFrom: Date,
+  dateTo: Date,
+  statusFilter?: TwitterPayoutStatusFilter,
+  creatorId?: string,
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (contestIds.length === 0) return result;
+
+  let query = supabase
+    .from("twitter_campaign_tweets")
+    .select("creator_id, earnings, moderation_status, bonus_amount")
+    .in("contest_id", contestIds)
+    .gte("tweet_created_at", dateFrom.toISOString())
+    .lte("tweet_created_at", dateTo.toISOString());
+
+  if (creatorId) {
+    query = query.eq("creator_id", creatorId);
+  }
+
+  query = applyTwitterModerationStatusFilter(query, statusFilter);
+
+  const CHUNK = 1000;
+  let rangeFrom = 0;
+
+  while (true) {
+    const { data, error } = await query.range(rangeFrom, rangeFrom + CHUNK - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      const id = String(row.creator_id ?? "");
+      if (!id) continue;
+      const payout = computeSubmissionPayoutCents({
+        status: row.moderation_status,
+        earnings: row.earnings,
+        bonus_amount: row.bonus_amount,
+      });
+      if (payout <= 0) continue;
+      result.set(id, (result.get(id) ?? 0) + payout);
+    }
+
+    if (data.length < CHUNK) break;
+    rangeFrom += CHUNK;
+  }
+
+  return result;
+}
+
+/** Sum tweet earnings in the analytics date range, optionally filtered by moderation status. */
+export async function fetchTwitterFilteredPayoutsCents(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestIds: string[],
+  ctx: BrandAnalyticsQueryContext,
+): Promise<number> {
+  return fetchTwitterPayoutsCentsFromTweets(
+    supabase,
+    contestIds,
+    ctx.dateFrom,
+    ctx.dateTo,
+    ctx,
+  );
+}
+
+/** Twitter gross payouts from tweet rows in the selected date range (not leaderboard totals). */
+export async function resolveBrandTwitterPayoutsCents(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestIds: string[],
+  ctx: BrandAnalyticsQueryContext,
+): Promise<number> {
+  if (contestIds.length === 0) return 0;
+  return fetchTwitterFilteredPayoutsCents(supabase, contestIds, ctx);
+}
+
 type FetchBrandTotalPayoutsInput = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any;
@@ -46,7 +173,7 @@ type FetchBrandTotalPayoutsInput = {
 /**
  * Total Payouts (gross) for brand analytics — matches Overview tile definition:
  * - Video/PC: earnings + bonus on paid submissions in date range (ignores UI status filter)
- * - Twitter: creator earnings from twitter_campaign_leaderboard for scoped contests
+ * - Twitter: paid tweet earnings in date range (ignores UI status filter)
  */
 export async function fetchBrandTotalPayoutsCents(
   input: FetchBrandTotalPayoutsInput,
@@ -109,13 +236,12 @@ export async function fetchBrandTotalPayoutsCents(
   }
 
   if (twitterContestIds.length > 0) {
-    const { data: leaderboard, error } = await supabase
-      .from("twitter_campaign_leaderboard")
-      .select("earnings")
-      .in("contest_id", twitterContestIds);
-
-    if (error) throw new Error(error.message);
-    totalCents += sumTwitterLeaderboardPayoutsCents(leaderboard ?? []);
+    totalCents += await fetchTwitterPayoutsCentsFromTweets(
+      supabase,
+      twitterContestIds,
+      dateFrom,
+      dateTo,
+    );
   }
 
   return totalCents;

@@ -362,9 +362,15 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       buildBrandAnalyticsQueryString({
         activeFilter,
         contentType:
-          videoYoutube || videoInstagram || videoTiktok
-            ? "video"
-            : contentType,
+          !isPcSubmissions &&
+          twitterAnalytics &&
+          !videoYoutube &&
+          !videoInstagram &&
+          !videoTiktok
+            ? "text_image"
+            : videoYoutube || videoInstagram || videoTiktok
+              ? "video"
+              : contentType,
         videoPlatform,
         videoTiktok,
         twitterAnalytics: isPcSubmissions ? false : twitterAnalytics,

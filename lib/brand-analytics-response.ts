@@ -12,13 +12,20 @@ import {
   contestTotalsFromRollup,
   countByStatusFiltered,
   countByStatusFromDaily,
+  hasBrandAnalyticsStatusFilter,
   resolveAllowedPlatforms,
+  resolveBrandMetricPlatformScope,
   statusMatchesFilter,
   sumDailyRows,
   sumTwitterDailyRows,
   twitterContestTotalsFromRollup,
 } from "@/lib/brand-analytics-cache";
 import { buildBrandAnalyticsGraphFromDailyRows } from "@/lib/brand-analytics-graph";
+import {
+  fetchBrandContestBudgetSubmissions,
+  fetchTwitterLeaderboardPaidByContest,
+  resolveContestBudgetTile,
+} from "@/lib/brand-analytics-contest-budget";
 
 function modStatus(c: BrandContestRow): string {
   return (c.moderation_status ?? "").toString().toLowerCase();
@@ -99,7 +106,6 @@ function computeBrandFinancialMetrics(
   const contestsForFinancial = contestsWithActivity(contests, bundle);
 
   const totalMoneyPaid = contestsForFinancial.reduce((sum, c) => {
-    if (modStatus(c) !== "published") return sum;
     const pd = parsePaymentDetails(c.payment_details);
     if (
       pd?.payment_status === "completed" &&
@@ -181,18 +187,11 @@ function getContestActivityTotals(
     bundle.contestRollup,
     bundle.ctx,
   );
-  return { ...totals, quoteReposts: 0 };
+  return { ...totals, retweets: 0, quoteReposts: 0 };
 }
 
 function hasStatusFilter(ctx: BrandAnalyticsQueryContext): boolean {
-  return (
-    ctx.notRejected ||
-    Boolean(
-      ctx.submissionStatus &&
-        ctx.submissionStatus !== "all" &&
-        ctx.submissionStatus.trim() !== "",
-    )
-  );
+  return hasBrandAnalyticsStatusFilter(ctx);
 }
 
 function buildCampaignList(
@@ -235,23 +234,33 @@ function buildCampaignList(
   }));
 }
 
-export function buildBrandOverviewResponse(bundle: BrandAnalyticsBundle) {
+export function buildBrandOverviewResponse(
+  bundle: BrandAnalyticsBundle,
+  twitterLeaderboardPayoutsCents = 0,
+) {
   const { ctx, scopedContests, dailyRows, twitterDaily } = bundle;
-  const video = sumDailyRows(dailyRows, ctx);
-  const twitter = sumTwitterDailyRows(twitterDaily, ctx);
-  const videoAll = sumDailyRows(dailyRows, ctx, { allStatuses: true });
-  const twitterAll = sumTwitterDailyRows(twitterDaily, ctx, { allStatuses: true });
+  const { includeVideo, includeTwitter } = resolveBrandMetricPlatformScope(ctx);
+  const videoDailyRows = includeVideo ? dailyRows : [];
+  const twitterDailyRows = includeTwitter ? twitterDaily : [];
+
+  const video = sumDailyRows(videoDailyRows, ctx);
+  const twitter = sumTwitterDailyRows(twitterDailyRows, ctx);
+  const videoAll = sumDailyRows(videoDailyRows, ctx, { allStatuses: true });
+  const twitterAll = sumTwitterDailyRows(twitterDailyRows, ctx, {
+    allStatuses: true,
+  });
 
   const totalSubmissions = video.submissions + twitter.submissions;
   const totalViews = video.views + twitter.views;
-  const totalVideoViews = video.views;
   const totalLikes = video.likes + twitter.likes;
   const totalComments = video.comments + twitter.comments;
-  const totalPayoutsFromDaily = videoAll.payoutsCents;
+  const totalPayoutsCents =
+    video.payoutsCents +
+    (includeTwitter ? twitterLeaderboardPayoutsCents : 0);
 
   const statusCounts = hasStatusFilter(ctx)
-    ? countByStatusFiltered(dailyRows, twitterDaily, ctx)
-    : countByStatusFromDaily(dailyRows, twitterDaily);
+    ? countByStatusFiltered(videoDailyRows, twitterDailyRows, ctx)
+    : countByStatusFromDaily(videoDailyRows, twitterDailyRows);
 
   const totalContests = scopedContests.length;
   const publishedContests = scopedContests.filter(
@@ -295,8 +304,8 @@ export function buildBrandOverviewResponse(bundle: BrandAnalyticsBundle) {
     totalContests > 0 ? totalSubmissions / totalContests : 0;
 
   const effectiveCpm = computeEffectiveCpmUsd(
-    totalPayoutsFromDaily,
-    totalVideoViews,
+    totalPayoutsCents,
+    totalViews,
   );
 
   type PlatformStat = {
@@ -371,23 +380,25 @@ export function buildBrandOverviewResponse(bundle: BrandAnalyticsBundle) {
   }
 
   // Per-platform status counts from rollup rows
-  for (const row of bundle.contestRollup) {
-    const contest = scopedContests.find((c) => c.id === row.contest_id);
-    if (!contest) continue;
-    const platform = normalizeBrandPlatformKey(contest);
-    const ps = platformStats[platform];
-    if (!ps) continue;
-    const useRow = hasStatusFilter(ctx)
-      ? statusMatchesFilter(row.status, ctx)
-      : true;
-    if (!useRow) continue;
-    const st = normalizeSubmissionStatus(row.status);
-    if (st === "verified") ps.verifiedSubmissions += row.submission_count;
-    else if (st === "paid") ps.paidSubmissions += row.submission_count;
-    else if (st === "pending") ps.pendingSubmissions += row.submission_count;
-    else if (st === "rejected") ps.rejectedSubmissions += row.submission_count;
+  if (includeVideo) {
+    for (const row of bundle.contestRollup) {
+      const contest = scopedContests.find((c) => c.id === row.contest_id);
+      if (!contest) continue;
+      const platform = normalizeBrandPlatformKey(contest);
+      const ps = platformStats[platform];
+      if (!ps) continue;
+      const useRow = hasStatusFilter(ctx)
+        ? statusMatchesFilter(row.status, ctx)
+        : true;
+      if (!useRow) continue;
+      const st = normalizeSubmissionStatus(row.status);
+      if (st === "verified") ps.verifiedSubmissions += row.submission_count;
+      else if (st === "paid") ps.paidSubmissions += row.submission_count;
+      else if (st === "pending") ps.pendingSubmissions += row.submission_count;
+      else if (st === "rejected") ps.rejectedSubmissions += row.submission_count;
+    }
   }
-  for (const row of bundle.twitterContestRollup) {
+  if (includeTwitter) for (const row of bundle.twitterContestRollup) {
     const contest = scopedContests.find((c) => c.id === row.contest_id);
     if (!contest || normalizeBrandPlatformKey(contest) !== "twitter") continue;
     const ps = platformStats.twitter;
@@ -463,7 +474,7 @@ export function buildBrandOverviewResponse(bundle: BrandAnalyticsBundle) {
       totalSubmissions,
       totalViews,
       totalSpent,
-      totalPayoutsCents: totalPayoutsFromDaily,
+      totalPayoutsCents,
       effectiveCpm,
       avgCostPerView: Math.round(avgCostPerView * 100) / 100,
       avgCostPerSubmission: Math.round(avgCostPerSubmission * 100) / 100,
@@ -503,15 +514,177 @@ export function buildBrandOverviewResponse(bundle: BrandAnalyticsBundle) {
   };
 }
 
+export async function buildBrandContestsResponse(
+  bundle: BrandAnalyticsBundle,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+) {
+  const { ctx, allBrandContests } = bundle;
+  const isPc = ctx.dataSource === "pc_submissions";
+
+  let list = allBrandContests.filter((c) => {
+    if (ctx.contestTypeSet !== null) {
+      if (
+        !ctx.contestTypeSet.has((c.contest_type ?? "").toString().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+    const allowed = resolveAllowedPlatforms(ctx);
+    return allowed.includes(normalizeBrandPlatformKey(c));
+  });
+
+  if (isPc) {
+    const pcIdSet = new Set(
+      bundle.contestRollup
+        .map((row) => row.contest_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    list = list.filter(
+      (c) =>
+        normalizeBrandPlatformKey(c) !== "twitter" && pcIdSet.has(c.id),
+    );
+  }
+
+  if (ctx.contestIdSet !== null) {
+    list = list.filter((c) => ctx.contestIdSet!.has(c.id));
+  }
+
+  list = contestsWithActivity(list, bundle);
+
+  const budgetSubmissionsByContest = await fetchBrandContestBudgetSubmissions(
+    supabase,
+    list,
+    ctx,
+  );
+  const twitterContestIds = list
+    .filter((c) => normalizeBrandPlatformKey(c) === "twitter")
+    .map((c) => c.id);
+  const twitterLeaderboardPaidByContest =
+    await fetchTwitterLeaderboardPaidByContest(supabase, twitterContestIds);
+
+  type ContestMetrics = {
+    totalViews: number;
+    totalSubmissions: number;
+    totalSpent: number;
+    avgViewsPerSubmission: number;
+    costPerView: number;
+    roi: number;
+  };
+
+  const contestsWithMetrics = list.map((contest) => {
+    const activity = getContestActivityTotals(contest, bundle);
+    const platform = normalizeBrandPlatformKey(contest);
+    const isTwitter = platform === "twitter";
+    const budgetSubmissions = budgetSubmissionsByContest.get(contest.id) ?? [];
+
+    const twitterMetrics = isTwitter
+      ? {
+          likes: activity.likes,
+          replies: activity.comments,
+          retweets: activity.retweets,
+          quote_reposts: activity.quoteReposts || 0,
+          impressions: activity.views,
+        }
+      : undefined;
+
+    const submissions =
+      activity.submissions > 0
+        ? [
+            {
+              id: isTwitter ? "twitter-aggregate" : "aggregate",
+              views: activity.views,
+              other_stats: isTwitter
+                ? { twitter: twitterMetrics, x: twitterMetrics }
+                : undefined,
+              status: "verified",
+              created_at: contest.created_at,
+            },
+          ]
+        : [];
+
+    const budgetTile = resolveContestBudgetTile(
+      contest,
+      budgetSubmissions,
+      twitterLeaderboardPaidByContest.get(contest.id),
+    );
+    const totalSpent = budgetTile?.numeratorCents ?? 0;
+
+    const totalViews = activity.views;
+    const totalSubmissions = activity.submissions;
+    const avgViewsPerSubmission =
+      totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
+    const costPerView = totalViews > 0 ? totalSpent / totalViews : 0;
+    const roi =
+      totalViews > 0 && totalSpent > 0
+        ? (totalViews / totalSpent) * 100
+        : 0;
+
+    const out: Record<string, unknown> = {
+      ...contest,
+      submissions,
+      live_submission_count: totalSubmissions,
+      budgetTile,
+      metrics: {
+        totalViews,
+        totalSubmissions,
+        totalSpent,
+        avgViewsPerSubmission: Math.round(avgViewsPerSubmission * 100) / 100,
+        costPerView: Math.round(costPerView * 100) / 100,
+        roi: Math.round(roi * 100) / 100,
+      } satisfies ContestMetrics,
+    };
+    if (twitterMetrics) {
+      out.twitter_metrics = twitterMetrics;
+    }
+    return out;
+  });
+
+  const totalContests = contestsWithMetrics.length;
+  const totalViews = contestsWithMetrics.reduce(
+    (sum, contest) =>
+      sum + ((contest.metrics as ContestMetrics).totalViews || 0),
+    0,
+  );
+  const totalSubmissions = contestsWithMetrics.reduce(
+    (sum, contest) =>
+      sum + ((contest.metrics as ContestMetrics).totalSubmissions || 0),
+    0,
+  );
+  const totalSpent = contestsWithMetrics.reduce(
+    (sum, contest) =>
+      sum + ((contest.metrics as ContestMetrics).totalSpent || 0),
+    0,
+  );
+  const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
+
+  return {
+    dataSource: ctx.dataSource,
+    contests: contestsWithMetrics,
+    summary: {
+      totalContests,
+      totalViews,
+      totalSubmissions,
+      totalSpent,
+      avgViewsPerContest: totalContests > 0 ? totalViews / totalContests : 0,
+      avgSubmissionsPerContest:
+        totalContests > 0 ? totalSubmissions / totalContests : 0,
+      avgSpentPerContest: totalContests > 0 ? totalSpent / totalContests : 0,
+      avgCostPerView: Math.round(avgCostPerView * 100) / 100,
+    },
+  };
+}
+
 export function buildBrandGraphResponse(
   bundle: BrandAnalyticsBundle,
   activeFilter: string,
 ) {
-  const includeTwitter =
-    bundle.ctx.dataSource !== "pc_submissions" && bundle.ctx.twitterAnalytics;
+  const { includeVideo, includeTwitter } = resolveBrandMetricPlatformScope(
+    bundle.ctx,
+  );
 
   const result = buildBrandAnalyticsGraphFromDailyRows({
-    dailyRows: bundle.dailyRows,
+    dailyRows: includeVideo ? bundle.dailyRows : [],
     twitterDaily: includeTwitter ? bundle.twitterDaily : [],
     from: bundle.ctx.dateFrom,
     to: bundle.ctx.dateTo,
@@ -531,60 +704,70 @@ export function buildBrandDetailedResponse(
   twitterLeaderboardPayoutsCents: number,
 ) {
   const { ctx, scopedContests, dailyRows, twitterDaily } = bundle;
-  const video = sumDailyRows(dailyRows, ctx);
-  const twitter = sumTwitterDailyRows(twitterDaily, ctx);
-  const videoAll = sumDailyRows(dailyRows, ctx, { allStatuses: true });
-  const twitterAll = sumTwitterDailyRows(twitterDaily, ctx, { allStatuses: true });
+  const { includeVideo, includeTwitter } = resolveBrandMetricPlatformScope(ctx);
+  const videoDailyRows = includeVideo ? dailyRows : [];
+  const twitterDailyRows = includeTwitter ? twitterDaily : [];
+
+  const video = sumDailyRows(videoDailyRows, ctx);
+  const twitter = sumTwitterDailyRows(twitterDailyRows, ctx);
+  const videoAll = sumDailyRows(videoDailyRows, ctx, { allStatuses: true });
+  const twitterAll = sumTwitterDailyRows(twitterDailyRows, ctx, {
+    allStatuses: true,
+  });
 
   const totalSubmissions = video.submissions + twitter.submissions;
   const totalViews = video.views + twitter.views;
 
   const statusFilterActive = hasStatusFilter(ctx);
   const statusCounts = statusFilterActive
-    ? countByStatusFiltered(dailyRows, twitterDaily, ctx)
-    : countByStatusFromDaily(dailyRows, twitterDaily);
+    ? countByStatusFiltered(videoDailyRows, twitterDailyRows, ctx)
+    : countByStatusFromDaily(videoDailyRows, twitterDailyRows);
+  const twitterStatusCounts = statusFilterActive
+    ? countByStatusFiltered([], twitterDailyRows, ctx)
+    : countByStatusFromDaily([], twitterDailyRows);
 
   const viewsFilterCtx = statusFilterActive ? ctx : undefined;
   const viewsByStatusYoutubeInstagram = {
     expected: countViewsByStatus(
-      dailyRows,
+      videoDailyRows,
       ["pending", "verified", "paid"],
       viewsFilterCtx,
     ),
-    verified: countViewsByStatus(dailyRows, ["verified"], viewsFilterCtx),
-    pending: countViewsByStatus(dailyRows, ["pending"], viewsFilterCtx),
-    rejected: countViewsByStatus(dailyRows, ["rejected"], viewsFilterCtx),
-    paid: countViewsByStatus(dailyRows, ["paid"], viewsFilterCtx),
+    verified: countViewsByStatus(videoDailyRows, ["verified"], viewsFilterCtx),
+    pending: countViewsByStatus(videoDailyRows, ["pending"], viewsFilterCtx),
+    rejected: countViewsByStatus(videoDailyRows, ["rejected"], viewsFilterCtx),
+    paid: countViewsByStatus(videoDailyRows, ["paid"], viewsFilterCtx),
     total: statusFilterActive ? video.views : videoAll.views,
   };
 
   const viewsByStatusTwitter = {
     expected: countTwitterViewsByStatus(
-      twitterDaily,
+      twitterDailyRows,
       ["pending", "verified", "paid"],
       viewsFilterCtx,
     ),
     verified: countTwitterViewsByStatus(
-      twitterDaily,
+      twitterDailyRows,
       ["verified"],
       viewsFilterCtx,
     ),
     pending: countTwitterViewsByStatus(
-      twitterDaily,
+      twitterDailyRows,
       ["pending"],
       viewsFilterCtx,
     ),
     rejected: countTwitterViewsByStatus(
-      twitterDaily,
+      twitterDailyRows,
       ["rejected"],
       viewsFilterCtx,
     ),
-    paid: countTwitterViewsByStatus(twitterDaily, ["paid"], viewsFilterCtx),
+    paid: countTwitterViewsByStatus(twitterDailyRows, ["paid"], viewsFilterCtx),
     total: statusFilterActive ? twitter.views : twitterAll.views,
   };
 
   const totalPayoutsCents =
-    videoAll.payoutsCents + twitterLeaderboardPayoutsCents;
+    video.payoutsCents +
+    (includeTwitter ? twitterLeaderboardPayoutsCents : 0);
 
   let topContest: BrandContestRow | null = null;
   let topViews = -1;
@@ -625,6 +808,7 @@ export function buildBrandDetailedResponse(
     ps.likes += activity.likes;
     ps.comments += activity.comments;
     ps.shares += activity.shares;
+    ps.retweets = (ps.retweets || 0) + (activity.retweets || 0);
     ps.quote_reposts =
       (ps.quote_reposts || 0) + (activity.quoteReposts || 0);
     ps.spent += getContestSpent(contest);
@@ -657,14 +841,14 @@ export function buildBrandDetailedResponse(
     views: statusFilterActive ? twitter.views : twitterAll.views,
     likes: statusFilterActive ? twitter.likes : twitterAll.likes,
     replies: statusFilterActive ? twitter.comments : twitterAll.comments,
-    retweets: statusFilterActive ? twitter.shares : twitterAll.shares,
+    retweets: statusFilterActive ? twitter.retweets : twitterAll.retweets,
     quote_reposts: statusFilterActive
       ? twitter.quoteReposts
       : twitterAll.quoteReposts,
-    verified: statusCounts.verified,
-    paid: statusCounts.paid,
-    pending: statusCounts.pending,
-    rejected: statusCounts.rejected,
+    verified: twitterStatusCounts.verified,
+    paid: twitterStatusCounts.paid,
+    pending: twitterStatusCounts.pending,
+    rejected: twitterStatusCounts.rejected,
   };
 
   const totalContests = scopedContests.length;
@@ -707,7 +891,7 @@ export function buildBrandDetailedResponse(
     totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
   const engagementRate =
     totalViews > 0
-      ? ((video.likes + twitter.likes + video.comments + twitter.comments + video.shares + twitter.shares) /
+      ? ((video.likes + twitter.likes + video.comments + twitter.comments + video.shares + twitter.retweets) /
           totalViews) *
         100
       : 0;
@@ -761,7 +945,7 @@ export function buildBrandDetailedResponse(
       viewsByStatusTwitter,
       totalLikes: video.likes + twitter.likes,
       totalComments: video.comments + twitter.comments,
-      totalShares: video.shares + twitter.shares,
+      totalShares: video.shares,
       totalQuoteReposts: twitter.quoteReposts,
       totalMoneyPaid: financials.totalMoneyPaid,
       totalProjectedSpent: financials.totalProjectedSpent,
@@ -821,7 +1005,7 @@ export async function buildBrandCreatorsResponse(
   bundle: BrandAnalyticsCreatorsBundle,
   supabase: ReturnType<typeof import("@/utils/supabase/admin").createAdminClient>,
   limit: number,
-  twitterLeaderboardByCreator: Map<string, number>,
+  twitterEarningsByCreator: Map<string, number>,
 ) {
   const ctx = bundle.ctx;
   type CreatorAcc = {
@@ -916,8 +1100,6 @@ export async function buildBrandCreatorsResponse(
     acc.submissionsTwitter += row.submission_count;
     acc.platforms.add("twitter");
     acc.contestTypes.add(row.contest_type);
-    const lb = twitterLeaderboardByCreator.get(id) ?? 0;
-    acc.totalEarnings += lb;
     const first = row.first_created_at ? new Date(row.first_created_at) : null;
     const last = row.last_created_at ? new Date(row.last_created_at) : null;
     if (first && (!acc.firstSubmission || first < acc.firstSubmission)) {
@@ -928,7 +1110,7 @@ export async function buildBrandCreatorsResponse(
     }
   }
 
-  for (const [creatorId, earnings] of twitterLeaderboardByCreator) {
+  for (const [creatorId, earnings] of twitterEarningsByCreator) {
     if (!creatorStats[creatorId]) continue;
     creatorStats[creatorId].totalEarnings += earnings;
   }
@@ -968,10 +1150,10 @@ export async function buildBrandCreatorsResponse(
     }
   }
 
-  const creatorsLeaderboard = Object.values(creatorStats)
-    .filter((c) => c.creator != null)
-    .map((creator) => ({
+  const creatorsLeaderboard = Object.entries(creatorStats).map(
+    ([id, creator]) => ({
       ...creator,
+      creator: creator.creator ?? { id, username: null },
       platforms: Array.from(creator.platforms),
       contestTypes: Array.from(creator.contestTypes),
       avgViewsPerSubmission:
@@ -998,7 +1180,8 @@ export async function buildBrandCreatorsResponse(
                 (1000 * 60 * 60 * 24),
             )
           : 0,
-    }));
+    }),
+  );
 
   const topByViews = [...creatorsLeaderboard]
     .sort((a, b) => b.totalViews - a.totalViews)
@@ -1012,7 +1195,6 @@ export async function buildBrandCreatorsResponse(
 
   const video = sumDailyRows(bundle.dailyRows, ctx);
   const twitter = sumTwitterDailyRows(bundle.twitterDaily, ctx);
-  const videoAll = sumDailyRows(bundle.dailyRows, ctx, { allStatuses: true });
 
   const platformDemographics: Record<string, number> = {};
   for (const row of bundle.creatorRollup) {
@@ -1048,10 +1230,10 @@ export async function buildBrandCreatorsResponse(
   ]).size;
   const totalSubmissions = video.submissions + twitter.submissions;
   const totalViews = video.views + twitter.views;
-  let totalEarnings = videoAll.payoutsCents;
-  for (const earnings of twitterLeaderboardByCreator.values()) {
-    totalEarnings += earnings;
-  }
+  const totalEarnings = Object.values(creatorStats).reduce(
+    (sum, creator) => sum + creator.totalEarnings,
+    0,
+  );
   const totalPayoutsCents = totalEarnings;
 
   return {

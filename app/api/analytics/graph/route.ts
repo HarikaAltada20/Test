@@ -5,6 +5,7 @@ import {
   resolveBrandActiveFilter,
 } from "@/lib/brand-analytics-context";
 import { getCachedBrandAnalyticsBundle } from "@/lib/brand-analytics-cache";
+import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
 import { buildBrandGraphResponse } from "@/lib/brand-analytics-response";
 
 export async function GET(request: NextRequest) {
@@ -43,10 +44,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Brand analytics graph error:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to load analytics",
-      },
+      { error: brandAnalyticsClientErrorMessage(error, "Failed to load analytics") },
       { status: 500 },
     );
   }

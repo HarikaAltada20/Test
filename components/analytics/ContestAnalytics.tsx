@@ -96,7 +96,11 @@ export default function ContestAnalytics({
   const calculateSummaryStats = () => {
     // Use filtered contests for summary stats
     const totalSubmissions = filteredContests.reduce(
-      (sum, contest) => sum + (contest.submissions?.length || 0),
+      (sum, contest) =>
+        sum +
+        (contest.live_submission_count ??
+          contest.submissions?.length ??
+          0),
       0,
     );
     const totalViews = filteredContests.reduce(

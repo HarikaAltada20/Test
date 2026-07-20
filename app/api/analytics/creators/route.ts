@@ -5,8 +5,11 @@ import { parseBrandAnalyticsContext } from "@/lib/brand-analytics-context";
 import {
   getCachedBrandAnalyticsCreatorsBundle,
   statusMatchesFilter,
+  twitterContestIdsWithRollupActivity,
 } from "@/lib/brand-analytics-cache";
 import { buildBrandCreatorsResponse } from "@/lib/brand-analytics-response";
+import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
+import { fetchTwitterEarningsCentsByCreator } from "@/lib/brand-analytics-payouts";
 
 async function buildCreatorDetailResponse(
   advertiserId: string,
@@ -83,7 +86,11 @@ async function buildCreatorDetailResponse(
       row.earnings_cents_sum,
     );
     if (row.first_created_at) {
-      const month = new Date(row.first_created_at).toISOString().slice(0, 7);
+      const month = new Date(
+        row.last_created_at ?? row.first_created_at,
+      )
+        .toISOString()
+        .slice(0, 7);
       addBucket(
         performanceTimeline,
         month,
@@ -114,7 +121,11 @@ async function buildCreatorDetailResponse(
       0,
     );
     if (row.first_created_at) {
-      const month = new Date(row.first_created_at).toISOString().slice(0, 7);
+      const month = new Date(
+        row.last_created_at ?? row.first_created_at,
+      )
+        .toISOString()
+        .slice(0, 7);
       addBucket(
         performanceTimeline,
         month,
@@ -126,13 +137,25 @@ async function buildCreatorDetailResponse(
   }
 
   if (bundle.twitterContestIds.length > 0) {
-    const { data: lbRows } = await supabase
-      .from("twitter_campaign_leaderboard")
-      .select("earnings")
-      .in("contest_id", bundle.twitterContestIds)
-      .eq("creator_id", creatorId);
-    for (const row of lbRows ?? []) {
-      totalEarnings += Number(row.earnings ?? 0) || 0;
+    const twitterContestIds = twitterContestIdsWithRollupActivity(
+      bundle.twitterContestRollup,
+    );
+    if (twitterContestIds.length > 0) {
+      const earningsByCreator = await fetchTwitterEarningsCentsByCreator(
+        supabase,
+        twitterContestIds,
+        ctx.ctx.dateFrom,
+        ctx.ctx.dateTo,
+        ctx.ctx,
+        creatorId,
+      );
+      for (const earnings of earningsByCreator.values()) {
+        totalEarnings += earnings;
+      }
+      const twitterEarnings = earningsByCreator.get(creatorId) ?? 0;
+      if (twitterEarnings > 0) {
+        addBucket(platformStats, "twitter", 0, 0, twitterEarnings);
+      }
     }
   }
 
@@ -252,20 +275,20 @@ export async function GET(request: NextRequest) {
     const bundle = await getCachedBrandAnalyticsCreatorsBundle(parsed.ctx);
     const admin = createAdminClient();
 
-    const twitterLeaderboardByCreator = new Map<string, number>();
-    if (bundle.twitterContestIds.length > 0) {
-      const { data: leaderboard } = await admin
-        .from("twitter_campaign_leaderboard")
-        .select("creator_id, earnings")
-        .in("contest_id", bundle.twitterContestIds);
-      for (const row of leaderboard ?? []) {
-        const id = String(row.creator_id ?? "");
-        if (!id) continue;
-        twitterLeaderboardByCreator.set(
-          id,
-          (twitterLeaderboardByCreator.get(id) ?? 0) +
-            (Number(row.earnings ?? 0) || 0),
-        );
+    const twitterEarningsByCreator = new Map<string, number>();
+    const twitterContestIds = twitterContestIdsWithRollupActivity(
+      bundle.twitterContestRollup,
+    );
+    if (twitterContestIds.length > 0) {
+      const earningsByCreator = await fetchTwitterEarningsCentsByCreator(
+        admin,
+        twitterContestIds,
+        parsed.ctx.dateFrom,
+        parsed.ctx.dateTo,
+        parsed.ctx,
+      );
+      for (const [creatorId, earnings] of earningsByCreator) {
+        twitterEarningsByCreator.set(creatorId, earnings);
       }
     }
 
@@ -273,17 +296,14 @@ export async function GET(request: NextRequest) {
       bundle,
       admin,
       limit,
-      twitterLeaderboardByCreator,
+      twitterEarningsByCreator,
     );
 
     return NextResponse.json(response);
   } catch (error) {
     console.error("Analytics creators error:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: brandAnalyticsClientErrorMessage(error) },
       { status: 500 },
     );
   }

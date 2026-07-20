@@ -475,13 +475,20 @@ export async function syncPostCampaignFromSubmissions(
     contestId,
     overwriteMetrics,
   );
-  if (rpcResult) return rpcResult;
+  const result =
+    rpcResult ??
+    (await syncPostCampaignFromSubmissionsClient(
+      supabaseAdmin,
+      contestId,
+      overwriteMetrics,
+    ));
 
-  return syncPostCampaignFromSubmissionsClient(
-    supabaseAdmin,
-    contestId,
-    overwriteMetrics,
+  const { revalidateBrandAnalyticsCache } = await import(
+    "@/lib/brand-analytics-cache"
   );
+  revalidateBrandAnalyticsCache();
+
+  return result;
 }
 
 /**

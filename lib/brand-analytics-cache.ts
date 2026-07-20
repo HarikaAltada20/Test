@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   ADMIN_ANALYTICS_BASE_STATUSES,
@@ -12,6 +12,28 @@ import { normalizeBrandPlatformKey } from "@/lib/brand-analytics-graph";
 
 export const BRAND_ANALYTICS_CACHE_SECONDS = 5 * 60;
 export const BRAND_ANALYTICS_CACHE_TAG = "brand-analytics";
+
+/** Invalidate cached brand analytics bundles after submission or PC metric updates. */
+export function revalidateBrandAnalyticsCache(): void {
+  try {
+    revalidateTag(BRAND_ANALYTICS_CACHE_TAG);
+  } catch (e) {
+    console.warn("[brand-analytics-cache] revalidateTag failed:", e);
+  }
+}
+
+/** Contest IDs with at least one Twitter submission in the current rollup scope. */
+export function twitterContestIdsWithRollupActivity(
+  rollup: BrandTwitterContestRow[],
+): string[] {
+  const ids = new Set<string>();
+  for (const row of rollup) {
+    if (row.submission_count > 0) {
+      ids.add(row.contest_id);
+    }
+  }
+  return [...ids];
+}
 
 export type BrandContestRow = {
   id: string;
@@ -27,6 +49,8 @@ export type BrandContestRow = {
   status?: string | null;
   post_contest_status?: string | null;
   payment_details?: unknown;
+  max_earnings_per_creator?: number | null;
+  thumbnail_url?: string | null;
 };
 
 export type BrandContestRollupRow = {
@@ -489,7 +513,7 @@ async function fetchAdvertiserContests(
     const { data, error } = await supabase
       .from("contests_with_status")
       .select(
-        "id, title, platform, contest_type, start_date, end_date, created_at, contest_based_details, live_submission_count, moderation_status, status, post_contest_status, payment_details",
+        "id, title, platform, contest_type, start_date, end_date, created_at, contest_based_details, live_submission_count, moderation_status, status, post_contest_status, payment_details, max_earnings_per_creator, thumbnail_url",
       )
       .eq("advertiser_id", advertiserId)
       .order("created_at", { ascending: false })
@@ -531,12 +555,31 @@ export function resolveAllowedPlatforms(ctx: BrandAnalyticsQueryContext): string
   }
 
   if (platforms.length === 0) {
+    if (ctx.contentType === "text_image") {
+      return !isPc && ctx.twitterAnalytics ? ["twitter"] : [];
+    }
     return isPc
       ? ["youtube", "instagram", "tiktok"]
       : ["youtube", "instagram", "tiktok", "twitter"];
   }
 
   return platforms;
+}
+
+/** Which platform buckets to include in submission/view metric totals for the current filter. */
+export function resolveBrandMetricPlatformScope(
+  ctx: BrandAnalyticsQueryContext,
+): { includeVideo: boolean; includeTwitter: boolean } {
+  const allowed = new Set(resolveAllowedPlatforms(ctx));
+  return {
+    includeVideo: (["youtube", "instagram", "tiktok"] as const).some((p) =>
+      allowed.has(p),
+    ),
+    includeTwitter:
+      ctx.dataSource !== "pc_submissions" &&
+      ctx.twitterAnalytics &&
+      allowed.has("twitter"),
+  };
 }
 
 export function resolveStatusBases(ctx: BrandAnalyticsQueryContext): AdminAnalyticsBaseStatus[] {
@@ -564,6 +607,19 @@ export function statusMatchesFilter(
   if (normalized === "unknown") return false;
   const bases = resolveStatusBases(ctx);
   return bases.includes(normalized);
+}
+
+export function hasBrandAnalyticsStatusFilter(
+  ctx: BrandAnalyticsQueryContext,
+): boolean {
+  return (
+    ctx.notRejected ||
+    Boolean(
+      ctx.submissionStatus &&
+        ctx.submissionStatus !== "all" &&
+        ctx.submissionStatus.trim() !== "",
+    )
+  );
 }
 
 function filterContests(
@@ -756,8 +812,9 @@ async function fetchCreatorRollupFromPc(
     );
     if (error) {
       if (isMissingRpcError(error)) {
-        // Fall back to standard creator rollup on submissions if PC-specific RPC missing
-        return fetchCreatorRollup(supabase, contestIds, fromIso, toIso);
+        throw new Error(
+          "Brand analytics PC creator RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
+        );
       }
       throw new Error(`Failed to load PC creator rollup: ${error.message}`);
     }
@@ -984,13 +1041,14 @@ export function twitterContestTotalsFromRollup(
   likes: number;
   comments: number;
   shares: number;
+  retweets: number;
   quoteReposts: number;
 } {
   let submissions = 0;
   let views = 0;
   let likes = 0;
   let comments = 0;
-  let shares = 0;
+  let retweets = 0;
   let quoteReposts = 0;
 
   for (const row of rollup) {
@@ -1000,11 +1058,19 @@ export function twitterContestTotalsFromRollup(
     views += row.views_sum;
     likes += row.likes_sum;
     comments += row.comments_sum;
-    shares += row.shares_sum;
+    retweets += row.shares_sum;
     quoteReposts += row.quote_reposts_sum;
   }
 
-  return { submissions, views, likes, comments, shares, quoteReposts };
+  return {
+    submissions,
+    views,
+    likes,
+    comments,
+    shares: 0,
+    retweets,
+    quoteReposts,
+  };
 }
 
 export function sumDailyRows(
@@ -1053,13 +1119,14 @@ export function sumTwitterDailyRows(
   likes: number;
   comments: number;
   shares: number;
+  retweets: number;
   quoteReposts: number;
 } {
   let submissions = 0;
   let views = 0;
   let likes = 0;
   let comments = 0;
-  let shares = 0;
+  let retweets = 0;
   let quoteReposts = 0;
 
   for (const row of rows) {
@@ -1072,11 +1139,19 @@ export function sumTwitterDailyRows(
     views += row.views_sum;
     likes += row.likes_sum;
     comments += row.comments_sum;
-    shares += row.shares_sum;
+    retweets += row.shares_sum;
     quoteReposts += row.quote_reposts_sum;
   }
 
-  return { submissions, views, likes, comments, shares, quoteReposts };
+  return {
+    submissions,
+    views,
+    likes,
+    comments,
+    shares: 0,
+    retweets,
+    quoteReposts,
+  };
 }
 
 export function countByStatusFromDaily(

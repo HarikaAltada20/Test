@@ -2,22 +2,14 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 import { parseBrandAnalyticsContext } from "@/lib/brand-analytics-context";
-import { getCachedBrandAnalyticsBundle } from "@/lib/brand-analytics-cache";
+import {
+  getCachedBrandAnalyticsBundle,
+  resolveBrandMetricPlatformScope,
+  twitterContestIdsWithRollupActivity,
+} from "@/lib/brand-analytics-cache";
 import { buildBrandOverviewResponse } from "@/lib/brand-analytics-response";
-import { sumTwitterLeaderboardPayoutsCents } from "@/lib/brand-analytics-payouts";
-
-async function fetchTwitterLeaderboardPayoutsCents(
-  twitterContestIds: string[],
-): Promise<number> {
-  if (twitterContestIds.length === 0) return 0;
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("twitter_campaign_leaderboard")
-    .select("earnings")
-    .in("contest_id", twitterContestIds);
-  if (error) return 0;
-  return sumTwitterLeaderboardPayoutsCents(data ?? []);
-}
+import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
+import { resolveBrandTwitterPayoutsCents } from "@/lib/brand-analytics-payouts";
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,22 +41,29 @@ export async function GET(request: NextRequest) {
     }
 
     const bundle = await getCachedBrandAnalyticsBundle(parsed.ctx);
-    const response = buildBrandOverviewResponse(bundle);
 
-    const twitterPayouts = await fetchTwitterLeaderboardPayoutsCents(
-      bundle.twitterContestIds,
-    );
-    response.overview.totalPayoutsCents =
-      response.overview.totalPayoutsCents + twitterPayouts;
+    const platformScope = resolveBrandMetricPlatformScope(parsed.ctx);
+    const twitterContestIds = platformScope.includeTwitter
+      ? twitterContestIdsWithRollupActivity(bundle.twitterContestRollup)
+      : [];
+
+    let twitterPayoutsCents = 0;
+    if (twitterContestIds.length > 0) {
+      const admin = createAdminClient();
+      twitterPayoutsCents = await resolveBrandTwitterPayoutsCents(
+        admin,
+        twitterContestIds,
+        parsed.ctx,
+      );
+    }
+
+    const response = buildBrandOverviewResponse(bundle, twitterPayoutsCents);
 
     return NextResponse.json(response);
   } catch (error) {
     console.error("Analytics overview error:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: brandAnalyticsClientErrorMessage(error) },
       { status: 500 },
     );
   }

@@ -353,7 +353,7 @@ export function buildBrandAnalyticsGraphFromDailyRows(
       Number(row.views_sum) || 0,
       Number(row.likes_sum) || 0,
       Number(row.comments_sum) || 0,
-      Number(row.shares_sum) || 0,
+      0,
       true,
     );
   }
