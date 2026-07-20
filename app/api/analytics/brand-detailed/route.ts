@@ -667,7 +667,8 @@ export async function GET(request: NextRequest) {
         0,
       ) || 0) + twitterTotals.retweets;
 
-    // Financial metrics
+    // Financial metrics — scoped to campaigns with submission activity in the
+    // current filter set (date range, status, platform, campaign selection).
     const parsePayment = (pd: any) => {
       if (!pd) return null;
       try {
@@ -677,7 +678,18 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    const totalMoneyPaid = contests.reduce((sum: number, c: any) => {
+    const contestsForFinancial = contestsWithSubmissions.filter(
+      (contest: any) => {
+        const platform = normalizePlatformKey(contest);
+        if (platform === "twitter") {
+          return (twitterTotals.byContest[contest.id]?.submissions || 0) > 0;
+        }
+        return (contest.submissions?.length || 0) > 0;
+      },
+    );
+
+    const totalMoneyPaid = contestsForFinancial.reduce((sum: number, c: any) => {
+      if (c.moderation_status !== "published") return sum;
       const pd = parsePayment(c.payment_details);
       if (
         pd?.payment_status === "completed" &&
@@ -688,7 +700,8 @@ export async function GET(request: NextRequest) {
       return sum;
     }, 0);
 
-    const totalProjectedSpent = contests.reduce((sum: number, c: any) => {
+    const totalProjectedSpent = contestsForFinancial.reduce(
+      (sum: number, c: any) => {
       const details = c?.contest_based_details || {};
       if (
         c.contest_type === "leaderboard" &&
@@ -708,7 +721,8 @@ export async function GET(request: NextRequest) {
       return sum;
     }, 0);
 
-    const moneyPaidUnpublished = contests.reduce((sum: number, c: any) => {
+    const moneyPaidUnpublished = contestsForFinancial.reduce(
+      (sum: number, c: any) => {
       const pd = parsePayment(c.payment_details);
       if (
         c.moderation_status !== "published" &&
@@ -720,7 +734,8 @@ export async function GET(request: NextRequest) {
       return sum;
     }, 0);
 
-    const moneyInDraftNotPaid = contests.reduce((sum: number, c: any) => {
+    const moneyInDraftNotPaid = contestsForFinancial.reduce(
+      (sum: number, c: any) => {
       if (c.moderation_status !== "draft") return sum;
       const details = c?.contest_based_details || {};
       if (
@@ -742,7 +757,7 @@ export async function GET(request: NextRequest) {
     }, 0);
 
     // Payment breakdown
-    const paymentsBreakdown = contests.reduce(
+    const paymentsBreakdown = contestsForFinancial.reduce(
       (acc: any, c: any) => {
         const pd = parsePayment(c.payment_details);
         if (pd?.payment_status === "completed") {

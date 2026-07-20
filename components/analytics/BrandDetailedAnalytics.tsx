@@ -65,9 +65,10 @@ export default function BrandDetailedAnalytics({
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const url = `/api/analytics/brand-detailed?${analyticsQueryString}`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: "no-store" });
 
       if (!response.ok) {
         throw new Error("Failed to fetch analytics data");
@@ -83,7 +84,7 @@ export default function BrandDetailedAnalytics({
     }
   };
 
-  if (loading) {
+  if (loading && !analyticsData) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
