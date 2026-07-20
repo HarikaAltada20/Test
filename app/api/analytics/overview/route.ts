@@ -1,6 +1,21 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  parseBrandAnalyticsDateRange,
+  parseBrandContestIdSet,
+  parseBrandContestTypeSet,
+  parseBrandAnalyticsSource,
+  validateBrandAnalyticsDateRange,
+} from "@/lib/brand-analytics-query";
+import {
+  fetchBrandPcSubmissionsAsAnalyticsRows,
+  fetchBrandPcCampaignIdsInRange,
+} from "@/lib/brand-analytics-pc-submissions";
+import {
+  fetchBrandTotalPayoutsCents,
+  sumSubmissionPayoutsCents,
+} from "@/lib/brand-analytics-payouts";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,14 +32,16 @@ export async function GET(request: NextRequest) {
     const submissionStatusRaw = searchParams.get("status");
     const submissionStatus = submissionStatusRaw?.trim().toLowerCase() || null;
     const notRejected = searchParams.get("notRejected") === "true";
-    const contestTypeFilter = (searchParams.get("type") ?? "all")
-      .trim()
-      .toLowerCase() as
-      | "all"
-      | "leaderboard"
-      | "cpm"
-      | "milestone"
-      | "dual_rewards";
+    const contestIdSet = parseBrandContestIdSet(searchParams);
+    const contestTypeSet = parseBrandContestTypeSet(searchParams);
+    const dateRange = parseBrandAnalyticsDateRange(searchParams);
+    const dateValidation = validateBrandAnalyticsDateRange(dateRange);
+    if (!dateValidation.ok) {
+      return NextResponse.json({ error: dateValidation.error }, { status: 400 });
+    }
+    const { from: dateFrom, to: dateTo } = dateRange;
+    const source = parseBrandAnalyticsSource(searchParams);
+    const isPc = source === "pc_submissions";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -34,7 +51,9 @@ export async function GET(request: NextRequest) {
     const tiktokParam = searchParams.get("tiktok");
     const tiktokAnalytics = tiktokParam === "true" || tiktokParam === "1";
     const twitterParam = searchParams.get("twitter");
-    const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
+    const twitterAnalytics = isPc
+      ? false
+      : twitterParam === "true" || twitterParam === "1";
 
     // Get user type
     const { data: userData } = await supabase
@@ -85,56 +104,104 @@ export async function GET(request: NextRequest) {
       contestRangeFrom += CHUNK_CONTEST;
     }
 
+    // Full brand contest list (before campaign-id filtering) so the campaign
+    // dropdown always shows every campaign in the type/platform scope.
+    const allBrandContests = contests.slice();
+
+    if (contestIdSet !== null) {
+      contests = contests.filter((c) => contestIdSet.has(c.id));
+    }
+
     const advertiserContestIds = contests?.map((c) => c.id) || [];
 
-    // 2. Fetch submissions for these contests in chunks to avoid Supabase's 1000-row limit
+    // 2. Fetch submissions (or PC overlay rows) for these contests
     let allSubmissions: any[] = [];
     if (advertiserContestIds.length > 0) {
-      const CHUNK = 1000;
-      const CONTEST_ID_CHUNK = 200;
-      for (let idFrom = 0; idFrom < advertiserContestIds.length; idFrom += CONTEST_ID_CHUNK) {
-        const contestIdChunk = advertiserContestIds.slice(
-          idFrom,
-          idFrom + CONTEST_ID_CHUNK,
-        );
-        let rangeFrom = 0;
-        while (true) {
-          let query = supabase.from("submissions").select(`
+      if (isPc) {
+        try {
+          allSubmissions = await fetchBrandPcSubmissionsAsAnalyticsRows(
+            supabase,
+            advertiserContestIds,
+            {
+              dateFrom,
+              dateTo,
+              notRejected,
+              submissionStatus,
+            },
+          );
+        } catch (error) {
+          console.error("Error fetching PC submissions:", error);
+          return NextResponse.json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to fetch PC submissions",
+            },
+            { status: 500 },
+          );
+        }
+      } else {
+        const CHUNK = 1000;
+        const CONTEST_ID_CHUNK = 200;
+        for (
+          let idFrom = 0;
+          idFrom < advertiserContestIds.length;
+          idFrom += CONTEST_ID_CHUNK
+        ) {
+          const contestIdChunk = advertiserContestIds.slice(
+            idFrom,
+            idFrom + CONTEST_ID_CHUNK,
+          );
+          let rangeFrom = 0;
+          while (true) {
+            let query = supabase
+              .from("submissions")
+              .select(
+                `
             id,
             views,
+            earnings,
+            bonus_amount,
             created_at,
             platform,
             creator_id,
             other_stats,
             status,
             contest_id
-          `)
-            .in("contest_id", contestIdChunk)
-            .range(rangeFrom, rangeFrom + CHUNK - 1);
+          `,
+              )
+              .in("contest_id", contestIdChunk)
+              .gte("created_at", dateFrom.toISOString())
+              .lte("created_at", dateTo.toISOString())
+              .range(rangeFrom, rangeFrom + CHUNK - 1);
 
-          // Apply status filter if provided
-          if (notRejected) {
-            query = query.neq("status", "rejected");
-          } else if (submissionStatus && submissionStatus !== "all") {
-            if (submissionStatus === "verifiedpaid") {
-              query = query.in("status", ["verified", "paid"]);
-            } else {
-              query = query.eq("status", submissionStatus);
+            if (notRejected) {
+              query = query.neq("status", "rejected");
+            } else if (submissionStatus && submissionStatus !== "all") {
+              if (submissionStatus === "verifiedpaid") {
+                query = query.in("status", ["verified", "paid"]);
+              } else {
+                query = query.eq("status", submissionStatus);
+              }
             }
-          }
 
-          const { data: chunk, error: submissionsError } = await query;
-          if (submissionsError) {
-            console.error("Error fetching submissions chunk:", submissionsError);
-            return NextResponse.json(
-              { error: "Failed to fetch submissions" },
-              { status: 500 },
-            );
+            const { data: chunk, error: submissionsError } = await query;
+            if (submissionsError) {
+              console.error(
+                "Error fetching submissions chunk:",
+                submissionsError,
+              );
+              return NextResponse.json(
+                { error: "Failed to fetch submissions" },
+                { status: 500 },
+              );
+            }
+            if (!chunk || chunk.length === 0) break;
+            allSubmissions = allSubmissions.concat(chunk);
+            if (chunk.length < CHUNK) break;
+            rangeFrom += CHUNK;
           }
-          if (!chunk || chunk.length === 0) break;
-          allSubmissions = allSubmissions.concat(chunk);
-          if (chunk.length < CHUNK) break;
-          rangeFrom += CHUNK;
         }
       }
     }
@@ -173,12 +240,14 @@ export async function GET(request: NextRequest) {
     }
 
     const contestsFilteredByType =
-      contestTypeFilter === "all"
+      contestTypeSet === null
         ? contestsWithSubmissions
-        : contestsWithSubmissions.filter(
-            (contest) =>
-              (contest as { contest_type?: string }).contest_type ===
-              contestTypeFilter,
+        : contestsWithSubmissions.filter((contest) =>
+            contestTypeSet.has(
+              ((contest as { contest_type?: string }).contest_type ?? "")
+                .toString()
+                .toLowerCase(),
+            ),
           );
 
     // Platform filter: video (youtube/instagram/tiktok) and/or text_image (twitter); both => all selected
@@ -247,8 +316,12 @@ export async function GET(request: NextRequest) {
     if (twitterContestIds.length > 0) {
       let tweetsQuery = supabase
         .from("twitter_campaign_tweets")
-        .select("contest_id, impressions, likes, replies, moderation_status")
-        .in("contest_id", twitterContestIds);
+        .select(
+          "contest_id, impressions, likes, replies, moderation_status, tweet_created_at",
+        )
+        .in("contest_id", twitterContestIds)
+        .gte("tweet_created_at", dateFrom.toISOString())
+        .lte("tweet_created_at", dateTo.toISOString());
       if (notRejected) {
         tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
       } else if (submissionStatus && submissionStatus !== "all") {
@@ -313,32 +386,69 @@ export async function GET(request: NextRequest) {
     const contestIdsAll = contestsFilteredByPlatform.map((c) => c.id);
     let allSubmissionsUnfiltered: any[] = [];
     if (contestIdsAll.length > 0) {
-      const CHUNK = 1000;
-      const CONTEST_ID_CHUNK = 200;
-      for (let idFrom = 0; idFrom < contestIdsAll.length; idFrom += CONTEST_ID_CHUNK) {
-        const contestIdChunk = contestIdsAll.slice(
-          idFrom,
-          idFrom + CONTEST_ID_CHUNK,
-        );
-        let rangeFrom = 0;
-        while (true) {
-          const { data: chunk, error: unfilteredError } = await supabase
-            .from("submissions")
-            .select("id, status, contest_id, other_stats")
-            .in("contest_id", contestIdChunk)
-            .range(rangeFrom, rangeFrom + CHUNK - 1);
-
-          if (unfilteredError) {
-            console.error("Error fetching unfiltered submissions:", unfilteredError);
-            return NextResponse.json(
-              { error: "Failed to fetch unfiltered submissions" },
-              { status: 500 },
+      if (isPc) {
+        try {
+          allSubmissionsUnfiltered =
+            await fetchBrandPcSubmissionsAsAnalyticsRows(
+              supabase,
+              contestIdsAll,
+              {
+                dateFrom,
+                dateTo,
+                // No status filter — full breakdown for tiles
+              },
             );
+        } catch (error) {
+          console.error("Error fetching unfiltered PC submissions:", error);
+          return NextResponse.json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to fetch unfiltered PC submissions",
+            },
+            { status: 500 },
+          );
+        }
+      } else {
+        const CHUNK = 1000;
+        const CONTEST_ID_CHUNK = 200;
+        for (
+          let idFrom = 0;
+          idFrom < contestIdsAll.length;
+          idFrom += CONTEST_ID_CHUNK
+        ) {
+          const contestIdChunk = contestIdsAll.slice(
+            idFrom,
+            idFrom + CONTEST_ID_CHUNK,
+          );
+          let rangeFrom = 0;
+          while (true) {
+            const { data: chunk, error: unfilteredError } = await supabase
+              .from("submissions")
+              .select(
+                "id, status, contest_id, other_stats, earnings, bonus_amount",
+              )
+              .in("contest_id", contestIdChunk)
+              .gte("created_at", dateFrom.toISOString())
+              .lte("created_at", dateTo.toISOString())
+              .range(rangeFrom, rangeFrom + CHUNK - 1);
+
+            if (unfilteredError) {
+              console.error(
+                "Error fetching unfiltered submissions:",
+                unfilteredError,
+              );
+              return NextResponse.json(
+                { error: "Failed to fetch unfiltered submissions" },
+                { status: 500 },
+              );
+            }
+            if (!chunk || chunk.length === 0) break;
+            allSubmissionsUnfiltered = allSubmissionsUnfiltered.concat(chunk);
+            if (chunk.length < CHUNK) break;
+            rangeFrom += CHUNK;
           }
-          if (!chunk || chunk.length === 0) break;
-          allSubmissionsUnfiltered = allSubmissionsUnfiltered.concat(chunk);
-          if (chunk.length < CHUNK) break;
-          rangeFrom += CHUNK;
         }
       }
     }
@@ -351,9 +461,33 @@ export async function GET(request: NextRequest) {
     if (twitterContestIds.length > 0) {
       const { data: allTweets } = await supabase
         .from("twitter_campaign_tweets")
-        .select("contest_id, likes, replies, moderation_status")
-        .in("contest_id", twitterContestIds);
+        .select("contest_id, likes, replies, moderation_status, tweet_created_at")
+        .in("contest_id", twitterContestIds)
+        .gte("tweet_created_at", dateFrom.toISOString())
+        .lte("tweet_created_at", dateTo.toISOString());
       twitterTweetsAll = allTweets || [];
+    }
+
+    // Total payouts (gross): video earnings + bonus on paid submissions, plus Twitter leaderboard.
+    // Independent of the UI submission-status filter (matches admin analytics).
+    const videoContestIdsForPayouts = contestsFilteredByPlatform
+      .filter((c) => normalizePlatformKey(c) !== "twitter")
+      .map((c) => c.id);
+    let totalPayoutsCents = 0;
+    try {
+      totalPayoutsCents = await fetchBrandTotalPayoutsCents({
+        supabase,
+        videoContestIds: videoContestIdsForPayouts,
+        twitterContestIds,
+        dateFrom,
+        dateTo,
+        isPc,
+      });
+    } catch (error) {
+      console.error("Error computing total payouts:", error);
+      totalPayoutsCents = sumSubmissionPayoutsCents(
+        allSubmissionsUnfiltered || [],
+      );
     }
 
     // Contest lifecycle from dates (UTC)
@@ -478,10 +612,14 @@ export async function GET(request: NextRequest) {
     const totalContests = contestsFilteredByPlatform.length;
     let totalSubmissions = 0;
     let totalViews = 0;
+    let totalVideoViews = 0;
     for (const contest of contestsFilteredByPlatform) {
       const platform = normalizePlatformKey(contest);
       totalSubmissions += getContestSubmissionCount(contest, platform);
       totalViews += getContestViews(contest, platform);
+      if (platform !== "twitter") {
+        totalVideoViews += getContestViews(contest, platform);
+      }
     }
 
     // Calculate total spent (include contest budget if it has submissions or Twitter tweets after filtering)
@@ -506,6 +644,12 @@ export async function GET(request: NextRequest) {
       totalSubmissions > 0 ? totalSpentDollars / totalSubmissions : 0;
     const avgSubmissionsPerContest =
       totalContests > 0 ? totalSubmissions / totalContests : 0;
+
+    // Effective CPM (eCPM): total payouts / views from the currently selected scope (video only)
+    const effectiveCpm =
+      totalPayoutsCents > 0 && totalVideoViews > 0
+        ? ((totalPayoutsCents / 100) / totalVideoViews) * 1000
+        : null;
 
     // Contest status counts (filtered by platform)
     const modStatus = (c: { moderation_status?: string | null }) =>
@@ -792,11 +936,14 @@ export async function GET(request: NextRequest) {
     );
 
     const response = {
+      dataSource: source,
       overview: {
         totalContests,
         totalSubmissions,
         totalViews,
         totalSpent,
+        totalPayoutsCents,
+        effectiveCpm,
         avgCostPerView: Math.round(avgCostPerView * 100) / 100, // Round to 2 decimal places
         avgCostPerSubmission: Math.round(avgCostPerSubmission * 100) / 100,
         avgSubmissionsPerContest:
@@ -828,8 +975,8 @@ export async function GET(request: NextRequest) {
                   ? (twitterTweetCountByContest[topContest.id] ??
                     topContest.live_submission_count ??
                     0)
-                  : (topContest.live_submission_count ??
-                    topContest.submissions?.length ??
+                  : (topContest.submissions?.length ??
+                    topContest.live_submission_count ??
                     0),
             }
           : null,
@@ -837,6 +984,45 @@ export async function GET(request: NextRequest) {
       platformStats,
       monthlyData,
       contestTypeStats,
+      // Campaign dropdown list = full type/platform scope, NOT limited by the
+      // current campaign-id selection (so unchecking one doesn't hide it).
+      // PC Submissions: only campaigns with post-campaign overlay rows in range.
+      campaigns: await (async () => {
+        let list = allBrandContests
+          .filter((c) =>
+            contestTypeSet === null
+              ? true
+              : contestTypeSet.has(
+                  ((c as { contest_type?: string }).contest_type ?? "")
+                    .toString()
+                    .toLowerCase(),
+                ),
+          )
+          .filter((c) => allowedPlatforms.includes(normalizePlatformKey(c)));
+
+        if (isPc) {
+          const candidateIds = list
+            .filter((c) => normalizePlatformKey(c) !== "twitter")
+            .map((c) => c.id);
+          try {
+            const pcIds = await fetchBrandPcCampaignIdsInRange(
+              supabase,
+              candidateIds,
+              dateFrom,
+              dateTo,
+            );
+            list = list.filter((c) => pcIds.has(c.id));
+          } catch (error) {
+            console.error("Error fetching PC campaign ids:", error);
+            list = [];
+          }
+        }
+
+        return list.map((c) => ({
+          id: c.id,
+          title: (c.title || "Untitled campaign").trim() || "Untitled campaign",
+        }));
+      })(),
     };
 
     return NextResponse.json(response);

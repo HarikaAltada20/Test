@@ -1,5 +1,17 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  parseBrandAnalyticsDateRange,
+  parseBrandContestIdSet,
+  parseBrandContestTypeSet,
+  parseBrandAnalyticsSource,
+  validateBrandAnalyticsDateRange,
+} from "@/lib/brand-analytics-query";
+import {
+  attachCreatorsToSubmissionRows,
+  fetchBrandPcSubmissionsAsAnalyticsRows,
+} from "@/lib/brand-analytics-pc-submissions";
+import { fetchBrandTotalPayoutsCents } from "@/lib/brand-analytics-payouts";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,9 +30,14 @@ export async function GET(request: NextRequest) {
     const creatorId = searchParams.get("creatorId");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
-    const contestTypeFilter = (searchParams.get("type") ?? "all")
-      .trim()
-      .toLowerCase();
+    const contestTypeSet = parseBrandContestTypeSet(searchParams);
+    const contestIdSet = parseBrandContestIdSet(searchParams);
+    const dateRange = parseBrandAnalyticsDateRange(searchParams);
+    const dateValidation = validateBrandAnalyticsDateRange(dateRange);
+    if (!dateValidation.ok) {
+      return NextResponse.json({ error: dateValidation.error }, { status: 400 });
+    }
+    const { from: dateFrom, to: dateTo } = dateRange;
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -76,17 +93,28 @@ export async function GET(request: NextRequest) {
 
       // Get contest IDs for this advertiser (optionally by contest type)
       let contestIdsForFilter: string[] | null = null;
-      if (contestTypeFilter && contestTypeFilter !== "all") {
+      if (contestTypeSet && contestTypeSet.size > 0) {
         const { data: typeContests } = await supabase
           .from("contests")
           .select("id")
           .eq("advertiser_id", user.id)
-          .eq("contest_type", contestTypeFilter);
+          .in("contest_type", [...contestTypeSet]);
         contestIdsForFilter = (typeContests || []).map(
           (c: { id: string }) => c.id,
         );
         if (contestIdsForFilter.length === 0) {
           contestIdsForFilter = [];
+        }
+      }
+      if (contestIdSet !== null) {
+        if (contestIdSet.size === 0) {
+          contestIdsForFilter = [];
+        } else if (contestIdsForFilter) {
+          contestIdsForFilter = contestIdsForFilter.filter((id) =>
+            contestIdSet.has(id),
+          );
+        } else {
+          contestIdsForFilter = [...contestIdSet];
         }
       }
 
@@ -101,7 +129,7 @@ export async function GET(request: NextRequest) {
           .eq("contests.advertiser_id", user.id);
         if (contestIdsForFilter && contestIdsForFilter.length > 0) {
           query = query.in("contest_id", contestIdsForFilter);
-        } else if (contestTypeFilter && contestTypeFilter !== "all") {
+        } else if (contestTypeSet && contestTypeSet.size > 0) {
           query = query.in("contest_id", []);
         }
         if (notRejected) {
@@ -239,6 +267,33 @@ export async function GET(request: NextRequest) {
       });
     } else {
       const statusNorm = submissionStatus?.trim().toLowerCase() || null;
+      const source = parseBrandAnalyticsSource(searchParams);
+
+      if (contestTypeSet !== null && contestTypeSet.size === 0) {
+        return NextResponse.json({
+          dataSource: source,
+          leaderboards: {
+            topByViews: [],
+            topByViewsYoutubeInstagram: [],
+            topByViewsTwitter: [],
+            topBySubmissions: [],
+            topByEarnings: [],
+          },
+          summary: {
+            totalUniqueCreators: 0,
+            totalSubmissions: 0,
+            totalViews: 0,
+            totalEarnings: 0,
+            avgSubmissionsPerCreator: 0,
+            avgViewsPerCreator: 0,
+            avgEarningsPerCreator: 0,
+          },
+          demographics: {
+            platformDemographics: {},
+            contestTypePreferences: {},
+          },
+        });
+      }
 
       // Get this advertiser's contests to find Twitter contest IDs and contest_type for preferences
       const { data: advertiserContests } = await supabase
@@ -298,18 +353,25 @@ export async function GET(request: NextRequest) {
       let contestsFiltered = (advertiserContests || []).filter((c: any) =>
         allowedPlatforms.includes(normalizePlatform(c)),
       );
-      if (contestTypeFilter && contestTypeFilter !== "all") {
-        contestsFiltered = contestsFiltered.filter(
-          (c: any) =>
-            (c.contest_type || "").toLowerCase() === contestTypeFilter,
+      if (contestTypeSet && contestTypeSet.size > 0) {
+        contestsFiltered = contestsFiltered.filter((c: any) =>
+          contestTypeSet.has((c.contest_type || "").toLowerCase()),
+        );
+      }
+      if (contestIdSet !== null) {
+        contestsFiltered = contestsFiltered.filter((c: any) =>
+          contestIdSet.has(c.id),
         );
       }
       const videoContestIds = contestsFiltered
         .filter((c: any) => normalizePlatform(c) !== "twitter")
         .map((c: any) => c.id);
-      const twitterContestIds = contestsFiltered
-        .filter((c: any) => normalizePlatform(c) === "twitter")
-        .map((c: any) => c.id);
+      const twitterContestIds =
+        source === "pc_submissions"
+          ? []
+          : contestsFiltered
+              .filter((c: any) => normalizePlatform(c) === "twitter")
+              .map((c: any) => c.id);
       const twitterContestIdToType: Record<string, string> = {};
       contestsFiltered
         .filter((c: any) => normalizePlatform(c) === "twitter")
@@ -320,9 +382,42 @@ export async function GET(request: NextRequest) {
 
       // Get leaderboard of creators (paginated to bypass PostgREST row cap)
       const LIST_PAGE_SIZE = 1000;
-      const submissionsRawAll: any[] = [];
+      let submissionsRawAll: any[] = [];
 
       if (videoContestIds.length > 0) {
+        if (source === "pc_submissions") {
+          const pcRows = await fetchBrandPcSubmissionsAsAnalyticsRows(
+            supabase,
+            videoContestIds,
+            {
+              dateFrom,
+              dateTo,
+              notRejected,
+              submissionStatus: statusNorm,
+            },
+          );
+          submissionsRawAll = await attachCreatorsToSubmissionRows(
+            supabase,
+            pcRows,
+          );
+          const contestById = new Map(
+            contestsFiltered.map((c: any) => [c.id, c]),
+          );
+          submissionsRawAll = submissionsRawAll.map((sub) => {
+            const contest = contestById.get(sub.contest_id as string);
+            return {
+              ...sub,
+              contests: contest
+                ? {
+                    id: contest.id,
+                    advertiser_id: user.id,
+                    title: contest.title,
+                    contest_type: contest.contest_type,
+                  }
+                : null,
+            };
+          });
+        } else {
         for (let page = 0; ; page++) {
           const from = page * LIST_PAGE_SIZE;
           const to = from + LIST_PAGE_SIZE - 1;
@@ -359,6 +454,8 @@ export async function GET(request: NextRequest) {
             )
             .eq("contests.advertiser_id", user.id)
             .in("contest_id", videoContestIds)
+            .gte("created_at", dateFrom.toISOString())
+            .lte("created_at", dateTo.toISOString())
             .range(from, to)
             .order("created_at", { ascending: false });
           if (notRejected) {
@@ -374,6 +471,7 @@ export async function GET(request: NextRequest) {
           if (pageData && pageData.length > 0)
             submissionsRawAll.push(...pageData);
           if (!pageData || pageData.length < LIST_PAGE_SIZE) break;
+        }
         }
       }
       const submissions = submissionsRawAll;
@@ -393,7 +491,9 @@ export async function GET(request: NextRequest) {
         let tweetsQuery = supabase
           .from("twitter_campaign_tweets")
           .select("creator_id, contest_id, impressions, tweet_created_at")
-          .in("contest_id", twitterContestIds);
+          .in("contest_id", twitterContestIds)
+          .gte("tweet_created_at", dateFrom.toISOString())
+          .lte("tweet_created_at", dateTo.toISOString());
         if (notRejected) {
           tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
         } else if (statusNorm && statusNorm !== "all") {
@@ -694,6 +794,20 @@ export async function GET(request: NextRequest) {
         submissions.reduce((sum, sub) => sum + (sub.earnings || 0), 0) +
         twitterTotals.earnings;
 
+      let totalPayoutsCents = totalEarnings;
+      try {
+        totalPayoutsCents = await fetchBrandTotalPayoutsCents({
+          supabase,
+          videoContestIds,
+          twitterContestIds,
+          dateFrom,
+          dateTo,
+          isPc: source === "pc_submissions",
+        });
+      } catch (error) {
+        console.error("Error computing creator summary payouts:", error);
+      }
+
       // Platform demographics (include Twitter submission count)
       const platformDemographics = submissions.reduce(
         (acc, sub) => {
@@ -723,6 +837,7 @@ export async function GET(request: NextRequest) {
       });
 
       return NextResponse.json({
+        dataSource: source,
         leaderboards: {
           topByViews,
           topByViewsYoutubeInstagram,
@@ -735,6 +850,7 @@ export async function GET(request: NextRequest) {
           totalSubmissions,
           totalViews,
           totalEarnings,
+          totalPayoutsCents,
           avgSubmissionsPerCreator:
             totalUniqueCreators > 0
               ? totalSubmissions / totalUniqueCreators
@@ -743,6 +859,10 @@ export async function GET(request: NextRequest) {
             totalUniqueCreators > 0 ? totalViews / totalUniqueCreators : 0,
           avgEarningsPerCreator:
             totalUniqueCreators > 0 ? totalEarnings / totalUniqueCreators : 0,
+          avgPayoutsPerCreator:
+            totalUniqueCreators > 0
+              ? totalPayoutsCents / 100 / totalUniqueCreators
+              : 0,
         },
         demographics: {
           platformDemographics,

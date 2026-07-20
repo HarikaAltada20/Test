@@ -13,12 +13,8 @@ interface ContestAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?:
-    | "all"
-    | "leaderboard"
-    | "cpm"
-    | "milestone"
-    | "dual_rewards";
+  contestTypeFilter?: string;
+  analyticsQueryString: string;
 }
 
 interface Contest {
@@ -65,6 +61,7 @@ export default function ContestAnalytics({
   videoPlatform = "all",
   twitterAnalytics = false,
   contestTypeFilter = "all",
+  analyticsQueryString,
 }: ContestAnalyticsProps) {
   const [contests, setContests] = useState<Contest[]>([]);
   const [filteredContests, setFilteredContests] = useState<Contest[]>([]);
@@ -74,40 +71,12 @@ export default function ContestAnalytics({
 
   useEffect(() => {
     fetchContests();
-  }, [
-    userId,
-    activeFilter,
-    contentType,
-    videoPlatform,
-    twitterAnalytics,
-    contestTypeFilter,
-  ]);
+  }, [analyticsQueryString]);
 
   const fetchContests = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (activeFilter && activeFilter !== "all") {
-        if (activeFilter === "not_rejected") {
-          params.set("notRejected", "true");
-        } else {
-          params.set("status", activeFilter);
-        }
-      }
-      params.set("contentType", contentType);
-      params.set("videoPlatform", videoPlatform);
-      // Determine if tiktok is selected based on videoPlatform
-      const hasTiktok =
-        videoPlatform === "all" ||
-        videoPlatform === "tiktok" ||
-        videoPlatform.includes("tiktok");
-      params.set("tiktok", hasTiktok ? "true" : "false");
-      params.set("twitter", twitterAnalytics ? "true" : "false");
-      if (contestTypeFilter && contestTypeFilter !== "all") {
-        params.set("type", contestTypeFilter);
-      }
-      const qs = params.toString();
-      const url = `/api/analytics/contests${qs ? `?${qs}` : ""}`;
+      const url = `/api/analytics/contests?${analyticsQueryString}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch campaigns");
       const json = await res.json();

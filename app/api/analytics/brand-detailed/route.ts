@@ -2,6 +2,14 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  parseBrandAnalyticsDateRange,
+  parseBrandContestIdSet,
+  parseBrandContestTypeSet,
+  parseBrandAnalyticsSource,
+  validateBrandAnalyticsDateRange,
+} from "@/lib/brand-analytics-query";
+import { fetchBrandPcSubmissionsAsAnalyticsRows } from "@/lib/brand-analytics-pc-submissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +26,15 @@ export async function GET(request: NextRequest) {
     const submissionStatusRaw = searchParams.get("status");
     const submissionStatus = submissionStatusRaw?.trim().toLowerCase() || null;
     const notRejected = searchParams.get("notRejected") === "true";
-    const contestTypeFilter = searchParams.get("type") || "all";
+    const contestTypeSet = parseBrandContestTypeSet(searchParams);
+    const contestIdSet = parseBrandContestIdSet(searchParams);
+    const dateRange = parseBrandAnalyticsDateRange(searchParams);
+    const dateValidation = validateBrandAnalyticsDateRange(dateRange);
+    if (!dateValidation.ok) {
+      return NextResponse.json({ error: dateValidation.error }, { status: 400 });
+    }
+    const { from: dateFrom, to: dateTo } = dateRange;
+    const source = parseBrandAnalyticsSource(searchParams);
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -74,7 +90,43 @@ export async function GET(request: NextRequest) {
     let allSubmissions: any[] = [];
     const PAGE_SIZE = 1000;
     let joinFetchError = false;
+    let perContestFetched: Record<string, number> = {};
+    const performPerContestFallback = async (contestsInput: any[]) => {
+      const contestsWithCounts = (contestsInput || []).filter(
+        (c: any) => c && c.id,
+      );
+      const fetched: Record<string, number> = {};
+      const MAX_PER_CONTEST_FALLBACK = 50;
+      const limited = contestsWithCounts.slice(0, MAX_PER_CONTEST_FALLBACK);
+      for (const c of limited) {
+        try {
+          let perQuery = supabaseAdmin
+            .from("submissions")
+            .select("id,status,views,contest_id,created_at,platform,creator_id")
+            .eq("contest_id", c.id)
+            .gte("created_at", dateFrom.toISOString())
+            .lte("created_at", dateTo.toISOString())
+            .order("created_at", { ascending: false });
+          if (submissionStatus && submissionStatus !== "all") {
+            if (submissionStatus === "verifiedpaid") {
+              perQuery = perQuery.in("status", ["verified", "paid"]);
+            } else {
+              perQuery = perQuery.eq("status", submissionStatus);
+            }
+          }
+          const { data: subsByContest, error: perErr } = await perQuery;
+          if (!perErr && subsByContest && subsByContest.length > 0) {
+            allSubmissions.push(...(subsByContest as any[]));
+            fetched[c.id as string] = subsByContest.length;
+          } else if (perErr) {
+            // swallow
+          }
+        } catch {}
+      }
+      return fetched;
+    };
 
+    if (source !== "pc_submissions") {
     for (let page = 0; ; page++) {
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
@@ -97,6 +149,8 @@ export async function GET(request: NextRequest) {
         `,
         )
         .eq("contests.advertiser_id", user.id)
+        .gte("created_at", dateFrom.toISOString())
+        .lte("created_at", dateTo.toISOString())
         .range(from, to)
         .order("created_at", { ascending: false });
 
@@ -160,6 +214,8 @@ export async function GET(request: NextRequest) {
             `,
             )
             .in("contest_id", ids)
+            .gte("created_at", dateFrom.toISOString())
+            .lte("created_at", dateTo.toISOString())
             .range(from, to)
             .order("created_at", { ascending: false });
           if (notRejected) {
@@ -185,44 +241,6 @@ export async function GET(request: NextRequest) {
       subsSource = "fallback";
     }
 
-    // Last-resort fetch: per-contest queries if IN returned 0 but counts say > 0
-    // We'll build per-contest fallback after we have computed `contests` below
-    let perContestFetched: Record<string, number> = {};
-    const performPerContestFallback = async (contestsInput: any[]) => {
-      const contestsWithCounts = (contestsInput || []).filter(
-        (c: any) => c && c.id,
-      );
-      const perContestFetched: Record<string, number> = {};
-      // Cap per-contest fallback to avoid unbounded loops
-      const MAX_PER_CONTEST_FALLBACK = 50;
-      const limited = contestsWithCounts.slice(0, MAX_PER_CONTEST_FALLBACK);
-      for (const c of limited) {
-        try {
-          let perQuery = supabaseAdmin
-            .from("submissions")
-            .select("id,status,views,contest_id,created_at,platform,creator_id")
-            .eq("contest_id", c.id)
-            .order("created_at", { ascending: false });
-          if (submissionStatus && submissionStatus !== "all") {
-            if (submissionStatus === "verifiedpaid") {
-              perQuery = perQuery.in("status", ["verified", "paid"]);
-            } else {
-              perQuery = perQuery.eq("status", submissionStatus);
-            }
-          }
-          const { data: subsByContest, error: perErr } = await perQuery;
-          if (!perErr && subsByContest && subsByContest.length > 0) {
-            allSubmissions.push(...(subsByContest as any[]));
-            perContestFetched[c.id as string] = subsByContest.length;
-          } else if (perErr) {
-            // swallow
-          }
-        } catch {}
-      }
-      // no logs in production
-      return perContestFetched;
-    };
-
     // Apply submission status filter to submissions (verified / paid / pending / rejected)
     if (notRejected) {
       allSubmissions =
@@ -240,21 +258,31 @@ export async function GET(request: NextRequest) {
           return status === submissionStatus;
         }) || [];
     }
+    }
 
     // Apply contest type filter
-    const contestsByType = (allContests || []).filter((c: any) =>
-      contestTypeFilter === "all" ? true : c.contest_type === contestTypeFilter,
+    let contestsByType = (allContests || []).filter((c: any) =>
+      contestTypeSet === null
+        ? true
+        : contestTypeSet.has((c.contest_type ?? "").toString().toLowerCase()),
     );
+    if (contestIdSet !== null) {
+      contestsByType = contestsByType.filter((c: any) => contestIdSet.has(c.id));
+    }
 
     // If still no rows but counts indicate presence, do per-contest fallback now
-    if (allSubmissions.length === 0 && (contestsByType?.length || 0) > 0) {
+    if (
+      source !== "pc_submissions" &&
+      allSubmissions.length === 0 &&
+      (contestsByType?.length || 0) > 0
+    ) {
       perContestFetched = await performPerContestFallback(
         contestsByType as any[],
       );
     }
 
     // Re-apply submission status filter after fallback (fallback fills allSubmissions without status filter)
-    if (submissionStatus && submissionStatus !== "all") {
+    if (source !== "pc_submissions" && submissionStatus && submissionStatus !== "all") {
       allSubmissions =
         allSubmissions?.filter((sub: any) => {
           const status = (sub.status || "").toString().toLowerCase();
@@ -326,6 +354,23 @@ export async function GET(request: NextRequest) {
 
     // Submissions only for platform-filtered contests
     const platformFilteredContestIds = new Set(contests.map((c: any) => c.id));
+
+    if (source === "pc_submissions") {
+      const videoContestIds = contests
+        .filter((c: any) => normalizePlatformKey(c) !== "twitter")
+        .map((c: any) => c.id);
+      allSubmissions = await fetchBrandPcSubmissionsAsAnalyticsRows(
+        supabaseAdmin,
+        videoContestIds,
+        {
+          dateFrom,
+          dateTo,
+          notRejected,
+          submissionStatus,
+        },
+      );
+    }
+
     const allSubmissionsFiltered = (allSubmissions || []).filter((sub: any) =>
       platformFilteredContestIds.has(sub.contest_id),
     );
@@ -339,9 +384,12 @@ export async function GET(request: NextRequest) {
         ) || [],
     }));
 
-    const twitterContestIds = contests
-      .filter((c: any) => normalizePlatformKey(c) === "twitter")
-      .map((c: any) => c.id);
+    const twitterContestIds =
+      source === "pc_submissions"
+        ? []
+        : contests
+            .filter((c: any) => normalizePlatformKey(c) === "twitter")
+            .map((c: any) => c.id);
 
     let twitterTotals = {
       submissions: 0,
@@ -375,9 +423,11 @@ export async function GET(request: NextRequest) {
       let tweetsQuery = supabaseAdmin
         .from("twitter_campaign_tweets")
         .select(
-          "contest_id, impressions, likes, replies, retweets, quote_reposts, moderation_status",
+          "contest_id, impressions, likes, replies, retweets, quote_reposts, moderation_status, tweet_created_at",
         )
-        .in("contest_id", twitterContestIds);
+        .in("contest_id", twitterContestIds)
+        .gte("tweet_created_at", dateFrom.toISOString())
+        .lte("tweet_created_at", dateTo.toISOString());
 
       if (notRejected) {
         tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
@@ -906,6 +956,7 @@ export async function GET(request: NextRequest) {
     const recentContests = contestsWithSubmissions.slice(0, 5);
 
     const response: any = {
+      dataSource: source,
       overview: {
         totalContests,
         totalDraftContests,

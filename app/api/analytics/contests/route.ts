@@ -6,6 +6,14 @@ import {
   resolveBudgetTileMetrics,
   type BudgetTileSubmission,
 } from "@/lib/contest-budget-tile-metrics";
+import {
+  parseBrandAnalyticsDateRange,
+  parseBrandContestIdSet,
+  parseBrandContestTypeSet,
+  parseBrandAnalyticsSource,
+  validateBrandAnalyticsDateRange,
+} from "@/lib/brand-analytics-query";
+import { fetchBrandPcSubmissionsAsAnalyticsRows } from "@/lib/brand-analytics-pc-submissions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,14 +39,14 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const contestId = searchParams.get("contestId");
-    const contestTypeFilter = (searchParams.get("type") ?? "all")
-      .trim()
-      .toLowerCase() as
-      | "all"
-      | "leaderboard"
-      | "cpm"
-      | "milestone"
-      | "dual_rewards";
+    const contestTypeSet = parseBrandContestTypeSet(searchParams);
+    const contestIdSet = parseBrandContestIdSet(searchParams);
+    const dateRange = parseBrandAnalyticsDateRange(searchParams);
+    const dateValidation = validateBrandAnalyticsDateRange(dateRange);
+    if (!dateValidation.ok) {
+      return NextResponse.json({ error: dateValidation.error }, { status: 400 });
+    }
+    const { from: dateFrom, to: dateTo } = dateRange;
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -86,6 +94,8 @@ export async function GET(request: NextRequest) {
              creator:creator_id (username, creator_profiles (total_views, total_contests_participated, youtube_account, instagram_account))`,
           )
           .eq("contest_id", contestId)
+          .gte("created_at", dateFrom.toISOString())
+          .lte("created_at", dateTo.toISOString())
           .range(from, to)
           .order("created_at", { ascending: false });
         if (subPageErr) break;
@@ -228,14 +238,21 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const contestsFilteredByType =
-        contestTypeFilter === "all"
+      let contestsFilteredByType =
+        contestTypeSet === null
           ? contests
-          : contests.filter(
-              (contest) =>
-                (contest as { contest_type?: string }).contest_type ===
-                contestTypeFilter,
+          : contests.filter((contest) =>
+              contestTypeSet.has(
+                ((contest as { contest_type?: string }).contest_type ?? "")
+                  .toString()
+                  .toLowerCase(),
+              ),
             );
+      if (contestIdSet !== null) {
+        contestsFilteredByType = contestsFilteredByType.filter((contest) =>
+          contestIdSet.has(contest.id),
+        );
+      }
 
       const normalizePlatformKey = (c: {
         platform?: string | null;
@@ -299,41 +316,68 @@ export async function GET(request: NextRequest) {
               allowedPlatforms.includes(normalizePlatformKey(c)),
             );
 
+      const source = parseBrandAnalyticsSource(searchParams);
+      const contestsForMetrics =
+        source === "pc_submissions"
+          ? contestsFiltered.filter(
+              (c) => normalizePlatformKey(c) !== "twitter",
+            )
+          : contestsFiltered;
+
       // Fetch all submissions with pagination to bypass PostgREST default row cap
       const LIST_PAGE_SIZE = 1000;
-      const allSubmissions: any[] = [];
-      const contestIdsToFetch = contestsFiltered.map((c) => c.id);
+      let allSubmissions: any[] = [];
+      const contestIdsToFetch = contestsForMetrics.map((c) => c.id);
 
       if (contestIdsToFetch.length > 0) {
-        for (let page = 0; ; page++) {
-          const from = page * LIST_PAGE_SIZE;
-          const to = from + LIST_PAGE_SIZE - 1;
-          let pageQuery = supabase
-            .from("submissions")
-            .select(
-              "id, views, created_at, platform, contest_id, other_stats, status, creator_id, paid, earnings, bonus_paid, bonus_amount, paid_at",
-            )
-            .in("contest_id", contestIdsToFetch)
-            .range(from, to)
-            .order("created_at", { ascending: false });
-          if (notRejected) {
-            pageQuery = pageQuery.neq("status", "rejected");
-          } else if (submissionStatus && submissionStatus !== "all") {
-            if (submissionStatus === "verifiedpaid") {
-              pageQuery = pageQuery.in("status", ["verified", "paid"]);
-            } else {
-              pageQuery = pageQuery.eq("status", submissionStatus);
+        if (source === "pc_submissions") {
+          allSubmissions = await fetchBrandPcSubmissionsAsAnalyticsRows(
+            supabase,
+            contestIdsToFetch,
+            {
+              dateFrom,
+              dateTo,
+              notRejected,
+              submissionStatus,
+            },
+          );
+        } else {
+          for (let page = 0; ; page++) {
+            const from = page * LIST_PAGE_SIZE;
+            const to = from + LIST_PAGE_SIZE - 1;
+            let pageQuery = supabase
+              .from("submissions")
+              .select(
+                "id, views, created_at, platform, contest_id, other_stats, status, creator_id, paid, earnings, bonus_paid, bonus_amount, paid_at",
+              )
+              .in("contest_id", contestIdsToFetch)
+              .gte("created_at", dateFrom.toISOString())
+              .lte("created_at", dateTo.toISOString())
+              .range(from, to)
+              .order("created_at", { ascending: false });
+            if (notRejected) {
+              pageQuery = pageQuery.neq("status", "rejected");
+            } else if (submissionStatus && submissionStatus !== "all") {
+              if (submissionStatus === "verifiedpaid") {
+                pageQuery = pageQuery.in("status", ["verified", "paid"]);
+              } else {
+                pageQuery = pageQuery.eq("status", submissionStatus);
+              }
             }
+            const { data: pageData } = await pageQuery;
+            if (pageData && pageData.length > 0)
+              allSubmissions.push(...pageData);
+            if (!pageData || pageData.length < LIST_PAGE_SIZE) break;
           }
-          const { data: pageData } = await pageQuery;
-          if (pageData && pageData.length > 0) allSubmissions.push(...pageData);
-          if (!pageData || pageData.length < LIST_PAGE_SIZE) break;
         }
       }
 
-      const twitterContestIds = contestsFiltered
-        .filter((c) => normalizePlatformKey(c) === "twitter")
-        .map((c) => c.id);
+      const twitterContestIds =
+        source === "pc_submissions"
+          ? []
+          : contestsFiltered
+              .filter((c) => normalizePlatformKey(c) === "twitter")
+              .map((c) => c.id);
       const twitterCountByContest: Record<string, number> = {};
       const twitterViewsByContest: Record<string, number> = {};
       const twitterLikesByContest: Record<string, number> = {};
@@ -347,7 +391,9 @@ export async function GET(request: NextRequest) {
           .select(
             "id, contest_id, creator_id, tweet_created_at, created_at, moderation_status, points, manual_points_adjustment, earnings, impressions, likes, replies, retweets, quote_reposts, is_eligible, deleted_at",
           )
-          .in("contest_id", twitterContestIds);
+          .in("contest_id", twitterContestIds)
+          .gte("tweet_created_at", dateFrom.toISOString())
+          .lte("tweet_created_at", dateTo.toISOString());
         if (notRejected) {
           tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
         } else if (submissionStatus && submissionStatus !== "all") {
@@ -425,7 +471,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const contestsWithMetrics = contestsFiltered
+      const contestsWithMetrics = contestsForMetrics
         .map((contest) => {
           const isTwitter = normalizePlatformKey(contest) === "twitter";
           let totalViews: number;
@@ -596,6 +642,7 @@ export async function GET(request: NextRequest) {
       };
 
       return NextResponse.json({
+        dataSource: source,
         contests: contestsWithMetrics,
         summary: {
           totalContests,

@@ -10,6 +10,8 @@ import {
   Users,
   Eye,
   DollarSign,
+  Target,
+  Search,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -36,13 +38,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import ContestAnalytics from "./ContestAnalytics";
 import CreatorAnalytics from "./CreatorAnalytics";
 import BrandDetailedAnalytics from "./BrandDetailedAnalytics";
+import BrandAnalyticsGraph from "./BrandAnalyticsGraph";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
@@ -50,7 +55,10 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
-import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
+import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
+import { getLastNDaysUtcRange } from "@/lib/admin-date-range";
+import { buildBrandAnalyticsQueryString } from "@/lib/brand-analytics-query";
+import type { BrandAnalyticsDataSource } from "@/lib/brand-analytics-query";
 
 interface UnifiedAnalyticsProps {
   userId: string;
@@ -64,12 +72,14 @@ interface MetricTile {
   category: "contests" | "submissions" | "engagement" | "financial";
 }
 
-type ContestTypeFilterType =
-  | "all"
-  | "leaderboard"
-  | "cpm"
-  | "milestone"
-  | "dual_rewards";
+const CONTEST_TYPE_OPTIONS = [
+  { id: "leaderboard", label: "Leaderboard" },
+  { id: "cpm", label: "CPM" },
+  { id: "milestone", label: "Milestone" },
+  { id: "dual_rewards", label: "Dual Rewards" },
+] as const;
+
+const ALL_CONTEST_TYPE_IDS = CONTEST_TYPE_OPTIONS.map((o) => o.id) as string[];
 
 const defaultMetricTiles: MetricTile[] = [
   // Contest Metrics
@@ -199,6 +209,20 @@ const defaultMetricTiles: MetricTile[] = [
     category: "financial",
   },
   {
+    id: "total_payouts",
+    label: "Total Payouts",
+    icon: Wallet,
+    enabled: true,
+    category: "financial",
+  },
+  {
+    id: "effective_cpm",
+    label: "Effective CPM",
+    icon: Target,
+    enabled: true,
+    category: "financial",
+  },
+  {
     id: "avg_cost_per_view",
     label: "Avg Cost/View",
     icon: DollarSign,
@@ -243,6 +267,11 @@ const submissionStatusOptions = [
   { id: "verifiedPaid", label: "Verified + Paid", icon: CheckCircle },
 ];
 
+const DATA_SOURCE_TABS = [
+  { id: "submissions", label: "Submissions" },
+  { id: "pc_submissions", label: "PC Submissions" },
+] as const;
+
 // Tabs are computed responsively so small screens show shorter labels
 
 export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
@@ -250,6 +279,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   const computedTabs = useMemo(
     () => [
       { id: "overview", label: "Overview" },
+      { id: "graph", label: "Graph" },
       { id: "detailed", label: isMobile ? "Analytics" : "Detailed Analytics" },
       { id: "contests", label: "Campaigns" },
       { id: "creators", label: "Creators" },
@@ -283,8 +313,29 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   const [videoInstagram, setVideoInstagram] = useState(true);
   const [videoTiktok, setVideoTiktok] = useState(true);
   const [twitterAnalytics, setTwitterAnalytics] = useState(false);
-  const [contestTypeFilter, setContestTypeFilter] =
-    useState<ContestTypeFilterType>("all");
+  // Multi-select campaign types (all selected by default).
+  const [contestTypes, setContestTypes] = useState<string[]>([
+    ...ALL_CONTEST_TYPE_IDS,
+  ]);
+  // Serialized value sent to the API: "all", "__none__", or comma list.
+  const contestTypeParam =
+    contestTypes.length === ALL_CONTEST_TYPE_IDS.length
+      ? "all"
+      : contestTypes.length === 0
+        ? "__none__"
+        : contestTypes.join(",");
+  // Brand campaign filter (null = all)
+  const [selectedContestIds, setSelectedContestIds] = useState<string[] | null>(
+    null,
+  );
+  const [campaignSearch, setCampaignSearch] = useState("");
+  // Date range (drives the Graph tab). Shown in the top filter bar.
+  const [dateRange, setDateRange] = useState(() => getLastNDaysUtcRange(30));
+  const [dateRangePresetLabel, setDateRangePresetLabel] =
+    useState("Last 30 Days");
+  const [dataSource, setDataSource] =
+    useState<BrandAnalyticsDataSource>("submissions");
+  const isPcSubmissions = dataSource === "pc_submissions";
   const videoPlatform: string =
     videoYoutube && videoInstagram && videoTiktok
       ? "all"
@@ -306,46 +357,42 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   const [analyticsData, setAnalyticsData] = useState<any>(null);
   const { isDark } = useAnalyticsDarkMode();
 
-  useEffect(() => {
-    fetchAnalyticsData();
-  }, [
-    userId,
-    activeFilter,
-    contentType,
-    videoPlatform,
-    videoYoutube,
-    videoInstagram,
-    videoTiktok,
-    twitterAnalytics,
-    contestTypeFilter,
-  ]);
-
-  const buildAnalyticsParams = () => {
-    const params = new URLSearchParams();
-    if (activeFilter && activeFilter !== "all") {
-      if (activeFilter === "not_rejected") {
-        params.set("notRejected", "true");
-      } else {
-        params.set("status", activeFilter);
-      }
-    }
-    // When video platforms (YouTube, Instagram, or TikTok) and Twitter are selected, API needs contentType=video + twitter=true
-    const hasVideo = videoYoutube || videoInstagram || videoTiktok;
-    params.set("contentType", hasVideo ? "video" : "text_image");
-    params.set("videoPlatform", videoPlatform);
-    params.set("tiktok", videoTiktok ? "true" : "false");
-    params.set("twitter", twitterAnalytics ? "true" : "false");
-    if (contestTypeFilter && contestTypeFilter !== "all") {
-      params.set("type", contestTypeFilter);
-    }
-    return params.toString();
-  };
+  const analyticsQueryString = useMemo(
+    () =>
+      buildBrandAnalyticsQueryString({
+        activeFilter,
+        contentType:
+          videoYoutube || videoInstagram || videoTiktok
+            ? "video"
+            : contentType,
+        videoPlatform,
+        videoTiktok,
+        twitterAnalytics: isPcSubmissions ? false : twitterAnalytics,
+        contestTypeParam,
+        selectedContestIds,
+        dateRange,
+        dataSource,
+      }),
+    [
+      activeFilter,
+      contentType,
+      videoYoutube,
+      videoInstagram,
+      videoTiktok,
+      videoPlatform,
+      twitterAnalytics,
+      isPcSubmissions,
+      contestTypeParam,
+      selectedContestIds,
+      dateRange,
+      dataSource,
+    ],
+  );
 
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
-      const qs = buildAnalyticsParams();
-      const url = `/api/analytics/overview${qs ? `?${qs}` : ""}`;
+      const url = `/api/analytics/overview?${analyticsQueryString}`;
 
       const response = await fetch(url);
 
@@ -362,6 +409,48 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchAnalyticsData();
+  }, [userId, analyticsQueryString]);
+
+  // PC Submissions is video-only (no Twitter overlay).
+  useEffect(() => {
+    if (!isPcSubmissions) return;
+    setTwitterAnalytics(false);
+    if (!videoYoutube && !videoInstagram && !videoTiktok) {
+      setVideoYoutube(true);
+      setVideoInstagram(true);
+      setVideoTiktok(true);
+    }
+    setContentType("video");
+  }, [isPcSubmissions, videoYoutube, videoInstagram, videoTiktok]);
+
+  // When the scope changes (platform/type), campaign selection can become invalid.
+  useEffect(() => {
+    setSelectedContestIds(null);
+  }, [contentType, videoPlatform, twitterAnalytics, contestTypeParam]);
+
+  // Switching data source or date range can change which campaigns are in scope.
+  useEffect(() => {
+    setSelectedContestIds(null);
+  }, [dataSource, dateRange.from.toISOString(), dateRange.to.toISOString()]);
+
+  // Keep campaign selection consistent with the current campaign list.
+  useEffect(() => {
+    const campaignList: { id: string }[] = analyticsData?.campaigns ?? [];
+    setSelectedContestIds((prev) => {
+      if (prev === null) return prev;
+      if (prev.length === 0) return prev;
+      const validSet = new Set(campaignList.map((c) => c.id));
+      const next = prev.filter((id) => validSet.has(id));
+      if (next.length === prev.length) return prev;
+      // Stale ids after tab/filter change — fall back to all, not "none selected".
+      if (next.length === 0 && campaignList.length > 0) return null;
+      // Selection now matches every campaign in scope -> treat as "all".
+      return next.length === campaignList.length ? null : next;
+    });
+  }, [analyticsData]);
 
   const getTrendIcon = (current: number, previous: number) => {
     if (current > previous)
@@ -416,6 +505,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         return o.totalComments ?? 0;
       case "total_spent":
         return formatCurrencyFromCents(o.totalSpent ?? 0);
+      case "total_payouts":
+        return formatCurrencyFromCents(o.totalPayoutsCents ?? 0);
+      case "effective_cpm":
+        if (o.effectiveCpm == null) return "—";
+        return `$${Number(o.effectiveCpm).toFixed(
+          Number(o.effectiveCpm) >= 1 ? 2 : 3,
+        )}`;
       case "avg_cost_per_view":
         return formatCurrencyFromCents(
           Math.round((o.avgCostPerView ?? 0) * 100),
@@ -437,15 +533,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-      </div>
-    );
-  }
-
-  if (error || !analyticsData) {
+  if (error && !analyticsData) {
     return (
       <div className="text-center py-8">
         <p className="text-red-600 mb-4">
@@ -461,7 +549,100 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
     );
   }
 
+  if (loading && !analyticsData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  if (!analyticsData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
   const enabledTiles = metricTiles.filter((tile) => tile.enabled);
+  const campaigns: { id: string; title: string }[] = analyticsData?.campaigns ?? [];
+  const allCampaignIds = campaigns.map((c) => c.id);
+  const filteredCampaigns = (() => {
+    const q = campaignSearch.trim().toLowerCase();
+    if (!q) return campaigns;
+    return campaigns.filter(
+      (c) => c.title.toLowerCase().includes(q) || c.id.toLowerCase().includes(q),
+    );
+  })();
+
+  const isCampaignChecked = (id: string) =>
+    selectedContestIds === null || selectedContestIds.includes(id);
+
+  const setAllCampaignsChecked = (checked: boolean) => {
+    setSelectedContestIds(checked ? null : []);
+  };
+
+  const setCampaignChecked = (id: string, checked: boolean) => {
+    // `null` means "all campaigns selected" (no contestIds filter sent).
+    if (selectedContestIds === null) {
+      if (checked) return; // already all selected
+      const next = allCampaignIds.filter((cid) => cid !== id);
+      // If everything is still selected (e.g. ids list empty), keep null.
+      setSelectedContestIds(next.length === allCampaignIds.length ? null : next);
+      return;
+    }
+
+    if (checked) {
+      const nextSet = new Set(selectedContestIds);
+      nextSet.add(id);
+      const next = Array.from(nextSet);
+      setSelectedContestIds(next.length === allCampaignIds.length ? null : next);
+      return;
+    }
+
+    // unchecked
+    const next = selectedContestIds.filter((cid) => cid !== id);
+    setSelectedContestIds(next.length === allCampaignIds.length ? null : next);
+  };
+
+  const campaignButtonLabel =
+    selectedContestIds === null
+      ? campaigns.length > 0
+        ? `${campaigns.length} campaigns`
+        : "All Campaigns"
+      : selectedContestIds.length === 0
+        ? "No Campaigns"
+        : selectedContestIds.length === 1
+          ? campaigns.find((c) => c.id === selectedContestIds[0])?.title ??
+            "Campaign"
+          : `${selectedContestIds.length} Campaigns`;
+
+  const isContestTypeChecked = (id: string) => contestTypes.includes(id);
+
+  const setAllContestTypesChecked = (checked: boolean) => {
+    setContestTypes(checked ? [...ALL_CONTEST_TYPE_IDS] : []);
+  };
+
+  const setContestTypeChecked = (id: string, checked: boolean) => {
+    setContestTypes((prev) => {
+      if (checked) {
+        return prev.includes(id) ? prev : [...prev, id];
+      }
+      return prev.filter((t) => t !== id);
+    });
+  };
+
+  const contestTypeButtonLabel =
+    contestTypes.length === ALL_CONTEST_TYPE_IDS.length
+      ? "All Campaign Types"
+      : contestTypes.length === 0
+        ? "No Campaign Types"
+        : contestTypes.length === 1
+          ? CONTEST_TYPE_OPTIONS.find((o) => o.id === contestTypes[0])?.label ??
+            "Campaign Type"
+          : `${contestTypes.length} Campaign Types`;
+
   const categories = ["contests", "submissions", "engagement", "financial"];
   const categoryMetricLabels: Record<string, string> = {
     contests: "Campaign",
@@ -472,6 +653,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
   return (
     <div className="space-y-6">
+     
+
       {/* Unified Filter */}
       <div
         className={cn(
@@ -504,6 +687,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                 >
                   {(videoYoutube || videoInstagram || videoTiktok) &&
+                  !isPcSubmissions &&
                   twitterAnalytics ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
@@ -537,7 +721,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                         </span>
                       </span>
                     </>
-                  ) : twitterAnalytics ? (
+                  ) : !isPcSubmissions && twitterAnalytics ? (
                     <>
                       <ImageIcon className="w-4 h-4 shrink-0" />
                       <span className="truncate">
@@ -573,6 +757,15 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (videoYoutube || videoInstagram || videoTiktok) {
+                      if (isPcSubmissions) {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "PC Submissions only includes video platforms (YouTube, Instagram, TikTok).",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       if (!twitterAnalytics) {
                         toast({
                           title: "At least one platform required",
@@ -610,7 +803,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (videoYoutube) {
-                      if (videoInstagram || videoTiktok || twitterAnalytics) {
+                      if (
+                        videoInstagram ||
+                        videoTiktok ||
+                        (!isPcSubmissions && twitterAnalytics)
+                      ) {
                         setVideoYoutube(false);
                       } else {
                         toast({
@@ -643,7 +840,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (videoInstagram) {
-                      if (videoYoutube || videoTiktok || twitterAnalytics) {
+                      if (
+                        videoYoutube ||
+                        videoTiktok ||
+                        (!isPcSubmissions && twitterAnalytics)
+                      ) {
                         setVideoInstagram(false);
                       } else {
                         toast({
@@ -676,7 +877,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (videoTiktok) {
-                      if (videoYoutube || videoInstagram || twitterAnalytics) {
+                      if (
+                        videoYoutube ||
+                        videoInstagram ||
+                        (!isPcSubmissions && twitterAnalytics)
+                      ) {
                         setVideoTiktok(false);
                       } else {
                         toast({
@@ -701,6 +906,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   <SiTiktok className="w-4 h-4 mr-2" />
                   TikTok
                 </DropdownMenuItem>
+                {!isPcSubmissions && (
+                  <>
                 <DropdownMenuSeparator
                   className={isDark ? "bg-gray-700" : "bg-gray-200"}
                 />
@@ -770,14 +977,152 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   <Twitter className="w-4 h-4 mr-2" />
                   Twitter
                 </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
-            <ContestTypeFilter
-              value={contestTypeFilter}
-              onChange={(value) =>
-                setContestTypeFilter(value as ContestTypeFilterType)
-              }
-            />
+            {/* Campaign type filter (multi-select) */}
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "flex items-center gap-2 min-w-[180px] justify-between",
+                    isDark
+                      ? "bg-[#170337] text-white border-gray-600"
+                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+                  )}
+                >
+                  <span className="max-w-[150px] truncate">
+                    {contestTypeButtonLabel}
+                  </span>
+                  <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                onCloseAutoFocus={(e) => e.preventDefault()}
+                className={cn(
+                  "w-56 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+                )}
+              >
+                <DropdownMenuCheckboxItem
+                  checked={contestTypes.length === ALL_CONTEST_TYPE_IDS.length}
+                  onCheckedChange={(checked) =>
+                    setAllContestTypesChecked(checked === true)
+                  }
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "cursor-pointer font-semibold",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                >
+                  All Campaign Types
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                {CONTEST_TYPE_OPTIONS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.id}
+                    checked={isContestTypeChecked(option.id)}
+                    onCheckedChange={(checked) =>
+                      setContestTypeChecked(option.id, checked === true)
+                    }
+                    onSelect={(e) => e.preventDefault()}
+                    className={cn(
+                      "cursor-pointer font-medium",
+                      isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                    )}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Campaign filter */}
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "flex items-center gap-2 min-w-[200px] justify-between",
+                    isDark
+                      ? "bg-[#170337] text-white border-gray-600"
+                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
+                  )}
+                >
+                  <span className="max-w-[160px] truncate">{campaignButtonLabel}</span>
+                  <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(e) => e.preventDefault()}
+                className={cn(
+                  "w-96 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+                )}
+              >
+                <DropdownMenuCheckboxItem
+                  checked={selectedContestIds === null}
+                  onCheckedChange={(checked) => setAllCampaignsChecked(checked === true)}
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "cursor-pointer font-semibold",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                >
+                  All Campaigns
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <div
+                  className="px-2 pb-2"
+                  onKeyDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 opacity-40" />
+                    <Input
+                      value={campaignSearch}
+                      onChange={(e) => setCampaignSearch(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      placeholder="Search campaigns…"
+                      autoComplete="off"
+                      className={cn(
+                        "h-9 pl-8",
+                        isDark && "border-white/10 bg-[#121212]",
+                      )}
+                    />
+                  </div>
+                </div>
+                <DropdownMenuSeparator />
+                <div className="max-h-64 overflow-y-auto">
+                  {filteredCampaigns.length === 0 ? (
+                    <p className="px-3 py-4 text-sm opacity-50">No campaigns found</p>
+                  ) : (
+                    filteredCampaigns.map((c) => {
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={c.id}
+                          checked={isCampaignChecked(c.id)}
+                          onCheckedChange={(checked) =>
+                            setCampaignChecked(c.id, checked === true)
+                          }
+                          onSelect={(e) => e.preventDefault()}
+                          className={cn(
+                            "cursor-pointer font-medium break-words",
+                            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                          )}
+                        >
+                          <span className="whitespace-normal break-words">{c.title}</span>
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })
+                  )}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               size="sm"
@@ -794,28 +1139,72 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {submissionStatusOptions.map((option) => {
-            const Icon = option.icon;
-            return (
-              <Button
-                key={option.id}
-                variant={activeFilter === option.id ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveFilter(option.id)}
-                className={`flex items-center gap-2 ${
-                  activeFilter === option.id
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
+        {/* Submissions vs PC Submissions — drives overview tiles + graph */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div
+            className={cn(
+              "inline-flex flex-wrap gap-1 rounded-full border p-1",
+              isDark
+                ? "border-white/10 bg-[#0d0d0d]"
+                : "border-black/10 bg-[#f5f5f5]",
+            )}
+          >
+            {DATA_SOURCE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setDataSource(tab.id)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  dataSource === tab.id
+                    ? "border border-black/80 bg-[#7F39EC] text-white"
                     : isDark
-                      ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
-                      : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
-                }`}
+                      ? "text-white/60 hover:text-white"
+                      : "text-black/55 hover:text-black",
+                )}
               >
-                <Icon className="w-4 h-4" />
-                <span className="text-sm font-medium">{option.label}</span>
-              </Button>
-            );
-          })}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            {submissionStatusOptions.map((option) => {
+              const Icon = option.icon;
+              return (
+                <Button
+                  key={option.id}
+                  variant={activeFilter === option.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setActiveFilter(option.id)}
+                  className={`flex items-center gap-2 ${
+                    activeFilter === option.id
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : isDark
+                        ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
+                        : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="text-sm font-medium">{option.label}</span>
+                </Button>
+              );
+            })}
+          </div>
+          <div className="ml-auto">
+            <AdminDateRangePicker
+              isDark={isDark}
+              value={dateRange}
+              presetLabel={dateRangePresetLabel}
+              onChange={(next, label) => {
+                setDateRange(next);
+                setDateRangePresetLabel(label);
+              }}
+              align="end"
+            />
+          </div>
         </div>
       </div>
 
@@ -858,6 +1247,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   className={cn(
                     "text-2xl font-bold mb-2",
                     isDark ? "text-white" : "text-gray-900",
+                    loading && "opacity-60",
                   )}
                 >
                   {value}
@@ -1216,6 +1606,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           </div>
         </TabPanel>
 
+        <TabPanel value="graph" activeTab={activeTab}>
+          <BrandAnalyticsGraph analyticsQueryString={analyticsQueryString} />
+        </TabPanel>
+
         <TabPanel value="detailed" activeTab={activeTab}>
           <BrandDetailedAnalytics
             userId={userId}
@@ -1225,12 +1619,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 : contentType
             }
             videoPlatform={videoPlatform}
-            twitterAnalytics={twitterAnalytics}
-            contestTypeFilter={contestTypeFilter}
-            onContestTypeFilterChange={(value) =>
-              setContestTypeFilter(value as ContestTypeFilterType)
-            }
+            twitterAnalytics={isPcSubmissions ? false : twitterAnalytics}
+            contestTypeFilter={contestTypeParam}
             activeFilter={activeFilter}
+            analyticsQueryString={analyticsQueryString}
           />
         </TabPanel>
 
@@ -1244,8 +1636,9 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 : contentType
             }
             videoPlatform={videoPlatform}
-            twitterAnalytics={twitterAnalytics}
-            contestTypeFilter={contestTypeFilter}
+            twitterAnalytics={isPcSubmissions ? false : twitterAnalytics}
+            contestTypeFilter={contestTypeParam}
+            analyticsQueryString={analyticsQueryString}
           />
         </TabPanel>
 
@@ -1259,8 +1652,9 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 : contentType
             }
             videoPlatform={videoPlatform}
-            twitterAnalytics={twitterAnalytics}
-            contestTypeFilter={contestTypeFilter}
+            twitterAnalytics={isPcSubmissions ? false : twitterAnalytics}
+            contestTypeFilter={contestTypeParam}
+            analyticsQueryString={analyticsQueryString}
           />
         </TabPanel>
       </TabContent>
