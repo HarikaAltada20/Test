@@ -539,30 +539,48 @@ export function buildBrandDetailedResponse(
   const totalSubmissions = video.submissions + twitter.submissions;
   const totalViews = video.views + twitter.views;
 
-  const statusCounts = countByStatusFromDaily(dailyRows, twitterDaily);
+  const statusFilterActive = hasStatusFilter(ctx);
+  const statusCounts = statusFilterActive
+    ? countByStatusFiltered(dailyRows, twitterDaily, ctx)
+    : countByStatusFromDaily(dailyRows, twitterDaily);
 
+  const viewsFilterCtx = statusFilterActive ? ctx : undefined;
   const viewsByStatusYoutubeInstagram = {
-    expected:
-      countViewsByStatus(dailyRows, ["pending", "verified", "paid"]) +
-      0,
-    verified: countViewsByStatus(dailyRows, ["verified"]),
-    pending: countViewsByStatus(dailyRows, ["pending"]),
-    rejected: countViewsByStatus(dailyRows, ["rejected"]),
-    paid: countViewsByStatus(dailyRows, ["paid"]),
-    total: videoAll.views,
+    expected: countViewsByStatus(
+      dailyRows,
+      ["pending", "verified", "paid"],
+      viewsFilterCtx,
+    ),
+    verified: countViewsByStatus(dailyRows, ["verified"], viewsFilterCtx),
+    pending: countViewsByStatus(dailyRows, ["pending"], viewsFilterCtx),
+    rejected: countViewsByStatus(dailyRows, ["rejected"], viewsFilterCtx),
+    paid: countViewsByStatus(dailyRows, ["paid"], viewsFilterCtx),
+    total: statusFilterActive ? video.views : videoAll.views,
   };
 
   const viewsByStatusTwitter = {
-    expected: countTwitterViewsByStatus(twitterDaily, [
-      "pending",
-      "verified",
-      "paid",
-    ]),
-    verified: countTwitterViewsByStatus(twitterDaily, ["verified"]),
-    pending: countTwitterViewsByStatus(twitterDaily, ["pending"]),
-    rejected: countTwitterViewsByStatus(twitterDaily, ["rejected"]),
-    paid: countTwitterViewsByStatus(twitterDaily, ["paid"]),
-    total: twitterAll.views,
+    expected: countTwitterViewsByStatus(
+      twitterDaily,
+      ["pending", "verified", "paid"],
+      viewsFilterCtx,
+    ),
+    verified: countTwitterViewsByStatus(
+      twitterDaily,
+      ["verified"],
+      viewsFilterCtx,
+    ),
+    pending: countTwitterViewsByStatus(
+      twitterDaily,
+      ["pending"],
+      viewsFilterCtx,
+    ),
+    rejected: countTwitterViewsByStatus(
+      twitterDaily,
+      ["rejected"],
+      viewsFilterCtx,
+    ),
+    paid: countTwitterViewsByStatus(twitterDaily, ["paid"], viewsFilterCtx),
+    total: statusFilterActive ? twitter.views : twitterAll.views,
   };
 
   const totalPayoutsCents =
@@ -635,12 +653,14 @@ export function buildBrandDetailedResponse(
   }
 
   const twitterStats = {
-    submissions: twitterAll.submissions,
-    views: twitterAll.views,
-    likes: twitterAll.likes,
-    replies: twitterAll.comments,
-    retweets: twitterAll.shares,
-    quote_reposts: twitterAll.quoteReposts,
+    submissions: statusFilterActive ? twitter.submissions : twitterAll.submissions,
+    views: statusFilterActive ? twitter.views : twitterAll.views,
+    likes: statusFilterActive ? twitter.likes : twitterAll.likes,
+    replies: statusFilterActive ? twitter.comments : twitterAll.comments,
+    retweets: statusFilterActive ? twitter.shares : twitterAll.shares,
+    quote_reposts: statusFilterActive
+      ? twitter.quoteReposts
+      : twitterAll.quoteReposts,
     verified: statusCounts.verified,
     paid: statusCounts.paid,
     pending: statusCounts.pending,
@@ -778,9 +798,11 @@ export function buildBrandDetailedResponse(
 function countViewsByStatus(
   rows: { status: string; views_sum: number }[],
   statuses: string[],
+  ctx?: BrandAnalyticsQueryContext,
 ): number {
   const set = new Set(statuses);
   return rows.reduce((sum, row) => {
+    if (ctx && !statusMatchesFilter(row.status, ctx)) return sum;
     const st = normalizeSubmissionStatus(row.status);
     if (st === "unknown" || !set.has(st)) return sum;
     return sum + (Number(row.views_sum) || 0);
@@ -790,8 +812,9 @@ function countViewsByStatus(
 function countTwitterViewsByStatus(
   rows: { status: string; views_sum: number }[],
   statuses: string[],
+  ctx?: BrandAnalyticsQueryContext,
 ): number {
-  return countViewsByStatus(rows, statuses);
+  return countViewsByStatus(rows, statuses, ctx);
 }
 
 export async function buildBrandCreatorsResponse(

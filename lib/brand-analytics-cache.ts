@@ -809,7 +809,6 @@ function buildCacheKeyParts(
     ctx.twitterAnalytics ? "1" : "0",
     typeKey,
     contestIdsKey,
-    ctx.notRejected ? "not_rejected" : (ctx.submissionStatus ?? "all"),
   ];
 }
 
@@ -863,6 +862,12 @@ export function rehydrateBrandAnalyticsContext(
         ? ctx.contestIdSet
         : new Set(Array.isArray(ctx.contestIdSet) ? ctx.contestIdSet : []);
 
+  const submissionStatusRaw = ctx.submissionStatus;
+  const submissionStatus =
+    typeof submissionStatusRaw === "string" && submissionStatusRaw.trim()
+      ? submissionStatusRaw.trim().toLowerCase()
+      : null;
+
   return {
     ...ctx,
     dateFrom:
@@ -870,6 +875,8 @@ export function rehydrateBrandAnalyticsContext(
     dateTo: ctx.dateTo instanceof Date ? ctx.dateTo : new Date(ctx.dateTo),
     contestTypeSet,
     contestIdSet,
+    submissionStatus,
+    notRejected: ctx.notRejected === true,
   };
 }
 
@@ -895,8 +902,9 @@ function rehydrateBrandAnalyticsCreatorsBundle(
 export async function getCachedBrandAnalyticsBundle(
   ctx: BrandAnalyticsQueryContext,
 ): Promise<BrandAnalyticsBundle> {
-  const keyParts = buildCacheKeyParts("core-v1", ctx);
-  const serialized = serializeContext(ctx);
+  const requestCtx = rehydrateBrandAnalyticsContext(ctx);
+  const keyParts = buildCacheKeyParts("core-v2", requestCtx);
+  const serialized = serializeContext(requestCtx);
   const bundle = await unstable_cache(
     async () => loadBrandAnalyticsBundle(deserializeContext(serialized)),
     keyParts,
@@ -905,14 +913,19 @@ export async function getCachedBrandAnalyticsBundle(
       tags: [BRAND_ANALYTICS_CACHE_TAG],
     },
   )();
-  return rehydrateBrandAnalyticsBundle(bundle);
+  // Rollups are status-agnostic; always apply the request's status filter at read time.
+  return rehydrateBrandAnalyticsBundle({
+    ...bundle,
+    ctx: requestCtx,
+  });
 }
 
 export async function getCachedBrandAnalyticsCreatorsBundle(
   ctx: BrandAnalyticsQueryContext,
 ): Promise<BrandAnalyticsCreatorsBundle> {
-  const keyParts = buildCacheKeyParts("creators-v1", ctx);
-  const serialized = serializeContext(ctx);
+  const requestCtx = rehydrateBrandAnalyticsContext(ctx);
+  const keyParts = buildCacheKeyParts("creators-v2", requestCtx);
+  const serialized = serializeContext(requestCtx);
   const bundle = await unstable_cache(
     async () =>
       loadBrandAnalyticsCreatorsBundle(deserializeContext(serialized)),
@@ -922,7 +935,10 @@ export async function getCachedBrandAnalyticsCreatorsBundle(
       tags: [BRAND_ANALYTICS_CACHE_TAG],
     },
   )();
-  return rehydrateBrandAnalyticsCreatorsBundle(bundle);
+  return rehydrateBrandAnalyticsCreatorsBundle({
+    ...bundle,
+    ctx: requestCtx,
+  });
 }
 
 export function contestTotalsFromRollup(
