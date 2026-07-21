@@ -5,11 +5,66 @@ import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { parseBrandAnalyticsContext } from "@/lib/brand-analytics-context";
 import {
   parseBrandAnalyticsDateRange,
+  parseBrandAnalyticsSource,
   validateBrandAnalyticsDateRange,
 } from "@/lib/brand-analytics-query";
 import { getCachedBrandAnalyticsBundle } from "@/lib/brand-analytics-cache";
 import { buildBrandContestsResponse } from "@/lib/brand-analytics-response";
 import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
+import {
+  attachCreatorsToSubmissionRows,
+  fetchBrandPcSubmissionsAsAnalyticsRows,
+} from "@/lib/brand-analytics-pc-submissions";
+
+/** Drop OAuth tokens from nested creator social account blobs. */
+function redactCreatorSocialAccounts<T extends Record<string, unknown>>(
+  submissions: T[],
+): T[] {
+  return submissions.map((sub) => {
+    const creator = sub.creator as
+      | {
+          username?: string;
+          creator_profiles?: Record<string, unknown> | Record<string, unknown>[];
+        }
+      | null
+      | undefined;
+    if (!creator?.creator_profiles) return sub;
+
+    const profiles = Array.isArray(creator.creator_profiles)
+      ? creator.creator_profiles
+      : [creator.creator_profiles];
+
+    const redactedProfiles = profiles.map((profile) => {
+      const yt = profile.youtube_account as Record<string, unknown> | null | undefined;
+      const ig = profile.instagram_account as Record<string, unknown> | null | undefined;
+      return {
+        ...profile,
+        youtube_account: yt
+          ? {
+              channelId: yt.channelId ?? null,
+              channelTitle: yt.channelTitle ?? null,
+            }
+          : null,
+        instagram_account: ig
+          ? {
+              id: ig.id ?? null,
+              username: ig.username ?? null,
+            }
+          : null,
+      };
+    });
+
+    return {
+      ...sub,
+      creator: {
+        ...creator,
+        creator_profiles: Array.isArray(creator.creator_profiles)
+          ? redactedProfiles
+          : redactedProfiles[0],
+      },
+    };
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,6 +98,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: dateValidation.error }, { status: 400 });
       }
       const { from: dateFrom, to: dateTo } = dateRange;
+      const dataSource = parseBrandAnalyticsSource(searchParams);
+      const isPc = dataSource === "pc_submissions";
 
       // Get detailed analytics for a specific contest
       // Fetch contest metadata first (without nested submissions to avoid row cap)
@@ -66,27 +123,43 @@ export async function GET(request: NextRequest) {
         .eq("advertiser_id", user.id)
         .single();
 
-      // Fetch submissions separately with pagination to bypass PostgREST row cap
-      const SINGLE_PAGE_SIZE = 1000;
-      const allContestSubs: any[] = [];
-      for (let page = 0; ; page++) {
-        const from = page * SINGLE_PAGE_SIZE;
-        const to = from + SINGLE_PAGE_SIZE - 1;
-        const { data: subPage, error: subPageErr } = await supabase
-          .from("submissions")
-          .select(
-            `id, views, created_at, platform, creator_id, other_stats, status, earnings,
-             creator:creator_id (username, creator_profiles (total_views, total_contests_participated, youtube_account, instagram_account))`,
-          )
-          .eq("contest_id", contestId)
-          .gte("created_at", dateFrom.toISOString())
-          .lte("created_at", dateTo.toISOString())
-          .range(from, to)
-          .order("created_at", { ascending: false });
-        if (subPageErr) break;
-        if (subPage && subPage.length > 0) allContestSubs.push(...subPage);
-        if (!subPage || subPage.length < SINGLE_PAGE_SIZE) break;
+      // Live path reads `submissions`; PC path reads overlay metrics so totals match
+      // the Campaigns list when `source=pc_submissions`.
+      let allContestSubs: Record<string, unknown>[] = [];
+      if (isPc) {
+        const admin = createAdminClient();
+        const pcRows = await fetchBrandPcSubmissionsAsAnalyticsRows(
+          admin,
+          [contestId],
+          { dateFrom, dateTo },
+        );
+        allContestSubs = await attachCreatorsToSubmissionRows(admin, pcRows);
+      } else {
+        const SINGLE_PAGE_SIZE = 1000;
+        for (let page = 0; ; page++) {
+          const from = page * SINGLE_PAGE_SIZE;
+          const to = from + SINGLE_PAGE_SIZE - 1;
+          const { data: subPage, error: subPageErr } = await supabase
+            .from("submissions")
+            .select(
+              `id, views, created_at, platform, creator_id, other_stats, status, earnings,
+               creator:creator_id (username, creator_profiles (total_views, total_contests_participated, youtube_account, instagram_account))`,
+            )
+            .eq("contest_id", contestId)
+            .gte("created_at", dateFrom.toISOString())
+            .lte("created_at", dateTo.toISOString())
+            .range(from, to)
+            .order("created_at", { ascending: false });
+          if (subPageErr) break;
+          if (subPage && subPage.length > 0) {
+            allContestSubs.push(...(subPage as Record<string, unknown>[]));
+          }
+          if (!subPage || subPage.length < SINGLE_PAGE_SIZE) break;
+        }
       }
+
+      allContestSubs = redactCreatorSocialAccounts(allContestSubs);
+
       // Merge submissions back into contest object
       const resolvedContest = contest ? { ...contest, submissions: allContestSubs } : null;
 
