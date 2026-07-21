@@ -11,12 +11,62 @@ import { buildBrandCreatorsResponse } from "@/lib/brand-analytics-response";
 import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
 import { fetchTwitterEarningsCentsByCreator } from "@/lib/brand-analytics-payouts";
 
+/** True if this creator has ever submitted (video / Twitter / PC) on the advertiser's contests. */
+async function creatorBelongsToAdvertiser(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  advertiserId: string,
+  creatorId: string,
+): Promise<boolean> {
+  const { data: submission } = await supabase
+    .from("submissions")
+    .select("id, contests!inner(advertiser_id)")
+    .eq("creator_id", creatorId)
+    .eq("contests.advertiser_id", advertiserId)
+    .limit(1)
+    .maybeSingle();
+  if (submission) return true;
+
+  const { data: tweet } = await supabase
+    .from("twitter_campaign_tweets")
+    .select("id, contests!inner(advertiser_id)")
+    .eq("creator_id", creatorId)
+    .eq("contests.advertiser_id", advertiserId)
+    .limit(1)
+    .maybeSingle();
+  if (tweet) return true;
+
+  const { data: pcRow } = await supabase
+    .from("post_campaign_submission_metrics")
+    .select("id, contests!inner(advertiser_id)")
+    .eq("creator_id", creatorId)
+    .eq("contests.advertiser_id", advertiserId)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(pcRow);
+}
+
 async function buildCreatorDetailResponse(
   advertiserId: string,
   creatorId: string,
   ctx: ReturnType<typeof parseBrandAnalyticsContext> & { ok: true },
 ) {
+  if (ctx.ctx.advertiserId !== advertiserId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const supabase = createAdminClient();
+
+  // Authz before profile/PII load: block UUID probing across advertisers.
+  const allowed = await creatorBelongsToAdvertiser(
+    supabase,
+    advertiserId,
+    creatorId,
+  );
+  if (!allowed) {
+    return NextResponse.json({ error: "Creator not found" }, { status: 404 });
+  }
+
   const bundle = await getCachedBrandAnalyticsCreatorsBundle(ctx.ctx);
 
   const { data: creator } = await supabase

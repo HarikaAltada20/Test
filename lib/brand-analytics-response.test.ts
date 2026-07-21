@@ -384,15 +384,21 @@ describe("buildBrandContestsResponse", () => {
     const mockSupabase = {
       from: (table: string) => {
         if (table === "twitter_campaign_tweets") {
-          return {
-            select: () => ({
-              in: () => ({
-                gte: () => ({
-                  lte: async () => ({ data: [], error: null }),
-                }),
-              }),
-            }),
-          };
+          const chain: Record<string, unknown> = {};
+          const self = () => chain;
+          chain.select = self;
+          chain.in = self;
+          chain.gte = self;
+          chain.lte = self;
+          chain.range = self;
+          chain.order = self;
+          chain.neq = self;
+          chain.eq = self;
+          // Final awaitable: empty page ends pagination.
+          chain.then = (
+            resolve: (value: { data: unknown[]; error: null }) => unknown,
+          ) => resolve({ data: [], error: null });
+          return chain;
         }
         if (table === "twitter_campaign_leaderboard") {
           return {

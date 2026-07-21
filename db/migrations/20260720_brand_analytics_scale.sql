@@ -1,6 +1,68 @@
 -- Brand analytics: DB-side aggregates for advertiser dashboards at 10M+ submissions.
 -- Reuses admin_analytics_submission_daily_rollup / admin_analytics_pc_daily_rollup when present.
 -- Twitter paths aggregate twitter_campaign_tweets in SQL (no row streaming to Node).
+--
+-- DEPLOY ORDER (required before this file):
+--   1. 20260719_admin_analytics_daily_rollups.sql  (+ rollup backfill)
+--   2. 20260723_admin_analytics_rollup_delta_fix.sql  (prevents negative rollup inserts)
+--   3. THIS FILE
+--
+-- This file uses transaction-compatible index builds because Supabase SQL/migration
+-- runners may wrap it in a transaction. On a large production database, run during
+-- a low-traffic / maintenance window because these builds can briefly block writes.
+-- The short lock timeout prevents waiting indefinitely for existing transactions.
+
+DO $$
+BEGIN
+  IF to_regclass('public.admin_analytics_submission_daily_rollup') IS NULL THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: public.admin_analytics_submission_daily_rollup. Apply 20260719_admin_analytics_daily_rollups.sql (and backfill) before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  IF to_regclass('public.admin_analytics_pc_daily_rollup') IS NULL THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: public.admin_analytics_pc_daily_rollup. Apply 20260719_admin_analytics_daily_rollups.sql (and backfill) before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  IF to_regprocedure(
+    'public.admin_analytics_submission_row_in_scope(text)'
+  ) IS NULL THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: admin_analytics_submission_row_in_scope. Apply admin analytics daily RPC / rollup migrations before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  IF to_regprocedure(
+    'public.admin_analytics_pc_row_in_scope(text)'
+  ) IS NULL THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: admin_analytics_pc_row_in_scope. Apply admin analytics PC / rollup migrations before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  IF to_regprocedure(
+    'public.admin_analytics_normalize_status(text)'
+  ) IS NULL THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: admin_analytics_normalize_status. Apply admin analytics migrations before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = 'admin_analytics_normalize_platform'
+  ) THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: admin_analytics_normalize_platform. Apply admin analytics migrations before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = 'admin_analytics_submission_views'
+  ) THEN
+    RAISE EXCEPTION
+      'Prerequisite missing: admin_analytics_submission_views. Apply admin analytics migrations before 20260720_brand_analytics_scale.sql.';
+  END IF;
+  -- Also apply 20260723_admin_analytics_rollup_delta_fix.sql before relying on
+  -- live rollup deltas (same signature as 20260719; cannot detect via to_regprocedure).
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Per-contest rollups (submissions)
@@ -286,6 +348,8 @@ AS $$
     )
   GROUP BY s.creator_id, c.contest_type, 3, 4;
 $$;
+
+SET LOCAL lock_timeout = '5s';
 
 CREATE INDEX IF NOT EXISTS idx_twitter_campaign_tweets_contest_created
   ON public.twitter_campaign_tweets (contest_id, tweet_created_at);
