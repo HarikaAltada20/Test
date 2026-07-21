@@ -312,7 +312,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   const [videoYoutube, setVideoYoutube] = useState(true);
   const [videoInstagram, setVideoInstagram] = useState(true);
   const [videoTiktok, setVideoTiktok] = useState(true);
-  const [twitterAnalytics, setTwitterAnalytics] = useState(false);
+  // All platforms selected by default so campaign counts cover every campaign.
+  const [twitterAnalytics, setTwitterAnalytics] = useState(true);
   // Multi-select campaign types (all selected by default).
   const [contestTypes, setContestTypes] = useState<string[]>([
     ...ALL_CONTEST_TYPE_IDS,

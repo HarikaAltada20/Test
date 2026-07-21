@@ -31,6 +31,20 @@ function modStatus(c: BrandContestRow): string {
   return (c.moderation_status ?? "").toString().toLowerCase();
 }
 
+/** Campaign lifetime [created_at, end_date] overlaps the selected date range. */
+function contestOverlapsDateRange(
+  contest: BrandContestRow,
+  ctx: BrandAnalyticsQueryContext,
+): boolean {
+  const created = new Date(contest.created_at).getTime();
+  if (!Number.isNaN(created) && created > ctx.dateTo.getTime()) return false;
+  const end = contest.end_date ? new Date(contest.end_date).getTime() : null;
+  if (end != null && !Number.isNaN(end) && end < ctx.dateFrom.getTime()) {
+    return false;
+  }
+  return true;
+}
+
 function getContestLifecycle(
   contest: BrandContestRow,
 ): "upcoming" | "active" | "ended" | "incomplete" {
@@ -262,25 +276,36 @@ export function buildBrandOverviewResponse(
     ? countByStatusFiltered(videoDailyRows, twitterDailyRows, ctx)
     : countByStatusFromDaily(videoDailyRows, twitterDailyRows);
 
-  const totalContests = scopedContests.length;
-  const publishedContests = scopedContests.filter(
+  // Campaign count tiles follow the date range (campaign lifetime overlaps it)
+  // and, when a submission-status filter is active, only count campaigns with
+  // matching submission activity in that range.
+  const statusFilterActive = hasStatusFilter(ctx);
+  const rangeContests = scopedContests.filter(
+    (c) =>
+      contestOverlapsDateRange(c, ctx) &&
+      (!statusFilterActive ||
+        getContestActivityTotals(c, bundle).submissions > 0),
+  );
+
+  const totalContests = rangeContests.length;
+  const publishedContests = rangeContests.filter(
     (c) => modStatus(c) === "published",
   ).length;
-  const draftContests = scopedContests.filter(
+  const draftContests = rangeContests.filter(
     (c) => modStatus(c) === "draft",
   ).length;
-  const pendingApprovalContests = scopedContests.filter(
+  const pendingApprovalContests = rangeContests.filter(
     (c) => modStatus(c) === "pending_approval",
   ).length;
-  const approvedContests = scopedContests.filter(
+  const approvedContests = rangeContests.filter(
     (c) => modStatus(c) === "approved",
   ).length;
-  const rejectedContests = scopedContests.filter(
+  const rejectedContests = rangeContests.filter(
     (c) => modStatus(c) === "rejected",
   ).length;
 
   const lifecycleCounts = { upcoming: 0, active: 0, ended: 0 };
-  for (const c of scopedContests) {
+  for (const c of rangeContests) {
     if (modStatus(c) !== "published") continue;
     const life = getContestLifecycle(c);
     if (life === "upcoming") lifecycleCounts.upcoming++;
@@ -330,11 +355,13 @@ export function buildBrandOverviewResponse(
   };
 
   const platformStats: Record<string, PlatformStat> = {};
+  const rangeContestIds = new Set(rangeContests.map((c) => c.id));
 
   for (const contest of scopedContests) {
     const platform = normalizeBrandPlatformKey(contest);
     const activity = getContestActivityTotals(contest, bundle);
-    const mod = modStatus(contest);
+    const inRange = rangeContestIds.has(contest.id);
+    const mod = inRange ? modStatus(contest) : "";
     const life = getContestLifecycle(contest);
 
     if (!platformStats[platform]) {
@@ -851,36 +878,45 @@ export function buildBrandDetailedResponse(
     rejected: twitterStatusCounts.rejected,
   };
 
-  const totalContests = scopedContests.length;
+  // Same scoping as the overview tiles: date-range overlap plus, when a
+  // submission-status filter is active, matching activity in that range.
+  const rangeContests = scopedContests.filter(
+    (c) =>
+      contestOverlapsDateRange(c, ctx) &&
+      (!statusFilterActive ||
+        getContestActivityTotals(c, bundle).submissions > 0),
+  );
+
+  const totalContests = rangeContests.length;
   const mod = modStatus;
-  const totalDraftContests = scopedContests.filter(
+  const totalDraftContests = rangeContests.filter(
     (c) => mod(c) === "draft",
   ).length;
-  const totalPendingContests = scopedContests.filter(
+  const totalPendingContests = rangeContests.filter(
     (c) => mod(c) === "pending_approval",
   ).length;
-  const totalApprovedContests = scopedContests.filter(
+  const totalApprovedContests = rangeContests.filter(
     (c) => mod(c) === "approved",
   ).length;
-  const totalPublishedContests = scopedContests.filter(
+  const totalPublishedContests = rangeContests.filter(
     (c) => mod(c) === "published",
   ).length;
-  const totalRejectedContests = scopedContests.filter(
+  const totalRejectedContests = rangeContests.filter(
     (c) => mod(c) === "rejected",
   ).length;
-  const totalActiveContests = scopedContests.filter(
+  const totalActiveContests = rangeContests.filter(
     (c) => mod(c) === "published" && c.status === "active",
   ).length;
-  const totalUpcomingContests = scopedContests.filter(
+  const totalUpcomingContests = rangeContests.filter(
     (c) => mod(c) === "published" && c.status === "upcoming",
   ).length;
-  const totalEndedContests = scopedContests.filter(
+  const totalEndedContests = rangeContests.filter(
     (c) =>
       mod(c) === "published" &&
       c.status === "ended" &&
       c.post_contest_status !== "payouts_processed",
   ).length;
-  const totalCompletedContests = scopedContests.filter(
+  const totalCompletedContests = rangeContests.filter(
     (c) =>
       mod(c) === "published" &&
       c.status === "ended" &&

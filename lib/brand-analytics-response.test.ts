@@ -201,6 +201,118 @@ describe("buildBrandOverviewResponse", () => {
     assert.equal(response.overview.verifiedSubmissions, 4);
   });
 
+  it("scopes campaign count tiles to the selected date range", () => {
+    const inRangeContest = {
+      id: "contest-in-range",
+      title: "In Range",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: "2026-06-05T00:00:00.000Z",
+      end_date: "2026-06-20T00:00:00.000Z",
+      created_at: "2026-06-01T00:00:00.000Z",
+      contest_based_details: null,
+      moderation_status: "published",
+      status: "ended",
+    };
+    const endedBeforeRange = {
+      id: "contest-before-range",
+      title: "Before Range",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: "2026-04-01T00:00:00.000Z",
+      end_date: "2026-04-30T00:00:00.000Z",
+      created_at: "2026-03-25T00:00:00.000Z",
+      contest_based_details: null,
+      moderation_status: "published",
+      status: "ended",
+    };
+    const createdAfterRange = {
+      id: "contest-after-range",
+      title: "After Range",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: null,
+      end_date: null,
+      created_at: "2026-07-10T00:00:00.000Z",
+      contest_based_details: null,
+      moderation_status: "draft",
+      status: "draft",
+    };
+
+    const bundle = baseBundle({
+      allBrandContests: [inRangeContest, endedBeforeRange, createdAfterRange],
+      scopedContests: [inRangeContest, endedBeforeRange, createdAfterRange],
+    });
+
+    const response = buildBrandOverviewResponse(bundle, 0);
+
+    assert.equal(response.overview.totalContests, 1);
+    assert.equal(response.overview.publishedContests, 1);
+    assert.equal(response.overview.draftContests, 0);
+  });
+
+  it("only counts campaigns with matching activity when a status filter is active", () => {
+    const contestWithPaid = {
+      id: "contest-paid",
+      title: "Has Paid",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: "2026-06-05T00:00:00.000Z",
+      end_date: "2026-06-20T00:00:00.000Z",
+      created_at: "2026-06-01T00:00:00.000Z",
+      contest_based_details: null,
+      moderation_status: "published",
+      status: "ended",
+    };
+    const contestWithoutPaid = {
+      id: "contest-no-paid",
+      title: "No Paid",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: "2026-06-05T00:00:00.000Z",
+      end_date: "2026-06-20T00:00:00.000Z",
+      created_at: "2026-06-01T00:00:00.000Z",
+      contest_based_details: null,
+      moderation_status: "published",
+      status: "ended",
+    };
+
+    const bundle = baseBundle({
+      ctx: baseCtx({ submissionStatus: "paid" }),
+      allBrandContests: [contestWithPaid, contestWithoutPaid],
+      scopedContests: [contestWithPaid, contestWithoutPaid],
+      contestRollup: [
+        {
+          contest_id: "contest-paid",
+          status: "paid",
+          platform: "youtube",
+          submission_count: 2,
+          views_sum: 100,
+          likes_sum: 0,
+          comments_sum: 0,
+          shares_sum: 0,
+          payouts_cents_sum: 0,
+        },
+        {
+          contest_id: "contest-no-paid",
+          status: "verified",
+          platform: "youtube",
+          submission_count: 3,
+          views_sum: 300,
+          likes_sum: 0,
+          comments_sum: 0,
+          shares_sum: 0,
+          payouts_cents_sum: 0,
+        },
+      ],
+    });
+
+    const response = buildBrandOverviewResponse(bundle, 0);
+
+    assert.equal(response.overview.totalContests, 1);
+    assert.equal(response.overview.publishedContests, 1);
+  });
+
   it("uses filtered video payouts when a status filter is active", () => {
     const bundle = baseBundle({
       ctx: baseCtx({ submissionStatus: "paid" }),
