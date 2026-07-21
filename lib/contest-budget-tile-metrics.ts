@@ -5,7 +5,10 @@ import {
   isDualRewardsContestType,
 } from "@/lib/contest-type";
 import { getDualRewardsSubmissionPaidComponents } from "@/lib/dual-rewards-pool-budget";
-import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
+import {
+  computeMilestoneContestExpectedSpendCents,
+  type MilestoneBonusConfig,
+} from "@/lib/milestone-contest-expected-spend";
 import {
   calculateLeaderboardBudgetSpent,
   calculateTwitterCpmBudgetSpent,
@@ -164,7 +167,7 @@ function computeMilestoneFilledCents(
           payout_cents: number;
           winner_limit: number | null;
         }>;
-        bonus?: unknown;
+        bonus?: MilestoneBonusConfig;
       };
     } | null
   )?.milestone_contest;

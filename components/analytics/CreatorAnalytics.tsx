@@ -30,12 +30,8 @@ interface CreatorAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?:
-    | "all"
-    | "leaderboard"
-    | "cpm"
-    | "milestone"
-    | "dual_rewards";
+  contestTypeFilter?: string;
+  analyticsQueryString: string;
 }
 
 interface CreatorData {
@@ -79,9 +75,11 @@ interface CreatorData {
     totalSubmissions: number;
     totalViews: number;
     totalEarnings: number;
+    totalPayoutsCents?: number;
     avgSubmissionsPerCreator: number;
     avgViewsPerCreator: number;
     avgEarningsPerCreator: number;
+    avgPayoutsPerCreator?: number;
   };
   demographics: {
     platformDemographics: Record<string, number>;
@@ -114,6 +112,7 @@ export default function CreatorAnalytics({
   videoPlatform = "all",
   twitterAnalytics = false,
   contestTypeFilter = "all",
+  analyticsQueryString,
 }: CreatorAnalyticsProps) {
   const [data, setData] = useState<CreatorData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,40 +122,12 @@ export default function CreatorAnalytics({
 
   useEffect(() => {
     fetchCreatorData();
-  }, [
-    userId,
-    activeFilter,
-    contentType,
-    videoPlatform,
-    twitterAnalytics,
-    contestTypeFilter,
-  ]);
+  }, [analyticsQueryString]);
 
   const fetchCreatorData = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (activeFilter !== "all") {
-        if (activeFilter === "not_rejected") {
-          params.set("notRejected", "true");
-        } else {
-          params.set("status", activeFilter);
-        }
-      }
-      params.set("contentType", contentType);
-      params.set("videoPlatform", videoPlatform);
-      // Determine if tiktok is selected based on videoPlatform
-      const hasTiktok =
-        videoPlatform === "all" ||
-        videoPlatform === "tiktok" ||
-        videoPlatform.includes("tiktok");
-      params.set("tiktok", hasTiktok ? "true" : "false");
-      params.set("twitter", twitterAnalytics ? "true" : "false");
-      if (contestTypeFilter && contestTypeFilter !== "all") {
-        params.set("type", contestTypeFilter);
-      }
-      const qs = params.toString();
-      const url = `/api/analytics/creators${qs ? `?${qs}` : ""}`;
+      const url = `/api/analytics/creators?${analyticsQueryString}`;
 
       const response = await fetch(url);
 
@@ -373,7 +344,9 @@ export default function CreatorAnalytics({
           </div>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(summary.totalEarnings)}
+              {formatCurrencyFromCents(
+                summary.totalPayoutsCents ?? summary.totalEarnings,
+              )}
             </div>
             <p
               className={cn(
@@ -382,7 +355,10 @@ export default function CreatorAnalytics({
               )}
             >
               {formatCurrencyFromCents(
-                Math.round(summary.avgEarningsPerCreator * 100),
+                Math.round(
+                  (summary.avgPayoutsPerCreator ??
+                    summary.avgEarningsPerCreator) * 100,
+                ),
               )}{" "}
               per creator
             </p>

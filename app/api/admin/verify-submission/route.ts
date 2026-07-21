@@ -66,6 +66,7 @@ import {
   loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import { creditDualRewardsSubmissionReward } from "@/lib/dual-rewards-reward-credit";
+import { logDualRewardsReversalRefund } from "@/lib/dual-rewards-bulk-reversal";
 
 function isDualRewardsLedgerReward(r: {
   metadata?: Record<string, unknown> | null;

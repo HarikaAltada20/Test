@@ -37,16 +37,10 @@ interface BrandDetailedAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter:
-    | "all"
-    | "leaderboard"
-    | "cpm"
-    | "milestone"
-    | "dual_rewards";
-  onContestTypeFilterChange: (
-    value: "all" | "leaderboard" | "cpm" | "milestone" | "dual_rewards",
-  ) => void;
+  contestTypeFilter: string;
+  onContestTypeFilterChange?: (value: string) => void;
   activeFilter?: string;
+  analyticsQueryString: string;
 }
 
 export default function BrandDetailedAnalytics({
@@ -57,6 +51,7 @@ export default function BrandDetailedAnalytics({
   contestTypeFilter,
   onContestTypeFilterChange,
   activeFilter = "all",
+  analyticsQueryString,
 }: BrandDetailedAnalyticsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,38 +60,15 @@ export default function BrandDetailedAnalytics({
 
   useEffect(() => {
     fetchAnalyticsData();
-  }, [
-    contestTypeFilter,
-    contentType,
-    videoPlatform,
-    twitterAnalytics,
-    activeFilter,
-  ]);
+  }, [analyticsQueryString]);
 
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      params.set("type", contestTypeFilter);
-      params.set("contentType", contentType);
-      params.set("videoPlatform", videoPlatform);
-      // Determine if tiktok is selected based on videoPlatform
-      const hasTiktok =
-        videoPlatform === "all" ||
-        videoPlatform === "tiktok" ||
-        videoPlatform.includes("tiktok");
-      params.set("tiktok", hasTiktok ? "true" : "false");
-      params.set("twitter", twitterAnalytics ? "true" : "false");
-      if (activeFilter && activeFilter !== "all") {
-        if (activeFilter === "not_rejected") {
-          params.set("notRejected", "true");
-        } else {
-          params.set("status", activeFilter);
-        }
-      }
-      const url = `/api/analytics/brand-detailed?${params.toString()}`;
+      setError(null);
+      const url = `/api/analytics/brand-detailed?${analyticsQueryString}`;
 
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: "no-store" });
 
       if (!response.ok) {
         throw new Error("Failed to fetch analytics data");
@@ -112,7 +84,7 @@ export default function BrandDetailedAnalytics({
     }
   };
 
-  if (loading) {
+  if (loading && !analyticsData) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
