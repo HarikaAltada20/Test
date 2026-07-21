@@ -159,41 +159,56 @@ export async function fetchBrandContestBudgetSubmissions(
 
   if (!isPc && twitterContests.length > 0) {
     const twitterIds = twitterContests.map((c) => c.id);
-    let query = supabase
-      .from("twitter_campaign_tweets")
-      .select(
-        "id, contest_id, creator_id, tweet_created_at, moderation_status, points, manual_points_adjustment, earnings, impressions, is_eligible, deleted_at",
-      )
-      .in("contest_id", twitterIds)
-      .gte("tweet_created_at", fromIso)
-      .lte("tweet_created_at", toIso);
+    const PAGE_SIZE = 1000;
+    const CONTEST_ID_CHUNK = 200;
 
-    query = applySubmissionStatusFilter(query, ctx);
+    for (let i = 0; i < twitterIds.length; i += CONTEST_ID_CHUNK) {
+      const idChunk = twitterIds.slice(i, i + CONTEST_ID_CHUNK);
+      for (let page = 0; ; page++) {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        let query = supabase
+          .from("twitter_campaign_tweets")
+          .select(
+            "id, contest_id, creator_id, tweet_created_at, moderation_status, points, manual_points_adjustment, earnings, impressions, is_eligible, deleted_at",
+          )
+          .in("contest_id", idChunk)
+          .gte("tweet_created_at", fromIso)
+          .lte("tweet_created_at", toIso)
+          .range(from, to)
+          .order("tweet_created_at", { ascending: false });
 
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
+        query = applySubmissionStatusFilter(query, ctx);
 
-    for (const row of data ?? []) {
-      const contestId = String(row.contest_id ?? "");
-      if (!contestId) continue;
-      const list = result.get(contestId) ?? [];
-      list.push(
-        ...mapTwitterTweetsToBudgetSubmissions([
-          {
-            id: String(row.id ?? ""),
-            creator_id: row.creator_id,
-            tweet_created_at: row.tweet_created_at,
-            moderation_status: row.moderation_status,
-            points: row.points,
-            manual_points_adjustment: row.manual_points_adjustment,
-            earnings: row.earnings,
-            impressions: row.impressions,
-            is_eligible: row.is_eligible,
-            deleted_at: row.deleted_at,
-          },
-        ]),
-      );
-      result.set(contestId, list);
+        const { data, error } = await query;
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
+
+        for (const row of data) {
+          const contestId = String(row.contest_id ?? "");
+          if (!contestId) continue;
+          const list = result.get(contestId) ?? [];
+          list.push(
+            ...mapTwitterTweetsToBudgetSubmissions([
+              {
+                id: String(row.id ?? ""),
+                creator_id: row.creator_id,
+                tweet_created_at: row.tweet_created_at,
+                moderation_status: row.moderation_status,
+                points: row.points,
+                manual_points_adjustment: row.manual_points_adjustment,
+                earnings: row.earnings,
+                impressions: row.impressions,
+                is_eligible: row.is_eligible,
+                deleted_at: row.deleted_at,
+              },
+            ]),
+          );
+          result.set(contestId, list);
+        }
+
+        if (data.length < PAGE_SIZE) break;
+      }
     }
   }
 

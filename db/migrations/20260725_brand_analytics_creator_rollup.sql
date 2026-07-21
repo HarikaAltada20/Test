@@ -612,3 +612,13 @@ COMMENT ON TABLE public.admin_analytics_creator_daily_rollup IS
 
 COMMENT ON TABLE public.admin_analytics_pc_creator_daily_rollup IS
   'Per-creator daily PC overlay rollups for brand analytics creator leaderboards.';
+
+-- Internal rollup writers are invoked by SECURITY DEFINER trigger functions.
+-- Do not expose direct execution to API roles.
+REVOKE ALL ON FUNCTION public.admin_analytics_apply_creator_rollup_delta(
+  uuid, uuid, date, text, text, bigint, bigint, bigint
+) FROM PUBLIC, anon, authenticated;
+
+REVOKE ALL ON FUNCTION public.admin_analytics_apply_pc_creator_rollup_delta(
+  uuid, uuid, date, text, text, bigint, bigint, bigint
+) FROM PUBLIC, anon, authenticated;

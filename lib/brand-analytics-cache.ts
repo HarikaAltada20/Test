@@ -144,6 +144,41 @@ function isMissingRpcError(error: { code?: string; message?: string }): boolean 
   );
 }
 
+/** Missing rollup relation (app ahead of DB, or incomplete migrate). */
+function isMissingRollupDependencyError(error: {
+  code?: string;
+  message?: string;
+}): boolean {
+  const code = error.code ?? "";
+  const msg = (error.message ?? "").toLowerCase();
+  return (
+    code === "42P01" || // undefined_table
+    msg.includes("admin_analytics_submission_daily_rollup") ||
+    msg.includes("admin_analytics_pc_daily_rollup") ||
+    (msg.includes("relation") && msg.includes("does not exist"))
+  );
+}
+
+const BRAND_ANALYTICS_DEPLOY_ORDER =
+  "Deploy order: 20260719_admin_analytics_daily_rollups.sql (+ backfill) → 20260723_admin_analytics_rollup_delta_fix.sql → 20260720_brand_analytics_scale.sql.";
+
+function throwBrandAnalyticsDependencyError(
+  error: { code?: string; message?: string },
+  fallbackMessage: string,
+): never {
+  if (isMissingRollupDependencyError(error)) {
+    throw new Error(
+      `Brand analytics rollup tables/helpers are missing. ${BRAND_ANALYTICS_DEPLOY_ORDER}`,
+    );
+  }
+  if (isMissingRpcError(error)) {
+    throw new Error(
+      `Brand analytics RPCs are not deployed. ${BRAND_ANALYTICS_DEPLOY_ORDER}`,
+    );
+  }
+  throw new Error(fallbackMessage);
+}
+
 function mergeDailyRows(
   rows: AdminAnalyticsDailySqlRow[],
 ): AdminAnalyticsDailySqlRow[] {
@@ -200,12 +235,10 @@ async function fetchDailyRowsForContests(
         p_contest_ids: idChunk,
       });
       if (error) {
-        if (isMissingRpcError(error)) {
-          throw new Error(
-            "Brand analytics RPCs are not deployed. Apply migrations 20260714_admin_analytics_daily_rpc.sql and 20260719_admin_analytics_daily_rollups.sql.",
-          );
-        }
-        throw new Error(`Failed to aggregate brand analytics: ${error.message}`);
+        throwBrandAnalyticsDependencyError(
+          error,
+          `Failed to aggregate brand analytics: ${error.message}`,
+        );
       }
       dailyChunks.push(...((data ?? []) as AdminAnalyticsDailySqlRow[]));
     } else {
@@ -215,12 +248,8 @@ async function fetchDailyRowsForContests(
         p_contest_ids: idChunk,
       });
       if (error) {
-        if (isMissingRpcError(error)) {
-          throw new Error(
-            "Brand analytics PC RPCs are not deployed. Apply migrations 20260718_pc_metrics_admin_analytics_scale.sql and 20260719_admin_analytics_daily_rollups.sql.",
-          );
-        }
-        throw new Error(
+        throwBrandAnalyticsDependencyError(
+          error,
           `Failed to aggregate brand PC analytics: ${error.message}`,
         );
       }
@@ -278,12 +307,8 @@ async function fetchContestRollup(
       p_contest_ids: idChunk,
     });
     if (error) {
-      if (isMissingRpcError(error)) {
-        throw new Error(
-          "Brand analytics contest rollup RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
-        );
-      }
-      throw new Error(
+      throwBrandAnalyticsDependencyError(
+        error,
         `Failed to load brand contest rollup: ${error.message}`,
       );
     }
@@ -324,12 +349,10 @@ async function fetchTwitterDaily(
       p_contest_ids: idChunk,
     });
     if (error) {
-      if (isMissingRpcError(error)) {
-        throw new Error(
-          "Brand analytics Twitter RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
-        );
-      }
-      throw new Error(`Failed to load Twitter daily rollup: ${error.message}`);
+      throwBrandAnalyticsDependencyError(
+        error,
+        `Failed to load Twitter daily rollup: ${error.message}`,
+      );
     }
     for (const row of (data ?? []) as BrandTwitterDailyRow[]) {
       const dayKey = String(row.day_key).slice(0, 10);
@@ -383,12 +406,8 @@ async function fetchTwitterContestRollup(
       },
     );
     if (error) {
-      if (isMissingRpcError(error)) {
-        throw new Error(
-          "Brand analytics Twitter RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
-        );
-      }
-      throw new Error(
+      throwBrandAnalyticsDependencyError(
+        error,
         `Failed to load Twitter contest rollup: ${error.message}`,
       );
     }
@@ -428,12 +447,10 @@ async function fetchCreatorRollup(
       p_contest_ids: idChunk,
     });
     if (error) {
-      if (isMissingRpcError(error)) {
-        throw new Error(
-          "Brand analytics creator RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
-        );
-      }
-      throw new Error(`Failed to load creator rollup: ${error.message}`);
+      throwBrandAnalyticsDependencyError(
+        error,
+        `Failed to load creator rollup: ${error.message}`,
+      );
     }
     for (const row of (data ?? []) as BrandCreatorRollupRow[]) {
       rows.push({
@@ -475,12 +492,8 @@ async function fetchTwitterCreatorRollup(
       },
     );
     if (error) {
-      if (isMissingRpcError(error)) {
-        throw new Error(
-          "Brand analytics Twitter creator RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
-        );
-      }
-      throw new Error(
+      throwBrandAnalyticsDependencyError(
+        error,
         `Failed to load Twitter creator rollup: ${error.message}`,
       );
     }
@@ -835,12 +848,10 @@ async function fetchCreatorRollupFromPc(
       },
     );
     if (error) {
-      if (isMissingRpcError(error)) {
-        throw new Error(
-          "Brand analytics PC creator RPC is not deployed. Apply migration 20260720_brand_analytics_scale.sql.",
-        );
-      }
-      throw new Error(`Failed to load PC creator rollup: ${error.message}`);
+      throwBrandAnalyticsDependencyError(
+        error,
+        `Failed to load PC creator rollup: ${error.message}`,
+      );
     }
     for (const row of (data ?? []) as BrandCreatorRollupRow[]) {
       rows.push({
