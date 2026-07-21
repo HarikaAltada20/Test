@@ -308,7 +308,7 @@ export default function OverviewAnalytics({
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
-              Total Spent
+              Total Budget
             </CardTitle>
             <DollarSign
               className={cn(
@@ -577,7 +577,7 @@ export default function OverviewAnalytics({
                     >
                       {formatCurrencyFromCents(stats.spent)}
                     </p>
-                    <p className="text-sm text-muted-foreground">spent</p>
+                    <p className="text-sm text-muted-foreground">budget</p>
                   </div>
                 </div>
               ))}
@@ -670,7 +670,7 @@ export default function OverviewAnalytics({
                       >
                         {formatCurrencyFromCents(monthData.spent)}
                       </p>
-                      <p className="text-muted-foreground">Spent</p>
+                      <p className="text-muted-foreground">Budget</p>
                     </div>
                   </div>
                 </div>

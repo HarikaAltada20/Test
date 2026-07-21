@@ -483,11 +483,6 @@ export async function syncPostCampaignFromSubmissions(
       overwriteMetrics,
     ));
 
-  const { revalidateBrandAnalyticsCache } = await import(
-    "@/lib/brand-analytics-cache"
-  );
-  revalidateBrandAnalyticsCache();
-
   return result;
 }
 

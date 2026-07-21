@@ -13,7 +13,7 @@ import { normalizeBrandPlatformKey } from "@/lib/brand-analytics-graph";
 export const BRAND_ANALYTICS_CACHE_SECONDS = 5 * 60;
 export const BRAND_ANALYTICS_CACHE_TAG = "brand-analytics";
 
-/** Invalidate cached brand analytics bundles after submission or PC metric updates. */
+/** Optional manual bust of brand analytics cache (e.g. admin tooling). Normal reads rely on TTL only. */
 export function revalidateBrandAnalyticsCache(): void {
   try {
     revalidateTag(BRAND_ANALYTICS_CACHE_TAG);
@@ -609,6 +609,28 @@ export function statusMatchesFilter(
   return bases.includes(normalized);
 }
 
+/** True when creator has submission rollup rows matching the current status filter. */
+export function creatorHasScopedRollupActivity(
+  creatorId: string,
+  bundle: Pick<
+    BrandAnalyticsCreatorsBundle,
+    "creatorRollup" | "twitterCreatorRollup"
+  >,
+  ctx: BrandAnalyticsQueryContext,
+): boolean {
+  for (const row of bundle.creatorRollup) {
+    if (row.creator_id !== creatorId) continue;
+    if (!statusMatchesFilter(row.status, ctx)) continue;
+    if (row.submission_count > 0) return true;
+  }
+  for (const row of bundle.twitterCreatorRollup) {
+    if (row.creator_id !== creatorId) continue;
+    if (!statusMatchesFilter(row.status, ctx)) continue;
+    if (row.submission_count > 0) return true;
+  }
+  return false;
+}
+
 export function hasBrandAnalyticsStatusFilter(
   ctx: BrandAnalyticsQueryContext,
 ): boolean {
@@ -665,6 +687,8 @@ async function loadBrandAnalyticsBundle(
   ctx: BrandAnalyticsQueryContext,
 ): Promise<BrandAnalyticsBundle> {
   const supabase = createAdminClient();
+  // Contest IDs passed to RPCs are always derived from fetchAdvertiserContests(advertiserId)
+  // and filterContests — never from raw client contestIds alone.
   const fromIso = ctx.dateFrom.toISOString();
   const toIso = ctx.dateTo.toISOString();
   const isPc = ctx.dataSource === "pc_submissions";

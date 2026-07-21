@@ -56,7 +56,8 @@ import { toast } from "@/hooks/use-toast";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
-import { getLastNDaysUtcRange } from "@/lib/admin-date-range";
+import { getUtcMonthsAgoRange } from "@/lib/admin-date-range";
+import { BRAND_ANALYTICS_MAX_RANGE_DAYS } from "@/lib/brand-analytics-query";
 import { buildBrandAnalyticsQueryString } from "@/lib/brand-analytics-query";
 import type { BrandAnalyticsDataSource } from "@/lib/brand-analytics-query";
 
@@ -203,7 +204,7 @@ const defaultMetricTiles: MetricTile[] = [
   // Financial Metrics
   {
     id: "total_spent",
-    label: "Total Spent",
+    label: "Total Budget",
     icon: DollarSign,
     enabled: true,
     category: "financial",
@@ -313,7 +314,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   const [videoInstagram, setVideoInstagram] = useState(true);
   const [videoTiktok, setVideoTiktok] = useState(true);
   // All platforms selected by default so campaign counts cover every campaign.
-  const [twitterAnalytics, setTwitterAnalytics] = useState(true);
+  const [twitterAnalytics, setTwitterAnalytics] = useState(false);
   // Multi-select campaign types (all selected by default).
   const [contestTypes, setContestTypes] = useState<string[]>([
     ...ALL_CONTEST_TYPE_IDS,
@@ -331,9 +332,9 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   );
   const [campaignSearch, setCampaignSearch] = useState("");
   // Date range (drives the Graph tab). Shown in the top filter bar.
-  const [dateRange, setDateRange] = useState(() => getLastNDaysUtcRange(30));
+  const [dateRange, setDateRange] = useState(() => getUtcMonthsAgoRange(12));
   const [dateRangePresetLabel, setDateRangePresetLabel] =
-    useState("Last 30 Days");
+    useState("Last 12 Months");
   const [dataSource, setDataSource] =
     useState<BrandAnalyticsDataSource>("submissions");
   const isPcSubmissions = dataSource === "pc_submissions";
@@ -683,11 +684,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
           <h3
             className={cn(
-              "text-lg font-semibold",
+              "text-base font-semibold tracking-tight",
               isDark ? "text-white" : "text-gray-900",
             )}
           >
-            Filter by Submission Status
+            Filters
           </h3>
           <div className="flex flex-wrap items-center gap-2 justify-start md:justify-end">
             <DropdownMenu>
@@ -1156,10 +1157,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         </div>
 
         {/* Submissions vs PC Submissions — drives overview tiles + graph */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div
             className={cn(
-              "inline-flex flex-wrap gap-1 rounded-full border p-1",
+              "inline-flex w-fit flex-wrap gap-1 rounded-full border p-1",
               isDark
                 ? "border-white/10 bg-[#0d0d0d]"
                 : "border-black/10 bg-[#f5f5f5]",
@@ -1171,9 +1172,9 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 type="button"
                 onClick={() => setDataSource(tab.id)}
                 className={cn(
-                  "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                  "rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
                   dataSource === tab.id
-                    ? "border border-black/80 bg-[#7F39EC] text-white"
+                    ? "bg-[#7F39EC] text-white shadow-sm"
                     : isDark
                       ? "text-white/60 hover:text-white"
                       : "text-black/55 hover:text-black",
@@ -1183,49 +1184,47 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
               </button>
             ))}
           </div>
+          <AdminDateRangePicker
+            isDark={isDark}
+            value={dateRange}
+            presetLabel={dateRangePresetLabel}
+            maxHistoryDays={BRAND_ANALYTICS_MAX_RANGE_DAYS}
+            onChange={(next, label) => {
+              setDateRange(next);
+              setDateRangePresetLabel(label);
+            }}
+            align="end"
+          />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap gap-2">
-            {submissionStatusOptions.map((option) => {
-              const Icon = option.icon;
-              return (
-                <Button
-                  key={option.id}
-                  variant={activeFilter === option.id ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setActiveFilter(option.id)}
-                  className={`flex items-center gap-2 ${
-                    activeFilter === option.id
-                      ? "bg-purple-600 hover:bg-purple-700 text-white"
-                      : isDark
-                        ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
-                        : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="text-sm font-medium">{option.label}</span>
-                </Button>
-              );
-            })}
-          </div>
-          <div className="ml-auto">
-            <AdminDateRangePicker
-              isDark={isDark}
-              value={dateRange}
-              presetLabel={dateRangePresetLabel}
-              onChange={(next, label) => {
-                setDateRange(next);
-                setDateRangePresetLabel(label);
-              }}
-              align="end"
-            />
-          </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {submissionStatusOptions.map((option) => {
+            const Icon = option.icon;
+            const isActive = activeFilter === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setActiveFilter(option.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "border-transparent bg-[#7F39EC] text-white"
+                    : isDark
+                      ? "border-white/10 bg-transparent text-white/70 hover:bg-white/5 hover:text-white"
+                      : "border-black/10 bg-white text-gray-600 hover:border-black/20 hover:text-gray-900",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                {option.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Customizable Metric Tiles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {enabledTiles.map((tile) => {
           const Icon = tile.icon;
           const value = getMetricValue(tile.id);
@@ -1235,54 +1234,42 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
             <div
               key={tile.id}
               className={cn(
-                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337] text-white" : "bg-white text-black",
+                "rounded-xl border p-4",
+                isDark
+                  ? "border-white/5 bg-[#170337] text-white"
+                  : "border-black/[0.04] bg-white text-black shadow-[0px_5px_20px_0px_#0000000D]",
               )}
             >
-              <div className="flex flex-row items-center justify-between space-y-0 px-6 pt-2">
-                <h1
-                  className={cn(
-                    "text-lg font-medium",
-                    isDark ? "text-white" : "text-gray-900",
-                  )}
-                >
-                  {tile.label}
-                </h1>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-2">
+                  <p
+                    className={cn(
+                      "text-sm font-medium leading-snug",
+                      isDark ? "text-white/70" : "text-gray-500",
+                    )}
+                  >
+                    {tile.label}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-2xl font-bold tracking-tight tabular-nums",
+                      isDark ? "text-white" : "text-gray-900",
+                    )}
+                  >
+                    {displayValue}
+                  </p>
+                </div>
                 <div
                   className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
                     isDark
-                      ? "bg-[#FFFFFF36] text-white"
+                      ? "bg-white/15 text-white"
                       : "bg-[#D8C3FF] text-[#4A00BE]",
                   )}
                 >
                   <Icon className="h-4 w-4" />
                 </div>
               </div>
-              <CardContent>
-                <div
-                  className={cn(
-                    "text-2xl font-bold mb-2",
-                    isDark ? "text-white" : "text-gray-900",
-                  )}
-                >
-                  {displayValue}
-                </div>
-                <p
-                  className={cn(
-                    "text-sm mt-2",
-                    isDark ? "text-white" : "text-gray-600",
-                  )}
-                >
-                  {activeFilter === "all"
-                    ? "All submissions"
-                    : `Filtered by ${
-                        submissionStatusOptions.find(
-                          (opt) => opt.id === activeFilter,
-                        )?.label
-                      }`}
-                </p>
-              </CardContent>
             </div>
           );
         })}
@@ -1609,7 +1596,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                 isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
-                              spent
+                              budget
                             </p>
                           </div>
                         </div>

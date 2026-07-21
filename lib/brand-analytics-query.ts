@@ -1,4 +1,11 @@
+import { getUtcMonthsAgoRange } from "@/lib/admin-date-range";
+
 export type BrandAnalyticsDataSource = "submissions" | "pc_submissions";
+
+export const BRAND_ANALYTICS_DEFAULT_MONTHS = 12;
+export const BRAND_ANALYTICS_MAX_RANGE_DAYS = 366;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function parseBrandAnalyticsSource(
   searchParams: URLSearchParams,
@@ -10,17 +17,15 @@ export function parseBrandAnalyticsSource(
 
 export type BrandAnalyticsDateRange = { from: Date; to: Date };
 
-/** Parse `from` / `to` ISO query params (defaults to last 30 days). */
+/** Parse `from` / `to` ISO query params (defaults to last 12 months). */
 export function parseBrandAnalyticsDateRange(
   searchParams: URLSearchParams,
 ): BrandAnalyticsDateRange {
-  const now = new Date();
-  const defaultFrom = new Date(now);
-  defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 30);
+  const defaultRange = getUtcMonthsAgoRange(BRAND_ANALYTICS_DEFAULT_MONTHS);
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
-  const from = fromParam ? new Date(fromParam) : defaultFrom;
-  const to = toParam ? new Date(toParam) : now;
+  const from = fromParam ? new Date(fromParam) : defaultRange.from;
+  const to = toParam ? new Date(toParam) : defaultRange.to;
   return { from, to };
 }
 
@@ -37,6 +42,14 @@ export function validateBrandAnalyticsDateRange(range: BrandAnalyticsDateRange):
     return {
       ok: false,
       error: "Invalid date range: from must be before to",
+    };
+  }
+  const spanDays =
+    (range.to.getTime() - range.from.getTime()) / MS_PER_DAY;
+  if (spanDays > BRAND_ANALYTICS_MAX_RANGE_DAYS) {
+    return {
+      ok: false,
+      error: `Invalid date range: maximum span is ${BRAND_ANALYTICS_MAX_RANGE_DAYS} days`,
     };
   }
   return { ok: true };

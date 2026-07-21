@@ -3,6 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 import { parseBrandAnalyticsContext } from "@/lib/brand-analytics-context";
 import {
+  creatorHasScopedRollupActivity,
   getCachedBrandAnalyticsCreatorsBundle,
   statusMatchesFilter,
   twitterContestIdsWithRollupActivity,
@@ -11,13 +12,44 @@ import { buildBrandCreatorsResponse } from "@/lib/brand-analytics-response";
 import { brandAnalyticsClientErrorMessage } from "@/lib/brand-analytics-errors";
 import { fetchTwitterEarningsCentsByCreator } from "@/lib/brand-analytics-payouts";
 
+type CreatorTopSubmissionRow = {
+  status?: string | null;
+  views?: number | null;
+};
+
 async function buildCreatorDetailResponse(
-  advertiserId: string,
   creatorId: string,
   ctx: ReturnType<typeof parseBrandAnalyticsContext> & { ok: true },
 ) {
   const supabase = createAdminClient();
   const bundle = await getCachedBrandAnalyticsCreatorsBundle(ctx.ctx);
+
+  let hasActivity = creatorHasScopedRollupActivity(
+    creatorId,
+    bundle,
+    ctx.ctx,
+  );
+
+  if (!hasActivity && bundle.twitterContestIds.length > 0) {
+    const twitterContestIds = twitterContestIdsWithRollupActivity(
+      bundle.twitterContestRollup,
+    );
+    if (twitterContestIds.length > 0) {
+      const earningsByCreator = await fetchTwitterEarningsCentsByCreator(
+        supabase,
+        twitterContestIds,
+        ctx.ctx.dateFrom,
+        ctx.ctx.dateTo,
+        ctx.ctx,
+        creatorId,
+      );
+      hasActivity = (earningsByCreator.get(creatorId) ?? 0) > 0;
+    }
+  }
+
+  if (!hasActivity) {
+    return NextResponse.json({ error: "Creator not found" }, { status: 404 });
+  }
 
   const { data: creator } = await supabase
     .from("users")
@@ -160,7 +192,7 @@ async function buildCreatorDetailResponse(
   }
 
   const contestIds = bundle.videoContestIds;
-  let topSubmissions: unknown[] = [];
+  let topSubmissions: CreatorTopSubmissionRow[] = [];
   if (contestIds.length > 0) {
     const CONTEST_ID_CHUNK = 500;
     for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
@@ -176,13 +208,17 @@ async function buildCreatorDetailResponse(
         },
       );
       if (!error && data) {
-        topSubmissions = topSubmissions.concat(data);
+        topSubmissions = topSubmissions.concat(
+          data as CreatorTopSubmissionRow[],
+        );
       }
     }
     topSubmissions = topSubmissions
+      .filter((row) =>
+        statusMatchesFilter(String(row.status ?? ""), ctx.ctx),
+      )
       .sort(
-        (a: { views?: number }, b: { views?: number }) =>
-          (Number(b.views) || 0) - (Number(a.views) || 0),
+        (a, b) => (Number(b.views) || 0) - (Number(a.views) || 0),
       )
       .slice(0, 10);
   }
@@ -238,7 +274,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (creatorId) {
-      return buildCreatorDetailResponse(user.id, creatorId, parsed);
+      return buildCreatorDetailResponse(creatorId, parsed);
     }
 
     if (
@@ -287,8 +323,8 @@ export async function GET(request: NextRequest) {
         parsed.ctx.dateTo,
         parsed.ctx,
       );
-      for (const [creatorId, earnings] of earningsByCreator) {
-        twitterEarningsByCreator.set(creatorId, earnings);
+      for (const [id, earnings] of earningsByCreator) {
+        twitterEarningsByCreator.set(id, earnings);
       }
     }
 
