@@ -83,22 +83,18 @@ BEGIN
     RETURN;
   END IF;
 
-  UPDATE public.admin_analytics_creator_daily_rollup AS r
-  SET
-    submission_count = GREATEST(0, r.submission_count + p_count_delta),
-    views_sum = GREATEST(0, r.views_sum + p_views_delta),
-    earnings_cents_sum = GREATEST(0, r.earnings_cents_sum + p_earnings_delta)
-  WHERE r.contest_id = p_contest_id
-    AND r.creator_id = p_creator_id
-    AND r.day_key = p_day_key
-    AND r.status = p_status
-    AND r.platform = p_platform;
-
-  IF NOT FOUND THEN
-    IF p_count_delta < 0 OR p_views_delta < 0 OR p_earnings_delta < 0 THEN
-      RETURN;
-    END IF;
-
+  IF p_count_delta < 0 OR p_views_delta < 0 OR p_earnings_delta < 0 THEN
+    UPDATE public.admin_analytics_creator_daily_rollup AS r
+    SET
+      submission_count = GREATEST(0, r.submission_count + p_count_delta),
+      views_sum = GREATEST(0, r.views_sum + p_views_delta),
+      earnings_cents_sum = GREATEST(0, r.earnings_cents_sum + p_earnings_delta)
+    WHERE r.contest_id = p_contest_id
+      AND r.creator_id = p_creator_id
+      AND r.day_key = p_day_key
+      AND r.status = p_status
+      AND r.platform = p_platform;
+  ELSE
     INSERT INTO public.admin_analytics_creator_daily_rollup (
       contest_id,
       creator_id,
@@ -118,7 +114,18 @@ BEGIN
       p_count_delta,
       p_views_delta,
       p_earnings_delta
-    );
+    )
+    ON CONFLICT (contest_id, creator_id, day_key, status, platform)
+    DO UPDATE SET
+      submission_count =
+        public.admin_analytics_creator_daily_rollup.submission_count
+        + EXCLUDED.submission_count,
+      views_sum =
+        public.admin_analytics_creator_daily_rollup.views_sum
+        + EXCLUDED.views_sum,
+      earnings_cents_sum =
+        public.admin_analytics_creator_daily_rollup.earnings_cents_sum
+        + EXCLUDED.earnings_cents_sum;
   END IF;
 
   DELETE FROM public.admin_analytics_creator_daily_rollup
@@ -159,22 +166,18 @@ BEGIN
     RETURN;
   END IF;
 
-  UPDATE public.admin_analytics_pc_creator_daily_rollup AS r
-  SET
-    submission_count = GREATEST(0, r.submission_count + p_count_delta),
-    views_sum = GREATEST(0, r.views_sum + p_views_delta),
-    earnings_cents_sum = GREATEST(0, r.earnings_cents_sum + p_earnings_delta)
-  WHERE r.contest_id = p_contest_id
-    AND r.creator_id = p_creator_id
-    AND r.day_key = p_day_key
-    AND r.status = p_status
-    AND r.platform = p_platform;
-
-  IF NOT FOUND THEN
-    IF p_count_delta < 0 OR p_views_delta < 0 OR p_earnings_delta < 0 THEN
-      RETURN;
-    END IF;
-
+  IF p_count_delta < 0 OR p_views_delta < 0 OR p_earnings_delta < 0 THEN
+    UPDATE public.admin_analytics_pc_creator_daily_rollup AS r
+    SET
+      submission_count = GREATEST(0, r.submission_count + p_count_delta),
+      views_sum = GREATEST(0, r.views_sum + p_views_delta),
+      earnings_cents_sum = GREATEST(0, r.earnings_cents_sum + p_earnings_delta)
+    WHERE r.contest_id = p_contest_id
+      AND r.creator_id = p_creator_id
+      AND r.day_key = p_day_key
+      AND r.status = p_status
+      AND r.platform = p_platform;
+  ELSE
     INSERT INTO public.admin_analytics_pc_creator_daily_rollup (
       contest_id,
       creator_id,
@@ -194,7 +197,18 @@ BEGIN
       p_count_delta,
       p_views_delta,
       p_earnings_delta
-    );
+    )
+    ON CONFLICT (contest_id, creator_id, day_key, status, platform)
+    DO UPDATE SET
+      submission_count =
+        public.admin_analytics_pc_creator_daily_rollup.submission_count
+        + EXCLUDED.submission_count,
+      views_sum =
+        public.admin_analytics_pc_creator_daily_rollup.views_sum
+        + EXCLUDED.views_sum,
+      earnings_cents_sum =
+        public.admin_analytics_pc_creator_daily_rollup.earnings_cents_sum
+        + EXCLUDED.earnings_cents_sum;
   END IF;
 
   DELETE FROM public.admin_analytics_pc_creator_daily_rollup
@@ -607,6 +621,195 @@ AS $$
   GROUP BY r.creator_id, c.contest_type, r.platform, r.status;
 $$;
 
+CREATE OR REPLACE FUNCTION public.brand_analytics_twitter_paid_by_contest(
+  p_contest_ids uuid[]
+)
+RETURNS TABLE (
+  contest_id uuid,
+  paid_cents bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    l.contest_id,
+    COALESCE(SUM(COALESCE(l.earnings, 0)), 0)::bigint AS paid_cents
+  FROM public.twitter_campaign_leaderboard l
+  WHERE p_contest_ids IS NOT NULL
+    AND cardinality(p_contest_ids) > 0
+    AND l.contest_id = ANY (p_contest_ids)
+  GROUP BY l.contest_id;
+$$;
+
+-- Targeted monthly timeline for one creator. Keeping this separate from the
+-- leaderboard RPC preserves daily rollup scalability for list responses.
+CREATE OR REPLACE FUNCTION public.brand_analytics_creator_monthly(
+  p_from timestamptz,
+  p_to timestamptz,
+  p_contest_ids uuid[],
+  p_creator_id uuid
+)
+RETURNS TABLE (
+  month_key date,
+  status text,
+  submission_count bigint,
+  views_sum bigint,
+  earnings_cents_sum bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    date_trunc('month', r.day_key::timestamp)::date AS month_key,
+    r.status,
+    SUM(r.submission_count)::bigint AS submission_count,
+    COALESCE(SUM(r.views_sum), 0)::bigint AS views_sum,
+    COALESCE(SUM(r.earnings_cents_sum), 0)::bigint AS earnings_cents_sum
+  FROM public.admin_analytics_creator_daily_rollup r
+  WHERE p_contest_ids IS NOT NULL
+    AND cardinality(p_contest_ids) > 0
+    AND r.contest_id = ANY (p_contest_ids)
+    AND r.creator_id = p_creator_id
+    AND r.day_key >= (p_from AT TIME ZONE 'UTC')::date
+    AND r.day_key <= (p_to AT TIME ZONE 'UTC')::date
+    AND public.admin_analytics_submission_row_in_scope(r.platform)
+  GROUP BY 1, r.status
+  ORDER BY 1, r.status;
+$$;
+
+CREATE OR REPLACE FUNCTION public.brand_analytics_pc_creator_monthly(
+  p_from timestamptz,
+  p_to timestamptz,
+  p_contest_ids uuid[],
+  p_creator_id uuid
+)
+RETURNS TABLE (
+  month_key date,
+  status text,
+  submission_count bigint,
+  views_sum bigint,
+  earnings_cents_sum bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    date_trunc('month', r.day_key::timestamp)::date AS month_key,
+    r.status,
+    SUM(r.submission_count)::bigint AS submission_count,
+    COALESCE(SUM(r.views_sum), 0)::bigint AS views_sum,
+    COALESCE(SUM(r.earnings_cents_sum), 0)::bigint AS earnings_cents_sum
+  FROM public.admin_analytics_pc_creator_daily_rollup r
+  WHERE p_contest_ids IS NOT NULL
+    AND cardinality(p_contest_ids) > 0
+    AND r.contest_id = ANY (p_contest_ids)
+    AND r.creator_id = p_creator_id
+    AND r.day_key >= (p_from AT TIME ZONE 'UTC')::date
+    AND r.day_key <= (p_to AT TIME ZONE 'UTC')::date
+    AND public.admin_analytics_pc_row_in_scope(r.platform)
+  GROUP BY 1, r.status
+  ORDER BY 1, r.status;
+$$;
+
+CREATE OR REPLACE FUNCTION public.brand_analytics_twitter_creator_monthly(
+  p_from timestamptz,
+  p_to timestamptz,
+  p_contest_ids uuid[],
+  p_creator_id uuid
+)
+RETURNS TABLE (
+  month_key date,
+  status text,
+  submission_count bigint,
+  views_sum bigint,
+  earnings_cents_sum bigint
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    date_trunc('month', t.tweet_created_at AT TIME ZONE 'UTC')::date AS month_key,
+    public.admin_analytics_normalize_status(t.moderation_status::text) AS status,
+    COUNT(*)::bigint AS submission_count,
+    COALESCE(SUM(COALESCE(t.impressions, 0)), 0)::bigint AS views_sum,
+    0::bigint AS earnings_cents_sum
+  FROM public.twitter_campaign_tweets t
+  WHERE p_contest_ids IS NOT NULL
+    AND cardinality(p_contest_ids) > 0
+    AND t.contest_id = ANY (p_contest_ids)
+    AND t.creator_id = p_creator_id
+    AND t.tweet_created_at >= p_from
+    AND t.tweet_created_at <= p_to
+  GROUP BY 1, 2
+  ORDER BY 1, 2;
+$$;
+
+CREATE OR REPLACE FUNCTION public.brand_analytics_pc_creator_top_submissions(
+  p_from timestamptz,
+  p_to timestamptz,
+  p_contest_ids uuid[],
+  p_creator_id uuid,
+  p_limit integer DEFAULT 10
+)
+RETURNS TABLE (
+  id uuid,
+  views bigint,
+  created_at timestamptz,
+  platform text,
+  status text,
+  earnings bigint,
+  contest_id uuid,
+  contest_title text,
+  contest_type text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    pcs.submission_id AS id,
+    public.admin_analytics_submission_views(
+      COALESCE(pcs.views, 0)::bigint,
+      public.admin_analytics_normalize_platform(
+        COALESCE(pcs.platform, c.platform),
+        c.contest_based_details
+      ),
+      COALESCE(pcs.other_stats, '{}'::jsonb)
+    ) AS views,
+    pcs.created_at,
+    COALESCE(pcs.platform, c.platform)::text AS platform,
+    pcs.status::text,
+    COALESCE(pcs.earnings, 0)::bigint AS earnings,
+    pcs.contest_id,
+    c.title AS contest_title,
+    c.contest_type::text AS contest_type
+  FROM public.post_campaign_submission_metrics pcs
+  INNER JOIN public.contests c ON c.id = pcs.contest_id
+  WHERE p_contest_ids IS NOT NULL
+    AND cardinality(p_contest_ids) > 0
+    AND pcs.contest_id = ANY (p_contest_ids)
+    AND pcs.creator_id = p_creator_id
+    AND pcs.created_at >= p_from
+    AND pcs.created_at <= p_to
+    AND public.admin_analytics_pc_row_in_scope(
+      public.admin_analytics_normalize_platform(
+        COALESCE(pcs.platform, c.platform),
+        c.contest_based_details
+      )
+    )
+  ORDER BY views DESC NULLS LAST, pcs.created_at DESC
+  LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 10), 50));
+$$;
+
 COMMENT ON TABLE public.admin_analytics_creator_daily_rollup IS
   'Per-creator daily submission rollups for brand analytics creator leaderboards.';
 
@@ -622,3 +825,35 @@ REVOKE ALL ON FUNCTION public.admin_analytics_apply_creator_rollup_delta(
 REVOKE ALL ON FUNCTION public.admin_analytics_apply_pc_creator_rollup_delta(
   uuid, uuid, date, text, text, bigint, bigint, bigint
 ) FROM PUBLIC, anon, authenticated;
+
+REVOKE ALL ON FUNCTION public.brand_analytics_creator_monthly(
+  timestamptz, timestamptz, uuid[], uuid
+) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.brand_analytics_twitter_paid_by_contest(
+  uuid[]
+) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.brand_analytics_pc_creator_monthly(
+  timestamptz, timestamptz, uuid[], uuid
+) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.brand_analytics_twitter_creator_monthly(
+  timestamptz, timestamptz, uuid[], uuid
+) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.brand_analytics_pc_creator_top_submissions(
+  timestamptz, timestamptz, uuid[], uuid, integer
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.brand_analytics_creator_monthly(
+  timestamptz, timestamptz, uuid[], uuid
+) TO service_role;
+GRANT EXECUTE ON FUNCTION public.brand_analytics_twitter_paid_by_contest(
+  uuid[]
+) TO service_role;
+GRANT EXECUTE ON FUNCTION public.brand_analytics_pc_creator_monthly(
+  timestamptz, timestamptz, uuid[], uuid
+) TO service_role;
+GRANT EXECUTE ON FUNCTION public.brand_analytics_twitter_creator_monthly(
+  timestamptz, timestamptz, uuid[], uuid
+) TO service_role;
+GRANT EXECUTE ON FUNCTION public.brand_analytics_pc_creator_top_submissions(
+  timestamptz, timestamptz, uuid[], uuid, integer
+) TO service_role;

@@ -382,36 +382,10 @@ describe("buildBrandContestsResponse", () => {
     });
 
     const mockSupabase = {
-      from: (table: string) => {
-        if (table === "twitter_campaign_tweets") {
-          const chain: Record<string, unknown> = {};
-          const self = () => chain;
-          chain.select = self;
-          chain.in = self;
-          chain.gte = self;
-          chain.lte = self;
-          chain.range = self;
-          chain.order = self;
-          chain.neq = self;
-          chain.eq = self;
-          // Final awaitable: empty page ends pagination.
-          chain.then = (
-            resolve: (value: { data: unknown[]; error: null }) => unknown,
-          ) => resolve({ data: [], error: null });
-          return chain;
-        }
-        if (table === "twitter_campaign_leaderboard") {
-          return {
-            select: () => ({
-              in: async () => ({
-                data: [{ contest_id: "tw-contest-1", earnings: 9990 }],
-                error: null,
-              }),
-            }),
-          };
-        }
-        throw new Error(`Unexpected table ${table}`);
-      },
+      rpc: async () => ({
+        data: [{ contest_id: "tw-contest-1", paid_cents: 9990 }],
+        error: null,
+      }),
     };
 
     const response = await buildBrandContestsResponse(
@@ -574,6 +548,13 @@ describe("buildBrandCreatorsResponse", () => {
     );
 
     assert.equal(response.leaderboards.topByViews.length, 1);
-    assert.equal(response.leaderboards.topByViews[0]?.creator?.id, "creator-2");
+    assert.equal(
+      (
+        response.leaderboards.topByViews[0]?.creator as
+          | { id?: string }
+          | undefined
+      )?.id,
+      "creator-2",
+    );
   });
 });

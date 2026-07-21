@@ -22,7 +22,6 @@ import {
 } from "@/lib/brand-analytics-cache";
 import { buildBrandAnalyticsGraphFromDailyRows } from "@/lib/brand-analytics-graph";
 import {
-  fetchBrandContestBudgetSubmissions,
   fetchTwitterLeaderboardPaidByContest,
   resolveContestBudgetTile,
 } from "@/lib/brand-analytics-contest-budget";
@@ -190,11 +189,12 @@ function getContestActivityTotals(
 ) {
   const platform = normalizeBrandPlatformKey(contest);
   if (platform === "twitter") {
-    return twitterContestTotalsFromRollup(
+    const totals = twitterContestTotalsFromRollup(
       contest.id,
       bundle.twitterContestRollup,
       bundle.ctx,
     );
+    return { ...totals, payoutsCents: 0 };
   }
   const totals = contestTotalsFromRollup(
     contest.id,
@@ -579,11 +579,6 @@ export async function buildBrandContestsResponse(
 
   list = contestsWithActivity(list, bundle);
 
-  const budgetSubmissionsByContest = await fetchBrandContestBudgetSubmissions(
-    supabase,
-    list,
-    ctx,
-  );
   const twitterContestIds = list
     .filter((c) => normalizeBrandPlatformKey(c) === "twitter")
     .map((c) => c.id);
@@ -603,7 +598,6 @@ export async function buildBrandContestsResponse(
     const activity = getContestActivityTotals(contest, bundle);
     const platform = normalizeBrandPlatformKey(contest);
     const isTwitter = platform === "twitter";
-    const budgetSubmissions = budgetSubmissionsByContest.get(contest.id) ?? [];
 
     const twitterMetrics = isTwitter
       ? {
@@ -632,7 +626,7 @@ export async function buildBrandContestsResponse(
 
     const budgetTile = resolveContestBudgetTile(
       contest,
-      budgetSubmissions,
+      activity.payoutsCents,
       twitterLeaderboardPaidByContest.get(contest.id),
     );
     const totalSpent = budgetTile?.numeratorCents ?? 0;

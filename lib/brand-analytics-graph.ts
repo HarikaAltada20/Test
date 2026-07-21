@@ -180,7 +180,11 @@ export function buildBrandAnalyticsGraph(input: {
 
     const contest = contestById.get(sub.contest_id);
     const metrics = getSubmissionMetricBundle(
-      sub,
+      {
+        ...sub,
+        platform: sub.platform ?? null,
+        views: sub.views ?? null,
+      },
       contest?.platform,
       contest?.contest_based_details,
     );

@@ -21,12 +21,57 @@ describe("resolveContestBudgetTile", () => {
       post_contest_status: "payouts_processed",
     };
 
-    const tile = resolveContestBudgetTile(contest, [], 9990);
+    const tile = resolveContestBudgetTile(contest, 0, 9990);
 
     assert.ok(tile);
     assert.equal(tile!.mode, "paid");
     assert.equal(tile!.numeratorCents, 9990);
     assert.equal(tile!.denominatorCents, 100000);
     assert.equal(tile!.label, "Budget paid / Campaign budget");
+  });
+
+  it("uses rollup payouts for paid video campaigns", () => {
+    const contest: BrandContestRow = {
+      id: "video-1",
+      title: "Video Campaign",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: "2026-05-02T00:00:00.000Z",
+      end_date: "2026-05-05T00:00:00.000Z",
+      created_at: "2026-05-01T00:00:00.000Z",
+      contest_based_details: {
+        cpm_contest: { total_budget: 100000 },
+      },
+      post_contest_status: "payouts_processed",
+    };
+
+    const tile = resolveContestBudgetTile(contest, 12500);
+
+    assert.equal(tile?.numeratorCents, 12500);
+    assert.equal(tile?.denominatorCents, 100000);
+  });
+
+  it("uses stored spend for active campaigns without loading submissions", () => {
+    const contest: BrandContestRow = {
+      id: "video-2",
+      title: "Active Campaign",
+      platform: "youtube",
+      contest_type: "cpm",
+      start_date: "2026-05-02T00:00:00.000Z",
+      end_date: "2026-05-05T00:00:00.000Z",
+      created_at: "2026-05-01T00:00:00.000Z",
+      contest_based_details: {
+        cpm_contest: {
+          total_budget: 100000,
+          budget_spent: 42000,
+        },
+      },
+      post_contest_status: "ongoing",
+    };
+
+    const tile = resolveContestBudgetTile(contest, 0);
+
+    assert.equal(tile?.mode, "filled");
+    assert.equal(tile?.numeratorCents, 42000);
   });
 });

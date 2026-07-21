@@ -128,7 +128,7 @@ export async function fetchBrandRollupAnalytics(
       viewsByStatus: result.pc.viewsByStatus,
       campaigns: result.pc.allCampaigns ?? [],
       allCampaigns: result.allCampaigns,
-      dataSource: source as const,
+      dataSource: source,
     };
   }
 
@@ -140,6 +140,6 @@ export async function fetchBrandRollupAnalytics(
     viewsByStatus: result.viewsByStatus,
     campaigns: result.campaigns,
     allCampaigns: result.allCampaigns,
-    dataSource: source as const,
+    dataSource: source,
   };
 }

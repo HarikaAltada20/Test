@@ -17,6 +17,14 @@ type CreatorTopSubmissionRow = {
   views?: number | null;
 };
 
+type CreatorMonthlyRow = {
+  month_key?: string | null;
+  status?: string | null;
+  submission_count?: number | null;
+  views_sum?: number | null;
+  earnings_cents_sum?: number | null;
+};
+
 /** True if this creator has ever submitted (video / Twitter / PC) on the advertiser's contests. */
 async function creatorBelongsToAdvertiser(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,7 +52,7 @@ async function creatorBelongsToAdvertiser(
 
   const { data: pcRow } = await supabase
     .from("post_campaign_submission_metrics")
-    .select("id, contests!inner(advertiser_id)")
+    .select("submission_id, contests!inner(advertiser_id)")
     .eq("creator_id", creatorId)
     .eq("contests.advertiser_id", advertiserId)
     .limit(1)
@@ -168,20 +176,6 @@ async function buildCreatorDetailResponse(
       row.views_sum,
       row.earnings_cents_sum,
     );
-    if (row.first_created_at) {
-      const month = new Date(
-        row.last_created_at ?? row.first_created_at,
-      )
-        .toISOString()
-        .slice(0, 7);
-      addBucket(
-        performanceTimeline,
-        month,
-        row.submission_count,
-        row.views_sum,
-        row.earnings_cents_sum,
-      );
-    }
   }
 
   for (const row of bundle.twitterCreatorRollup) {
@@ -203,20 +197,6 @@ async function buildCreatorDetailResponse(
       row.views_sum,
       0,
     );
-    if (row.first_created_at) {
-      const month = new Date(
-        row.last_created_at ?? row.first_created_at,
-      )
-        .toISOString()
-        .slice(0, 7);
-      addBucket(
-        performanceTimeline,
-        month,
-        row.submission_count,
-        row.views_sum,
-        0,
-      );
-    }
   }
 
   if (bundle.twitterContestIds.length > 0) {
@@ -243,13 +223,82 @@ async function buildCreatorDetailResponse(
   }
 
   const contestIds = bundle.videoContestIds;
+  const monthlyRpc =
+    ctx.ctx.dataSource === "pc_submissions"
+      ? "brand_analytics_pc_creator_monthly"
+      : "brand_analytics_creator_monthly";
+  const CONTEST_ID_CHUNK = 500;
+
+  for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
+    const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
+    const { data, error } = await supabase.rpc(monthlyRpc, {
+      p_from: ctx.ctx.dateFrom.toISOString(),
+      p_to: ctx.ctx.dateTo.toISOString(),
+      p_contest_ids: idChunk,
+      p_creator_id: creatorId,
+    });
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as CreatorMonthlyRow[]) {
+      if (
+        !row.month_key ||
+        !statusMatchesFilter(String(row.status ?? ""), ctx.ctx)
+      ) {
+        continue;
+      }
+      addBucket(
+        performanceTimeline,
+        String(row.month_key).slice(0, 7),
+        Number(row.submission_count) || 0,
+        Number(row.views_sum) || 0,
+        Number(row.earnings_cents_sum) || 0,
+      );
+    }
+  }
+
+  if (ctx.ctx.dataSource !== "pc_submissions") {
+    const twitterContestIds = twitterContestIdsWithRollupActivity(
+      bundle.twitterContestRollup,
+    );
+    for (let i = 0; i < twitterContestIds.length; i += CONTEST_ID_CHUNK) {
+      const idChunk = twitterContestIds.slice(i, i + CONTEST_ID_CHUNK);
+      const { data, error } = await supabase.rpc(
+        "brand_analytics_twitter_creator_monthly",
+        {
+          p_from: ctx.ctx.dateFrom.toISOString(),
+          p_to: ctx.ctx.dateTo.toISOString(),
+          p_contest_ids: idChunk,
+          p_creator_id: creatorId,
+        },
+      );
+      if (error) throw new Error(error.message);
+      for (const row of (data ?? []) as CreatorMonthlyRow[]) {
+        if (
+          !row.month_key ||
+          !statusMatchesFilter(String(row.status ?? ""), ctx.ctx)
+        ) {
+          continue;
+        }
+        addBucket(
+          performanceTimeline,
+          String(row.month_key).slice(0, 7),
+          Number(row.submission_count) || 0,
+          Number(row.views_sum) || 0,
+          0,
+        );
+      }
+    }
+  }
+
   let topSubmissions: CreatorTopSubmissionRow[] = [];
   if (contestIds.length > 0) {
-    const CONTEST_ID_CHUNK = 500;
+    const topSubmissionsRpc =
+      ctx.ctx.dataSource === "pc_submissions"
+        ? "brand_analytics_pc_creator_top_submissions"
+        : "brand_analytics_creator_top_submissions";
     for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
       const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
       const { data, error } = await supabase.rpc(
-        "brand_analytics_creator_top_submissions",
+        topSubmissionsRpc,
         {
           p_from: ctx.ctx.dateFrom.toISOString(),
           p_to: ctx.ctx.dateTo.toISOString(),
@@ -307,7 +356,13 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const creatorId = searchParams.get("creatorId");
-    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const requestedLimit = Number.parseInt(
+      searchParams.get("limit") || "20",
+      10,
+    );
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(100, Math.max(1, requestedLimit))
+      : 20;
 
     const { data: userData } = await supabase
       .from("users")
