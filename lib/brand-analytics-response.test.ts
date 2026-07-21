@@ -348,6 +348,64 @@ describe("buildBrandOverviewResponse", () => {
 });
 
 describe("buildBrandContestsResponse", () => {
+  it("maps aggregated video engagement into the contest card payload", async () => {
+    const bundle = baseBundle({
+      allBrandContests: [
+        {
+          id: "ig-contest-1",
+          title: "Instagram Campaign",
+          platform: "instagram",
+          contest_type: "cpm",
+          start_date: "2026-06-01T00:00:00.000Z",
+          end_date: "2026-06-30T23:59:59.999Z",
+          created_at: "2026-06-01T00:00:00.000Z",
+          contest_based_details: null,
+          moderation_status: "published",
+          status: "active",
+        },
+      ],
+      contestRollup: [
+        {
+          contest_id: "ig-contest-1",
+          status: "verified",
+          platform: "instagram",
+          submission_count: 2,
+          views_sum: 1000,
+          likes_sum: 45,
+          comments_sum: 6,
+          shares_sum: 7,
+          reach_sum: 800,
+          saved_sum: 9,
+          payouts_cents_sum: 0,
+        },
+      ],
+      twitterContestIds: [],
+    });
+
+    const response = await buildBrandContestsResponse(bundle, {} as never);
+    const submissions = response.contests[0]?.submissions as
+      | Array<{
+          other_stats?: {
+            instagram?: {
+              likes?: number;
+              comments?: number;
+              shares?: number;
+              reach?: number;
+              saved?: number;
+            };
+          };
+        }>
+      | undefined;
+    const submission = submissions?.[0];
+    const metrics = submission?.other_stats?.instagram;
+
+    assert.equal(metrics?.likes, 45);
+    assert.equal(metrics?.comments, 6);
+    assert.equal(metrics?.shares, 7);
+    assert.equal(metrics?.reach, 800);
+    assert.equal(metrics?.saved, 9);
+  });
+
   it("returns Twitter campaigns with rollup activity", async () => {
     const bundle = baseBundle({
       allBrandContests: [

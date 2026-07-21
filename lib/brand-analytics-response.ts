@@ -194,7 +194,7 @@ function getContestActivityTotals(
       bundle.twitterContestRollup,
       bundle.ctx,
     );
-    return { ...totals, payoutsCents: 0 };
+    return { ...totals, reach: 0, saved: 0, payoutsCents: 0 };
   }
   const totals = contestTotalsFromRollup(
     contest.id,
@@ -608,6 +608,16 @@ export async function buildBrandContestsResponse(
           impressions: activity.views,
         }
       : undefined;
+    const videoMetrics = !isTwitter
+      ? {
+          likes: activity.likes,
+          comments: activity.comments,
+          shares: activity.shares,
+          reach: activity.reach,
+          saved: activity.saved,
+          views: activity.views,
+        }
+      : undefined;
 
     const submissions =
       activity.submissions > 0
@@ -617,7 +627,10 @@ export async function buildBrandContestsResponse(
               views: activity.views,
               other_stats: isTwitter
                 ? { twitter: twitterMetrics, x: twitterMetrics }
-                : undefined,
+                : {
+                    [platform]: videoMetrics,
+                    [(contest.platform || platform).toLowerCase()]: videoMetrics,
+                  },
               status: "verified",
               created_at: contest.created_at,
             },

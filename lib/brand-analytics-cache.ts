@@ -62,6 +62,8 @@ export type BrandContestRollupRow = {
   likes_sum: number;
   comments_sum: number;
   shares_sum: number;
+  reach_sum?: number;
+  saved_sum?: number;
   payouts_cents_sum: number;
 };
 
@@ -322,6 +324,8 @@ async function fetchContestRollup(
         likes_sum: Number(row.likes_sum) || 0,
         comments_sum: Number(row.comments_sum) || 0,
         shares_sum: Number(row.shares_sum) || 0,
+        reach_sum: Number(row.reach_sum) || 0,
+        saved_sum: Number(row.saved_sum) || 0,
         payouts_cents_sum: Number(row.payouts_cents_sum) || 0,
       });
     }
@@ -995,7 +999,7 @@ export async function getCachedBrandAnalyticsBundle(
   ctx: BrandAnalyticsQueryContext,
 ): Promise<BrandAnalyticsBundle> {
   const requestCtx = rehydrateBrandAnalyticsContext(ctx);
-  const keyParts = buildCacheKeyParts("core-v2", requestCtx);
+  const keyParts = buildCacheKeyParts("core-v3", requestCtx);
   const serialized = serializeContext(requestCtx);
   const bundle = await unstable_cache(
     async () => loadBrandAnalyticsBundle(deserializeContext(serialized)),
@@ -1043,6 +1047,8 @@ export function contestTotalsFromRollup(
   likes: number;
   comments: number;
   shares: number;
+  reach: number;
+  saved: number;
   payoutsCents: number;
 } {
   let submissions = 0;
@@ -1050,6 +1056,8 @@ export function contestTotalsFromRollup(
   let likes = 0;
   let comments = 0;
   let shares = 0;
+  let reach = 0;
+  let saved = 0;
   let payoutsCents = 0;
 
   for (const row of rollup) {
@@ -1060,10 +1068,21 @@ export function contestTotalsFromRollup(
     likes += row.likes_sum;
     comments += row.comments_sum;
     shares += row.shares_sum;
+    reach += Number(row.reach_sum) || 0;
+    saved += Number(row.saved_sum) || 0;
     payoutsCents += row.payouts_cents_sum;
   }
 
-  return { submissions, views, likes, comments, shares, payoutsCents };
+  return {
+    submissions,
+    views,
+    likes,
+    comments,
+    shares,
+    reach,
+    saved,
+    payoutsCents,
+  };
 }
 
 export function twitterContestTotalsFromRollup(

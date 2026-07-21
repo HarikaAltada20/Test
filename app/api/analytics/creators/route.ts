@@ -307,7 +307,12 @@ async function buildCreatorDetailResponse(
           p_limit: 10,
         },
       );
-      if (!error && data) {
+      if (error) {
+        throw new Error(
+          `Failed to load creator top submissions: ${error.message}`,
+        );
+      }
+      if (data) {
         topSubmissions = topSubmissions.concat(
           data as CreatorTopSubmissionRow[],
         );
