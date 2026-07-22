@@ -6,7 +6,7 @@ import {
   ContestsPageClient,
   type CreatorRouteNotice,
 } from "./ContestsPageClient";
-import { listCampaignsPaginated } from "@/lib/contest-list-query";
+import { ContestsListLoader } from "./ContestsListLoader";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default async function ContestsPage({
@@ -44,16 +44,6 @@ export default async function ContestsPage({
     redirect("/dashboard");
   }
 
-  const list = await listCampaignsPaginated({
-    supabase,
-    scope: "advertiser",
-    advertiserId: user.id,
-    tab: "all",
-    sort: "created_at_desc",
-    page: 1,
-    limit: 9,
-  });
-
   const resolvedSearch = await searchParams;
   let creatorRouteNotice: CreatorRouteNotice = null;
   if (resolvedSearch.creator_route === "1") {
@@ -82,22 +72,16 @@ export default async function ContestsPage({
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
-          <PageLoadingSpinner mode="light" />
-        </div>
-      }
-    >
-      <ContestsPageClient
-        initialContests={list.contests as any}
-        initialTotal={list.total}
-        initialTabCounts={list.tabCounts}
-        initialPostPhaseCounts={list.postPhaseCounts}
-        initialAvailablePlatforms={list.availablePlatforms}
-        userId={user.id}
-        creatorRouteNotice={creatorRouteNotice}
-      />
-    </Suspense>
+    <ContestsPageClient userId={user.id} creatorRouteNotice={creatorRouteNotice}>
+      <Suspense
+        fallback={
+          <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
+            <PageLoadingSpinner mode="light" />
+          </div>
+        }
+      >
+        <ContestsListLoader userId={user.id} />
+      </Suspense>
+    </ContestsPageClient>
   );
 }

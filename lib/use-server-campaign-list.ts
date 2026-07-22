@@ -217,10 +217,12 @@ export function useServerCampaignList<T>(
         ? (listCache.get(key) as ServerCampaignListResult<T> | undefined)
         : undefined;
 
+      // Cache hit: paint immediately and keep controls enabled while revalidating
+      // in the background (matches opportunities list UX).
       if (cached) {
         applyResult(cached);
         setLoading(false);
-        setIsValidating(true);
+        setIsValidating(false);
       } else if (!opts?.quiet) {
         // Keep prior campaigns visible — only block when we have nothing to show.
         if (hasLoadedOnce || contestsRef.current.length > 0) {
@@ -229,6 +231,10 @@ export function useServerCampaignList<T>(
         } else {
           setLoading(true);
         }
+      } else if (hasLoadedOnce || contestsRef.current.length > 0) {
+        // Quiet refetch for a new page/filter with existing rows: soft validate.
+        setIsValidating(true);
+        setLoading(false);
       }
 
       const requestId = ++requestIdRef.current;

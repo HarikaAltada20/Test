@@ -2,7 +2,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default function AdminContestsLoading() {
   return (
-    <div className="flex h-[76vh] w-full items-center justify-center">
+    <div className="flex items-center justify-center h-[76vh]">
       <PageLoadingSpinner mode="light" />
     </div>
   );

@@ -706,7 +706,6 @@ export function ContestListClient({
     postPhaseCounts: serverPostPhaseCounts,
     availablePlatforms: serverAvailablePlatforms,
     loading: listLoading,
-    isValidating: listValidating,
     refresh: refreshServerList,
     setContests: setServerContests,
   } = useServerCampaignList<Contest>(
@@ -772,7 +771,12 @@ export function ContestListClient({
     };
   }, []);
 
+  // Seed SSR data once ? do not re-apply initialContests on later renders
+  // (that overwrites client page 2+ results and breaks pagination).
+  const initialListSeededRef = useRef(false);
   useEffect(() => {
+    if (initialListSeededRef.current) return;
+    initialListSeededRef.current = true;
     setServerContests(initialContests);
     setContests(initialContests);
   }, [initialContests, setServerContests]);
@@ -2733,8 +2737,10 @@ export function ContestListClient({
   const paginatedContests = contests;
 
   useEffect(() => {
+    if (!filtersHydrated) return;
     setPage(1);
   }, [
+    filtersHydrated,
     selectedTab,
     postContestPhaseFilter,
     platformFilter,
@@ -3768,7 +3774,7 @@ export function ContestListClient({
                   role="searchbox"
                   enterKeyHint="search"
                   autoComplete="off"
-                  placeholder="Search by title?"
+                  placeholder="Search by title..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -4276,8 +4282,13 @@ export function ContestListClient({
                     hasNextPage={hasNextPage}
                     hasPreviousPage={hasPreviousPage}
                     onPageChange={setPage}
-                    onLimitChange={setLimit}
-                    loading={listLoading || listValidating}
+                    onLimitChange={(nextLimit) => {
+                      setLimit(nextLimit);
+                      setPage(1);
+                    }}
+                    // Keep page buttons clickable during background refresh
+                    // (same UX as opportunities ? only block on hard empty load).
+                    loading={listLoading && contests.length === 0}
                     isDark={isDark}
                     showResultInfo={false}
                     showPageSizeSelector={false}

@@ -1,8 +1,7 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ContestListClient } from "./ContestListClient";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, Phone } from "lucide-react";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
@@ -20,18 +19,8 @@ import { createClient } from "@/utils/supabase/client";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   BRAND_CONTEST_LIST_TAB_KEY,
-  DEFAULT_CAMPAIGN_LIST_TAB,
-  normalizeBrandContestTabFromUrl,
-  readStoredCampaignListTab,
   writeStoredCampaignListTab,
-  BRAND_CONTEST_TAB_IDS,
 } from "@/lib/campaign-list-tab-storage";
-import {
-  BRAND_CONTEST_LIST_FILTERS_KEY,
-  readStoredContestListFilters,
-  writeStoredContestListFilters,
-  type ViewModeOption,
-} from "@/lib/campaign-list-filters-storage";
 
 const BOOK_A_CALL_URL = "https://calendly.com/guptavishesh2/30min";
 
@@ -48,8 +37,9 @@ export type CreatorRouteNotice =
   };
 
 interface ContestsPageClientProps {
-  initialContests: any[];
-  initialTotal?: number;
+  userId: string;
+  creatorRouteNotice?: CreatorRouteNotice;
+  children: React.ReactNode;
   initialTabCounts?: {
     all: number;
     draft: number;
@@ -60,75 +50,19 @@ interface ContestsPageClientProps {
     ended: number;
     rejected: number;
   };
-  initialPostPhaseCounts?: {
-    post_pending_review: number;
-    post_in_review: number;
-    post_payment_pending: number;
-    post_paid: number;
-  };
-  initialAvailablePlatforms?: string[];
-  userId: string;
-  creatorRouteNotice?: CreatorRouteNotice;
 }
 
 export function ContestsPageClient({
-  initialContests,
-  initialTotal,
-  initialTabCounts,
-  initialPostPhaseCounts,
-  initialAvailablePlatforms,
   userId,
   creatorRouteNotice = null,
+  children,
+  initialTabCounts,
 }: ContestsPageClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [showModal, setShowModal] = useState(false);
   const { handleCreateContest } = useContestCreation(userId);
-  const [selectedTab, setSelectedTabState] = useState(DEFAULT_CAMPAIGN_LIST_TAB);
-  const [tabHydrated, setTabHydrated] = useState(false);
-
-  useEffect(() => {
-    const urlTab = normalizeBrandContestTabFromUrl(
-      searchParams.get("tab") ?? "",
-    );
-    const stored = readStoredCampaignListTab(
-      BRAND_CONTEST_LIST_TAB_KEY,
-      BRAND_CONTEST_TAB_IDS,
-      DEFAULT_CAMPAIGN_LIST_TAB,
-    );
-    setSelectedTabState(urlTab ?? stored);
-    setTabHydrated(true);
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (!tabHydrated) return;
-    writeStoredCampaignListTab(BRAND_CONTEST_LIST_TAB_KEY, selectedTab);
-  }, [selectedTab, tabHydrated]);
-
-  const setSelectedTab = useCallback((tab: string) => {
-    setSelectedTabState(tab);
-  }, []);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
-  const [viewMode, setViewModeState] = useState<"grid" | "list">("grid");
-  const [viewModeHydrated, setViewModeHydrated] = useState(false);
-
-  useEffect(() => {
-    const stored = readStoredContestListFilters(BRAND_CONTEST_LIST_FILTERS_KEY);
-    setViewModeState(stored.viewMode);
-    setViewModeHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!viewModeHydrated) return;
-    writeStoredContestListFilters(BRAND_CONTEST_LIST_FILTERS_KEY, {
-      viewMode: viewMode as ViewModeOption,
-    });
-  }, [viewMode, viewModeHydrated]);
-
-  const setViewMode = useCallback((mode: "grid" | "list") => {
-    setViewModeState(mode);
-  }, []);
   /** Keeps the notice after router.replace strips search params (RSC refetch). */
   const [lockedCreatorRouteNotice, setLockedCreatorRouteNotice] =
     useState<CreatorRouteNotice>(null);
@@ -204,7 +138,8 @@ export function ContestsPageClient({
   };
 
   const handleViewAllDrafts = () => {
-    setSelectedTab("draft");
+    writeStoredCampaignListTab(BRAND_CONTEST_LIST_TAB_KEY, "draft");
+    router.refresh();
   };
 
   const isDark = mode === "dark";
@@ -328,11 +263,8 @@ export function ContestsPageClient({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-          {!(
-            initialTabCounts
-              ? initialTabCounts.all - initialTabCounts.draft > 0
-              : initialContests.some((c) => c.moderation_status !== "draft")
-          ) && (
+          {initialTabCounts &&
+            !(initialTabCounts.all - initialTabCounts.draft > 0) && (
             <a
               href={BOOK_A_CALL_URL}
               target="_blank"
@@ -368,20 +300,7 @@ export function ContestsPageClient({
           </button>
         </div>
       </header>
-      <Suspense fallback={<div>Loading campaigns...</div>}>
-        <ContestListClient
-          initialContests={initialContests}
-          initialTotal={initialTotal}
-          initialTabCounts={initialTabCounts}
-          initialPostPhaseCounts={initialPostPhaseCounts}
-          initialAvailablePlatforms={initialAvailablePlatforms}
-          isAdminView={false}
-          selectedTab={selectedTab}
-          onTabChange={setSelectedTab}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-        />
-      </Suspense>
+      {children}
 
       <ContestCreationModal
         isOpen={showModal}
