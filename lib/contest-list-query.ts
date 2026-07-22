@@ -15,6 +15,11 @@ import {
 } from "@/lib/campaign-list-filters-storage";
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
 import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
+import {
+  isCreatorEligibleForContest,
+  parseContestCreatorRequirements,
+  type CreatorRequirementsSnapshot,
+} from "@/lib/creator-requirements";
 
 export { sortCampaignsForList } from "@/lib/contest-list-sort";
 export {
@@ -116,7 +121,18 @@ export type ListCampaignsParams = {
   search?: string;
   mediaType?: "all" | "text" | "media";
   userCountries?: string[];
+  /**
+   * Opportunities only: keep contests the creator passes gates for.
+   * Requires creatorEligibilitySnapshot. Pagination scans SQL pages then
+   * filters so totals/pages match the eligible set (capped scan).
+   */
+  eligibleOnly?: boolean;
+  creatorEligibilitySnapshot?: CreatorRequirementsSnapshot;
 };
+
+/** Max contests hydrated while building an eligible-only page (DoS / latency guard). */
+const ELIGIBLE_SCAN_BATCH = 60;
+const ELIGIBLE_SCAN_MAX_ROWS = 1500;
 
 export type ListCampaignsResult = {
   contests: Array<
@@ -419,6 +435,72 @@ function isRpcAuthzError(error: { code?: string; message?: string } | null): boo
   );
 }
 
+/** True when listCampaignsPaginated failed closed on authz (map to HTTP 403). */
+export function isCampaignListForbiddenError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /authentication required|admin access required|permission denied|forbidden|invalid campaign list scope/i.test(
+    err.message,
+  );
+}
+
+function resolveSortForSql(
+  params: ListCampaignsParams,
+): ListCampaignsParams["sort"] {
+  if (SQL_SORTABLE.has(params.sort)) return params.sort;
+  return params.scope === "opportunities"
+    ? "relevance_desc"
+    : "created_at_desc";
+}
+
+function contestPassesEligibility(
+  contest: LightweightContest,
+  snapshot: CreatorRequirementsSnapshot,
+): boolean {
+  return isCreatorEligibleForContest({
+    requirements: parseContestCreatorRequirements(contest),
+    snapshot,
+  });
+}
+
+async function enrichListPage(
+  params: ListCampaignsParams,
+  pageRows: ContestWithStats[],
+): Promise<ListCampaignsResult["contests"]> {
+  const enrichedPage = await Promise.all(
+    pageRows.map(async (contest) => {
+      const withBudget = await enrichContestWithCalculatedBudgets(
+        {
+          ...contest,
+          contest_based_details:
+            (contest.contest_based_details as Record<string, unknown> | null) ??
+            {},
+        },
+        params.supabase,
+      );
+
+      return {
+        ...contest,
+        ...withBudget,
+        not_rejected_views: contest.not_rejected_views,
+        verified_submission_count: contest.verified_submission_count,
+        pending_submission_count: contest.pending_submission_count,
+        rejected_submission_count: contest.rejected_submission_count,
+        contest_based_details:
+          (withBudget.contest_based_details as Record<string, unknown> | null) ??
+          null,
+        advertiser_name:
+          (
+            contest as {
+              advertiser_profiles?: { company_name?: string };
+            }
+          ).advertiser_profiles?.company_name || undefined,
+      };
+    }),
+  );
+
+  return enrichedPage as ListCampaignsResult["contests"];
+}
+
 async function fetchTabCountsFromRpc(
   supabase: SupabaseClient,
   params: ListCampaignsParams,
@@ -645,27 +727,34 @@ export async function listCampaignsPaginated(
 ): Promise<ListCampaignsResult> {
   assertAdvertiserScoped(params);
 
+  if (params.eligibleOnly) {
+    if (
+      params.scope !== "opportunities" ||
+      !params.creatorEligibilitySnapshot
+    ) {
+      throw new Error(
+        "eligibleOnly requires opportunities scope and creatorEligibilitySnapshot",
+      );
+    }
+    return listCampaignsPaginatedEligible(
+      params,
+      params.creatorEligibilitySnapshot,
+    );
+  }
+
   const page = Math.max(1, params.page || 1);
   const limit = parseListLimit(String(params.limit));
   const offset = (page - 1) * limit;
 
   const countsPromise = fetchTabCountsFromRpc(params.supabase, params);
-
-  // All known sorts are SQL-backed. Unknown sorts still use the page RPC with
-  // created_at_desc fallback inside campaign_list_page_ids.
-  const sortForSql = SQL_SORTABLE.has(params.sort)
-    ? params.sort
-    : params.scope === "opportunities"
-      ? "relevance_desc"
-      : "created_at_desc";
+  const sortForSql = resolveSortForSql(params);
 
   const { rows, total: sqlTotal } = await fetchFilteredPageSql(
     params.supabase,
-    { ...params, sort: sortForSql as ListCampaignsParams["sort"] },
+    { ...params, sort: sortForSql },
     offset,
     limit,
   );
-  const total = sqlTotal;
   const pageRows = rows.map((row) => flattenContestStats(row));
 
   const countsFromRpc = await countsPromise;
@@ -674,58 +763,92 @@ export async function listCampaignsPaginated(
       "[contest-list-query] campaign_list_tab_counts unavailable; apply db/migrations/20260730_campaign_list_query.sql (not loading full campaign set)",
     );
   }
-  const tabCounts = countsFromRpc?.tabCounts ?? emptyTabCounts();
-  const postPhaseCounts =
-    countsFromRpc?.postPhaseCounts ?? emptyPostPhaseCounts();
-  const availablePlatforms = countsFromRpc?.availablePlatforms ?? ["all"];
 
-  // Keep full availablePlatforms from tab-counts RPC.
-  // Never shrink the dropdown to the current page when a platform filter is on.
-
-  // Budget trackers need live budget_spent (stored JSON is often 0 until
-  // metrics refresh). Enrich only this page — not the full campaign set —
-  // so tab switches stay fast while cards show real spend.
-  // Note: list order still follows SQL stored-metric sort keys above.
-  const enrichedPage = await Promise.all(
-    pageRows.map(async (contest) => {
-      const withBudget = await enrichContestWithCalculatedBudgets(
-        {
-          ...contest,
-          contest_based_details:
-            (contest.contest_based_details as Record<string, unknown> | null) ??
-            {},
-        },
-        params.supabase,
-      );
-
-      return {
-        ...contest,
-        ...withBudget,
-        // Keep list-card stats from contest_stats embed (do not lose them).
-        not_rejected_views: contest.not_rejected_views,
-        verified_submission_count: contest.verified_submission_count,
-        pending_submission_count: contest.pending_submission_count,
-        rejected_submission_count: contest.rejected_submission_count,
-        contest_based_details:
-          (withBudget.contest_based_details as Record<string, unknown> | null) ??
-          null,
-        advertiser_name:
-          (
-            contest as {
-              advertiser_profiles?: { company_name?: string };
-            }
-          ).advertiser_profiles?.company_name || undefined,
-      };
-    }),
-  );
+  const enrichedPage = await enrichListPage(params, pageRows);
 
   return {
-    contests: enrichedPage as ListCampaignsResult["contests"],
-    total,
+    contests: enrichedPage,
+    total: sqlTotal,
     page,
     limit,
-    tabCounts,
-    postPhaseCounts,
-    availablePlatforms,
+    tabCounts: countsFromRpc?.tabCounts ?? emptyTabCounts(),
+    postPhaseCounts:
+      countsFromRpc?.postPhaseCounts ?? emptyPostPhaseCounts(),
+    availablePlatforms: countsFromRpc?.availablePlatforms ?? ["all"],
+  };
+}
+
+/**
+ * Eligible-only opportunities: scan SQL pages, filter by creator gates, then
+ * paginate the eligible set so totals/pages are honest (bounded by scan cap).
+ */
+async function listCampaignsPaginatedEligible(
+  params: ListCampaignsParams,
+  snapshot: CreatorRequirementsSnapshot,
+): Promise<ListCampaignsResult> {
+  const page = Math.max(1, params.page || 1);
+  const limit = parseListLimit(String(params.limit));
+  const sortForSql = resolveSortForSql(params);
+
+  const countsPromise = fetchTabCountsFromRpc(params.supabase, params);
+
+  const eligible: ContestWithStats[] = [];
+  let sqlOffset = 0;
+  let sqlTotal = 0;
+  let scanned = 0;
+
+  while (scanned < ELIGIBLE_SCAN_MAX_ROWS) {
+    const batchLimit = Math.min(
+      ELIGIBLE_SCAN_BATCH,
+      ELIGIBLE_SCAN_MAX_ROWS - scanned,
+    );
+    const { rows, total } = await fetchFilteredPageSql(
+      params.supabase,
+      { ...params, sort: sortForSql },
+      sqlOffset,
+      batchLimit,
+    );
+    sqlTotal = total;
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const flat = flattenContestStats(row);
+      if (contestPassesEligibility(flat, snapshot)) {
+        eligible.push(flat);
+      }
+    }
+
+    scanned += rows.length;
+    sqlOffset += rows.length;
+    if (sqlOffset >= sqlTotal) break;
+  }
+
+  if (sqlOffset < sqlTotal && scanned >= ELIGIBLE_SCAN_MAX_ROWS) {
+    console.warn(
+      `[contest-list-query] eligible scan capped at ${ELIGIBLE_SCAN_MAX_ROWS} of ${sqlTotal} matching contests`,
+    );
+  }
+
+  const offset = (page - 1) * limit;
+  const pageRows = eligible.slice(offset, offset + limit);
+
+  const countsFromRpc = await countsPromise;
+  if (!countsFromRpc) {
+    console.error(
+      "[contest-list-query] campaign_list_tab_counts unavailable; apply db/migrations/20260730_campaign_list_query.sql (not loading full campaign set)",
+    );
+  }
+
+  const enrichedPage = await enrichListPage(params, pageRows);
+
+  return {
+    contests: enrichedPage,
+    total: eligible.length,
+    page,
+    limit,
+    tabCounts: countsFromRpc?.tabCounts ?? emptyTabCounts(),
+    postPhaseCounts:
+      countsFromRpc?.postPhaseCounts ?? emptyPostPhaseCounts(),
+    availablePlatforms: countsFromRpc?.availablePlatforms ?? ["all"],
   };
 }

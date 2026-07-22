@@ -121,8 +121,6 @@ import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 import {
-  isCreatorEligibleForContest,
-  parseContestCreatorRequirements,
   type CreatorRequirementsSnapshot,
 } from "@/lib/creator-requirements";
 
@@ -234,25 +232,6 @@ function getDualUnifiedBudgetMeta(contest: any): {
 }
 
 // Helper function to get contests filtered by media type
-function filterContestsByEligibility(
-  contests: any[],
-  eligibilityFilter: EligibilityFilterType,
-  snapshot: CreatorRequirementsSnapshot | null,
-  userId: string | undefined,
-  statsReady: boolean,
-): any[] {
-  if (eligibilityFilter !== "eligible") return contests;
-  if (!userId) return contests;
-  // Keep current list visible while stats load — filter applies when ready.
-  if (!statsReady || !snapshot) return contests;
-  return contests.filter((contest) =>
-    isCreatorEligibleForContest({
-      requirements: parseContestCreatorRequirements(contest),
-      snapshot,
-    }),
-  );
-}
-
 type OpportunitiesTabCounts = {
   all: number;
   live: number;
@@ -975,21 +954,10 @@ export default function OpportunitiesPage({
 
   const filteredContests = useMemo(() => {
     if (!rawListEntry) return [];
-    if (eligibilityFilter !== "eligible") return rawListEntry.contests;
-    return filterContestsByEligibility(
-      rawListEntry.contests,
-      eligibilityFilter,
-      creatorRequirementsSnapshot,
-      user?.id,
-      creatorStatsReady,
-    );
-  }, [
-    rawListEntry,
-    eligibilityFilter,
-    creatorRequirementsSnapshot,
-    creatorStatsReady,
-    user?.id,
-  ]);
+    // Eligible filtering is server-side (?eligibleOnly=1) once stats are ready.
+    // While stats load, keep the unfiltered server page visible.
+    return rawListEntry.contests;
+  }, [rawListEntry]);
 
   useEffect(() => {
     availableContestsRef.current = filteredContests;
@@ -1008,6 +976,7 @@ export default function OpportunitiesPage({
       search?: string;
       sort?: string;
       limit?: number;
+      eligibleOnly?: boolean;
     }) =>
       buildOpportunitiesListQueryKey({
         tab: overrides?.tab ?? statusFilter,
@@ -1019,6 +988,9 @@ export default function OpportunitiesPage({
         mediaType: overrides?.mediaType ?? mediaType,
         search: overrides?.search ?? searchQuery,
         userCountries: userCountriesList,
+        eligibleOnly:
+          overrides?.eligibleOnly ??
+          (eligibilityFilter === "eligible" && creatorStatsReady),
       });
 
     const key = buildKey();
@@ -1135,6 +1107,8 @@ export default function OpportunitiesPage({
     mediaType,
     searchQuery,
     userCountriesList,
+    eligibilityFilter,
+    creatorStatsReady,
   ]);
 
   useEffect(() => {
@@ -1311,6 +1285,7 @@ export default function OpportunitiesPage({
     sortOption,
     searchQuery,
     mediaType,
+    eligibilityFilter,
   ]);
 
   // Server already returned the sorted page — do not re-slice.

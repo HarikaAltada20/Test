@@ -129,8 +129,11 @@ $$;
 COMMENT ON FUNCTION public.refresh_contest_stats(uuid) IS
   'Recompute contest_stats for one contest (or all contests when null).';
 
+-- Triggers invoke this as SECURITY DEFINER; callers must not be able to
+-- trigger a full-catalog recompute (p_contest_id NULL).
+REVOKE ALL ON FUNCTION public.refresh_contest_stats(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.refresh_contest_stats(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_contest_stats(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.refresh_contest_stats(uuid) TO authenticated;
 
 -- Ensure row exists when a contest is created
 CREATE OR REPLACE FUNCTION public.contest_stats_ensure_row()

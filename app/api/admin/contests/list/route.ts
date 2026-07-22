@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
+  isCampaignListForbiddenError,
   listCampaignsPaginated,
   parseContestListSort,
   parseListLimit,
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
     const message =
       err instanceof Error ? err.message : "Failed to fetch contests";
     console.error("[/api/admin/contests/list] Error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = isCampaignListForbiddenError(err) ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

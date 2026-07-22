@@ -115,6 +115,7 @@ $$;
 COMMENT ON FUNCTION public.campaign_list_authorize_caller(text, uuid, text[]) IS
   'Resolves effective advertiser_id / countries for campaign list RPCs; enforces admin auth.';
 
+REVOKE ALL ON FUNCTION public.campaign_list_authorize_caller(text, uuid, text[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.campaign_list_authorize_caller(text, uuid, text[])
   TO authenticated, service_role;
 
@@ -290,6 +291,8 @@ $$;
 COMMENT ON FUNCTION public.campaign_list_tab_counts(text, uuid, text, text[]) IS
   'Grouped campaign tab counts, post-phase counts, and platforms for list filters.';
 
+REVOKE ALL ON FUNCTION public.campaign_list_tab_counts(text, uuid, text, text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.contest_matches_user_countries(jsonb, text[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.campaign_list_tab_counts(text, uuid, text, text[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.campaign_list_tab_counts(text, uuid, text, text[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.contest_matches_user_countries(jsonb, text[]) TO authenticated;
@@ -326,6 +329,7 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.contest_ids_matching_user_countries(text[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.contest_ids_matching_user_countries(text[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.contest_ids_matching_user_countries(text[]) TO service_role;
 

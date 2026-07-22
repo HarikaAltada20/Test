@@ -42,6 +42,9 @@ $$;
 GRANT EXECUTE ON FUNCTION public.contest_list_json_numeric(text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.contest_list_json_float8(text) TO authenticated, service_role;
 
+REVOKE ALL ON FUNCTION public.contest_list_json_numeric(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.contest_list_json_float8(text) FROM PUBLIC;
+
 -- ---------------------------------------------------------------------------
 -- Pool / prize value (cents) — mirrors lib/contest-list-sort getContestValueForSort
 -- ---------------------------------------------------------------------------
@@ -407,6 +410,12 @@ GRANT EXECUTE ON FUNCTION public.contest_list_sort_budget_spent_cents(text, json
 GRANT EXECUTE ON FUNCTION public.contest_list_sort_budget_remaining_cents(text, jsonb) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.contest_list_sort_approval_percent(text, integer, integer, integer, integer) TO authenticated, service_role;
 
+REVOKE ALL ON FUNCTION public.contest_list_sort_value_cents(text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.contest_list_sort_cpm_rate(text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.contest_list_sort_budget_spent_cents(text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.contest_list_sort_budget_remaining_cents(text, jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.contest_list_sort_approval_percent(text, integer, integer, integer, integer) FROM PUBLIC;
+
 -- ---------------------------------------------------------------------------
 -- Paginated list IDs (filter + sort + limit), all list sorts included
 -- ---------------------------------------------------------------------------
@@ -682,6 +691,10 @@ COMMENT ON FUNCTION public.campaign_list_page_ids(
   text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]
 ) IS
   'Returns { total, ids } for one campaign list page after SQL filter/sort (incl. budget/value/approval/CPM).';
+
+REVOKE ALL ON FUNCTION public.campaign_list_page_ids(
+  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]
+) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.campaign_list_page_ids(
   text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]

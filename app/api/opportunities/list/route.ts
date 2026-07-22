@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
+  isCampaignListForbiddenError,
   listCampaignsPaginated,
   parseListLimit,
   parseListPage,
@@ -9,6 +10,7 @@ import {
   type OpportunitiesStatusTab,
 } from "@/lib/contest-list-query";
 import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
+import { getCreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,17 @@ export async function GET(request: NextRequest) {
     // unrestricted campaigns (contest_matches_user_countries).
     const userCountries = await getCreatorUserCountries(supabase, user.id);
 
+    const eligibleOnly =
+      sp.get("eligibleOnly") === "1" || sp.get("eligibleOnly") === "true";
+
+    let creatorEligibilitySnapshot;
+    if (eligibleOnly) {
+      creatorEligibilitySnapshot = await getCreatorRequirementsSnapshot(
+        supabase,
+        user.id,
+      );
+    }
+
     const result = await listCampaignsPaginated({
       supabase,
       scope: "opportunities",
@@ -50,6 +63,8 @@ export async function GET(request: NextRequest) {
       search: sp.get("search") || "",
       mediaType: parseOpportunitiesMediaType(sp.get("mediaType")),
       userCountries,
+      eligibleOnly,
+      creatorEligibilitySnapshot,
     });
 
     return NextResponse.json(result);
@@ -57,6 +72,7 @@ export async function GET(request: NextRequest) {
     const message =
       err instanceof Error ? err.message : "Failed to fetch opportunities";
     console.error("[/api/opportunities/list] Error:", err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = isCampaignListForbiddenError(err) ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

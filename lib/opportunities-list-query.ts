@@ -8,6 +8,8 @@ export type OpportunitiesListQueryParams = {
   mediaType: string;
   search: string;
   userCountries?: string[];
+  /** When true, server returns only contests the creator passes gates for. */
+  eligibleOnly?: boolean;
 };
 
 export function buildOpportunitiesListQueryKey(
@@ -25,6 +27,9 @@ export function buildOpportunitiesListQueryKey(
   });
   if (params.userCountries && params.userCountries.length > 0) {
     urlParams.set("countries", params.userCountries.join(","));
+  }
+  if (params.eligibleOnly) {
+    urlParams.set("eligibleOnly", "1");
   }
   return urlParams.toString();
 }
