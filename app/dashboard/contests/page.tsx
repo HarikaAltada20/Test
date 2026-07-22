@@ -2,10 +2,7 @@ import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
-import {
-  ContestsPageClient,
-  type CreatorRouteNotice,
-} from "./ContestsPageClient";
+import { type CreatorRouteNotice } from "./ContestsPageClient";
 import { ContestsListLoader } from "./ContestsListLoader";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
@@ -72,16 +69,17 @@ export default async function ContestsPage({
   }
 
   return (
-    <ContestsPageClient userId={user.id} creatorRouteNotice={creatorRouteNotice}>
-      <Suspense
-        fallback={
-          <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
-            <PageLoadingSpinner mode="light" />
-          </div>
-        }
-      >
-        <ContestsListLoader userId={user.id} />
-      </Suspense>
-    </ContestsPageClient>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-[76vh] w-full">
+          <PageLoadingSpinner mode="light" />
+        </div>
+      }
+    >
+      <ContestsListLoader
+        userId={user.id}
+        creatorRouteNotice={creatorRouteNotice}
+      />
+    </Suspense>
   );
 }

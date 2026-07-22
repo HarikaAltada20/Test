@@ -706,6 +706,7 @@ export function ContestListClient({
     postPhaseCounts: serverPostPhaseCounts,
     availablePlatforms: serverAvailablePlatforms,
     loading: listLoading,
+    isValidating: listValidating,
     refresh: refreshServerList,
     setContests: setServerContests,
   } = useServerCampaignList<Contest>(
@@ -4122,7 +4123,7 @@ export function ContestListClient({
             id="brand-contests-results"
             className="scroll-mt-4 mt-4"
           >
-            {listLoading && contests.length === 0 ? (
+            {listLoading || (listValidating && contests.length === 0) ? (
               <div className="flex min-h-[40vh] items-center justify-center py-16">
                 <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
               </div>
@@ -4288,7 +4289,9 @@ export function ContestListClient({
                     }}
                     // Keep page buttons clickable during background refresh
                     // (same UX as opportunities ? only block on hard empty load).
-                    loading={listLoading && contests.length === 0}
+                    loading={
+                      listLoading || (listValidating && contests.length === 0)
+                    }
                     isDark={isDark}
                     showResultInfo={false}
                     showPageSizeSelector={false}

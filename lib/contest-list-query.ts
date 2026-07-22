@@ -9,18 +9,12 @@ import {
   type BrandPostPhaseFilterOption,
   type OpportunitiesSortOption,
 } from "@/lib/campaign-list-filters-storage";
-import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
-import {
-  enrichContestsWithListCardStats,
-  type ContestListCardStats,
-} from "@/lib/contest-list-card-stats";
-import { sortCampaignsForList } from "@/lib/contest-list-sort";
-import { isCountryInContestRegions } from "@/lib/region-utils";
+import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
 
 export { sortCampaignsForList } from "@/lib/contest-list-sort";
 
 /**
- * Filter in SQL → sort (full matching set for non-SQL sorts) → paginate.
+ * Filter in SQL → sort → paginate (campaign_list_page_ids + hydrate).
  * Tab counts use a grouped SQL RPC. Stats read from contest_stats via embed.
  */
 
@@ -99,18 +93,10 @@ const DEFAULT_SELECT =
 const SELECT_WITH_STATS = `${DEFAULT_SELECT}, ${STATS_EMBED}`;
 const SELECT_WITH_ADVERTISER_STATS = `${DEFAULT_SELECT}, advertiser_profiles!advertiser_id(company_name), ${STATS_EMBED}`;
 
-/** Sorts that can use SQL ORDER BY + LIMIT/OFFSET. */
+/** All supported list sorts paginate in SQL via campaign_list_page_ids. */
 const SQL_SORTABLE = new Set<string>([
-  "created_at_desc",
-  "created_at_asc",
-  "start_date_desc",
-  "start_date_asc",
-  "end_date_asc",
-  "end_date_desc",
-  "views_desc",
-  "views_asc",
-  "submissions_desc",
-  "submissions_asc",
+  ...CONTEST_LIST_SORT_OPTIONS,
+  ...OPPORTUNITIES_SORT_OPTIONS,
 ]);
 
 export type ListCampaignsParams = {
@@ -279,18 +265,6 @@ function contestMatchesPostPhase(
   }
 }
 
-function matchesMediaType(
-  c: LightweightContest,
-  mediaType: string | undefined,
-): boolean {
-  if (!mediaType || mediaType === "all") return true;
-  const isTextImage =
-    c.contest_format === "text_image" || c.content_type === "text_image";
-  if (mediaType === "text") return isTextImage;
-  if (mediaType === "media") return !isTextImage;
-  return true;
-}
-
 function flattenContestStats(
   contest: LightweightContest,
 ): ContestWithStats {
@@ -358,35 +332,6 @@ function applyTabFilter(
   }
 }
 
-function needsPostPhaseMemoryFilter(
-  params: ListCampaignsParams,
-): boolean {
-  const phase = params.postContestPhase;
-  const tab = params.tab || "all";
-  return Boolean(
-    phase &&
-      phase !== "all" &&
-      (tab === "all" || tab === "ended"),
-  );
-}
-
-function filterByPostPhase(
-  contests: LightweightContest[],
-  params: ListCampaignsParams,
-): LightweightContest[] {
-  const phase = params.postContestPhase;
-  const tab = params.tab || "all";
-  if (!phase || phase === "all" || (tab !== "all" && tab !== "ended")) {
-    return contests;
-  }
-  return contests.filter((c) =>
-    contestMatchesPostPhase(
-      c,
-      phase as Exclude<BrandPostPhaseFilterOption, "all">,
-    ),
-  );
-}
-
 function applyPostPhaseFilter(
   query: FilterableQuery,
   phase: string | undefined,
@@ -396,13 +341,26 @@ function applyPostPhaseFilter(
     return query;
   }
 
-  // On "All", restrict to ended contests when a post-phase sub-filter is active.
-  // Exact phase matching is done in memory (PostgREST or filters are unreliable).
+  let q = query;
   if (tab === "all") {
-    return query.eq("moderation_status", "published").eq("status", "ended");
+    q = q.eq("moderation_status", "published").eq("status", "ended");
   }
 
-  return query;
+  switch (phase) {
+    case "post_pending_review":
+      // null / pending_review / unknown — anything except the later phases
+      return q.or(
+        "post_contest_status.is.null,post_contest_status.eq.pending_review,post_contest_status.not.in.(in_review,verification_complete,payouts_processed)",
+      );
+    case "post_in_review":
+      return q.eq("post_contest_status", "in_review");
+    case "post_payment_pending":
+      return q.eq("post_contest_status", "verification_complete");
+    case "post_paid":
+      return q.eq("post_contest_status", "payouts_processed");
+    default:
+      return q;
+  }
 }
 
 function applySqlOrder(
@@ -445,6 +403,11 @@ function applySqlOrder(
         ascending: true,
         nullsFirst: false,
       });
+    case "relevance_desc":
+      // Fallback only: true live→upcoming→ended ranking requires campaign_list_page_ids.
+      return query
+        .order("status", { ascending: true })
+        .order("created_at", { ascending: false });
     case "created_at_desc":
     default:
       return query.order("created_at", { ascending: false });
@@ -487,21 +450,14 @@ function applyListFilters(
     q = q.or("contest_format.eq.text_image,content_type.eq.text_image");
   }
 
-  return q;
-}
+  if (params.scope === "opportunities" && params.mediaType === "media") {
+    // Exclude text_image on either format or content_type (nulls count as media).
+    q = q
+      .or("contest_format.is.null,contest_format.neq.text_image")
+      .or("content_type.is.null,content_type.neq.text_image");
+  }
 
-function filterByUserCountries(
-  contests: LightweightContest[],
-  userCountries: string[] | undefined,
-): LightweightContest[] {
-  if (!userCountries?.length) return contests;
-  return contests.filter((c) => {
-    const region = c.region as Record<string, string[]> | null | undefined;
-    if (!region || Object.keys(region).length === 0) return true;
-    return userCountries.some((country) =>
-      isCountryInContestRegions(country, region),
-    );
-  });
+  return q;
 }
 
 async function fetchTabCountsFromRpc(
@@ -550,6 +506,95 @@ async function fetchFilteredPageSql(
   offset: number,
   limit: number,
 ): Promise<{ rows: LightweightContest[]; total: number }> {
+  const { data: pagePayload, error: pageError } = await supabase.rpc(
+    "campaign_list_page_ids",
+    {
+      p_scope: params.scope,
+      p_advertiser_id:
+        params.scope === "advertiser" ? params.advertiserId ?? null : null,
+      p_tab: params.tab || "all",
+      p_sort: params.sort,
+      p_offset: offset,
+      p_limit: limit,
+      p_platform: params.platform || "all",
+      p_contest_type: params.contestType || "all",
+      p_contest_format: params.contestFormat || "all",
+      p_post_contest_phase: params.postContestPhase || "all",
+      p_search: params.search || "",
+      p_media_type: params.mediaType || "all",
+      p_user_countries:
+        params.scope === "opportunities" ? params.userCountries ?? null : null,
+    },
+  );
+
+  if (pageError || !pagePayload) {
+    console.warn(
+      "[contest-list-query] page ids RPC failed, falling back to PostgREST range:",
+      pageError?.message,
+    );
+    return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
+  }
+
+  const payload = pagePayload as { total?: number; ids?: string[] };
+  const ids = Array.isArray(payload.ids) ? payload.ids.filter(Boolean) : [];
+  const total = Number(payload.total) || 0;
+
+  if (ids.length === 0) {
+    return { rows: [], total };
+  }
+
+  const selectClause =
+    params.scope === "admin" ? SELECT_WITH_ADVERTISER_STATS : SELECT_WITH_STATS;
+
+  // Dynamic select strings are not in generated Database types.
+  const { data, error } = await (supabase
+    .from("contests_with_status")
+    .select(selectClause)
+    .in("id", ids) as FilterableQuery);
+
+  if (error) {
+    console.error("[contest-list-query] page hydrate failed:", error.message);
+    return { rows: [], total };
+  }
+
+  const byId = new Map(
+    ((data || []) as LightweightContest[]).map((row) => [row.id, row]),
+  );
+  const rows = ids
+    .map((id) => byId.get(id))
+    .filter((row): row is LightweightContest => Boolean(row));
+
+  return { rows, total };
+}
+
+/** Legacy PostgREST range path when campaign_list_page_ids is unavailable. */
+async function fetchFilteredPageViaPostgrest(
+  supabase: SupabaseClient,
+  params: ListCampaignsParams,
+  offset: number,
+  limit: number,
+): Promise<{ rows: LightweightContest[]; total: number }> {
+  let regionIds: string[] | null = null;
+  if (
+    params.scope === "opportunities" &&
+    params.userCountries &&
+    params.userCountries.length > 0
+  ) {
+    const { data, error: regionError } = await supabase.rpc(
+      "contest_ids_matching_user_countries",
+      { p_countries: params.userCountries },
+    );
+    if (regionError) {
+      console.error(
+        "[contest-list-query] region ids failed:",
+        regionError.message,
+      );
+      return { rows: [], total: 0 };
+    }
+    regionIds = (data as string[] | null) || [];
+    if (regionIds.length === 0) return { rows: [], total: 0 };
+  }
+
   let countQuery = applyListFilters(
     supabase.from("contests_with_status").select("id", {
       count: "exact",
@@ -557,6 +602,7 @@ async function fetchFilteredPageSql(
     }),
     params,
   );
+  if (regionIds) countQuery = countQuery.in("id", regionIds);
 
   const { count, error: countError } = await countQuery;
 
@@ -572,6 +618,7 @@ async function fetchFilteredPageSql(
     supabase.from("contests_with_status").select(selectClause),
     params,
   );
+  if (regionIds) dataQuery = dataQuery.in("id", regionIds);
 
   dataQuery = applySqlOrder(dataQuery, params.sort);
   const { data, error } = await dataQuery.range(offset, offset + limit - 1);
@@ -591,6 +638,27 @@ async function fetchFilteredLightweightAll(
   const selectClause =
     params.scope === "admin" ? SELECT_WITH_ADVERTISER_STATS : SELECT_WITH_STATS;
 
+  let regionIds: string[] | null = null;
+  if (
+    params.scope === "opportunities" &&
+    params.userCountries &&
+    params.userCountries.length > 0
+  ) {
+    const { data, error: regionError } = await supabase.rpc(
+      "contest_ids_matching_user_countries",
+      { p_countries: params.userCountries },
+    );
+    if (regionError) {
+      console.error(
+        "[contest-list-query] region ids failed:",
+        regionError.message,
+      );
+      return [];
+    }
+    regionIds = (data as string[] | null) || [];
+    if (regionIds.length === 0) return [];
+  }
+
   const PAGE = 1000;
   const all: LightweightContest[] = [];
   let from = 0;
@@ -600,6 +668,7 @@ async function fetchFilteredLightweightAll(
       supabase.from("contests_with_status").select(selectClause),
       params,
     );
+    if (regionIds) pageQuery = pageQuery.in("id", regionIds);
 
     const { data, error } = await pageQuery
       .order("created_at", { ascending: false })
@@ -619,35 +688,6 @@ async function fetchFilteredLightweightAll(
   return all;
 }
 
-async function attachListCardStats(
-  contests: LightweightContest[],
-): Promise<ContestWithStats[]> {
-  if (contests.length === 0) return [];
-
-  const withEmbedded = contests.map((contest) => {
-    const embedded = contest.contest_stats;
-    if (embedded) return flattenContestStats(contest);
-    return contest as ContestWithStats;
-  });
-
-  const missingStats = withEmbedded.filter(
-    (c) =>
-      c.not_rejected_views === undefined &&
-      !contests.find((x) => x.id === c.id)?.contest_stats,
-  );
-
-  if (missingStats.length === 0) {
-    return withEmbedded.map((c) =>
-      c.not_rejected_views !== undefined
-        ? c
-        : flattenContestStats({ ...c, contest_stats: null }),
-    );
-  }
-
-  const enriched = await enrichContestsWithListCardStats(contests);
-  return enriched as ContestWithStats[];
-}
-
 /**
  * List campaigns with SQL filter → sort → paginate. Tab counts via grouped RPC.
  */
@@ -659,50 +699,23 @@ export async function listCampaignsPaginated(
   const offset = (page - 1) * limit;
 
   const countsPromise = fetchTabCountsFromRpc(params.supabase, params);
-  const needsMemoryMediaFilter =
-    params.scope === "opportunities" &&
-    Boolean(params.mediaType && params.mediaType !== "all");
-  const needsPostPhaseFilter = needsPostPhaseMemoryFilter(params);
-  const useSqlPagination =
-    params.scope !== "opportunities" &&
-    SQL_SORTABLE.has(params.sort) &&
-    !needsMemoryMediaFilter &&
-    !needsPostPhaseFilter;
 
-  let pageRows: ContestWithStats[] = [];
-  let total = 0;
+  // All known sorts are SQL-backed. Unknown sorts still use the page RPC with
+  // created_at_desc fallback inside campaign_list_page_ids.
+  const sortForSql = SQL_SORTABLE.has(params.sort)
+    ? params.sort
+    : params.scope === "opportunities"
+      ? "relevance_desc"
+      : "created_at_desc";
 
-  if (useSqlPagination) {
-    const { rows, total: sqlTotal } = await fetchFilteredPageSql(
-      params.supabase,
-      params,
-      offset,
-      limit,
-    );
-    total = sqlTotal;
-    pageRows = rows.map((row) => flattenContestStats(row));
-  } else {
-    let filtered = await fetchFilteredLightweightAll(params.supabase, params);
-
-    if (params.scope === "opportunities") {
-      filtered = filterByUserCountries(filtered, params.userCountries);
-    }
-
-    if (
-      params.scope === "opportunities" &&
-      params.mediaType &&
-      params.mediaType !== "all"
-    ) {
-      filtered = filtered.filter((c) => matchesMediaType(c, params.mediaType));
-    }
-
-    filtered = filterByPostPhase(filtered, params);
-
-    const withStats = await attachListCardStats(filtered);
-    const sorted = sortCampaignsForList(withStats, params.sort);
-    total = sorted.length;
-    pageRows = sorted.slice(offset, offset + limit);
-  }
+  const { rows, total: sqlTotal } = await fetchFilteredPageSql(
+    params.supabase,
+    { ...params, sort: sortForSql as ListCampaignsParams["sort"] },
+    offset,
+    limit,
+  );
+  const total = sqlTotal;
+  const pageRows = rows.map((row) => flattenContestStats(row));
 
   const countsFromRpc = await countsPromise;
   let tabCounts = countsFromRpc?.tabCounts ?? emptyTabCounts();
@@ -740,27 +753,20 @@ export async function listCampaignsPaginated(
     }
   }
 
-  const enrichedPage = await Promise.all(
-    pageRows.map(async (contest) => {
-      const withBudgets = await enrichContestWithCalculatedBudgets(
-        contest as Parameters<typeof enrichContestWithCalculatedBudgets>[0],
-        params.supabase,
-      );
-      return {
-        ...withBudgets,
-        verified_submission_count: contest.verified_submission_count,
-        pending_submission_count: contest.pending_submission_count,
-        rejected_submission_count: contest.rejected_submission_count,
-        not_rejected_views: contest.not_rejected_views,
-        advertiser_name:
-          (
-            contest as {
-              advertiser_profiles?: { company_name?: string };
-            }
-          ).advertiser_profiles?.company_name || undefined,
-      };
-    }),
-  );
+  // List cards use stored contest_based_details + contest_stats. Skip
+  // enrichContestWithCalculatedBudgets here — it re-scans submissions per
+  // campaign and made every tab switch multi-second.
+  const enrichedPage = pageRows.map((contest) => ({
+    ...contest,
+    contest_based_details:
+      (contest.contest_based_details as Record<string, unknown> | null) ?? null,
+    advertiser_name:
+      (
+        contest as {
+          advertiser_profiles?: { company_name?: string };
+        }
+      ).advertiser_profiles?.company_name || undefined,
+  }));
 
   return {
     contests: enrichedPage as ListCampaignsResult["contests"],

@@ -56,17 +56,9 @@ const EMPTY_POST_PHASE: PostPhaseCounts = {
 const listCache = new Map<string, ServerCampaignListResult<unknown>>();
 
 function brandPrefetchTabs(isAdminView: boolean): readonly string[] {
+  // Keep prefetch small so tab switches stay snappy.
   return isAdminView
-    ? [
-        "all",
-        "live",
-        "ended",
-        "upcoming",
-        "draft",
-        "pending_approval",
-        "ready",
-        "rejected",
-      ]
+    ? ["all", "live", "ended", "upcoming"]
     : ["all", "live", "ended", "upcoming"];
 }
 
@@ -109,28 +101,33 @@ function parseListPayload<T>(payload: unknown): ServerCampaignListResult<T> | nu
 }
 
 async function prefetchSiblingTabs(current: ServerCampaignListQuery) {
-  for (const tab of brandPrefetchTabs(current.isAdminView)) {
-    if (tab === current.tab) continue;
-    const prefetchQuery: ServerCampaignListQuery = {
-      ...current,
-      tab,
-      page: 1,
-      enabled: true,
-    };
-    const key = cacheKeyFromQuery(prefetchQuery);
-    if (listCache.has(key)) continue;
-    try {
-      const response = await fetch(buildListUrl(prefetchQuery), {
-        cache: "no-store",
-      });
-      if (!response.ok) continue;
-      const payload = await response.json();
-      const parsed = parseListPayload(payload);
-      if (parsed) listCache.set(key, parsed);
-    } catch {
-      // prefetch is best-effort
-    }
-  }
+  const tasks = brandPrefetchTabs(current.isAdminView)
+    .filter((tab) => tab !== current.tab)
+    .map(async (tab) => {
+      // Never carry ended/all post-phase filters into other tabs.
+      const prefetchQuery: ServerCampaignListQuery = {
+        ...current,
+        tab,
+        page: 1,
+        postContestPhase: "all",
+        enabled: true,
+      };
+      const key = cacheKeyFromQuery(prefetchQuery);
+      if (listCache.has(key)) return;
+      try {
+        const response = await fetch(buildListUrl(prefetchQuery), {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const parsed = parseListPayload(payload);
+        if (parsed) listCache.set(key, parsed);
+      } catch {
+        // prefetch is best-effort
+      }
+    });
+
+  await Promise.all(tasks);
 }
 
 /**
@@ -217,24 +214,15 @@ export function useServerCampaignList<T>(
         ? (listCache.get(key) as ServerCampaignListResult<T> | undefined)
         : undefined;
 
-      // Cache hit: paint immediately and keep controls enabled while revalidating
-      // in the background (matches opportunities list UX).
+      // Cache hit: paint immediately; optional quiet background revalidation.
       if (cached) {
         applyResult(cached);
         setLoading(false);
+        setIsValidating(Boolean(opts?.quiet));
+      } else {
+        // No cached page for this tab/filter — show spinner, never flash empty state.
+        setLoading(true);
         setIsValidating(false);
-      } else if (!opts?.quiet) {
-        // Keep prior campaigns visible — only block when we have nothing to show.
-        if (hasLoadedOnce || contestsRef.current.length > 0) {
-          setIsValidating(true);
-          setLoading(false);
-        } else {
-          setLoading(true);
-        }
-      } else if (hasLoadedOnce || contestsRef.current.length > 0) {
-        // Quiet refetch for a new page/filter with existing rows: soft validate.
-        setIsValidating(true);
-        setLoading(false);
       }
 
       const requestId = ++requestIdRef.current;
@@ -261,6 +249,7 @@ export function useServerCampaignList<T>(
         }
         listCache.set(key, parsed as ServerCampaignListResult<unknown>);
         applyResult(parsed);
+        // Background only — do not await (keeps tab switches responsive).
         void prefetchSiblingTabs(current);
       } catch (err) {
         if (requestId !== requestIdRef.current) return;
@@ -275,7 +264,7 @@ export function useServerCampaignList<T>(
         }
       }
     },
-    [applyResult, hasLoadedOnce],
+    [applyResult],
   );
 
   useEffect(() => {
@@ -288,14 +277,18 @@ export function useServerCampaignList<T>(
       applyResult(cached);
       setLoading(false);
       setIsValidating(false);
-    } else if (!(hasLoadedOnce || contestsRef.current.length > 0)) {
+    } else {
+      // Avoid showing the previous tab's campaigns while the new tab loads.
+      setContests([]);
+      setTotal(0);
       setLoading(true);
+      setIsValidating(false);
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(
       () => {
-        void fetchPage({ quiet: Boolean(cached) || hasLoadedOnce });
+        void fetchPage({ quiet: Boolean(cached) });
       },
       query.search ? 250 : 0,
     );

@@ -1042,18 +1042,27 @@ export default function OpportunitiesPage({
 
     const key = buildKey();
     const cached = listCacheRef.current.get(key);
-    const hasVisibleList =
-      availableContestsRef.current.length > 0 || listHasLoadedRef.current;
 
     if (cached) {
       applyRawListToUiRef.current(cached);
       setListLoading(false);
       setListValidating(false);
-    } else if (hasVisibleList) {
-      setListValidating(true);
-      setListLoading(false);
     } else {
+      // Clear previous tab's campaigns and show spinner — never flash empty
+      // state or the wrong tab's cards while the new tab loads.
+      const previousCounts = rawListRef.current?.tabCounts ?? {
+        all: 0,
+        live: 0,
+        upcoming: 0,
+        ended: 0,
+      };
+      applyRawListToUiRef.current({
+        contests: [],
+        total: 0,
+        tabCounts: previousCounts,
+      });
       setListLoading(true);
+      setListValidating(false);
     }
 
     const requestId = ++listRequestIdRef.current;
@@ -1086,29 +1095,35 @@ export default function OpportunitiesPage({
           applyRawListToUiRef.current(entry);
           listHasLoadedRef.current = true;
 
-          for (const tab of ["all", "live", "upcoming", "ended"] as const) {
-            if (tab === statusFilter) continue;
-            const prefetchKey = buildKey({ tab, page: 1 });
-            if (listCacheRef.current.has(prefetchKey)) continue;
-            void fetch(`/api/opportunities/list?${prefetchKey}`, {
-              cache: "no-store",
-            })
-              .then(async (res) => {
-                if (!res.ok) return;
-                const data = await res.json();
-                listCacheRef.current.set(prefetchKey, {
-                  contests: Array.isArray(data.contests) ? data.contests : [],
-                  total: Number(data.total) || 0,
-                  tabCounts: {
-                    all: Number(data.tabCounts?.all) || 0,
-                    live: Number(data.tabCounts?.live) || 0,
-                    upcoming: Number(data.tabCounts?.upcoming) || 0,
-                    ended: Number(data.tabCounts?.ended) || 0,
-                  },
-                });
-              })
-              .catch(() => undefined);
-          }
+          // Prefetch sibling tabs in parallel (same filters, page 1).
+          void Promise.all(
+            (["all", "live", "upcoming", "ended"] as const)
+              .filter((tab) => tab !== statusFilter)
+              .map(async (tab) => {
+                const prefetchKey = buildKey({ tab, page: 1 });
+                if (listCacheRef.current.has(prefetchKey)) return;
+                try {
+                  const res = await fetch(
+                    `/api/opportunities/list?${prefetchKey}`,
+                    { cache: "no-store" },
+                  );
+                  if (!res.ok) return;
+                  const data = await res.json();
+                  listCacheRef.current.set(prefetchKey, {
+                    contests: Array.isArray(data.contests) ? data.contests : [],
+                    total: Number(data.total) || 0,
+                    tabCounts: {
+                      all: Number(data.tabCounts?.all) || 0,
+                      live: Number(data.tabCounts?.live) || 0,
+                      upcoming: Number(data.tabCounts?.upcoming) || 0,
+                      ended: Number(data.tabCounts?.ended) || 0,
+                    },
+                  });
+                } catch {
+                  // prefetch is best-effort
+                }
+              }),
+          );
         } catch (err) {
           if ((err as { name?: string })?.name === "AbortError") return;
           console.error("[opportunities] list fetch failed:", err);
@@ -1326,7 +1341,9 @@ export default function OpportunitiesPage({
   // Full-page loading (same as brand campaigns) until profile + first list are ready.
   const showInitialSpinner =
     (isFetchingData && !profileReady) ||
-    (listLoading && filteredContests.length === 0 && !listHasLoadedRef.current);
+    ((listLoading || listValidating) &&
+      filteredContests.length === 0 &&
+      !listHasLoadedRef.current);
 
   const completeGuidelines = async () => {
     const userId = user?.id;
@@ -2643,7 +2660,8 @@ export default function OpportunitiesPage({
           id="opportunities-results"
           className="space-y-6 scroll-mt-4"
         >
-          {listLoading && filteredContests.length === 0 ? (
+          {listLoading ||
+          (listValidating && filteredContests.length === 0) ? (
             <div className="flex min-h-[40vh] items-center justify-center py-16">
               <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
             </div>
