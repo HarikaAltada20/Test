@@ -246,6 +246,40 @@ export async function enrichContestsWithListCardStats<
   if (contests.length === 0) return [];
 
   const contestIds = contests.map((contest) => contest.id);
+
+  try {
+    const { loadContestStatsByContestIds, contestStatsToListCardStats } =
+      await import("@/lib/contest-stats");
+    const statsMap = await loadContestStatsByContestIds(contestIds);
+    const statsLookComplete =
+      statsMap.size > 0 &&
+      contests.every((contest) => {
+        const row = statsMap.get(contest.id);
+        if (!row) return false;
+        const statusTotal =
+          (row.verified_submission_count ?? 0) +
+          (row.pending_submission_count ?? 0) +
+          (row.rejected_submission_count ?? 0);
+        const live = contest.live_submission_count ?? 0;
+        return statusTotal > 0 || live === 0;
+      });
+
+    if (statsLookComplete) {
+      return contests.map((contest) => ({
+        ...contest,
+        ...contestStatsToListCardStats(
+          statsMap.get(contest.id),
+          contest.last_metrics_updated ?? null,
+        ),
+      }));
+    }
+  } catch (err) {
+    console.warn(
+      "[contest-list-card-stats] contest_stats unavailable, falling back:",
+      err,
+    );
+  }
+
   const { submissionStatusCounts, notRejectedViews } =
     await loadContestListCardStatsMaps(contestIds);
 

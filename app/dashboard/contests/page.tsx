@@ -2,13 +2,11 @@ import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
-import { RouteGuard } from "@/components/guards/RouteGuard";
 import {
   ContestsPageClient,
   type CreatorRouteNotice,
 } from "./ContestsPageClient";
-import { getAdvertiserContestsWithCalculatedBudgets } from "@/lib/contest-service";
-import { enrichContestsWithListCardStats } from "@/lib/contest-list-card-stats";
+import { listCampaignsPaginated } from "@/lib/contest-list-query";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default async function ContestsPage({
@@ -38,7 +36,6 @@ export default async function ContestsPage({
     redirect("/dashboard/opportunities");
   }
 
-  // Only allow advertisers (admins have their own route)
   if (userData?.user_type === "admin") {
     redirect("/dashboard/admin/contests");
   }
@@ -47,12 +44,15 @@ export default async function ContestsPage({
     redirect("/dashboard");
   }
 
-  const contestsWithCalculatedBudgets =
-    await getAdvertiserContestsWithCalculatedBudgets(user.id, supabase);
-
-  const typedContests = await enrichContestsWithListCardStats(
-    contestsWithCalculatedBudgets || [],
-  );
+  const list = await listCampaignsPaginated({
+    supabase,
+    scope: "advertiser",
+    advertiserId: user.id,
+    tab: "all",
+    sort: "created_at_desc",
+    page: 1,
+    limit: 9,
+  });
 
   const resolvedSearch = await searchParams;
   let creatorRouteNotice: CreatorRouteNotice = null;
@@ -64,7 +64,6 @@ export default async function ContestsPage({
         .eq("id", resolvedSearch.contest_id)
         .maybeSingle();
       const owns = Boolean(contest && contest.advertiser_id === user.id);
-      // Only block / modal when this brand does not own the contest (owners are redirected to /dashboard/contests/[id] by middleware).
       if (!owns) {
         creatorRouteNotice = {
           kind: "from_opportunity",
@@ -83,7 +82,6 @@ export default async function ContestsPage({
   }
 
   return (
-    // <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
     <Suspense
       fallback={
         <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
@@ -92,11 +90,14 @@ export default async function ContestsPage({
       }
     >
       <ContestsPageClient
-        initialContests={typedContests}
+        initialContests={list.contests as any}
+        initialTotal={list.total}
+        initialTabCounts={list.tabCounts}
+        initialPostPhaseCounts={list.postPhaseCounts}
+        initialAvailablePlatforms={list.availablePlatforms}
         userId={user.id}
         creatorRouteNotice={creatorRouteNotice}
       />
     </Suspense>
-    // </RouteGuard>
   );
 }

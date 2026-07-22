@@ -49,12 +49,34 @@ export type CreatorRouteNotice =
 
 interface ContestsPageClientProps {
   initialContests: any[];
+  initialTotal?: number;
+  initialTabCounts?: {
+    all: number;
+    draft: number;
+    pending_approval: number;
+    ready: number;
+    upcoming: number;
+    live: number;
+    ended: number;
+    rejected: number;
+  };
+  initialPostPhaseCounts?: {
+    post_pending_review: number;
+    post_in_review: number;
+    post_payment_pending: number;
+    post_paid: number;
+  };
+  initialAvailablePlatforms?: string[];
   userId: string;
   creatorRouteNotice?: CreatorRouteNotice;
 }
 
 export function ContestsPageClient({
   initialContests,
+  initialTotal,
+  initialTabCounts,
+  initialPostPhaseCounts,
+  initialAvailablePlatforms,
   userId,
   creatorRouteNotice = null,
 }: ContestsPageClientProps) {
@@ -306,7 +328,11 @@ export function ContestsPageClient({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-          {!initialContests.some((c) => c.moderation_status !== "draft") && (
+          {!(
+            initialTabCounts
+              ? initialTabCounts.all - initialTabCounts.draft > 0
+              : initialContests.some((c) => c.moderation_status !== "draft")
+          ) && (
             <a
               href={BOOK_A_CALL_URL}
               target="_blank"
@@ -345,6 +371,10 @@ export function ContestsPageClient({
       <Suspense fallback={<div>Loading campaigns...</div>}>
         <ContestListClient
           initialContests={initialContests}
+          initialTotal={initialTotal}
+          initialTabCounts={initialTabCounts}
+          initialPostPhaseCounts={initialPostPhaseCounts}
+          initialAvailablePlatforms={initialAvailablePlatforms}
           isAdminView={false}
           selectedTab={selectedTab}
           onTabChange={setSelectedTab}

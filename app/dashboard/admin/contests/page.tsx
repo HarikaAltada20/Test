@@ -4,8 +4,7 @@ import React, { Suspense, type ComponentProps } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { ContestListClient } from "../../contests/ContestListClient";
-import { getAllContestsWithCalculatedBudgets } from "@/lib/contest-service";
-import { enrichContestsWithListCardStats } from "@/lib/contest-list-card-stats";
+import { listCampaignsPaginated } from "@/lib/contest-list-query";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
@@ -27,17 +26,18 @@ export default async function AdminContestsPage() {
   const supabase = await createClient();
 
   try {
-    const contestsWithCalculatedBudgets =
-      await getAllContestsWithCalculatedBudgets(supabase);
-    const contestsWithCardStats = await enrichContestsWithListCardStats(
-      contestsWithCalculatedBudgets || [],
-    );
+    const list = await listCampaignsPaginated({
+      supabase,
+      scope: "admin",
+      tab: "all",
+      sort: "created_at_desc",
+      page: 1,
+      limit: 9,
+    });
 
-    const typedContests = contestsWithCardStats.map((contest) => ({
+    const typedContests = list.contests.map((contest) => ({
       ...contest,
-      advertiser_name:
-        (contest as { advertiser_profiles?: { company_name?: string } })
-          .advertiser_profiles?.company_name || "Unknown Brand",
+      advertiser_name: contest.advertiser_name || "Unknown Brand",
     })) as AdminContestListItem[];
 
     return (
@@ -69,7 +69,9 @@ export default async function AdminContestsPage() {
             >
               <Plus className="h-4 w-4 shrink-0" aria-hidden />
               <span className="sm:hidden">Create for brand</span>
-              <span className="hidden sm:inline">Create campaign for brand</span>
+              <span className="hidden sm:inline">
+                Create campaign for brand
+              </span>
             </Link>
           </div>
         </header>
@@ -82,6 +84,10 @@ export default async function AdminContestsPage() {
         >
           <ContestListClient
             initialContests={typedContests}
+            initialTotal={list.total}
+            initialTabCounts={list.tabCounts}
+            initialPostPhaseCounts={list.postPhaseCounts}
+            initialAvailablePlatforms={list.availablePlatforms}
             isAdminView={true}
           />
         </Suspense>

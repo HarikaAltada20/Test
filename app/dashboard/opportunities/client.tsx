@@ -121,6 +121,10 @@ import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 import {
+  ContestListStatsFooter,
+  ContestListSubmissionBadges,
+} from "@/components/ContestListCardMetrics";
+import {
   isCreatorEligibleForContest,
   parseContestCreatorRequirements,
   type CreatorRequirementsSnapshot,
@@ -154,6 +158,7 @@ import {
   type PageSizeOption,
   type ViewModeOption,
 } from "@/lib/campaign-list-filters-storage";
+import { buildOpportunitiesListQueryKey } from "@/lib/opportunities-list-query";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
@@ -182,6 +187,8 @@ type SortOptionType =
   | "budget_remaining_asc"
   | "budget_used_desc"
   | "budget_used_asc"
+  | "views_desc"
+  | "views_asc"
   | "cpm_rate_desc"
   | "cpm_rate_asc"
   | "submissions_desc"
@@ -192,8 +199,7 @@ const getBudgetTrackerValues = (
   budgetSpent?: number | null,
 ) => {
   const spent = Math.max(0, budgetSpent ?? 0);
-  const clampedSpent =
-    totalBudget > 0 ? Math.min(spent, totalBudget) : spent;
+  const clampedSpent = totalBudget > 0 ? Math.min(spent, totalBudget) : spent;
   const percentage = totalBudget > 0 ? (clampedSpent / totalBudget) * 100 : 0;
   const remaining = Math.max(totalBudget - clampedSpent, 0);
 
@@ -256,8 +262,8 @@ function filterContestsByEligibility(
 ): any[] {
   if (eligibilityFilter !== "eligible") return contests;
   if (!userId) return contests;
-  // Fail-closed until cached stats are loaded successfully.
-  if (!statsReady || !snapshot) return [];
+  // Keep current list visible while stats load — filter applies when ready.
+  if (!statsReady || !snapshot) return contests;
   return contests.filter((contest) =>
     isCreatorEligibleForContest({
       requirements: parseContestCreatorRequirements(contest),
@@ -266,19 +272,75 @@ function filterContestsByEligibility(
   );
 }
 
+type OpportunitiesTabCounts = {
+  all: number;
+  live: number;
+  upcoming: number;
+  ended: number;
+};
+
+type OpportunitiesListCacheEntry = {
+  contests: any[];
+  total: number;
+  tabCounts: OpportunitiesTabCounts;
+};
+
 export default function OpportunitiesPage({
   user,
+  initialContests = [],
+  initialTotal = 0,
+  initialTabCounts = { all: 0, live: 0, upcoming: 0, ended: 0 },
+  initialUserCountries = [],
+  initialListQueryKey = "",
 }: {
   user: UserResponse["data"]["user"];
+  initialContests?: any[];
+  initialTotal?: number;
+  initialTabCounts?: OpportunitiesTabCounts;
+  initialUserCountries?: string[];
+  initialListQueryKey?: string;
 }) {
-  const [availableContests, setAvailableContests] = useState<any[]>([]);
+  const [rawListEntry, setRawListEntry] =
+    useState<OpportunitiesListCacheEntry | null>(
+      initialContests.length > 0 || initialTotal > 0
+        ? {
+            contests: initialContests,
+            total: initialTotal,
+            tabCounts: initialTabCounts,
+          }
+        : null,
+    );
+  const [serverTotal, setServerTotal] = useState(initialTotal);
+  const [serverTabCounts, setServerTabCounts] =
+    useState<OpportunitiesTabCounts>(initialTabCounts);
+  const [listLoading, setListLoading] = useState(false);
+  const [listValidating, setListValidating] = useState(false);
+  const [profileReady, setProfileReady] = useState(false);
+  const [userCountriesList, setUserCountriesList] =
+    useState<string[]>(initialUserCountries);
+  const listRequestIdRef = useRef(0);
+  const listCacheRef = useRef<Map<string, OpportunitiesListCacheEntry>>(
+    new Map(),
+  );
+  const availableContestsRef = useRef<any[]>(initialContests);
+  const initialCacheSeededRef = useRef(false);
+  const listHasLoadedRef = useRef(
+    initialContests.length > 0 || initialTotal > 0,
+  );
+  const rawListRef = useRef<OpportunitiesListCacheEntry | null>(
+    initialContests.length > 0 || initialTotal > 0
+      ? {
+          contests: initialContests,
+          total: initialTotal,
+          tabCounts: initialTabCounts,
+        }
+      : null,
+  );
   const [isFetchingData, setIsFetchingData] = useState(true);
   const [showGuidelines, setShowGuidelines] = useState(false);
   const [showParticipationOnboarding, setShowParticipationOnboarding] =
     useState(false);
-  const [pendingContestId, setPendingContestId] = useState<string | null>(
-    null,
-  );
+  const [pendingContestId, setPendingContestId] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [hasCheckedGuidelines, setHasCheckedGuidelines] = useState(false);
   const [userCountry, setUserCountry] = useState<string | null>(null);
@@ -346,7 +408,6 @@ export default function OpportunitiesPage({
   const [sortOption, setSortOption] =
     useState<SortOptionType>("relevance_desc");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [displayedContests, setDisplayedContests] = useState<any[]>([]);
   const [page, setPage] = useState<number>(1);
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
@@ -451,63 +512,22 @@ export default function OpportunitiesPage({
     };
   }, [user?.id, creatorStatsRefreshNonce]);
 
-  const contestsForTabCounts = useMemo(() => {
-    const byMedia = getContestsByMediaType(availableContests, mediaType);
-    return filterContestsByEligibility(
-      byMedia,
-      eligibilityFilter,
-      creatorRequirementsSnapshot,
-      user?.id,
-      creatorStatsReady,
-    );
-  }, [
-    availableContests,
-    mediaType,
-    eligibilityFilter,
-    creatorRequirementsSnapshot,
-    creatorStatsReady,
-    user?.id,
-  ]);
-
   const tabs = useMemo(
     () => [
-      {
-        id: "all",
-        label: "All",
-        count: contestsForTabCounts.filter(
-          (c) => c.moderation_status === "published" && c.status,
-        ).length,
-      },
-      {
-        id: "live",
-        label: "Live",
-        count: contestsForTabCounts.filter(
-          (c) => c.moderation_status === "published" && c.status === "active",
-        ).length,
-      },
-      {
-        id: "upcoming",
-        label: "Upcoming",
-        count: contestsForTabCounts.filter(
-          (c) => c.moderation_status === "published" && c.status === "upcoming",
-        ).length,
-      },
-      {
-        id: "ended",
-        label: "Ended",
-        count: contestsForTabCounts.filter(
-          (c) => c.moderation_status === "published" && c.status === "ended",
-        ).length,
-      },
+      { id: "all", label: "All", count: serverTabCounts.all },
+      { id: "live", label: "Live", count: serverTabCounts.live },
+      { id: "upcoming", label: "Upcoming", count: serverTabCounts.upcoming },
+      { id: "ended", label: "Ended", count: serverTabCounts.ended },
     ],
-    [contestsForTabCounts],
+    [serverTabCounts],
   );
 
   useEffect(() => {
     if (!filtersHydrated) return;
     writeStoredOpportunitiesListFilters(OPPORTUNITIES_LIST_FILTERS_KEY, {
       mediaType: mediaType as OpportunitiesMediaTypeOption,
-      eligibilityFilter: eligibilityFilter as OpportunitiesEligibilityFilterOption,
+      eligibilityFilter:
+        eligibilityFilter as OpportunitiesEligibilityFilterOption,
       platformFilter: platformFilter as OpportunitiesPlatformFilterOption,
       typeFilter: typeFilter as ContestTypeFilterOption,
       sortOption: sortOption as OpportunitiesSortOption,
@@ -740,7 +760,8 @@ export default function OpportunitiesPage({
 
       if (userError) {
         console.error("Error fetching user:", userError);
-        setAvailableContests([]);
+        setRawListEntry(null);
+        setProfileReady(true);
         return;
       }
 
@@ -834,18 +855,22 @@ export default function OpportunitiesPage({
         Date.now() - parseInt(cachedOnboardingTimestamp, 10) <
           24 * 60 * 60 * 1000;
 
-      const resolveOnboardingSeen = (row: {
-        has_seen_campaign_onboarding?: boolean | null;
-      } | null) => {
+      const resolveOnboardingSeen = (
+        row: {
+          has_seen_campaign_onboarding?: boolean | null;
+        } | null,
+      ) => {
         if (cachedOnboarding === "true" && isOnboardingCacheValid) return true;
         if (cachedOnboarding === "false" && isOnboardingCacheValid)
           return false;
         return row?.has_seen_campaign_onboarding === true;
       };
 
-      const resolveGuidelinesSeen = (row: {
-        has_seen_guidelines?: boolean | null;
-      } | null) => {
+      const resolveGuidelinesSeen = (
+        row: {
+          has_seen_guidelines?: boolean | null;
+        } | null,
+      ) => {
         if (cachedGuidelines === "true" && isCacheValid) return true;
         if (cachedGuidelines === "false" && isCacheValid) return false;
         return row?.has_seen_guidelines === true;
@@ -927,394 +952,12 @@ export default function OpportunitiesPage({
       setCreatorCategories(localCreatorCategories);
       setCreatorSubcategories(localCreatorSubcategories);
       setCreatorInterests(localCreatorInterests);
-
-      const { data: contests, error: contestError } = await supabase
-        .from("contests_with_status")
-        .select(
-          `
-            *,
-            contest_based_details
-          `,
-        )
-        .eq("moderation_status", "published")
-        .not("status", "eq", "incomplete")
-        .order("created_at", { ascending: false });
-
-      if (contestError) {
-        console.error("Error fetching contests:", contestError);
-        setAvailableContests([]);
-      } else {
-        const contestsWithCalculatedBudgets = await Promise.all(
-          (contests || []).map(async (contest) => {
-            let updatedContest = { ...contest };
-
-            const isTwitterTextImage =
-              (contest.platform?.toLowerCase() === "twitter" ||
-                contest.platform?.toLowerCase() === "x") &&
-              contest.contest_format === "text_image";
-
-            const manualAdjustmentMap =
-              contest.contest_type === "cpm" ||
-              contest.contest_type === "dual_rewards"
-                ? await fetchTwitterLeaderboardManualAdjustments(contest.id)
-                : {};
-
-            if (isTwitterTextImage) {
-              const { data: metrics } = await supabase
-                .from("twitter_campaign_metrics")
-                .select("total_participants, max_participants")
-                .eq("contest_id", contest.id)
-                .maybeSingle();
-
-              if (metrics) {
-                updatedContest.twitter_participants_count =
-                  metrics.total_participants || 0;
-                updatedContest.twitter_max_participants =
-                  metrics.max_participants;
-              } else {
-                updatedContest.twitter_participants_count = 0;
-                updatedContest.twitter_max_participants = null;
-              }
-            }
-
-            if (
-              contest.contest_type === "leaderboard" &&
-              contest.contest_based_details?.leaderboard_contest?.total_budget >
-                0 &&
-              contest.contest_based_details?.leaderboard_contest
-                ?.flat_fee_bonus > 0
-            ) {
-              let leaderboardSubmissions: Submission[] = [];
-              let leaderboardFetchOk = false;
-
-              if (isTwitterTextImage) {
-                const { data: twitterTweets, error: twitterErr } =
-                  await fetchContestTwitterTweetsAllPages<TwitterLeaderboardTweetRow>(
-                  supabase,
-                  contest.id,
-                  "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
-                  {
-                    isEligible: true,
-                    deletedAtNull: true,
-                    moderationStatusIn: ["verified", "paid"],
-                    order: { column: "tweet_created_at", ascending: true },
-                  },
-                );
-
-                if (!twitterErr) {
-                  leaderboardFetchOk = true;
-                leaderboardSubmissions = (twitterTweets || [])
-                  .filter((tweet) => tweet.creator_id)
-                  .map(
-                    (tweet): Submission & { id: string; is_twitter_tweet: true } => ({
-                    id: tweet.id,
-                    creator_id: tweet.creator_id,
-                    created_at:
-                      tweet.tweet_created_at || new Date().toISOString(),
-                    status: tweet.moderation_status,
-                    is_eligible: tweet.is_eligible === true,
-                    deleted_at: tweet.deleted_at ?? null,
-                    is_twitter_tweet: true as const,
-                    paid: tweet.moderation_status === "paid",
-                    earnings: null,
-                    bonus_paid: false,
-                    platform: "twitter",
-                  }),
-                  );
-                }
-              } else {
-                const { data: submissions, error: subsErr } =
-                  await fetchContestSubmissionsAllPages<LeaderboardBudgetSubmissionRow>(
-                  supabase,
-                  contest.id,
-                  "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
-                  {
-                    statusIn: ["verified", "paid"],
-                    order: { column: "created_at", ascending: true },
-                  },
-                );
-
-                if (!subsErr) {
-                  leaderboardFetchOk = true;
-                  leaderboardSubmissions = (submissions || []).map((s) => ({
-                    paid: !!s.paid,
-                    earnings: s.earnings ?? null,
-                    bonus_paid: !!s.bonus_paid,
-                    bonus_amount:
-                      s.bonus_amount != null ? Number(s.bonus_amount) : undefined,
-                    creator_id: s.creator_id,
-                    created_at: s.created_at,
-                    status: s.status,
-                    views: s.views,
-                  }));
-                }
-              }
-
-              if (!leaderboardFetchOk) {
-                return updatedContest;
-              }
-
-              const actualBudgetSpent = calculateLeaderboardBudgetSpent(
-                leaderboardSubmissions,
-                contest.contest_based_details.leaderboard_contest
-                  .flat_fee_bonus,
-              );
-
-              updatedContest = {
-                ...updatedContest,
-                contest_based_details: {
-                  ...updatedContest.contest_based_details,
-                  leaderboard_contest: {
-                    ...updatedContest.contest_based_details.leaderboard_contest,
-                    budget_spent: Math.round(actualBudgetSpent * 100),
-                  },
-                },
-              };
-            }
-
-            const treatAsCpmPool = isCpmContestType(contest.contest_type);
-            const treatAsMilestonePool =
-              isMilestoneContestType(contest.contest_type);
-
-            if (
-              treatAsCpmPool &&
-              contest.platform === "twitter" &&
-              contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
-            ) {
-              const { data: twitterTweets, error: twitterCpmErr } =
-                await fetchContestTwitterTweetsAllPages(
-                supabase,
-                contest.id,
-                "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, is_eligible, deleted_at",
-                {
-                  isEligible: true,
-                  deletedAtNull: true,
-                  moderationStatusIn: ["verified", "paid"],
-                  order: { column: "tweet_created_at", ascending: true },
-                },
-              );
-
-              if (twitterCpmErr) {
-                return updatedContest;
-              }
-
-              const submissions =
-                twitterTweets?.map((tweet: any) => ({
-                  id: tweet.id,
-                  creator_id: tweet.creator_id,
-                  created_at: tweet.tweet_created_at,
-                  platform: "twitter",
-                  status: tweet.moderation_status,
-                  is_eligible: tweet.is_eligible === true,
-                  deleted_at: tweet.deleted_at ?? null,
-                  is_twitter_tweet: true as const,
-                  paid: tweet.moderation_status === "paid",
-                  earnings: null,
-                  bonus_paid: false,
-                  bonus_amount: 0,
-                  other_stats: {
-                    base_points: tweet.points || 0,
-                    manual_points_adjustment:
-                      tweet.manual_points_adjustment || 0,
-                  },
-                  manual_points_adjustment: tweet.manual_points_adjustment || 0,
-                  views: 0,
-                })) || [];
-
-              const cpmDetails = contest.contest_based_details.cpm_contest;
-
-              const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
-                submissions,
-                cpmDetails.cpm_rate_usd,
-                contest.max_earnings_per_creator ||
-                  cpmDetails.max_earnings_per_creator ||
-                  null,
-                cpmDetails.min_views,
-                cpmDetails.max_views,
-                cpmDetails.flat_fee_bonus || 0,
-                cpmDetails.flat_fee_bonus_cap || null,
-                manualAdjustmentMap,
-              );
-
-              updatedContest = {
-                ...updatedContest,
-                contest_based_details: {
-                  ...updatedContest.contest_based_details,
-                  cpm_contest: {
-                    ...updatedContest.contest_based_details.cpm_contest,
-                    budget_spent: Math.round(actualBudgetSpent * 100),
-                  },
-                },
-              };
-            }
-
-            if (
-              treatAsCpmPool &&
-              contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0 &&
-              !["twitter", "x"].includes((contest.platform || "").toLowerCase())
-            ) {
-              const { data: submissions, error: cpmSubsErr } =
-                await fetchContestSubmissionsAllPages<CpmBudgetSubmissionRow>(
-                supabase,
-                contest.id,
-                "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount",
-                {
-                  statusIn: ["verified", "paid"],
-                  order: { column: "created_at", ascending: true },
-                },
-              );
-
-              if (cpmSubsErr) {
-                return updatedContest;
-              }
-
-              const submissionRecords: Submission[] = (submissions || []).map(
-                (submission) => ({
-                  id: submission.id,
-                  creator_id: submission.creator_id,
-                  created_at: submission.created_at,
-                  status: submission.status,
-                  paid: !!submission.paid,
-                  earnings: submission.earnings ?? null,
-                  views: submission.views,
-                  platform: submission.platform,
-                  other_stats: submission.other_stats,
-                  manual_points_adjustment: 0,
-                  bonus_paid: !!submission.bonus_paid,
-                  bonus_amount:
-                    submission.bonus_amount != null
-                      ? Number(submission.bonus_amount)
-                      : undefined,
-                }),
-              );
-
-              const cpmDetails = contest.contest_based_details.cpm_contest;
-
-              const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
-                submissionRecords,
-                cpmDetails.cpm_rate_usd,
-                contest.max_earnings_per_creator ||
-                  cpmDetails.max_earnings_per_creator,
-                cpmDetails.min_views,
-                cpmDetails.max_views,
-                cpmDetails.flat_fee_bonus || 0,
-                cpmDetails.flat_fee_bonus_cap || null,
-                manualAdjustmentMap,
-              );
-
-              updatedContest = {
-                ...updatedContest,
-                contest_based_details: {
-                  ...updatedContest.contest_based_details,
-                  cpm_contest: {
-                    ...updatedContest.contest_based_details.cpm_contest,
-                    budget_spent: Math.round(actualBudgetSpent * 100),
-                  },
-                },
-              };
-            }
-
-            if (
-              treatAsMilestonePool &&
-              contest.contest_based_details?.milestone_contest
-            ) {
-              const { data: submissions, error: milestoneSubsErr } =
-                await fetchContestSubmissionsAllPages(
-                supabase,
-                contest.id,
-                "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
-                {
-                  statusIn: ["pending", "verified", "paid"],
-                  order: { column: "created_at", ascending: true },
-                },
-              );
-
-              if (!milestoneSubsErr) {
-              const submissionRecords = (submissions || []).map(
-                (submission: any) => ({
-                  id: submission.id,
-                  creator_id: submission.creator_id,
-                  created_at: submission.created_at,
-                  status: submission.status,
-                  paid: submission.paid,
-                  paid_at: submission.paid_at,
-                  earnings: submission.earnings,
-                  views: submission.views,
-                  platform: submission.platform,
-                  other_stats: submission.other_stats,
-                  manual_points_adjustment: 0,
-                  bonus_paid: submission.bonus_paid ?? false,
-                  bonus_amount: submission.bonus_amount ?? undefined,
-                  metadata: submission.metadata,
-                  milestone_bonus_paid: submission.milestone_bonus_paid,
-                }),
-              );
-
-              const budgetSubs: BudgetTileSubmission[] = submissionRecords.map(
-                (submission) => ({
-                  id: submission.id,
-                  creator_id: submission.creator_id,
-                  created_at: submission.created_at,
-                  status: submission.status,
-                  paid: submission.paid,
-                  paid_at: submission.paid_at,
-                  earnings: submission.earnings,
-                  views: submission.views,
-                  platform: submission.platform,
-                  other_stats: submission.other_stats,
-                  bonus_paid: submission.bonus_paid,
-                  bonus_amount: submission.bonus_amount,
-                }),
-              );
-
-              const tileInput = {
-                contest_type: contest.contest_type,
-                post_contest_status: contest.post_contest_status,
-                max_earnings_per_creator: contest.max_earnings_per_creator,
-                contest_based_details: updatedContest.contest_based_details,
-              };
-              const mode = getBudgetTileMode(contest.post_contest_status);
-              const milestoneBudgetSpentCents =
-                mode === "paid"
-                  ? computeBudgetPaidCents(tileInput, budgetSubs)
-                  : computeBudgetFilledCents(tileInput, budgetSubs);
-
-              updatedContest = {
-                ...updatedContest,
-                contest_based_details: {
-                  ...updatedContest.contest_based_details,
-                  milestone_contest: {
-                    ...updatedContest.contest_based_details.milestone_contest,
-                    budget_spent: milestoneBudgetSpentCents,
-                  },
-                },
-              };
-              }
-            }
-
-            return updatedContest;
-          }),
-        );
-
-        const regionFilteredContests = contestsWithCalculatedBudgets.filter(
-          (contest) => {
-            if (userCountries.length === 0) {
-              return true;
-            }
-            if (!contest.region || Object.keys(contest.region).length === 0) {
-              return true;
-            }
-            return userCountries.some((country: string) =>
-              isCountryInContestRegions(country, contest.region),
-            );
-          },
-        );
-
-        setAvailableContests(regionFilteredContests);
-      }
+      setUserCountriesList(userCountries);
+      setProfileReady(true);
     } catch (error) {
       console.error("Unexpected error in fetchData:", error);
-      setAvailableContests([]);
+      setRawListEntry(null);
+      setProfileReady(true);
     } finally {
       setIsFetchingData(false);
     }
@@ -1325,12 +968,189 @@ export default function OpportunitiesPage({
   }, [fetchOpportunities]);
 
   useEffect(() => {
+    if (initialCacheSeededRef.current || !initialListQueryKey) return;
+    if (initialContests.length === 0 && initialTotal === 0) return;
+    initialCacheSeededRef.current = true;
+    listCacheRef.current.set(initialListQueryKey, {
+      contests: initialContests,
+      total: initialTotal,
+      tabCounts: initialTabCounts,
+    });
+  }, [
+    initialContests,
+    initialTotal,
+    initialTabCounts,
+    initialListQueryKey,
+  ]);
+
+  const applyRawListToUi = useCallback((entry: OpportunitiesListCacheEntry) => {
+    rawListRef.current = entry;
+    setRawListEntry(entry);
+    setServerTotal(entry.total);
+    setServerTabCounts(entry.tabCounts);
+  }, []);
+  const applyRawListToUiRef = useRef(applyRawListToUi);
+  applyRawListToUiRef.current = applyRawListToUi;
+
+  const filteredContests = useMemo(() => {
+    if (!rawListEntry) return [];
+    if (eligibilityFilter !== "eligible") return rawListEntry.contests;
+    return filterContestsByEligibility(
+      rawListEntry.contests,
+      eligibilityFilter,
+      creatorRequirementsSnapshot,
+      user?.id,
+      creatorStatsReady,
+    );
+  }, [
+    rawListEntry,
+    eligibilityFilter,
+    creatorRequirementsSnapshot,
+    creatorStatsReady,
+    user?.id,
+  ]);
+
+  useEffect(() => {
+    availableContestsRef.current = filteredContests;
+  }, [filteredContests]);
+
+  // Paginated list with cache so tab/filter switches feel immediate.
+  useEffect(() => {
+    if (!user || !filtersHydrated || !statusTabHydrated) return;
+
+    const buildKey = (overrides?: {
+      tab?: string;
+      page?: number;
+      platform?: string;
+      contestType?: string;
+      mediaType?: string;
+      search?: string;
+      sort?: string;
+      limit?: number;
+    }) =>
+      buildOpportunitiesListQueryKey({
+        tab: overrides?.tab ?? statusFilter,
+        sort: overrides?.sort ?? sortOption,
+        page: overrides?.page ?? page,
+        limit: overrides?.limit ?? limit,
+        platform: overrides?.platform ?? platformFilter,
+        contestType: overrides?.contestType ?? typeFilter,
+        mediaType: overrides?.mediaType ?? mediaType,
+        search: overrides?.search ?? searchQuery,
+        userCountries: userCountriesList,
+      });
+
+    const key = buildKey();
+    const cached = listCacheRef.current.get(key);
+    const hasVisibleList =
+      availableContestsRef.current.length > 0 || listHasLoadedRef.current;
+
+    if (cached) {
+      applyRawListToUiRef.current(cached);
+      setListLoading(false);
+      setListValidating(false);
+    } else if (hasVisibleList) {
+      setListValidating(true);
+      setListLoading(false);
+    } else {
+      setListLoading(true);
+    }
+
+    const requestId = ++listRequestIdRef.current;
+    const controller = new AbortController();
+
+    const t = setTimeout(
+      async () => {
+        try {
+          const response = await fetch(`/api/opportunities/list?${key}`, {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`Opportunities list failed (${response.status})`);
+          }
+          const payload = await response.json();
+          if (requestId !== listRequestIdRef.current) return;
+
+          const entry: OpportunitiesListCacheEntry = {
+            contests: Array.isArray(payload.contests) ? payload.contests : [],
+            total: Number(payload.total) || 0,
+            tabCounts: {
+              all: Number(payload.tabCounts?.all) || 0,
+              live: Number(payload.tabCounts?.live) || 0,
+              upcoming: Number(payload.tabCounts?.upcoming) || 0,
+              ended: Number(payload.tabCounts?.ended) || 0,
+            },
+          };
+          listCacheRef.current.set(key, entry);
+          applyRawListToUiRef.current(entry);
+          listHasLoadedRef.current = true;
+
+          for (const tab of ["all", "live", "upcoming", "ended"] as const) {
+            if (tab === statusFilter) continue;
+            const prefetchKey = buildKey({ tab, page: 1 });
+            if (listCacheRef.current.has(prefetchKey)) continue;
+            void fetch(`/api/opportunities/list?${prefetchKey}`, {
+              cache: "no-store",
+            })
+              .then(async (res) => {
+                if (!res.ok) return;
+                const data = await res.json();
+                listCacheRef.current.set(prefetchKey, {
+                  contests: Array.isArray(data.contests) ? data.contests : [],
+                  total: Number(data.total) || 0,
+                  tabCounts: {
+                    all: Number(data.tabCounts?.all) || 0,
+                    live: Number(data.tabCounts?.live) || 0,
+                    upcoming: Number(data.tabCounts?.upcoming) || 0,
+                    ended: Number(data.tabCounts?.ended) || 0,
+                  },
+                });
+              })
+              .catch(() => undefined);
+          }
+        } catch (err) {
+          if ((err as { name?: string })?.name === "AbortError") return;
+          console.error("[opportunities] list fetch failed:", err);
+        } finally {
+          if (requestId === listRequestIdRef.current) {
+            setListLoading(false);
+            setListValidating(false);
+          }
+        }
+      },
+      searchQuery ? 250 : 0,
+    );
+
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [
+    user,
+    filtersHydrated,
+    statusTabHydrated,
+    statusFilter,
+    sortOption,
+    page,
+    limit,
+    platformFilter,
+    typeFilter,
+    mediaType,
+    searchQuery,
+    userCountriesList,
+  ]);
+
+  useEffect(() => {
     const handleRefresh = async () => {
       try {
         await fetch("/api/contests/clear-cache", { method: "POST" });
       } catch {
-        // Still refetch; list API may use its own path
+        // still refetch
       }
+      listCacheRef.current.clear();
+      listHasLoadedRef.current = false;
+      setProfileReady(false);
       await fetchOpportunities();
     };
 
@@ -1483,277 +1303,30 @@ export default function OpportunitiesPage({
     return { score, percentage, matchLabel, matchColor };
   };
 
-  // useEffect for filtering and sorting
+  // List filter/sort/page owned by /api/opportunities/list.
+
+  // Reset to first page whenever server-backed filters or sort change.
   useEffect(() => {
-    let contestsToDisplay = [...availableContests];
-
-    // Search Filter - filter by title (case-insensitive)
-    if (searchQuery.trim() !== "") {
-      const searchTerm = searchQuery.trim().toLowerCase();
-      contestsToDisplay = contestsToDisplay.filter((contest) => {
-        const title = contest.title?.toLowerCase() || "";
-        return title.includes(searchTerm);
-      });
-    }
-
-    // Status Filter - only for published contests with valid lifecycle status
-    if (statusFilter !== "all") {
-      contestsToDisplay = contestsToDisplay.filter((contest) => {
-        // Only published contests should be visible, and they should have a valid status
-        if (contest.moderation_status !== "published" || !contest.status)
-          return false;
-        if (statusFilter === "live") return contest.status === "active";
-        if (statusFilter === "upcoming") return contest.status === "upcoming";
-        if (statusFilter === "ended") return contest.status === "ended";
-        return true; // Should not happen if logic is correct
-      });
-    }
-
-    // Media type based on contest content format
-    // mediaType === "all"   => show all contests (both text and video)
-    // mediaType === "media" => show only contests with content_format === "video"
-    // mediaType === "text"  => show only contests with content_format === "text_image"
-    contestsToDisplay = contestsToDisplay.filter((contest) => {
-      const format = contest.contest_format;
-
-      if (mediaType === "all") {
-        // Show all contests (both text and video)
-        return true;
-      } else if (mediaType === "media") {
-        if (format !== "video") return false;
-      } else if (mediaType === "text") {
-        if (format !== "text_image") return false;
-      }
-
-      return true;
-    });
-
-    // Platform Filter (applied on top of mediaType grouping)
-    if (platformFilter !== "all") {
-      contestsToDisplay = contestsToDisplay.filter(
-        (contest) => contest.platform?.toLowerCase() === platformFilter,
-      );
-    }
-
-    // Contest Type Filter
-    if (typeFilter !== "all") {
-      contestsToDisplay = contestsToDisplay.filter(
-        (contest) => contest.contest_type === typeFilter,
-      );
-    }
-
-    // Filter out contests based on preferences matching
-    const creatorHasPreferences =
-      creatorCategories.length > 0 ||
-      Object.keys(creatorSubcategories).length > 0 ||
-      creatorInterests.length > 0;
-
-    contestsToDisplay = contestsToDisplay.filter((contest) => {
-      const contestCategories = Array.isArray(contest.categories)
-        ? contest.categories
-        : [];
-      const contestSubcategories =
-        typeof contest.subcategories === "object" &&
-        contest.subcategories !== null
-          ? (contest.subcategories as Record<string, string[]>)
-          : {};
-      const contestInterests = Array.isArray(contest.interests)
-        ? contest.interests
-        : [];
-
-      // Check if contest has preferences set (categories, subcategories, or interests)
-      const contestHasPreferences =
-        contestCategories.length > 0 ||
-        Object.keys(contestSubcategories).length > 0 ||
-        contestInterests.length > 0;
-
-      // If country is chosen and contest has preferences, check relevance score
-      // If score is 0, exclude the contest
-      if (userCountry && contestHasPreferences) {
-        const relevanceScore = calculateRelevanceScore(contest);
-        if (relevanceScore === 0) {
-          return false; // Don't show contests with 0 relevance score when country is chosen
-        }
-      }
-
-      // If creator has no preferences and contest has preferences, filter out
-      if (!creatorHasPreferences && contestHasPreferences) {
-        return false; // Don't show contests with preferences if creator hasn't set preferences
-      }
-
-      // If creator has preferences and contest has preferences, only show if score > 0
-      if (creatorHasPreferences && contestHasPreferences) {
-        const relevanceScore = calculateRelevanceScore(contest);
-        // Don't show contests with 0 points if they have preferences set
-        return relevanceScore > 0;
-      }
-
-      // If contest has no preferences, show it (normal behavior)
-      // This covers: creator has preferences + contest has no preferences
-      // and: creator has no preferences + contest has no preferences
-      return true;
-    });
-
-    // Sorting
-    contestsToDisplay.sort((a, b) => {
-      switch (sortOption) {
-        case "relevance_desc":
-          const scoreA = calculateRelevanceScore(a);
-          const scoreB = calculateRelevanceScore(b);
-          // Sort by score descending (highest first)
-          return scoreB - scoreA;
-        case "start_date_desc":
-          if (!a.start_date) return 1; // push contests without start_date to the bottom
-          if (!b.start_date) return -1;
-          return (
-            new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-          );
-        case "start_date_asc":
-          if (!a.start_date) return 1; // push contests without start_date to the bottom
-          if (!b.start_date) return -1;
-          return (
-            new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-          );
-        case "end_date_asc":
-          if (!a.end_date) return 1; // push contests without end_date to the bottom
-          if (!b.end_date) return -1;
-          return (
-            new Date(a.end_date).getTime() - new Date(b.end_date).getTime()
-          );
-        case "end_date_desc":
-          if (!a.end_date) return 1;
-          if (!b.end_date) return -1;
-          return (
-            new Date(b.end_date).getTime() - new Date(a.end_date).getTime()
-          );
-        case "value_desc":
-        case "value_asc":
-          let valueA = 0;
-          let valueB = 0;
-          if (
-            a.contest_type === "leaderboard" &&
-            a.contest_based_details?.leaderboard_contest?.total_prize
-          ) {
-            valueA = a.contest_based_details.leaderboard_contest.total_prize;
-          } else if (
-            isCpmContestType(a.contest_type) &&
-            a.contest_based_details
-          ) {
-            valueA = getPoolBudgetCentsFromDetails(
-              a.contest_type,
-              a.contest_based_details,
-            );
-          } else if (
-            a.contest_type === "milestone" &&
-            a.contest_based_details?.milestone_contest?.total_budget_cents
-          ) {
-            valueA =
-              a.contest_based_details.milestone_contest.total_budget_cents;
-          }
-          if (
-            b.contest_type === "leaderboard" &&
-            b.contest_based_details?.leaderboard_contest?.total_prize
-          ) {
-            valueB = b.contest_based_details.leaderboard_contest.total_prize;
-          } else if (
-            isCpmContestType(b.contest_type) &&
-            b.contest_based_details
-          ) {
-            valueB = getPoolBudgetCentsFromDetails(
-              b.contest_type,
-              b.contest_based_details,
-            );
-          } else if (
-            b.contest_type === "milestone" &&
-            b.contest_based_details?.milestone_contest?.total_budget_cents
-          ) {
-            valueB =
-              b.contest_based_details.milestone_contest.total_budget_cents;
-          }
-          if (sortOption === "value_desc") {
-            return valueB - valueA;
-          } else {
-            return valueA - valueB;
-          }
-        case "budget_remaining_desc":
-        case "budget_remaining_asc":
-          return compareContestBudgetRemaining(a, b, sortOption);
-        case "budget_used_desc":
-        case "budget_used_asc":
-          return compareContestBudgetUsed(a, b, sortOption);
-        case "cpm_rate_desc":
-        case "cpm_rate_asc":
-          const rateA =
-            isCpmContestType(a.contest_type) &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
-              ? a.contest_based_details.cpm_contest.cpm_rate_usd
-              : -1; // Use -1 to sort contests without CPM rate last
-          const rateB =
-            isCpmContestType(b.contest_type) &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
-              ? b.contest_based_details.cpm_contest.cpm_rate_usd
-              : -1;
-          if (rateA === -1 && rateB === -1) return 0;
-          if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
-          if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
-          return sortOption === "cpm_rate_desc" ? rateB - rateA : rateA - rateB;
-        case "submissions_desc":
-        case "submissions_asc":
-          const countA = a.live_submission_count ?? -1; // Treat null/undefined as -1 to sort them last/first depending on order
-          const countB = b.live_submission_count ?? -1;
-          if (countA === -1 && countB === -1) return 0; // Both unknown, treat as equal
-          if (countA === -1) return 1; // a (unknown) comes after b (known)
-          if (countB === -1) return -1; // b (unknown) comes after a (known)
-          return sortOption === "submissions_desc"
-            ? countB - countA
-            : countA - countB;
-        default:
-          return 0;
-      }
-    });
-
-    if (eligibilityFilter === "eligible") {
-      contestsToDisplay = filterContestsByEligibility(
-        contestsToDisplay,
-        eligibilityFilter,
-        creatorRequirementsSnapshot,
-        user?.id,
-        creatorStatsReady,
-      );
-    }
-
-    setDisplayedContests(contestsToDisplay);
+    setPage(1);
   }, [
-    availableContests,
     statusFilter,
     platformFilter,
     typeFilter,
     sortOption,
     searchQuery,
-    creatorCategories,
-    creatorSubcategories,
-    creatorInterests,
-    userCountry,
     mediaType,
-    eligibilityFilter,
-    creatorRequirementsSnapshot,
-    creatorStatsReady,
-    user?.id,
   ]);
 
-  // Reset to first page whenever filters or sort change
-  useEffect(() => {
-    setPage(1);
-  }, [statusFilter, platformFilter, typeFilter, sortOption, searchQuery, eligibilityFilter]);
-
-  const total = displayedContests.length;
+  // Server already returned the sorted page — do not re-slice.
+  const total = serverTotal;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const hasPreviousPage = page > 1;
   const hasNextPage = page < totalPages;
-  const paginatedContests = displayedContests.slice(
-    (page - 1) * limit,
-    page * limit,
-  );
+  const paginatedContests = filteredContests;
+  // Full-page loading (same as brand campaigns) until profile + first list are ready.
+  const showInitialSpinner =
+    (isFetchingData && !profileReady) ||
+    (listLoading && filteredContests.length === 0 && !listHasLoadedRef.current);
 
   const completeGuidelines = async () => {
     const userId = user?.id;
@@ -1830,7 +1403,10 @@ export default function OpportunitiesPage({
     router.push(getOpportunityDetailHref(contestId));
   };
 
-  const renderOpportunityCardLink = (contest: { id: string; title?: string }) => (
+  const renderOpportunityCardLink = (contest: {
+    id: string;
+    title?: string;
+  }) => (
     <Link
       href={getOpportunityDetailHref(contest.id)}
       prefetch={false}
@@ -1843,7 +1419,11 @@ export default function OpportunitiesPage({
   const renderOpportunityViewDetailsLink = (
     contest: { id: string },
     className?: string,
-    options?: { fullWidth?: boolean; eyeClassName?: string; textClassName?: string },
+    options?: {
+      fullWidth?: boolean;
+      eyeClassName?: string;
+      textClassName?: string;
+    },
   ) => (
     <Link
       href={getOpportunityDetailHref(contest.id)}
@@ -1891,406 +1471,466 @@ export default function OpportunitiesPage({
       >
         {renderOpportunityCardLink(contest)}
         <div className="pointer-events-none flex flex-col sm:flex-row flex-1 w-full">
-        {/* Status Badge - Top Right Corner */}
-        {(contest.status === "active" ||
-          contest.status === "upcoming" ||
-          contest.status === "ended") && (
-          <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
-            <Badge
-              className={cn(
-                "text-sm px-3 py-1 font-medium border",
-                contest.status === "active" &&
-                  "capitalize bg-[#7F39EC] text-white",
-                contest.status === "upcoming" &&
-                  "capitalize bg-[#7F39EC] text-white",
-                contest.status === "ended" &&
-                  `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
-              )}
-            >
-              {contest.status === "active"
-                ? "Live"
-                : contest.status === "upcoming"
-                  ? "Upcoming"
-                  : contest.status === "ended"
-                    ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
-                    : contest.status || "Unknown"}
-            </Badge>
-          </div>
-        )}
-        {/* Thumbnail */}
-        <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
-          {contest.thumbnail_url ? (
-            <img
-              src={contest.thumbnail_url || "/placeholder.svg"}
-              alt={contest.title || "Contest thumbnail"}
-              className="w-full h-full object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
-            />
-          ) : (
-            <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+          {/* Status Badge - Top Right Corner */}
+          {(contest.status === "active" ||
+            contest.status === "upcoming" ||
+            contest.status === "ended") && (
+            <div className="absolute top-3 right-3 z-10 flex flex-row gap-2">
+              <Badge
+                className={cn(
+                  "text-sm px-3 py-1 font-medium border",
+                  contest.status === "active" &&
+                    "capitalize bg-[#7F39EC] text-white",
+                  contest.status === "upcoming" &&
+                    "capitalize bg-[#7F39EC] text-white",
+                  contest.status === "ended" &&
+                    `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
+                )}
+              >
+                {contest.status === "active"
+                  ? "Live"
+                  : contest.status === "upcoming"
+                    ? "Upcoming"
+                    : contest.status === "ended"
+                      ? getEndedOpportunityPhaseLabel(
+                          contest.post_contest_status,
+                        )
+                      : contest.status || "Unknown"}
+              </Badge>
+            </div>
           )}
-        </div>
+          {/* Thumbnail */}
+          <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
+            {contest.thumbnail_url ? (
+              <img
+                src={contest.thumbnail_url || "/placeholder.svg"}
+                alt={contest.title || "Contest thumbnail"}
+                className="w-full h-full object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
+              />
+            ) : (
+              <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+            )}
+          </div>
 
-        {/* Content */}
-        <div className="flex-1 flex flex-col p-3 sm:p-4">
-          <CardHeader className="p-0 pb-2">
-            <CardTitle
-              className="text-base sm:text-lg font-bold leading-tight mb-2"
-              style={{
-                color: isDark ? "white" : "#1e293b",
-                transition: "none",
-              }}
-            >
-              {contest.title || "Untitled Contest"}
-            </CardTitle>
-            {/* Badges */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
-              {(() => {
-                const isTwitterTextImage =
-                  (contest.platform?.toLowerCase() === "twitter" ||
-                    contest.platform?.toLowerCase() === "x") &&
-                  contest.contest_format === "text_image";
+          {/* Content */}
+          <div className="flex-1 flex flex-col p-3 sm:p-4">
+            <CardHeader className="p-0 pb-2">
+              <CardTitle
+                className="text-base sm:text-lg font-bold leading-tight mb-2"
+                style={{
+                  color: isDark ? "white" : "#1e293b",
+                  transition: "none",
+                }}
+              >
+                {contest.title || "Untitled Contest"}
+              </CardTitle>
+              {/* Badges */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
+                {(() => {
+                  const isTwitterTextImage =
+                    (contest.platform?.toLowerCase() === "twitter" ||
+                      contest.platform?.toLowerCase() === "x") &&
+                    contest.contest_format === "text_image";
 
-                if (isTwitterTextImage) {
-                  const campaignType =
-                    contest.contest_based_details?.twitter_campaign
-                      ?.campaign_type;
-                  if (campaignType === "raid" || campaignType === "awareness") {
+                  if (isTwitterTextImage) {
+                    const campaignType =
+                      contest.contest_based_details?.twitter_campaign
+                        ?.campaign_type;
+                    if (
+                      campaignType === "raid" ||
+                      campaignType === "awareness"
+                    ) {
+                      return (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-sm px-3 py-1 font-medium",
+                            isDark
+                              ? campaignType === "raid"
+                                ? "bg-red-900/30 text-red-300 border-red-700/50"
+                                : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
+                              : campaignType === "raid"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-cyan-50 text-cyan-700 border-cyan-200",
+                          )}
+                        >
+                          {campaignType.toUpperCase()}
+                        </Badge>
+                      );
+                    }
+                    return null;
+                  }
+
+                  if (contest.multiple_submissions_enabled) {
                     return (
                       <Badge
                         variant="outline"
                         className={cn(
                           "text-sm px-3 py-1 font-medium",
                           isDark
-                            ? campaignType === "raid"
-                              ? "bg-red-900/30 text-red-300 border-red-700/50"
-                              : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
-                            : campaignType === "raid"
-                              ? "bg-red-50 text-red-700 border-red-200"
-                              : "bg-cyan-50 text-cyan-700 border-cyan-200",
+                            ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                            : "bg-purple-50 text-purple-700 border-purple-200",
                         )}
                       >
-                        {campaignType.toUpperCase()}
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                        {(contest.max_submissions_per_creator ?? 1) > 1
+                          ? `${contest.max_submissions_per_creator} Submissions`
+                          : "Multiple Entries"}
                       </Badge>
                     );
                   }
                   return null;
-                }
+                })()}
+                {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
+                {(() => {
+                  const isTwitterTextImage =
+                    (contest.platform?.toLowerCase() === "twitter" ||
+                      contest.platform?.toLowerCase() === "x") &&
+                    contest.contest_format === "text_image";
 
-                if (contest.multiple_submissions_enabled) {
-                  return (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-sm px-3 py-1 font-medium",
-                        isDark
-                          ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                          : "bg-purple-50 text-purple-700 border-purple-200",
-                      )}
-                    >
-                      <CheckCheck className="h-3 w-3 mr-1" />
-                      {(contest.max_submissions_per_creator ?? 1) > 1
-                        ? `${contest.max_submissions_per_creator} Submissions`
-                        : "Multiple Entries"}
-                    </Badge>
-                  );
-                }
-                return null;
-              })()}
-              {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
-              {(() => {
-                const isTwitterTextImage =
-                  (contest.platform?.toLowerCase() === "twitter" ||
-                    contest.platform?.toLowerCase() === "x") &&
-                  contest.contest_format === "text_image";
+                  if (isTwitterTextImage) {
+                    return null;
+                  }
 
-                if (isTwitterTextImage) {
+                  if (contest.content_type) {
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-sm px-3 py-1 font-medium",
+                          isDark
+                            ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                            : "bg-blue-50 text-blue-700 border-blue-200",
+                        )}
+                      >
+                        <Tag className="h-3 w-3 mr-1" />
+                        {contest.content_type.toUpperCase()}
+                      </Badge>
+                    );
+                  }
                   return null;
-                }
-
-                if (contest.content_type) {
-                  return (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-sm px-3 py-1 font-medium",
-                        isDark
-                          ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                          : "bg-blue-50 text-blue-700 border-blue-200",
-                      )}
-                    >
-                      <Tag className="h-3 w-3 mr-1" />
-                      {contest.content_type.toUpperCase()}
-                    </Badge>
-                  );
-                }
-                return null;
-              })()}
-              {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                contest.contest_based_details?.leaderboard_contest
-                  ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium",
-                    isDark
-                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                      : "bg-green-50 text-green-700 border-green-200",
-                  )}
-                >
-                  <Gift className="h-3 w-3 mr-1" />
-                  {formatMoney(
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
-                      contest.contest_based_details?.leaderboard_contest
+                })()}
+                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                  contest.contest_based_details?.leaderboard_contest
+                    ?.flat_fee_bonus) && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-green-900/30 text-green-300 border-green-700/50"
+                        : "bg-green-50 text-green-700 border-green-200",
+                    )}
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
                         ?.flat_fee_bonus ||
-                      0,
-                  )}
-                  /submission
-                </Badge>
-              )}
-              {contest.bonus_details?.description_html && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-sm px-3 py-1 font-medium",
-                    isDark
-                      ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
-                      : "bg-amber-50 text-amber-700 border-amber-200",
-                  )}
-                >
-                  <Star className="h-3 w-3 mr-1" />
-                  Bonus Available
-                </Badge>
-              )}
-              <ContestRequirementBadges
-                contest={contest}
-                snapshot={creatorRequirementsSnapshot}
-                isDark={isDark}
-                size="default"
-                showEligibility
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 pt-2 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
-              <div className="flex items-center">
-                <div className="mr-2 flex-shrink-0">
-                  {getPlatformIconWithFallback(contest.platform, "sm")}
-                </div>
-                <span
-                  style={{
-                    color: isDark ? "white" : "#475569",
-                    transition: "none",
-                  }}
-                >
-                  Platform:{" "}
-                  <span className="font-medium">
-                    {contest.platform || "N/A"}
-                  </span>
-                </span>
+                        contest.contest_based_details?.leaderboard_contest
+                          ?.flat_fee_bonus ||
+                        0,
+                    )}
+                    /submission
+                  </Badge>
+                )}
+                {contest.bonus_details?.description_html && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-sm px-3 py-1 font-medium",
+                      isDark
+                        ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                        : "bg-amber-50 text-amber-700 border-amber-200",
+                    )}
+                  >
+                    <Star className="h-3 w-3 mr-1" />
+                    Bonus Available
+                  </Badge>
+                )}
+                <ContestListSubmissionBadges
+                  contest={contest}
+                  isDark={isDark}
+                  size="default"
+                />
+                <ContestRequirementBadges
+                  contest={contest}
+                  snapshot={creatorRequirementsSnapshot}
+                  isDark={isDark}
+                  size="default"
+                  showEligibility
+                />
               </div>
-              {contest.start_date && (
+            </CardHeader>
+            <CardContent className="p-0 pt-2 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
                 <div className="flex items-center">
-                  <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span
-                    style={{
-                      color: isDark ? "white" : "#475569",
-                      transition: "none",
-                    }}
-                  >
-                    Starts:{" "}
-                    <span className="font-medium">
-                      {formatLocalDateTime(contest.start_date, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {contest.end_date && (
-                <div className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <span
-                    style={{
-                      color: isDark ? "white" : "#475569",
-                      transition: "none",
-                    }}
-                  >
-                    Ends:{" "}
-                    <span className="font-medium">
-                      {formatLocalDateTime(contest.end_date, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {/* For Twitter text_image contests, show participants instead of submissions */}
-              {(() => {
-                const isTwitterTextImage =
-                  (contest.platform?.toLowerCase() === "twitter" ||
-                    contest.platform?.toLowerCase() === "x") &&
-                  contest.contest_format === "text_image";
-
-                if (isTwitterTextImage) {
-                  // For Twitter contests, show participants count if available
-                  const participantsCount =
-                    contest.twitter_participants_count ?? 0;
-                  const maxParticipants = contest.twitter_max_participants;
-                  const displayValue = maxParticipants
-                    ? `${participantsCount} / ${maxParticipants}`
-                    : participantsCount;
-
-                  return (
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span
-                        style={{
-                          color: isDark ? "white" : "#475569",
-                          transition: "none",
-                        }}
-                      >
-                        Participants:{" "}
-                        <span className="font-medium">{displayValue}</span>
-                      </span>
-                    </div>
-                  );
-                }
-
-                // For non-Twitter contests, show submissions count
-                if (
-                  contest.live_submission_count !== null &&
-                  contest.live_submission_count !== undefined
-                ) {
-                  return (
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span
-                        style={{
-                          color: isDark ? "white" : "#475569",
-                          transition: "none",
-                        }}
-                      >
-                        Submissions:{" "}
-                        <span className="font-medium">
-                          {contest.live_submission_count}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-              {(() => {
-                const contestCategories = Array.isArray(contest.categories)
-                  ? contest.categories
-                  : [];
-                const contestSubcategories =
-                  typeof contest.subcategories === "object" &&
-                  contest.subcategories !== null
-                    ? (contest.subcategories as Record<string, string[]>)
-                    : {};
-                const contestInterests = Array.isArray(contest.interests)
-                  ? contest.interests
-                  : [];
-                const contestHasPreferences =
-                  contestCategories.length > 0 ||
-                  Object.keys(contestSubcategories).length > 0 ||
-                  contestInterests.length > 0;
-
-                return contestHasPreferences ? (
-                  <div className="flex items-center">
-                    <Star className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
-                    >
-                      Relevance Score:{" "}
-                      <span className="font-medium">
-                        {calculateRelevanceScore(contest)}
-                      </span>
-                      {(() => {
-                        const matchDetails = getMatchDetails(contest);
-                        return matchDetails.matchLabel ? (
-                          <span className="ml-1">
-                            ({matchDetails.matchLabel})
-                          </span>
-                        ) : null;
-                      })()}
-                    </span>
+                  <div className="mr-2 flex-shrink-0">
+                    {getPlatformIconWithFallback(contest.platform, "sm")}
                   </div>
-                ) : null;
-              })()}
-              <div className="flex items-center">
-                <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                <span
-                  style={{
-                    color: isDark ? "white" : "#475569",
-                    transition: "none",
-                  }}
-                >
-                  Campaign Type:{" "}
-                  <span className="font-medium">
-                    {contest.contest_type === "cpm"
-                      ? "CPM Based"
-                      : contest.contest_type === "leaderboard"
-                        ? "Leaderboard"
-                        : contest.contest_type === "milestone"
-                          ? "Milestone"
-                          : contest.contest_type === "dual_rewards"
-                            ? "Dual Rewards"
-                            : contest.contest_type
-                              ? contest.contest_type.charAt(0).toUpperCase() +
-                                contest.contest_type.slice(1)
-                              : "N/A"}
+                  <span
+                    style={{
+                      color: isDark ? "white" : "#475569",
+                      transition: "none",
+                    }}
+                  >
+                    Platform:{" "}
+                    <span className="font-medium">
+                      {contest.platform || "N/A"}
+                    </span>
                   </span>
-                </span>
-              </div>
-              {isCpmContestType(contest.contest_type) &&
-                contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                  null && (
+                </div>
+                {contest.start_date && (
                   <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span
                       style={{
                         color: isDark ? "white" : "#475569",
                         transition: "none",
                       }}
                     >
-                      {contest.platform?.toLowerCase() === "twitter" ||
-                      contest.platform?.toLowerCase() === "x"
-                        ? "Points Rate: "
-                        : "CPM Rate: "}
+                      Starts:{" "}
                       <span className="font-medium">
-                        {formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            .cpm_rate_usd * 100,
-                        )}{" "}
-                        {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
-                          ? "/ 1k points"
-                          : "/ 1k views"}
+                        {formatLocalDateTime(contest.start_date, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </span>
                   </div>
                 )}
-              {isCpmContestType(contest.contest_type) &&
-                (() => {
-                  const poolCents = getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  );
-                  if (poolCents <= 0) return null;
-                  return (
+                {contest.end_date && (
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Ends:{" "}
+                      <span className="font-medium">
+                        {formatLocalDateTime(contest.end_date, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {/* For Twitter text_image contests, show participants instead of submissions */}
+                {(() => {
+                  const isTwitterTextImage =
+                    (contest.platform?.toLowerCase() === "twitter" ||
+                      contest.platform?.toLowerCase() === "x") &&
+                    contest.contest_format === "text_image";
+
+                  if (isTwitterTextImage) {
+                    // For Twitter contests, show participants count if available
+                    const participantsCount =
+                      contest.twitter_participants_count ?? 0;
+                    const maxParticipants = contest.twitter_max_participants;
+                    const displayValue = maxParticipants
+                      ? `${participantsCount} / ${maxParticipants}`
+                      : participantsCount;
+
+                    return (
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Participants:{" "}
+                          <span className="font-medium">{displayValue}</span>
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // For non-Twitter contests, show submissions count
+                  if (
+                    contest.live_submission_count !== null &&
+                    contest.live_submission_count !== undefined
+                  ) {
+                    return (
+                      <div className="flex items-center">
+                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Submissions:{" "}
+                          <span className="font-medium">
+                            {contest.live_submission_count}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                {(() => {
+                  const contestCategories = Array.isArray(contest.categories)
+                    ? contest.categories
+                    : [];
+                  const contestSubcategories =
+                    typeof contest.subcategories === "object" &&
+                    contest.subcategories !== null
+                      ? (contest.subcategories as Record<string, string[]>)
+                      : {};
+                  const contestInterests = Array.isArray(contest.interests)
+                    ? contest.interests
+                    : [];
+                  const contestHasPreferences =
+                    contestCategories.length > 0 ||
+                    Object.keys(contestSubcategories).length > 0 ||
+                    contestInterests.length > 0;
+
+                  return contestHasPreferences ? (
+                    <div className="flex items-center">
+                      <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Relevance Score:{" "}
+                        <span className="font-medium">
+                          {calculateRelevanceScore(contest)}
+                        </span>
+                        {(() => {
+                          const matchDetails = getMatchDetails(contest);
+                          return matchDetails.matchLabel ? (
+                            <span className="ml-1">
+                              ({matchDetails.matchLabel})
+                            </span>
+                          ) : null;
+                        })()}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
+                <div className="flex items-center">
+                  <Info className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span
+                    style={{
+                      color: isDark ? "white" : "#475569",
+                      transition: "none",
+                    }}
+                  >
+                    Campaign Type:{" "}
+                    <span className="font-medium">
+                      {contest.contest_type === "cpm"
+                        ? "CPM Based"
+                        : contest.contest_type === "leaderboard"
+                          ? "Leaderboard"
+                          : contest.contest_type === "milestone"
+                            ? "Milestone"
+                            : contest.contest_type === "dual_rewards"
+                              ? "Dual Rewards"
+                              : contest.contest_type
+                                ? contest.contest_type.charAt(0).toUpperCase() +
+                                  contest.contest_type.slice(1)
+                                : "N/A"}
+                    </span>
+                  </span>
+                </div>
+                {isCpmContestType(contest.contest_type) &&
+                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
+                    null && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        {contest.platform?.toLowerCase() === "twitter" ||
+                        contest.platform?.toLowerCase() === "x"
+                          ? "Points Rate: "
+                          : "CPM Rate: "}
+                        <span className="font-medium">
+                          {formatMoney(
+                            contest.contest_based_details.cpm_contest
+                              .cpm_rate_usd * 100,
+                          )}{" "}
+                          {contest.platform?.toLowerCase() === "twitter" ||
+                          contest.platform?.toLowerCase() === "x"
+                            ? "/ 1k points"
+                            : "/ 1k views"}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                {isCpmContestType(contest.contest_type) &&
+                  (() => {
+                    const poolCents = getPoolBudgetCentsFromDetails(
+                      contest.contest_type,
+                      contest.contest_based_details,
+                    );
+                    if (poolCents <= 0) return null;
+                    return (
+                      <div className="flex items-center">
+                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Total Budget:{" "}
+                          <span className="font-medium">
+                            {formatMoney(poolCents)}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })()}
+                {contest.contest_type === "leaderboard" &&
+                  contest.contest_based_details?.leaderboard_contest
+                    ?.total_prize != null &&
+                  contest.contest_based_details.leaderboard_contest
+                    .total_prize > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign
+                        className={cn(
+                          "h-4 w-4 mr-2 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-purple-600",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-purple-300" : "text-purple-700",
+                        )}
+                        style={{ transition: "none" }}
+                      >
+                        Total Prize Pool:{" "}
+                        <span>
+                          {formatMoney(
+                            contest.contest_based_details.leaderboard_contest
+                              .total_prize,
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                {contest.contest_type === "milestone" &&
+                  contest.contest_based_details?.milestone_contest
+                    ?.total_budget_cents != null &&
+                  contest.contest_based_details.milestone_contest
+                    .total_budget_cents > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -2301,250 +1941,206 @@ export default function OpportunitiesPage({
                       >
                         Total Budget:{" "}
                         <span className="font-medium">
-                          {formatMoney(poolCents)}
+                          {formatMoney(
+                            contest.contest_based_details.milestone_contest
+                              .total_budget_cents,
+                          )}
                         </span>
                       </span>
                     </div>
+                  )}
+              </div>
+
+              {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
+              {dualUnifiedBudget &&
+                (() => {
+                  const { total, spent } = dualUnifiedBudget;
+                  const tracker = getBudgetTrackerValues(total, spent);
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#374151",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">Budget Tracker</span>
+                        <span className="font-semibold">
+                          {formatMoney(tracker.spent)} / {formatMoney(total)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                        )}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${tracker.percentage}%` }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                      </div>
+                    </div>
                   );
                 })()}
-              {contest.contest_type === "leaderboard" &&
-                contest.contest_based_details?.leaderboard_contest
-                  ?.total_prize != null &&
-                contest.contest_based_details.leaderboard_contest.total_prize >
-                  0 && (
-                  <div className="flex items-center">
-                    <DollarSign
-                      className={cn(
-                        "h-4 w-4 mr-2 flex-shrink-0",
-                        isDark ? "text-purple-400" : "text-purple-600",
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isDark ? "text-purple-300" : "text-purple-700",
-                      )}
-                      style={{ transition: "none" }}
-                    >
-                      Total Prize Pool:{" "}
-                      <span>
-                        {formatMoney(
-                          contest.contest_based_details.leaderboard_contest
-                            .total_prize,
+
+              {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
+              {!dualUnifiedBudget &&
+                isCpmContestType(contest.contest_type) &&
+                contest.contest_based_details?.cpm_contest?.total_budget !=
+                  null &&
+                contest.contest_based_details.cpm_contest.total_budget > 0 &&
+                (() => {
+                  const totalBudget =
+                    contest.contest_based_details.cpm_contest.total_budget;
+                  const budgetSpent =
+                    contest.contest_based_details.cpm_contest.budget_spent || 0;
+                  const tracker = getBudgetTrackerValues(
+                    totalBudget,
+                    budgetSpent,
+                  );
+                  const trackerLabel =
+                    contest.contest_type === "dual_rewards"
+                      ? "CPM pool"
+                      : "Budget Tracker";
+
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#374151",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">{trackerLabel}</span>
+                        <span className="font-semibold">
+                          {formatMoney(tracker.spent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                         )}
-                      </span>
-                    </span>
-                  </div>
-                )}
-              {contest.contest_type === "milestone" &&
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${tracker.percentage}%` }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              {/* Milestone budget_spent: paid vs filled in fetchData (see contest-budget-tile-metrics) */}
+              {!dualUnifiedBudget &&
+                isMilestoneContestType(contest.contest_type) &&
                 contest.contest_based_details?.milestone_contest
                   ?.total_budget_cents != null &&
                 contest.contest_based_details.milestone_contest
-                  .total_budget_cents > 0 && (
-                  <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
-                    >
-                      Total Budget:{" "}
-                      <span className="font-medium">
-                        {formatMoney(
-                          contest.contest_based_details.milestone_contest
-                            .total_budget_cents,
+                  .total_budget_cents > 0 &&
+                (() => {
+                  const totalBudget =
+                    contest.contest_based_details.milestone_contest
+                      .total_budget_cents;
+                  const budgetSpent =
+                    contest.contest_based_details.milestone_contest
+                      .budget_spent || 0;
+                  const tracker = getBudgetTrackerValues(
+                    totalBudget,
+                    budgetSpent,
+                  );
+                  const trackerLabel =
+                    contest.contest_type === "dual_rewards"
+                      ? "Milestone pool"
+                      : "Budget Tracker";
+
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#374151",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">{trackerLabel}</span>
+                        <span className="font-semibold">
+                          {formatMoney(tracker.spent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                         )}
-                      </span>
-                    </span>
-                  </div>
-                )}
-            </div>
-
-            {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
-            {dualUnifiedBudget &&
-              (() => {
-                const { total, spent } = dualUnifiedBudget;
-                const tracker = getBudgetTrackerValues(total, spent);
-                return (
-                  <div className="mt-3">
-                    <div
-                      className="flex justify-between text-sm mb-2"
-                      style={{
-                        color: isDark ? "#d1d5db" : "#374151",
-                        transition: "none",
-                      }}
-                    >
-                      <span className="font-medium">Budget Tracker</span>
-                      <span className="font-semibold">
-                        {formatMoney(tracker.spent)} / {formatMoney(total)}
-                      </span>
-                    </div>
-                    <div
-                      className={cn(
-                        "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                      )}
-                    >
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{
+                            width: `${Math.min(tracker.percentage, 100)}%`,
+                          }}
+                        ></div>
+                      </div>
                       <div
-                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${tracker.percentage}%` }}
-                      ></div>
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                      </div>
                     </div>
-                    <div
-                      className="flex justify-between text-xs mt-1.5"
-                      style={{
-                        color: isDark ? "#d1d5db" : "#64748b",
-                        transition: "none",
-                      }}
-                    >
-                      <span>{tracker.percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(tracker.remaining)} remaining</span>
-                    </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
+              <ContestListStatsFooter contest={contest} isDark={isDark} />
+            </CardContent>
+          </div>
 
-            {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
-            {!dualUnifiedBudget &&
-              isCpmContestType(contest.contest_type) &&
-              contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
-              contest.contest_based_details.cpm_contest.total_budget > 0 &&
-              (() => {
-                const totalBudget =
-                  contest.contest_based_details.cpm_contest.total_budget;
-                const budgetSpent =
-                  contest.contest_based_details.cpm_contest.budget_spent || 0;
-                const tracker = getBudgetTrackerValues(
-                  totalBudget,
-                  budgetSpent,
-                );
-                const trackerLabel =
-                  contest.contest_type === "dual_rewards"
-                    ? "CPM pool"
-                    : "Budget Tracker";
-
-                return (
-                  <div className="mt-3">
-                    <div
-                      className="flex justify-between text-sm mb-2"
-                      style={{
-                        color: isDark ? "#d1d5db" : "#374151",
-                        transition: "none",
-                      }}
-                    >
-                      <span className="font-medium">{trackerLabel}</span>
-                      <span className="font-semibold">
-                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
-                      </span>
-                    </div>
-                    <div
-                      className={cn(
-                        "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                      )}
-                    >
-                      <div
-                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${tracker.percentage}%` }}
-                      ></div>
-                    </div>
-                    <div
-                      className="flex justify-between text-xs mt-1.5"
-                      style={{
-                        color: isDark ? "#d1d5db" : "#64748b",
-                        transition: "none",
-                      }}
-                    >
-                      <span>{tracker.percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(tracker.remaining)} remaining</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-            {/* Milestone budget_spent: paid vs filled in fetchData (see contest-budget-tile-metrics) */}
-            {!dualUnifiedBudget &&
-              isMilestoneContestType(contest.contest_type) &&
-              contest.contest_based_details?.milestone_contest
-                ?.total_budget_cents != null &&
-              contest.contest_based_details.milestone_contest
-                .total_budget_cents > 0 &&
-              (() => {
-                const totalBudget =
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents;
-                const budgetSpent =
-                  contest.contest_based_details.milestone_contest
-                    .budget_spent || 0;
-                const tracker = getBudgetTrackerValues(
-                  totalBudget,
-                  budgetSpent,
-                );
-                const trackerLabel =
-                  contest.contest_type === "dual_rewards"
-                    ? "Milestone pool"
-                    : "Budget Tracker";
-
-                return (
-                  <div className="mt-3">
-                    <div
-                      className="flex justify-between text-sm mb-2"
-                      style={{
-                        color: isDark ? "#d1d5db" : "#374151",
-                        transition: "none",
-                      }}
-                    >
-                      <span className="font-medium">{trackerLabel}</span>
-                      <span className="font-semibold">
-                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
-                      </span>
-                    </div>
-                    <div
-                      className={cn(
-                        "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
-                      )}
-                    >
-                      <div
-                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
-                      ></div>
-                    </div>
-                    <div
-                      className="flex justify-between text-xs mt-1.5"
-                      style={{
-                        color: isDark ? "#d1d5db" : "#64748b",
-                        transition: "none",
-                      }}
-                    >
-                      <span>{tracker.percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(tracker.remaining)} remaining</span>
-                    </div>
-                  </div>
-                );
-              })()}
-          </CardContent>
-        </div>
-
-        {/* Third Column - View Details Button */}
-        <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
-          {renderOpportunityViewDetailsLink(contest, "px-4 py-3 whitespace-nowrap", {
-            textClassName: "text-sm font-medium",
-          })}
-        </div>
+          {/* Third Column - View Details Button */}
+          <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
+            {renderOpportunityViewDetailsLink(
+              contest,
+              "px-4 py-3 whitespace-nowrap",
+              {
+                textClassName: "text-sm font-medium",
+              },
+            )}
+          </div>
         </div>
       </Card>
     );
   };
 
-  if (isFetchingData) {
+  if (showInitialSpinner) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
-        {/* <div className="text-center">
-          <p>Loading opportunities...</p>
-        </div> */}
         <PageLoadingSpinner mode="light" />
       </div>
     );
@@ -2561,8 +2157,6 @@ export default function OpportunitiesPage({
   }
 
   const isDark = mode === "dark";
-  const isEligibilityFilterPending =
-    eligibilityFilter === "eligible" && !!user?.id && creatorStatsLoading;
   const isEligibilityFilterFailed =
     eligibilityFilter === "eligible" && !!user?.id && creatorStatsFetchFailed;
   const displayViewMode: "grid" | "list" = layoutAllowsListView
@@ -2572,164 +2166,91 @@ export default function OpportunitiesPage({
   return (
     <>
       <div className="w-full no-theme-transition">
-      <div className="mb-6">
-        {/* Heading Row - Heading on left, buttons on right */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance min-w-0">
-            Campaigns
-          </h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <a
-              href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-                isDark
-                  ? "text-white border-gray-600"
-                  : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]",
-              )}
-            >
-              <Play className="h-3.5 w-3.5" />
-              How it works
-            </a>
-            <Link
-              href="/dashboard/getting-started"
-              className={cn(
-                "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
-                isDark
-                  ? "text-white border-gray-600"
-                  : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]",
-              )}
-            >
-              <GraduationCap className="h-3.5 w-3.5" />
-              Learn how to participate
-            </Link>
-          </div>
-        </div>
-        {/* Search + filter toolbar */}
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full min-w-0 sm:gap-3">
-            <div className="relative flex-1 min-w-0 sm:max-w-md lg:max-w-xl">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none"
-                aria-hidden
-              />
-              {searchQuery.trim() !== "" && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-md"
-                  aria-label="Clear search"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-              <Input
-                type="text"
-                role="searchbox"
-                enterKeyHint="search"
-                autoComplete="off"
-                placeholder="Search by title…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && searchQuery.trim() !== "") {
-                    e.preventDefault();
-                    opportunitiesResultsRef.current?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    });
-                  }
-                }}
+        <div className="mb-6">
+          {/* Heading Row - Heading on left, buttons on right */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance min-w-0">
+              Campaigns
+            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={cn(
-                  "pl-10 h-11 w-full text-sm sm:text-base border rounded-xl shadow-sm",
-                  searchQuery.trim() !== "" && "pr-10",
+                  "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
                   isDark
-                    ? "border-gray-600 bg-[#020817] text-white placeholder:text-gray-500"
-                    : "border-gray-300 bg-white text-gray-900 placeholder:text-gray-500",
-                )}
-              />
-            </div>
-
-            <div
-              role="group"
-              aria-label="Campaign eligibility"
-              className={cn(
-                "flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
-                isDark
-                  ? "border-gray-600 bg-[#020817]/60"
-                  : "border-gray-300 bg-gray-50/90",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setEligibilityFilter("all")}
-                title="All campaigns"
-                className={cn(
-                  "flex-1 sm:flex-initial flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[5rem] transition-colors",
-                  eligibilityFilter === "all"
-                    ? "bg-[#7F39EC] text-white shadow-sm"
-                    : isDark
-                      ? "text-gray-300 hover:text-white hover:bg-white/10"
-                      : "text-gray-700 hover:bg-white hover:text-gray-900",
+                    ? "text-white border-gray-600"
+                    : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]",
                 )}
               >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setEligibilityFilter("eligible")}
-                title="Campaigns you are eligible for"
+                <Play className="h-3.5 w-3.5" />
+                How it works
+              </a>
+              <Link
+                href="/dashboard/getting-started"
                 className={cn(
-                  "flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[6.5rem] transition-colors",
-                  eligibilityFilter === "eligible"
-                    ? "bg-[#7F39EC] text-white shadow-sm"
-                    : isDark
-                      ? "text-gray-300 hover:text-white hover:bg-white/10"
-                      : "text-gray-700 hover:bg-white hover:text-gray-900",
-                )}
-              >
-                <CheckCheck className="h-4 w-4 shrink-0 opacity-90" />
-                Eligible
-              </button>
-            </div>
-
-            {searchQuery.trim() !== "" && (
-              <Button
-                type="button"
-                variant="outline"
-                className={cn(
-                  "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
+                  "inline-flex items-center justify-center gap-2 border px-3 py-1.5 rounded-full transition-colors text-sm",
                   isDark
-                    ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
-                    : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
+                    ? "text-white border-gray-600"
+                    : "text-[#7F39EC] border-[#7F39EC] bg-[#D9C0FF26]  hover:bg-[#D9C0FF61]",
                 )}
-                onClick={() =>
-                  opportunitiesResultsRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  })
-                }
               >
-                Search
-              </Button>
-            )}
+                <GraduationCap className="h-3.5 w-3.5" />
+                Learn how to participate
+              </Link>
+            </div>
           </div>
+          {/* Search + filter toolbar */}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full min-w-0 sm:gap-3">
+              <div className="relative flex-1 min-w-0 sm:max-w-md lg:max-w-xl">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none"
+                  aria-hidden
+                />
+                {searchQuery.trim() !== "" && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-md"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                <Input
+                  type="text"
+                  role="searchbox"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  placeholder="Search by title…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchQuery.trim() !== "") {
+                      e.preventDefault();
+                      opportunitiesResultsRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
+                    }
+                  }}
+                  className={cn(
+                    "pl-10 h-11 w-full text-sm sm:text-base border rounded-xl shadow-sm",
+                    searchQuery.trim() !== "" && "pr-10",
+                    isDark
+                      ? "border-gray-600 bg-[#020817] text-white placeholder:text-gray-500"
+                      : "border-gray-300 bg-white text-gray-900 placeholder:text-gray-500",
+                  )}
+                />
+              </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between lg:gap-4">
-            {/* Format: single segmented control — short labels, full text in title */}
-            <div
-              className={cn(
-                "w-full min-w-0 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible",
-                "[scrollbar-width:thin]",
-              )}
-            >
               <div
                 role="group"
-                aria-label="Opportunity type"
+                aria-label="Campaign eligibility"
                 className={cn(
-                  "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
+                  "flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
                   isDark
                     ? "border-gray-600 bg-[#020817]/60"
                     : "border-gray-300 bg-gray-50/90",
@@ -2737,11 +2258,146 @@ export default function OpportunitiesPage({
               >
                 <button
                   type="button"
-                  onClick={() => setMediaType("all")}
-                  title="All opportunities"
+                  onClick={() => setEligibilityFilter("all")}
+                  title="All campaigns"
                   className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
-                    mediaType === "all"
+                    "flex-1 sm:flex-initial flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[5rem] transition-colors",
+                    eligibilityFilter === "all"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEligibilityFilter("eligible")}
+                  title="Campaigns you are eligible for"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[6.5rem] transition-colors",
+                    eligibilityFilter === "eligible"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  <CheckCheck className="h-4 w-4 shrink-0 opacity-90" />
+                  Eligible
+                </button>
+              </div>
+
+              {searchQuery.trim() !== "" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
+                    isDark
+                      ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
+                      : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
+                  )}
+                  onClick={() =>
+                    opportunitiesResultsRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
+                >
+                  Search
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between lg:gap-4">
+              {/* Format: single segmented control — short labels, full text in title */}
+              <div
+                className={cn(
+                  "w-full min-w-0 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible",
+                  "[scrollbar-width:thin]",
+                )}
+              >
+                <div
+                  role="group"
+                  aria-label="Opportunity type"
+                  className={cn(
+                    "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
+                    isDark
+                      ? "border-gray-600 bg-[#020817]/60"
+                      : "border-gray-300 bg-gray-50/90",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setMediaType("all")}
+                    title="All opportunities"
+                    className={cn(
+                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      mediaType === "all"
+                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        : isDark
+                          ? "text-gray-300 hover:text-white hover:bg-white/10"
+                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                    )}
+                  >
+                    <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
+                    <span>All</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaType("text")}
+                    title="Text and image opportunities"
+                    className={cn(
+                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      mediaType === "text"
+                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        : isDark
+                          ? "text-gray-300 hover:text-white hover:bg-white/10"
+                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                    )}
+                  >
+                    <FileType className="h-4 w-4 shrink-0 opacity-90" />
+                    <span>Text & image</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaType("media")}
+                    title="Video opportunities"
+                    className={cn(
+                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      mediaType === "media"
+                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        : isDark
+                          ? "text-gray-300 hover:text-white hover:bg-white/10"
+                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                    )}
+                  >
+                    <Film className="h-4 w-4 shrink-0 opacity-90" />
+                    <span>Video</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* View mode — lg+ only (1024px); below that grid is forced */}
+              <div
+                role="group"
+                aria-label="Layout"
+                className={cn(
+                  "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
+                  isDark
+                    ? "border-gray-600 bg-[#020817]/60"
+                    : "border-gray-300 bg-gray-50/90",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  title="Grid view"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    viewMode === "grid"
                       ? "bg-[#7F39EC] text-white shadow-sm"
                       : isDark
                         ? "text-gray-300 hover:text-white hover:bg-white/10"
@@ -2749,121 +2405,59 @@ export default function OpportunitiesPage({
                   )}
                 >
                   <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
-                  <span>All</span>
+                  <span>Grid</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMediaType("text")}
-                  title="Text and image opportunities"
+                  onClick={() => setViewMode("list")}
+                  title="List view"
                   className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
-                    mediaType === "text"
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    viewMode === "list"
                       ? "bg-[#7F39EC] text-white shadow-sm"
                       : isDark
                         ? "text-gray-300 hover:text-white hover:bg-white/10"
                         : "text-gray-700 hover:bg-white hover:text-gray-900",
                   )}
                 >
-                  <FileType className="h-4 w-4 shrink-0 opacity-90" />
-                  <span>Text & image</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMediaType("media")}
-                  title="Video opportunities"
-                  className={cn(
-                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
-                    mediaType === "media"
-                      ? "bg-[#7F39EC] text-white shadow-sm"
-                      : isDark
-                        ? "text-gray-300 hover:text-white hover:bg-white/10"
-                        : "text-gray-700 hover:bg-white hover:text-gray-900",
-                  )}
-                >
-                  <Film className="h-4 w-4 shrink-0 opacity-90" />
-                  <span>Video</span>
+                  <List className="h-4 w-4 shrink-0 opacity-90" />
+                  <span>List</span>
                 </button>
               </div>
             </div>
-
-            {/* View mode — lg+ only (1024px); below that grid is forced */}
-            <div
-              role="group"
-              aria-label="Layout"
-              className={cn(
-                "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
-                isDark
-                  ? "border-gray-600 bg-[#020817]/60"
-                  : "border-gray-300 bg-gray-50/90",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                title="Grid view"
-                className={cn(
-                  "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
-                  viewMode === "grid"
-                    ? "bg-[#7F39EC] text-white shadow-sm"
-                    : isDark
-                      ? "text-gray-300 hover:text-white hover:bg-white/10"
-                      : "text-gray-700 hover:bg-white hover:text-gray-900",
-                )}
-              >
-                <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
-                <span>Grid</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                title="List view"
-                className={cn(
-                  "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
-                  viewMode === "list"
-                    ? "bg-[#7F39EC] text-white shadow-sm"
-                    : isDark
-                      ? "text-gray-300 hover:text-white hover:bg-white/10"
-                      : "text-gray-700 hover:bg-white hover:text-gray-900",
-                )}
-              >
-                <List className="h-4 w-4 shrink-0 opacity-90" />
-                <span>List</span>
-              </button>
-            </div>
           </div>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <EnhancedTabs
-        tabs={tabs.map((tab) => ({
-          ...tab,
-          label: (
-            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
-              <span className="truncate">{tab.label}</span>
-              {tab.count !== undefined && (
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground",
-                    isDark ? "text-gray-300" : "text-gray-600 bg-gray-200",
-                  )}
-                >
-                  {tab.count}
-                </Badge>
-              )}
-            </div>
-          ),
-        }))}
-        activeTab={statusFilter}
-        isDark={isDark}
-        light={!isDark}
-        onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
-        className="mt-6 mb-8 w-full overflow-x-auto scrollbar-hide"
-      />
+        {/* Tabs */}
+        <EnhancedTabs
+          tabs={tabs.map((tab) => ({
+            ...tab,
+            label: (
+              <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
+                <span className="truncate">{tab.label}</span>
+                {tab.count !== undefined && (
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground",
+                      isDark ? "text-gray-300" : "text-gray-600 bg-gray-200",
+                    )}
+                  >
+                    {tab.count}
+                  </Badge>
+                )}
+              </div>
+            ),
+          }))}
+          activeTab={statusFilter}
+          isDark={isDark}
+          light={!isDark}
+          onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
+          className="mt-6 mb-8 w-full overflow-x-auto scrollbar-hide"
+        />
 
-      {/* Enhanced Status Filter Tabs with better visual distinction */}
-      {/* <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-8">
+        {/* Enhanced Status Filter Tabs with better visual distinction */}
+        {/* <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-8">
         <TabsList>
           <TabsTrigger value="all">
             All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status).length}</Badge>
@@ -2880,1215 +2474,1279 @@ export default function OpportunitiesPage({
         </TabsList>
       </Tabs> */}
 
-      {/* Enhanced Filter and Sort Select Dropdowns */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {/* Platform Filter */}
-        <Select
-          value={platformFilter}
-          onValueChange={(value) =>
-            setPlatformFilter(value as PlatformFilterType)
-          }
-        >
-          <SelectTrigger
-            className={cn(
-              "border font-medium",
-              isDark ? "border-gray-600" : "border-gray-400",
-            )}
+        {/* Enhanced Filter and Sort Select Dropdowns */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* Platform Filter */}
+          <Select
+            value={platformFilter}
+            onValueChange={(value) =>
+              setPlatformFilter(value as PlatformFilterType)
+            }
           >
-            <SelectValue placeholder="Filter by Platform" />
-          </SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem value="all" isDark={isDark}>
-              All Platforms
-            </SelectItem>
+            <SelectTrigger
+              className={cn(
+                "border font-medium",
+                isDark ? "border-gray-600" : "border-gray-400",
+              )}
+            >
+              <SelectValue placeholder="Filter by Platform" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem value="all" isDark={isDark}>
+                All Platforms
+              </SelectItem>
 
-            {mediaType == "all" && (
-              <>
-                <SelectItem value="youtube" isDark={isDark}>
-                  YouTube
-                </SelectItem>
-                <SelectItem value="instagram" isDark={isDark}>
-                  Instagram
-                </SelectItem>
-                <SelectItem value="tiktok" isDark={isDark}>
-                  TikTok
-                </SelectItem>
+              {mediaType == "all" && (
+                <>
+                  <SelectItem value="youtube" isDark={isDark}>
+                    YouTube
+                  </SelectItem>
+                  <SelectItem value="instagram" isDark={isDark}>
+                    Instagram
+                  </SelectItem>
+                  <SelectItem value="tiktok" isDark={isDark}>
+                    TikTok
+                  </SelectItem>
+                  <SelectItem value="twitter" isDark={isDark}>
+                    Twitter
+                  </SelectItem>
+                </>
+              )}
+              {mediaType == "media" && (
+                <>
+                  <SelectItem value="youtube" isDark={isDark}>
+                    YouTube
+                  </SelectItem>
+                  <SelectItem value="instagram" isDark={isDark}>
+                    Instagram
+                  </SelectItem>
+                  <SelectItem value="tiktok" isDark={isDark}>
+                    TikTok
+                  </SelectItem>
+                </>
+              )}
+              {mediaType == "text" && (
                 <SelectItem value="twitter" isDark={isDark}>
                   Twitter
                 </SelectItem>
-              </>
-            )}
-            {mediaType == "media" && (
-              <>
-                <SelectItem value="youtube" isDark={isDark}>
-                  YouTube
-                </SelectItem>
-                <SelectItem value="instagram" isDark={isDark}>
-                  Instagram
-                </SelectItem>
-                <SelectItem value="tiktok" isDark={isDark}>
-                  TikTok
-                </SelectItem>
-              </>
-            )}
-            {mediaType == "text" && (
-              <SelectItem value="twitter" isDark={isDark}>
-                Twitter
+              )}
+
+              {/* Add more platforms as needed */}
+            </SelectContent>
+          </Select>
+
+          {/* Contest Type Filter */}
+          <Select
+            value={typeFilter}
+            onValueChange={(value) =>
+              setTypeFilter(value as ContestTypeFilterType)
+            }
+          >
+            <SelectTrigger
+              className={cn(
+                "border font-medium",
+                isDark ? "border-gray-600" : "border-gray-400",
+              )}
+            >
+              <SelectValue placeholder="Filter by Type" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem value="all" isDark={isDark}>
+                All Campaign Types
               </SelectItem>
-            )}
+              <SelectItem value="leaderboard" isDark={isDark}>
+                Leaderboard
+              </SelectItem>
+              <SelectItem value="cpm" isDark={isDark}>
+                CPM
+              </SelectItem>
+              <SelectItem value="milestone" isDark={isDark}>
+                Milestone
+              </SelectItem>
+              <SelectItem value="dual_rewards" isDark={isDark}>
+                Dual rewards
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-            {/* Add more platforms as needed */}
-          </SelectContent>
-        </Select>
-
-        {/* Contest Type Filter */}
-        <Select
-          value={typeFilter}
-          onValueChange={(value) =>
-            setTypeFilter(value as ContestTypeFilterType)
-          }
-        >
-          <SelectTrigger
-            className={cn(
-              "border font-medium",
-              isDark ? "border-gray-600" : "border-gray-400",
-            )}
+          {/* Sort By */}
+          <Select
+            value={sortOption}
+            onValueChange={(value) => setSortOption(value as SortOptionType)}
           >
-            <SelectValue placeholder="Filter by Type" />
-          </SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem value="all" isDark={isDark}>
-              All Campaign Types
-            </SelectItem>
-            <SelectItem value="leaderboard" isDark={isDark}>
-              Leaderboard
-            </SelectItem>
-            <SelectItem value="cpm" isDark={isDark}>
-              CPM
-            </SelectItem>
-            <SelectItem value="milestone" isDark={isDark}>
-              Milestone
-            </SelectItem>
-            <SelectItem value="dual_rewards" isDark={isDark}>
-              Dual rewards
-            </SelectItem>
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              className={cn(
+                "border font-medium",
+                isDark ? "border-gray-600" : "border-gray-400",
+              )}
+            >
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent isDark={isDark}>
+              <SelectItem value="relevance_desc" isDark={isDark}>
+                Relevance: Highest to Lowest
+              </SelectItem>
+              <SelectItem value="start_date_asc" isDark={isDark}>
+                Start Date: Soonest First
+              </SelectItem>
+              <SelectItem value="start_date_desc" isDark={isDark}>
+                Start Date: Furthest First
+              </SelectItem>
+              <SelectItem value="end_date_asc" isDark={isDark}>
+                End Date: Soonest First
+              </SelectItem>
+              <SelectItem value="end_date_desc" isDark={isDark}>
+                End Date: Furthest First
+              </SelectItem>
+              <SelectItem value="value_desc" isDark={isDark}>
+                Prize/Budget: High to Low
+              </SelectItem>
+              <SelectItem value="value_asc" isDark={isDark}>
+                Prize/Budget: Low to High
+              </SelectItem>
+              <SelectItem value="budget_remaining_desc" isDark={isDark}>
+                Budget Left: Most
+              </SelectItem>
+              <SelectItem value="budget_remaining_asc" isDark={isDark}>
+                Budget Left: Least
+              </SelectItem>
+              <SelectItem value="budget_used_desc" isDark={isDark}>
+                Budget Used: Most
+              </SelectItem>
+              <SelectItem value="budget_used_asc" isDark={isDark}>
+                Budget Used: Least
+              </SelectItem>
+              <SelectItem value="views_desc" isDark={isDark}>
+                Views: High to Low
+              </SelectItem>
+              <SelectItem value="views_asc" isDark={isDark}>
+                Views: Low to High
+              </SelectItem>
+              <SelectItem value="cpm_rate_desc" isDark={isDark}>
+                CPM Rate: High to Low
+              </SelectItem>
+              <SelectItem value="cpm_rate_asc" isDark={isDark}>
+                CPM Rate: Low to High
+              </SelectItem>
+              <SelectItem value="submissions_desc" isDark={isDark}>
+                Submissions: High to Low
+              </SelectItem>
+              <SelectItem value="submissions_asc" isDark={isDark}>
+                Submissions: Low to High
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        {/* Sort By */}
-        <Select
-          value={sortOption}
-          onValueChange={(value) => setSortOption(value as SortOptionType)}
+        <div
+          ref={opportunitiesResultsRef}
+          id="opportunities-results"
+          className="space-y-6 scroll-mt-4"
         >
-          <SelectTrigger
-            className={cn(
-              "border font-medium",
-              isDark ? "border-gray-600" : "border-gray-400",
-            )}
-          >
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent isDark={isDark}>
-            <SelectItem value="relevance_desc" isDark={isDark}>
-              Relevance: Highest to Lowest
-            </SelectItem>
-            <SelectItem value="start_date_asc" isDark={isDark}>
-              Start Date: Soonest First
-            </SelectItem>
-            <SelectItem value="start_date_desc" isDark={isDark}>
-              Start Date: Furthest First
-            </SelectItem>
-            <SelectItem value="end_date_asc" isDark={isDark}>
-              End Date: Soonest First
-            </SelectItem>
-            <SelectItem value="end_date_desc" isDark={isDark}>
-              End Date: Furthest First
-            </SelectItem>
-            <SelectItem value="value_desc" isDark={isDark}>
-              Prize/Budget: High to Low
-            </SelectItem>
-            <SelectItem value="value_asc" isDark={isDark}>
-              Prize/Budget: Low to High
-            </SelectItem>
-            <SelectItem value="budget_remaining_desc" isDark={isDark}>
-              Budget Left: Most
-            </SelectItem>
-            <SelectItem value="budget_remaining_asc" isDark={isDark}>
-              Budget Left: Least
-            </SelectItem>
-            <SelectItem value="budget_used_desc" isDark={isDark}>
-              Budget Used: Most
-            </SelectItem>
-            <SelectItem value="budget_used_asc" isDark={isDark}>
-              Budget Used: Least
-            </SelectItem>
-            <SelectItem value="cpm_rate_desc" isDark={isDark}>
-              CPM Rate: High to Low
-            </SelectItem>
-            <SelectItem value="cpm_rate_asc" isDark={isDark}>
-              CPM Rate: Low to High
-            </SelectItem>
-            <SelectItem value="submissions_desc" isDark={isDark}>
-              Submissions: High to Low
-            </SelectItem>
-            <SelectItem value="submissions_asc" isDark={isDark}>
-              Submissions: Low to High
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div
-        ref={opportunitiesResultsRef}
-        id="opportunities-results"
-        className="space-y-6 scroll-mt-4"
-      >
-        {displayViewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {isEligibilityFilterPending ? (
-              <div className="col-span-full flex items-center justify-center py-16">
-                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
-              </div>
-            ) : isEligibilityFilterFailed ? (
-              <div className="col-span-full text-center py-12">
-                <h2
-                  className="text-xl font-medium mb-2"
-                  style={{
-                    color: isDark ? "white" : "black",
-                    transition: "none",
-                  }}
-                >
-                  Could not load eligibility
-                </h2>
-                <p
-                  className="mb-3"
-                  style={{
-                    color: isDark ? "#94a3b8" : "#64748b",
-                    transition: "none",
-                  }}
-                >
-                  We could not verify which campaigns you qualify for. Please try
-                  again.
-                </p>
-                <Button
-                  onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
-                  className="mt-4 text-md"
-                  style={{
-                    backgroundColor: "#7F39EC",
-                    color: "white",
-                    transition: "none",
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Retry
-                </Button>
-              </div>
-            ) : paginatedContests && paginatedContests.length > 0 ? (
-              paginatedContests.map((contest) => {
-                const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
-                return (
-                <Card
-                  key={contest.id}
-                  className={cn(
-                    "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
-                    isDark
-                      ? "bg-[#06021D] border-slate-700"
-                      : "bg-white border-slate-200",
-                  )}
-                >
-                  {renderOpportunityCardLink(contest)}
-                  <div className="pointer-events-none flex flex-col flex-grow">
-                  <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
-                    {contest.thumbnail_url ? (
-                      <img
-                        src={contest.thumbnail_url || "/placeholder.svg"}
-                        alt={contest.title}
-                        className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                      />
-                    ) : (
-                      <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
-                    )}
-                    <div className="absolute top-2 right-2 flex gap-2">
-                      <Badge
-                        className={cn(
-                          "text-sm px-3 py-1 font-medium border",
-                          contest.status === "active" &&
-                            "capitalize bg-[#7F39EC] text-white",
-                          contest.status === "upcoming" &&
-                            "capitalize bg-[#7F39EC] text-white",
-                          contest.status === "ended" &&
-                            `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
-                          !["active", "upcoming", "ended"].includes(
-                            contest.status,
-                          ) && "capitalize bg-[#7F39EC] text-white",
-                        )}
-                      >
-                        {contest.status === "active"
-                          ? "Live"
-                          : contest.status === "upcoming"
-                            ? "Upcoming"
-                            : contest.status === "ended"
-                              ? getEndedOpportunityPhaseLabel(
-                                  contest.post_contest_status,
-                                )
-                              : contest.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <CardHeader className="p-4 pb-2">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <CardTitle
-                        className="text-lg font-bold leading-tight flex-1"
-                        style={{
-                          color: isDark ? "white" : "#1e293b",
-                          transition: "none",
-                        }}
-                      >
-                        {contest.title}
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                    <div
-                      className="space-y-2.5 text-md mb-3"
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
+          {listLoading && filteredContests.length === 0 ? (
+            <div className="flex min-h-[40vh] items-center justify-center py-16">
+              <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+            </div>
+          ) : displayViewMode === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {isEligibilityFilterFailed ? (
+                <div className="col-span-full text-center py-12">
+                  <h2
+                    className="text-xl font-medium mb-2"
+                    style={{
+                      color: isDark ? "white" : "black",
+                      transition: "none",
+                    }}
+                  >
+                    Could not load eligibility
+                  </h2>
+                  <p
+                    className="mb-3"
+                    style={{
+                      color: isDark ? "#94a3b8" : "#64748b",
+                      transition: "none",
+                    }}
+                  >
+                    We could not verify which campaigns you qualify for. Please
+                    try again.
+                  </p>
+                  <Button
+                    onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
+                    className="mt-4 text-md"
+                    style={{
+                      backgroundColor: "#7F39EC",
+                      color: "white",
+                      transition: "none",
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Retry
+                  </Button>
+                </div>
+              ) : paginatedContests && paginatedContests.length > 0 ? (
+                paginatedContests.map((contest) => {
+                  const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
+                  return (
+                    <Card
+                      key={contest.id}
+                      className={cn(
+                        "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+                        isDark
+                          ? "bg-[#06021D] border-slate-700"
+                          : "bg-white border-slate-200",
+                      )}
                     >
-                      {/* New Features Indicators */}
-                      <div className="flex flex-wrap items-center gap-2 mb-3">
-                        {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
-                        {(() => {
-                          const isTwitterTextImage =
-                            (contest.platform?.toLowerCase() === "twitter" ||
-                              contest.platform?.toLowerCase() === "x") &&
-                            contest.contest_format === "text_image";
+                      {renderOpportunityCardLink(contest)}
+                      <div className="pointer-events-none flex flex-col flex-grow">
+                        <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
+                          {contest.thumbnail_url ? (
+                            <img
+                              src={contest.thumbnail_url || "/placeholder.svg"}
+                              alt={contest.title}
+                              className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+                            />
+                          ) : (
+                            <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+                          )}
+                          <div className="absolute top-2 right-2 flex gap-2">
+                            <Badge
+                              className={cn(
+                                "text-sm px-3 py-1 font-medium border",
+                                contest.status === "active" &&
+                                  "capitalize bg-[#7F39EC] text-white",
+                                contest.status === "upcoming" &&
+                                  "capitalize bg-[#7F39EC] text-white",
+                                contest.status === "ended" &&
+                                  `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
+                                !["active", "upcoming", "ended"].includes(
+                                  contest.status,
+                                ) && "capitalize bg-[#7F39EC] text-white",
+                              )}
+                            >
+                              {contest.status === "active"
+                                ? "Live"
+                                : contest.status === "upcoming"
+                                  ? "Upcoming"
+                                  : contest.status === "ended"
+                                    ? getEndedOpportunityPhaseLabel(
+                                        contest.post_contest_status,
+                                      )
+                                    : contest.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        <CardHeader className="p-4 pb-2">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <CardTitle
+                              className="text-lg font-bold leading-tight flex-1"
+                              style={{
+                                color: isDark ? "white" : "#1e293b",
+                                transition: "none",
+                              }}
+                            >
+                              {contest.title}
+                            </CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
+                          <div
+                            className="space-y-2.5 text-md mb-3"
+                            style={{
+                              color: isDark ? "white" : "#475569",
+                              transition: "none",
+                            }}
+                          >
+                            {/* New Features Indicators */}
+                            <div className="flex flex-wrap items-center gap-2 mb-3">
+                              {/* Show campaign type badge (RAID/AWARENESS) for Twitter text_image contests */}
+                              {(() => {
+                                const isTwitterTextImage =
+                                  (contest.platform?.toLowerCase() ===
+                                    "twitter" ||
+                                    contest.platform?.toLowerCase() === "x") &&
+                                  contest.contest_format === "text_image";
 
-                          if (isTwitterTextImage) {
-                            const campaignType =
-                              contest.contest_based_details?.twitter_campaign
-                                ?.campaign_type;
-                            if (
-                              campaignType === "raid" ||
-                              campaignType === "awareness"
-                            ) {
-                              return (
+                                if (isTwitterTextImage) {
+                                  const campaignType =
+                                    contest.contest_based_details
+                                      ?.twitter_campaign?.campaign_type;
+                                  if (
+                                    campaignType === "raid" ||
+                                    campaignType === "awareness"
+                                  ) {
+                                    return (
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "text-[12px]",
+                                          isDark
+                                            ? campaignType === "raid"
+                                              ? "bg-red-900/30 text-red-300 border-red-700/50"
+                                              : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
+                                            : campaignType === "raid"
+                                              ? "bg-red-50 text-red-700 border-red-200"
+                                              : "bg-cyan-50 text-cyan-700 border-cyan-200",
+                                        )}
+                                      >
+                                        {campaignType.toUpperCase()}
+                                      </Badge>
+                                    );
+                                  }
+                                  return null;
+                                }
+
+                                if (contest.multiple_submissions_enabled) {
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[12px]",
+                                        isDark
+                                          ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                                          : "bg-purple-50 text-purple-700 border-purple-200",
+                                      )}
+                                    >
+                                      <CheckCheck className="h-3 w-3 mr-1" />
+                                      {contest.max_submissions_per_creator > 1
+                                        ? `${contest.max_submissions_per_creator} Submissions`
+                                        : "Multiple Entries"}
+                                    </Badge>
+                                  );
+                                }
+                                return null;
+                              })()}
+                              {(contest.contest_based_details?.cpm_contest
+                                ?.flat_fee_bonus ||
+                                contest.contest_based_details
+                                  ?.leaderboard_contest?.flat_fee_bonus) && (
                                 <Badge
                                   variant="outline"
                                   className={cn(
                                     "text-[12px]",
                                     isDark
-                                      ? campaignType === "raid"
-                                        ? "bg-red-900/30 text-red-300 border-red-700/50"
-                                        : "bg-cyan-900/30 text-cyan-300 border-cyan-700/50"
-                                      : campaignType === "raid"
-                                        ? "bg-red-50 text-red-700 border-red-200"
-                                        : "bg-cyan-50 text-cyan-700 border-cyan-200",
+                                      ? "bg-green-900/30 text-green-300 border-green-700/50"
+                                      : "bg-green-50 text-green-700 border-green-200",
                                   )}
                                 >
-                                  {campaignType.toUpperCase()}
+                                  <Gift className="h-3 w-3 mr-1" />
+                                  {formatMoney(
+                                    contest.contest_based_details?.cpm_contest
+                                      ?.flat_fee_bonus ||
+                                      contest.contest_based_details
+                                        ?.leaderboard_contest?.flat_fee_bonus ||
+                                      0,
+                                  )}
+                                  /submission
                                 </Badge>
-                              );
-                            }
-                            return null;
-                          }
-
-                          if (contest.multiple_submissions_enabled) {
-                            return (
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[12px]",
-                                  isDark
-                                    ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                                    : "bg-purple-50 text-purple-700 border-purple-200",
-                                )}
-                              >
-                                <CheckCheck className="h-3 w-3 mr-1" />
-                                {contest.max_submissions_per_creator > 1
-                                  ? `${contest.max_submissions_per_creator} Submissions`
-                                  : "Multiple Entries"}
-                              </Badge>
-                            );
-                          }
-                          return null;
-                        })()}
-                        {(contest.contest_based_details?.cpm_contest
-                          ?.flat_fee_bonus ||
-                          contest.contest_based_details?.leaderboard_contest
-                            ?.flat_fee_bonus) && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                : "bg-green-50 text-green-700 border-green-200",
-                            )}
-                          >
-                            <Gift className="h-3 w-3 mr-1" />
-                            {formatMoney(
-                              contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
-                                contest.contest_based_details
-                                  ?.leaderboard_contest?.flat_fee_bonus ||
-                                0,
-                            )}
-                            /submission
-                          </Badge>
-                        )}
-                        {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
-                        {(() => {
-                          const isTwitterTextImage =
-                            (contest.platform?.toLowerCase() === "twitter" ||
-                              contest.platform?.toLowerCase() === "x") &&
-                            contest.contest_format === "text_image";
-
-                          if (isTwitterTextImage) {
-                            return null;
-                          }
-
-                          if (contest.content_type) {
-                            return (
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[12px]",
-                                  isDark
-                                    ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
-                                    : "bg-blue-50 text-blue-700 border-blue-200",
-                                )}
-                              >
-                                <Tag className="h-3 w-3 mr-1" />
-                                {contest.content_type.toUpperCase()}
-                              </Badge>
-                            );
-                          }
-                          return null;
-                        })()}
-                        {contest.bonus_details?.description_html && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[12px]",
-                              isDark
-                                ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
-                                : "bg-purple-50 text-purple-700 border-purple-200",
-                            )}
-                          >
-                            <Star className="h-3 w-3 mr-1" />
-                            Bonus Available
-                          </Badge>
-                        )}
-                        <ContestRequirementBadges
-                          contest={contest}
-                          snapshot={creatorRequirementsSnapshot}
-                          isDark={isDark}
-                          size="compact"
-                          showEligibility
-                        />
-                      </div>
-
-                      <div className="flex items-center">
-                        <div className="mr-2 flex-shrink-0">
-                          {getPlatformIconWithFallback(contest.platform, "sm")}
-                        </div>
-                        <span>
-                          Platform:{" "}
-                          <span
-                            className={cn(
-                              "font-medium",
-                              isDark ? "text-white" : "text-slate-700",
-                            )}
-                          >
-                            {contest.platform || "N/A"}
-                          </span>
-                        </span>
-                      </div>
-                      {contest.start_date && (
-                        <div className="flex items-center">
-                          <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            Starts:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700",
                               )}
-                            >
-                              {formatLocalDateTime(contest.start_date, {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </span>
-                        </div>
-                      )}
-                      {contest.end_date && (
-                        <div className="flex items-center">
-                          <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                          <span>
-                            Ends:{" "}
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-700",
-                              )}
-                            >
-                              {formatLocalDateTime(contest.end_date, {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </span>
-                        </div>
-                      )}
-                      {/* For Twitter text_image contests, show participants instead of submissions */}
-                      {(() => {
-                        const isTwitterTextImage =
-                          (contest.platform?.toLowerCase() === "twitter" ||
-                            contest.platform?.toLowerCase() === "x") &&
-                          contest.contest_format === "text_image";
-
-                        if (isTwitterTextImage) {
-                          // For Twitter contests, show participants count if available
-                          const participantsCount =
-                            contest.twitter_participants_count ?? 0;
-                          const maxParticipants =
-                            contest.twitter_max_participants;
-                          const displayValue = maxParticipants
-                            ? `${participantsCount} / ${maxParticipants}`
-                            : participantsCount;
-
-                          return (
-                            <div className="flex items-center">
-                              <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                              <span>
-                                Participants:{" "}
-                                <span
-                                  className={cn(
-                                    "font-medium",
-                                    isDark ? "text-white" : "text-slate-700",
-                                  )}
-                                >
-                                  {displayValue}
-                                </span>
-                              </span>
-                            </div>
-                          );
-                        }
-
-                        // For non-Twitter contests, show submissions count
-                        if (
-                          contest.live_submission_count !== null &&
-                          contest.live_submission_count !== undefined
-                        ) {
-                          return (
-                            <div className="flex items-center">
-                              <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                              <span>
-                                Submissions:{" "}
-                                <span
-                                  className={cn(
-                                    "font-medium",
-                                    isDark ? "text-white" : "text-slate-700",
-                                  )}
-                                >
-                                  {contest.live_submission_count}
-                                </span>
-                              </span>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      {(() => {
-                        const contestCategories = Array.isArray(
-                          contest.categories,
-                        )
-                          ? contest.categories
-                          : [];
-                        const contestSubcategories =
-                          typeof contest.subcategories === "object" &&
-                          contest.subcategories !== null
-                            ? (contest.subcategories as Record<
-                                string,
-                                string[]
-                              >)
-                            : {};
-                        const contestInterests = Array.isArray(
-                          contest.interests,
-                        )
-                          ? contest.interests
-                          : [];
-                        const contestHasPreferences =
-                          contestCategories.length > 0 ||
-                          Object.keys(contestSubcategories).length > 0 ||
-                          contestInterests.length > 0;
-
-                        return contestHasPreferences ? (
-                          <div className="flex items-center">
-                            <Star className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
-                              Relevance Score:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700",
-                                )}
-                              >
-                                {calculateRelevanceScore(contest)}
-                              </span>
+                              {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
                               {(() => {
-                                const matchDetails = getMatchDetails(contest);
-                                return matchDetails.matchLabel ? (
-                                  <span className="ml-1">
-                                    ({matchDetails.matchLabel})
-                                  </span>
-                                ) : null;
+                                const isTwitterTextImage =
+                                  (contest.platform?.toLowerCase() ===
+                                    "twitter" ||
+                                    contest.platform?.toLowerCase() === "x") &&
+                                  contest.contest_format === "text_image";
+
+                                if (isTwitterTextImage) {
+                                  return null;
+                                }
+
+                                if (contest.content_type) {
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[12px]",
+                                        isDark
+                                          ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                                          : "bg-blue-50 text-blue-700 border-blue-200",
+                                      )}
+                                    >
+                                      <Tag className="h-3 w-3 mr-1" />
+                                      {contest.content_type.toUpperCase()}
+                                    </Badge>
+                                  );
+                                }
+                                return null;
                               })()}
-                            </span>
-                          </div>
-                        ) : null;
-                      })()}
-                      <div className="flex items-center">
-                        <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span>
-                          Campaign Type:{" "}
-                          <span
-                            className={cn(
-                              "font-medium",
-                              isDark ? "text-white" : "text-slate-700",
-                            )}
-                          >
-                            {contest.contest_type === "cpm"
-                              ? "CPM Based"
-                              : contest.contest_type === "leaderboard"
-                                ? "Leaderboard"
-                                : contest.contest_type === "milestone"
-                                  ? "Milestone"
-                                  : contest.contest_type === "dual_rewards"
-                                    ? "Dual Rewards"
-                                    : contest.contest_type
-                                      ? contest.contest_type
-                                          .charAt(0)
-                                          .toUpperCase() +
-                                        contest.contest_type.slice(1)
-                                      : "N/A"}
-                          </span>
-                        </span>
-                      </div>
-                      {isCpmContestType(contest.contest_type) &&
-                        contest.contest_based_details?.cpm_contest
-                          ?.cpm_rate_usd != null && (
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
-                              {contest.platform?.toLowerCase() === "twitter" ||
-                              contest.platform?.toLowerCase() === "x"
-                                ? "Points Rate: "
-                                : "CPM Rate: "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700",
-                                )}
-                              >
-                                {formatMoney(
-                                  contest.contest_based_details.cpm_contest
-                                    .cpm_rate_usd * 100,
-                                )}{" "}
-                                {contest.platform?.toLowerCase() ===
-                                  "twitter" ||
-                                contest.platform?.toLowerCase() === "x"
-                                  ? "/ 1k points"
-                                  : "/ 1k views"}
-                              </span>
-                            </span>
-                          </div>
-                        )}
-                      {isCpmContestType(contest.contest_type) &&
-                        (() => {
-                          const poolCents = getPoolBudgetCentsFromDetails(
-                            contest.contest_type,
-                            contest.contest_based_details,
-                          );
-                          if (poolCents <= 0) return null;
-                          return (
+                              {contest.bonus_details?.description_html && (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[12px]",
+                                    isDark
+                                      ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                                      : "bg-purple-50 text-purple-700 border-purple-200",
+                                  )}
+                                >
+                                  <Star className="h-3 w-3 mr-1" />
+                                  Bonus Available
+                                </Badge>
+                              )}
+                              <ContestListSubmissionBadges
+                                contest={contest}
+                                isDark={isDark}
+                                size="compact"
+                              />
+                              <ContestRequirementBadges
+                                contest={contest}
+                                snapshot={creatorRequirementsSnapshot}
+                                isDark={isDark}
+                                size="compact"
+                                showEligibility
+                              />
+                            </div>
+
                             <div className="flex items-center">
-                              <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                              <div className="mr-2 flex-shrink-0">
+                                {getPlatformIconWithFallback(
+                                  contest.platform,
+                                  "sm",
+                                )}
+                              </div>
                               <span>
-                                Total Budget:{" "}
+                                Platform:{" "}
                                 <span
                                   className={cn(
                                     "font-medium",
                                     isDark ? "text-white" : "text-slate-700",
                                   )}
                                 >
-                                  {formatMoney(poolCents)}
+                                  {contest.platform || "N/A"}
                                 </span>
                               </span>
                             </div>
-                          );
-                        })()}
-                      {contest.contest_type === "leaderboard" &&
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.total_prize != null &&
-                        contest.contest_based_details.leaderboard_contest
-                          .total_prize > 0 && (
-                          <div className="flex items-center">
-                            <DollarSign
-                              className={cn(
-                                "h-4 w-4 mr-2 flex-shrink-0",
-                                isDark ? "text-purple-400" : "text-purple-600",
-                              )}
-                            />
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-purple-300" : "text-purple-700",
-                              )}
-                            >
-                              Total Prize Pool:{" "}
+                            {contest.start_date && (
+                              <div className="flex items-center">
+                                <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                                <span>
+                                  Starts:{" "}
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      isDark ? "text-white" : "text-slate-700",
+                                    )}
+                                  >
+                                    {formatLocalDateTime(contest.start_date, {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {contest.end_date && (
+                              <div className="flex items-center">
+                                <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                                <span>
+                                  Ends:{" "}
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      isDark ? "text-white" : "text-slate-700",
+                                    )}
+                                  >
+                                    {formatLocalDateTime(contest.end_date, {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {/* For Twitter text_image contests, show participants instead of submissions */}
+                            {(() => {
+                              const isTwitterTextImage =
+                                (contest.platform?.toLowerCase() ===
+                                  "twitter" ||
+                                  contest.platform?.toLowerCase() === "x") &&
+                                contest.contest_format === "text_image";
+
+                              if (isTwitterTextImage) {
+                                // For Twitter contests, show participants count if available
+                                const participantsCount =
+                                  contest.twitter_participants_count ?? 0;
+                                const maxParticipants =
+                                  contest.twitter_max_participants;
+                                const displayValue = maxParticipants
+                                  ? `${participantsCount} / ${maxParticipants}`
+                                  : participantsCount;
+
+                                return (
+                                  <div className="flex items-center">
+                                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>
+                                      Participants:{" "}
+                                      <span
+                                        className={cn(
+                                          "font-medium",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        {displayValue}
+                                      </span>
+                                    </span>
+                                  </div>
+                                );
+                              }
+
+                              // For non-Twitter contests, show submissions count
+                              if (
+                                contest.live_submission_count !== null &&
+                                contest.live_submission_count !== undefined
+                              ) {
+                                return (
+                                  <div className="flex items-center">
+                                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>
+                                      Submissions:{" "}
+                                      <span
+                                        className={cn(
+                                          "font-medium",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        {contest.live_submission_count}
+                                      </span>
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                            {(() => {
+                              const contestCategories = Array.isArray(
+                                contest.categories,
+                              )
+                                ? contest.categories
+                                : [];
+                              const contestSubcategories =
+                                typeof contest.subcategories === "object" &&
+                                contest.subcategories !== null
+                                  ? (contest.subcategories as Record<
+                                      string,
+                                      string[]
+                                    >)
+                                  : {};
+                              const contestInterests = Array.isArray(
+                                contest.interests,
+                              )
+                                ? contest.interests
+                                : [];
+                              const contestHasPreferences =
+                                contestCategories.length > 0 ||
+                                Object.keys(contestSubcategories).length > 0 ||
+                                contestInterests.length > 0;
+
+                              return contestHasPreferences ? (
+                                <div className="flex items-center">
+                                  <Star className="h-4 w-4 mr-2 flex-shrink-0" />
+                                  <span>
+                                    Relevance Score:{" "}
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      {calculateRelevanceScore(contest)}
+                                    </span>
+                                    {(() => {
+                                      const matchDetails =
+                                        getMatchDetails(contest);
+                                      return matchDetails.matchLabel ? (
+                                        <span className="ml-1">
+                                          ({matchDetails.matchLabel})
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                  </span>
+                                </div>
+                              ) : null;
+                            })()}
+                            <div className="flex items-center">
+                              <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                               <span>
-                                {formatMoney(
-                                  contest.contest_based_details
-                                    .leaderboard_contest.total_prize,
-                                )}
-                              </span>
-                            </span>
-                          </div>
-                        )}
-                      {contest.contest_type === "leaderboard" &&
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.total_budget != null &&
-                        contest.contest_based_details.leaderboard_contest
-                          .total_budget > 0 && (
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
-                            <span>
-                              Total Bonus Budget:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-green-600",
-                                )}
-                              >
-                                {formatMoney(
-                                  contest.contest_based_details
-                                    .leaderboard_contest.total_budget,
-                                )}
-                              </span>
-                            </span>
-                          </div>
-                        )}
-                      {contest.contest_type === "milestone" &&
-                        contest.contest_based_details?.milestone_contest
-                          ?.total_budget_cents != null &&
-                        contest.contest_based_details.milestone_contest
-                          .total_budget_cents > 0 && (
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
-                              Total Budget:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700",
-                                )}
-                              >
-                                {formatMoney(
-                                  contest.contest_based_details
-                                    .milestone_contest.total_budget_cents,
-                                )}
-                              </span>
-                            </span>
-                          </div>
-                        )}
-                    </div>
-
-                    {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
-                    {dualUnifiedBudget &&
-                      (() => {
-                        const { total, spent } = dualUnifiedBudget;
-                        const tracker = getBudgetTrackerValues(total, spent);
-                        return (
-                          <div className="mt-3 mb-3">
-                            <div
-                              className="flex justify-between text-sm mb-2"
-                              style={{
-                                color: isDark ? "#d1d5db" : "#374151",
-                                transition: "none",
-                              }}
-                            >
-                              <span className="font-medium">
-                                Budget Tracker
-                              </span>
-                              <span className="font-semibold">
-                                {formatMoney(tracker.spent)} / {formatMoney(total)}
+                                Campaign Type:{" "}
+                                <span
+                                  className={cn(
+                                    "font-medium",
+                                    isDark ? "text-white" : "text-slate-700",
+                                  )}
+                                >
+                                  {contest.contest_type === "cpm"
+                                    ? "CPM Based"
+                                    : contest.contest_type === "leaderboard"
+                                      ? "Leaderboard"
+                                      : contest.contest_type === "milestone"
+                                        ? "Milestone"
+                                        : contest.contest_type ===
+                                            "dual_rewards"
+                                          ? "Dual Rewards"
+                                          : contest.contest_type
+                                            ? contest.contest_type
+                                                .charAt(0)
+                                                .toUpperCase() +
+                                              contest.contest_type.slice(1)
+                                            : "N/A"}
+                                </span>
                               </span>
                             </div>
-                            <div
-                              className={cn(
-                                "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                                isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                            {isCpmContestType(contest.contest_type) &&
+                              contest.contest_based_details?.cpm_contest
+                                ?.cpm_rate_usd != null && (
+                                <div className="flex items-center">
+                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                                  <span>
+                                    {contest.platform?.toLowerCase() ===
+                                      "twitter" ||
+                                    contest.platform?.toLowerCase() === "x"
+                                      ? "Points Rate: "
+                                      : "CPM Rate: "}
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .cpm_contest.cpm_rate_usd * 100,
+                                      )}{" "}
+                                      {contest.platform?.toLowerCase() ===
+                                        "twitter" ||
+                                      contest.platform?.toLowerCase() === "x"
+                                        ? "/ 1k points"
+                                        : "/ 1k views"}
+                                    </span>
+                                  </span>
+                                </div>
                               )}
-                              title={`Total Budget Spent: ${formatMoney(
-                                tracker.spent,
-                              )}`}
-                            >
-                              <div
-                                className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                                style={{
-                                  width: `${tracker.percentage}%`,
-                                }}
-                              ></div>
-                            </div>
-                            <div
-                              className="flex justify-between text-xs mt-1.5"
-                              style={{
-                                color: isDark ? "#d1d5db" : "#64748b",
-                                transition: "none",
-                              }}
-                            >
-                              <span>{tracker.percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(tracker.remaining)} remaining</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                    {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
-                    {!dualUnifiedBudget &&
-                      isCpmContestType(contest.contest_type) &&
-                      contest.contest_based_details?.cpm_contest
-                        ?.total_budget != null &&
-                      contest.contest_based_details.cpm_contest.total_budget >
-                        0 &&
-                      (() => {
-                        const totalBudget =
-                          contest.contest_based_details.cpm_contest
-                            .total_budget;
-                        // Use real-time updated budget_spent field
-                        const budgetSpent =
-                          contest.contest_based_details.cpm_contest
-                            .budget_spent || 0;
-                        const tracker = getBudgetTrackerValues(
-                          totalBudget,
-                          budgetSpent,
-                        );
-                        const trackerLabel =
-                          contest.contest_type === "dual_rewards"
-                            ? "CPM pool"
-                            : "Budget Tracker";
-
-                        return (
-                          <div className="mt-3 mb-3">
-                            <div
-                              className="flex justify-between text-sm mb-2"
-                              style={{
-                                color: isDark ? "#d1d5db" : "#374151",
-                                transition: "none",
-                              }}
-                            >
-                              <span className="font-medium">
-                                {trackerLabel}
-                              </span>
-                              <span className="font-semibold">
-                                {formatMoney(tracker.spent)} /{" "}
-                                {formatMoney(totalBudget)}
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                                isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                            {isCpmContestType(contest.contest_type) &&
+                              (() => {
+                                const poolCents = getPoolBudgetCentsFromDetails(
+                                  contest.contest_type,
+                                  contest.contest_based_details,
+                                );
+                                if (poolCents <= 0) return null;
+                                return (
+                                  <div className="flex items-center">
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>
+                                      Total Budget:{" "}
+                                      <span
+                                        className={cn(
+                                          "font-medium",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        {formatMoney(poolCents)}
+                                      </span>
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            {contest.contest_type === "leaderboard" &&
+                              contest.contest_based_details?.leaderboard_contest
+                                ?.total_prize != null &&
+                              contest.contest_based_details.leaderboard_contest
+                                .total_prize > 0 && (
+                                <div className="flex items-center">
+                                  <DollarSign
+                                    className={cn(
+                                      "h-4 w-4 mr-2 flex-shrink-0",
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-purple-600",
+                                    )}
+                                  />
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      isDark
+                                        ? "text-purple-300"
+                                        : "text-purple-700",
+                                    )}
+                                  >
+                                    Total Prize Pool:{" "}
+                                    <span>
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .leaderboard_contest.total_prize,
+                                      )}
+                                    </span>
+                                  </span>
+                                </div>
                               )}
-                              title={`Total Budget Spent: ${formatMoney(
-                                tracker.spent,
-                              )}`}
-                            >
-                              <div
-                                className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                                style={{
-                                  width: `${tracker.percentage}%`,
-                                }}
-                              ></div>
-                            </div>
-                            <div
-                              className="flex justify-between text-xs mt-1.5"
-                              style={{
-                                color: isDark ? "#d1d5db" : "#64748b",
-                                transition: "none",
-                              }}
-                            >
-                              <span>{tracker.percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(tracker.remaining)} remaining</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                    {/* Bonus Budget Tracker for Leaderboard contests */}
-                    {contest.contest_type === "leaderboard" &&
-                      contest.contest_based_details?.leaderboard_contest
-                        ?.total_budget != null &&
-                      contest.contest_based_details.leaderboard_contest
-                        .total_budget > 0 &&
-                      (() => {
-                        const totalBudget =
-                          contest.contest_based_details.leaderboard_contest
-                            .total_budget;
-                        const leaderboardBudgetSpent =
-                          contest.contest_based_details.leaderboard_contest
-                            .budget_spent || 0;
-                        const tracker = getBudgetTrackerValues(
-                          totalBudget,
-                          leaderboardBudgetSpent,
-                        );
-                        const percentage = tracker.percentage;
-                        const remaining = tracker.remaining;
-
-                        return (
-                          <div className="mt-3 mb-3">
-                            <div
-                              className="flex justify-between text-sm mb-2"
-                              style={{
-                                color: isDark ? "#cbd5e1" : "#475569",
-                                transition: "none",
-                              }}
-                            >
-                              <span className="font-medium">
-                                Flat Fee Bonus Budget Tracker
-                              </span>
-                              <span className="font-semibold">
-                                {formatMoney(tracker.spent)} /{" "}
-                                {formatMoney(totalBudget)}
-                              </span>
-                            </div>
-                            <div
-                              className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
-                              title={`Flat Fee Bonus Budget Spent: ${formatMoney(
-                                tracker.spent,
-                              )}`}
-                            >
-                              <div
-                                className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
-                                style={{
-                                  width: `${percentage}%`,
-                                }}
-                              ></div>
-                            </div>
-                            <div
-                              className="flex justify-between text-xs mt-1.5"
-                              style={{
-                                color: isDark ? "#94a3b8" : "#64748b",
-                                transition: "none",
-                              }}
-                            >
-                              <span>{percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(remaining)} remaining</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                    {/* Budget Spent Progress Bar for Milestone contests (and dual rewards milestone pool) */}
-                    {!dualUnifiedBudget &&
-                      isMilestoneContestType(contest.contest_type) &&
-                      contest.contest_based_details?.milestone_contest
-                        ?.total_budget_cents != null &&
-                      contest.contest_based_details.milestone_contest
-                        .total_budget_cents > 0 &&
-                      (() => {
-                        const totalBudget =
-                          contest.contest_based_details.milestone_contest
-                            .total_budget_cents;
-                        const budgetSpent =
-                          contest.contest_based_details.milestone_contest
-                            .budget_spent || 0;
-                        const tracker = getBudgetTrackerValues(
-                          totalBudget,
-                          budgetSpent,
-                        );
-                        const trackerLabel =
-                          contest.contest_type === "dual_rewards"
-                            ? "Milestone pool"
-                            : "Budget Tracker";
-
-                        return (
-                          <div className="mt-3 mb-3">
-                            <div
-                              className="flex justify-between text-sm mb-2"
-                              style={{
-                                color: isDark ? "#d1d5db" : "#374151",
-                                transition: "none",
-                              }}
-                            >
-                              <span className="font-medium">
-                                {trackerLabel}
-                              </span>
-                              <span className="font-semibold">
-                                {formatMoney(tracker.spent)} /{" "}
-                                {formatMoney(totalBudget)}
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
-                                isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                            {contest.contest_type === "leaderboard" &&
+                              contest.contest_based_details?.leaderboard_contest
+                                ?.total_budget != null &&
+                              contest.contest_based_details.leaderboard_contest
+                                .total_budget > 0 && (
+                                <div className="flex items-center">
+                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                                  <span>
+                                    Total Bonus Budget:{" "}
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-green-600",
+                                      )}
+                                    >
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .leaderboard_contest.total_budget,
+                                      )}
+                                    </span>
+                                  </span>
+                                </div>
                               )}
-                              title={`Total Budget Spent: ${formatMoney(
-                                tracker.spent,
-                              )}`}
-                            >
-                              <div
-                                className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                                style={{
-                                  width: `${tracker.percentage}%`,
-                                }}
-                              ></div>
-                            </div>
-                            <div
-                              className="flex justify-between text-xs mt-1.5"
-                              style={{
-                                color: isDark ? "#d1d5db" : "#64748b",
-                                transition: "none",
-                              }}
-                            >
-                              <span>{tracker.percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(tracker.remaining)} remaining</span>
-                            </div>
+                            {contest.contest_type === "milestone" &&
+                              contest.contest_based_details?.milestone_contest
+                                ?.total_budget_cents != null &&
+                              contest.contest_based_details.milestone_contest
+                                .total_budget_cents > 0 && (
+                                <div className="flex items-center">
+                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                                  <span>
+                                    Total Budget:{" "}
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .milestone_contest.total_budget_cents,
+                                      )}
+                                    </span>
+                                  </span>
+                                </div>
+                              )}
                           </div>
-                        );
-                      })()}
 
-                    {renderOpportunityViewDetailsLink(contest, "px-3 py-3", {
-                      fullWidth: true,
-                      eyeClassName: "mr-1",
-                    })}
-                  </CardContent>
-                  </div>
-                </Card>
-                );
-              })
-            ) : (
-              <div className="col-span-full text-center py=-12">
-                <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h2
-                  className="text-xl font-medium mb-2"
-                  style={{
-                    color: isDark ? "white" : "black",
-                    transition: "none",
-                  }}
-                >
-                  No contests match your criteria
-                </h2>
-                <p
-                  className="mb-3"
-                  style={{
-                    color: isDark ? "#94a3b8" : "#64748b",
-                    transition: "none",
-                  }}
-                >
-                  Try adjusting your filters or check back later.
-                </p>
-                <Button
-                  onClick={resetFilters}
-                  className="mt-4 text-md"
-                  style={{
-                    backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
-                    color: "white",
-                    transition: "none",
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {isEligibilityFilterPending ? (
-              <div className="col-span-full flex items-center justify-center py-16">
-                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
-              </div>
-            ) : isEligibilityFilterFailed ? (
-              <div className="col-span-full text-center py-12">
-                <h2
-                  className="text-xl font-medium mb-2"
-                  style={{
-                    color: isDark ? "white" : "black",
-                    transition: "none",
-                  }}
-                >
-                  Could not load eligibility
-                </h2>
-                <p
-                  className="mb-3"
-                  style={{
-                    color: isDark ? "#94a3b8" : "#64748b",
-                    transition: "none",
-                  }}
-                >
-                  We could not verify which campaigns you qualify for. Please try
-                  again.
-                </p>
-                <Button
-                  onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
-                  className="mt-4 text-md"
-                  style={{
-                    backgroundColor: "#7F39EC",
-                    color: "white",
-                    transition: "none",
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Retry
-                </Button>
-              </div>
-            ) : paginatedContests && paginatedContests.length > 0 ? (
-              paginatedContests.map((contest) =>
-                renderOpportunityListItem(contest),
-              )
-            ) : (
-              <div className="text-center py-12">
-                <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h2
-                  className="text-xl font-medium mb-2"
-                  style={{
-                    color: isDark ? "white" : "black",
-                    transition: "none",
-                  }}
-                >
-                  No contests match your criteria
-                </h2>
-                <p
-                  className="mb-3"
-                  style={{
-                    color: isDark ? "#94a3b8" : "#64748b",
-                    transition: "none",
-                  }}
-                >
-                  Try adjusting your filters or check back later.
-                </p>
-                <Button
-                  onClick={resetFilters}
-                  className="mt-4 text-md"
-                  style={{
-                    backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
-                    color: "white",
-                    transition: "none",
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+                          {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
+                          {dualUnifiedBudget &&
+                            (() => {
+                              const { total, spent } = dualUnifiedBudget;
+                              const tracker = getBudgetTrackerValues(
+                                total,
+                                spent,
+                              );
+                              return (
+                                <div className="mt-3 mb-3">
+                                  <div
+                                    className="flex justify-between text-sm mb-2"
+                                    style={{
+                                      color: isDark ? "#d1d5db" : "#374151",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span className="font-medium">
+                                      Budget Tracker
+                                    </span>
+                                    <span className="font-semibold">
+                                      {formatMoney(tracker.spent)} /{" "}
+                                      {formatMoney(total)}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                                      isDark
+                                        ? "bg-[#FFFFFF42]"
+                                        : "bg-slate-200",
+                                    )}
+                                    title={`Total Budget Spent: ${formatMoney(
+                                      tracker.spent,
+                                    )}`}
+                                  >
+                                    <div
+                                      className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                      style={{
+                                        width: `${tracker.percentage}%`,
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <div
+                                    className="flex justify-between text-xs mt-1.5"
+                                    style={{
+                                      color: isDark ? "#d1d5db" : "#64748b",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span>
+                                      {tracker.percentage.toFixed(1)}% used
+                                    </span>
+                                    <span>
+                                      {formatMoney(tracker.remaining)} remaining
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
-        {total > 0 && (
-          <div className="mt-2 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-              <div
-                className="text-sm"
-                style={{
-                  color: isDark ? "#cbd5e1" : "#4b5563",
-                  transition: "none",
-                }}
-              >
-                {(() => {
-                  const startItem = (page - 1) * limit + 1;
-                  const endItem = Math.min(page * limit, total);
-                  return `Showing ${startItem}-${endItem} of ${total} opportunities`;
-                })()}
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className="text-sm"
-                  style={{
-                    color: isDark ? "#cbd5e1" : "#4b5563",
-                    transition: "none",
-                  }}
-                >
-                  Show:
-                </span>
-                <Select
-                  value={limit.toString()}
-                  onValueChange={(value) => {
-                    const newLimit = parseInt(value, 10);
-                    setLimit(newLimit);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    className={cn("w-20", isDark && "border border-gray-600")}
+                          {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
+                          {!dualUnifiedBudget &&
+                            isCpmContestType(contest.contest_type) &&
+                            contest.contest_based_details?.cpm_contest
+                              ?.total_budget != null &&
+                            contest.contest_based_details.cpm_contest
+                              .total_budget > 0 &&
+                            (() => {
+                              const totalBudget =
+                                contest.contest_based_details.cpm_contest
+                                  .total_budget;
+                              // Use real-time updated budget_spent field
+                              const budgetSpent =
+                                contest.contest_based_details.cpm_contest
+                                  .budget_spent || 0;
+                              const tracker = getBudgetTrackerValues(
+                                totalBudget,
+                                budgetSpent,
+                              );
+                              const trackerLabel =
+                                contest.contest_type === "dual_rewards"
+                                  ? "CPM pool"
+                                  : "Budget Tracker";
+
+                              return (
+                                <div className="mt-3 mb-3">
+                                  <div
+                                    className="flex justify-between text-sm mb-2"
+                                    style={{
+                                      color: isDark ? "#d1d5db" : "#374151",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span className="font-medium">
+                                      {trackerLabel}
+                                    </span>
+                                    <span className="font-semibold">
+                                      {formatMoney(tracker.spent)} /{" "}
+                                      {formatMoney(totalBudget)}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                                      isDark
+                                        ? "bg-[#FFFFFF42]"
+                                        : "bg-slate-200",
+                                    )}
+                                    title={`Total Budget Spent: ${formatMoney(
+                                      tracker.spent,
+                                    )}`}
+                                  >
+                                    <div
+                                      className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                      style={{
+                                        width: `${tracker.percentage}%`,
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <div
+                                    className="flex justify-between text-xs mt-1.5"
+                                    style={{
+                                      color: isDark ? "#d1d5db" : "#64748b",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span>
+                                      {tracker.percentage.toFixed(1)}% used
+                                    </span>
+                                    <span>
+                                      {formatMoney(tracker.remaining)} remaining
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                          {/* Bonus Budget Tracker for Leaderboard contests */}
+                          {contest.contest_type === "leaderboard" &&
+                            contest.contest_based_details?.leaderboard_contest
+                              ?.total_budget != null &&
+                            contest.contest_based_details.leaderboard_contest
+                              .total_budget > 0 &&
+                            (() => {
+                              const totalBudget =
+                                contest.contest_based_details
+                                  .leaderboard_contest.total_budget;
+                              const leaderboardBudgetSpent =
+                                contest.contest_based_details
+                                  .leaderboard_contest.budget_spent || 0;
+                              const tracker = getBudgetTrackerValues(
+                                totalBudget,
+                                leaderboardBudgetSpent,
+                              );
+                              const percentage = tracker.percentage;
+                              const remaining = tracker.remaining;
+
+                              return (
+                                <div className="mt-3 mb-3">
+                                  <div
+                                    className="flex justify-between text-sm mb-2"
+                                    style={{
+                                      color: isDark ? "#cbd5e1" : "#475569",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span className="font-medium">
+                                      Flat Fee Bonus Budget Tracker
+                                    </span>
+                                    <span className="font-semibold">
+                                      {formatMoney(tracker.spent)} /{" "}
+                                      {formatMoney(totalBudget)}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                                    title={`Flat Fee Bonus Budget Spent: ${formatMoney(
+                                      tracker.spent,
+                                    )}`}
+                                  >
+                                    <div
+                                      className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                                      style={{
+                                        width: `${percentage}%`,
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <div
+                                    className="flex justify-between text-xs mt-1.5"
+                                    style={{
+                                      color: isDark ? "#94a3b8" : "#64748b",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span>{percentage.toFixed(1)}% used</span>
+                                    <span>
+                                      {formatMoney(remaining)} remaining
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                          {/* Budget Spent Progress Bar for Milestone contests (and dual rewards milestone pool) */}
+                          {!dualUnifiedBudget &&
+                            isMilestoneContestType(contest.contest_type) &&
+                            contest.contest_based_details?.milestone_contest
+                              ?.total_budget_cents != null &&
+                            contest.contest_based_details.milestone_contest
+                              .total_budget_cents > 0 &&
+                            (() => {
+                              const totalBudget =
+                                contest.contest_based_details.milestone_contest
+                                  .total_budget_cents;
+                              const budgetSpent =
+                                contest.contest_based_details.milestone_contest
+                                  .budget_spent || 0;
+                              const tracker = getBudgetTrackerValues(
+                                totalBudget,
+                                budgetSpent,
+                              );
+                              const trackerLabel =
+                                contest.contest_type === "dual_rewards"
+                                  ? "Milestone pool"
+                                  : "Budget Tracker";
+
+                              return (
+                                <div className="mt-3 mb-3">
+                                  <div
+                                    className="flex justify-between text-sm mb-2"
+                                    style={{
+                                      color: isDark ? "#d1d5db" : "#374151",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span className="font-medium">
+                                      {trackerLabel}
+                                    </span>
+                                    <span className="font-semibold">
+                                      {formatMoney(tracker.spent)} /{" "}
+                                      {formatMoney(totalBudget)}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                                      isDark
+                                        ? "bg-[#FFFFFF42]"
+                                        : "bg-slate-200",
+                                    )}
+                                    title={`Total Budget Spent: ${formatMoney(
+                                      tracker.spent,
+                                    )}`}
+                                  >
+                                    <div
+                                      className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                      style={{
+                                        width: `${tracker.percentage}%`,
+                                      }}
+                                    ></div>
+                                  </div>
+                                  <div
+                                    className="flex justify-between text-xs mt-1.5"
+                                    style={{
+                                      color: isDark ? "#d1d5db" : "#64748b",
+                                      transition: "none",
+                                    }}
+                                  >
+                                    <span>
+                                      {tracker.percentage.toFixed(1)}% used
+                                    </span>
+                                    <span>
+                                      {formatMoney(tracker.remaining)} remaining
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                          <ContestListStatsFooter contest={contest} isDark={isDark} />
+
+                          {renderOpportunityViewDetailsLink(
+                            contest,
+                            "px-3 py-3",
+                            {
+                              fullWidth: true,
+                              eyeClassName: "mr-1",
+                            },
+                          )}
+                        </CardContent>
+                      </div>
+                    </Card>
+                  );
+                })
+              ) : (
+                <div className="col-span-full text-center py=-12">
+                  <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                  <h2
+                    className="text-xl font-medium mb-2"
+                    style={{
+                      color: isDark ? "white" : "black",
+                      transition: "none",
+                    }}
                   >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent
-                    isDark={isDark}
-                    className={cn(
-                      isDark && "border-gray-600 bg-[#07031D] text-white",
-                    )}
+                    No contests match your criteria
+                  </h2>
+                  <p
+                    className="mb-3"
+                    style={{
+                      color: isDark ? "#94a3b8" : "#64748b",
+                      transition: "none",
+                    }}
                   >
-                    {[9, 15, 21, 30].map((size) => (
-                      <SelectItem
-                        isDark={isDark}
-                        key={size}
-                        value={size.toString()}
-                        className={cn(
-                          isDark &&
-                            "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
-                        )}
-                      >
-                        {size}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span
-                  className="text-sm"
-                  style={{
-                    color: isDark ? "#cbd5e1" : "#4b5563",
-                    transition: "none",
-                  }}
-                >
-                  per page
-                </span>
-              </div>
+                    Try adjusting your filters or check back later.
+                  </p>
+                  <Button
+                    onClick={resetFilters}
+                    className="mt-4 text-md"
+                    style={{
+                      backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
+                      color: "white",
+                      transition: "none",
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </Button>
+                </div>
+              )}
             </div>
-            {totalPages > 1 && (
-              <PaginationControls
-                page={page}
-                limit={limit}
-                total={total}
-                totalPages={totalPages}
-                hasNextPage={hasNextPage}
-                hasPreviousPage={hasPreviousPage}
-                onPageChange={setPage}
-                onLimitChange={setLimit}
-                loading={false}
-                isDark={isDark}
-                showResultInfo={false}
-                showPageSizeSelector={false}
-                showEdgeButtons={false}
-                showPrevNextButtons={true}
-                pageSizeOptions={[9, 15, 21, 30]}
-              />
-            )}
-          </div>
-        )}
+          ) : (
+            <div className="flex flex-col gap-4">
+              {isEligibilityFilterFailed ? (
+                <div className="col-span-full text-center py-12">
+                  <h2
+                    className="text-xl font-medium mb-2"
+                    style={{
+                      color: isDark ? "white" : "black",
+                      transition: "none",
+                    }}
+                  >
+                    Could not load eligibility
+                  </h2>
+                  <p
+                    className="mb-3"
+                    style={{
+                      color: isDark ? "#94a3b8" : "#64748b",
+                      transition: "none",
+                    }}
+                  >
+                    We could not verify which campaigns you qualify for. Please
+                    try again.
+                  </p>
+                  <Button
+                    onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
+                    className="mt-4 text-md"
+                    style={{
+                      backgroundColor: "#7F39EC",
+                      color: "white",
+                      transition: "none",
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Retry
+                  </Button>
+                </div>
+              ) : paginatedContests && paginatedContests.length > 0 ? (
+                paginatedContests.map((contest) =>
+                  renderOpportunityListItem(contest),
+                )
+              ) : (
+                <div className="text-center py-12">
+                  <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                  <h2
+                    className="text-xl font-medium mb-2"
+                    style={{
+                      color: isDark ? "white" : "black",
+                      transition: "none",
+                    }}
+                  >
+                    No contests match your criteria
+                  </h2>
+                  <p
+                    className="mb-3"
+                    style={{
+                      color: isDark ? "#94a3b8" : "#64748b",
+                      transition: "none",
+                    }}
+                  >
+                    Try adjusting your filters or check back later.
+                  </p>
+                  <Button
+                    onClick={resetFilters}
+                    className="mt-4 text-md"
+                    style={{
+                      backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
+                      color: "white",
+                      transition: "none",
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {total > 0 && (
+            <div className="mt-2 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                <div
+                  className="text-sm"
+                  style={{
+                    color: isDark ? "#cbd5e1" : "#4b5563",
+                    transition: "none",
+                  }}
+                >
+                  {(() => {
+                    const startItem = (page - 1) * limit + 1;
+                    const endItem = Math.min(page * limit, total);
+                    return `Showing ${startItem}-${endItem} of ${total} opportunities`;
+                  })()}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-sm"
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#4b5563",
+                      transition: "none",
+                    }}
+                  >
+                    Show:
+                  </span>
+                  <Select
+                    value={limit.toString()}
+                    onValueChange={(value) => {
+                      const newLimit = parseInt(value, 10);
+                      setLimit(newLimit);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger
+                      className={cn("w-20", isDark && "border border-gray-600")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent
+                      isDark={isDark}
+                      className={cn(
+                        isDark && "border-gray-600 bg-[#07031D] text-white",
+                      )}
+                    >
+                      {[9, 15, 21, 30].map((size) => (
+                        <SelectItem
+                          isDark={isDark}
+                          key={size}
+                          value={size.toString()}
+                          className={cn(
+                            isDark &&
+                              "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
+                          )}
+                        >
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span
+                    className="text-sm"
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#4b5563",
+                      transition: "none",
+                    }}
+                  >
+                    per page
+                  </span>
+                </div>
+              </div>
+              {totalPages > 1 && (
+                <PaginationControls
+                  page={page}
+                  limit={limit}
+                  total={total}
+                  totalPages={totalPages}
+                  hasNextPage={hasNextPage}
+                  hasPreviousPage={hasPreviousPage}
+                  onPageChange={setPage}
+                  onLimitChange={setLimit}
+                  loading={listLoading || listValidating}
+                  isDark={isDark}
+                  showResultInfo={false}
+                  showPageSizeSelector={false}
+                  showEdgeButtons={false}
+                  showPrevNextButtons={true}
+                  pageSizeOptions={[9, 15, 21, 30]}
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
       <CreatorParticipationOnboardingModal
         open={showParticipationOnboarding}
         onComplete={completeParticipationOnboarding}

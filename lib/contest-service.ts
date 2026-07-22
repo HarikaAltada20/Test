@@ -82,7 +82,7 @@ async function fetchContestsWithDetails(
   return data;
 }
 
-async function enrichContestWithCalculatedBudgets(
+export async function enrichContestWithCalculatedBudgets(
   contest: ContestWithDetails,
   supabase: SupabaseClient,
 ) {

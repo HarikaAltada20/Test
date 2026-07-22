@@ -37,6 +37,8 @@ export const OPPORTUNITIES_SORT_OPTIONS = [
   "budget_remaining_asc",
   "budget_used_desc",
   "budget_used_asc",
+  "views_desc",
+  "views_asc",
   "cpm_rate_desc",
   "cpm_rate_asc",
   "submissions_desc",

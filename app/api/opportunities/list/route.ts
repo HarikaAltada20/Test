@@ -2,24 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
   listCampaignsPaginated,
-  parseContestListSort,
   parseListLimit,
   parseListPage,
-  type CampaignListTabId,
+  parseOpportunitiesSort,
+  type OpportunitiesStatusTab,
 } from "@/lib/contest-list-query";
 
 export const dynamic = "force-dynamic";
 
-const TAB_IDS = new Set([
-  "all",
-  "draft",
-  "pending_approval",
-  "ready",
-  "upcoming",
-  "live",
-  "ended",
-  "rejected",
-]);
+const STATUS_TABS = new Set(["all", "live", "upcoming", "ended"]);
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,35 +24,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userType = (user.user_metadata || {})?.user_type;
-    if (userType === "creator") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const sp = request.nextUrl.searchParams;
     const tabRaw = sp.get("tab") || "all";
-    const tab = (TAB_IDS.has(tabRaw) ? tabRaw : "all") as CampaignListTabId;
+    const tab = (
+      STATUS_TABS.has(tabRaw) ? tabRaw : "all"
+    ) as OpportunitiesStatusTab;
+
+    const countriesRaw = sp.get("countries") || "";
+    const userCountries = countriesRaw
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean);
 
     const result = await listCampaignsPaginated({
       supabase,
-      scope: "advertiser",
-      advertiserId: user.id,
+      scope: "opportunities",
       tab,
-      sort: parseContestListSort(sp.get("sort")),
+      sort: parseOpportunitiesSort(sp.get("sort")),
       page: parseListPage(sp.get("page")),
       limit: parseListLimit(sp.get("limit")),
       platform: sp.get("platform") || "all",
       contestType: sp.get("contestType") || "all",
       contestFormat: sp.get("contestFormat") || "all",
-      postContestPhase: sp.get("postContestPhase") || "all",
       search: sp.get("search") || "",
+      mediaType: (sp.get("mediaType") as "all" | "text" | "media") || "all",
+      userCountries,
     });
 
     return NextResponse.json(result);
   } catch (err: unknown) {
     const message =
-      err instanceof Error ? err.message : "Failed to fetch contests";
-    console.error("[/api/contests/list] Error:", err);
+      err instanceof Error ? err.message : "Failed to fetch opportunities";
+    console.error("[/api/opportunities/list] Error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
