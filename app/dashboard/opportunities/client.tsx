@@ -121,10 +121,6 @@ import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 import {
-  ContestListStatsFooter,
-  ContestListSubmissionBadges,
-} from "@/components/ContestListCardMetrics";
-import {
   isCreatorEligibleForContest,
   parseContestCreatorRequirements,
   type CreatorRequirementsSnapshot,
@@ -1665,11 +1661,6 @@ export default function OpportunitiesPage({
                     Bonus Available
                   </Badge>
                 )}
-                <ContestListSubmissionBadges
-                  contest={contest}
-                  isDark={isDark}
-                  size="default"
-                />
                 <ContestRequirementBadges
                   contest={contest}
                   snapshot={creatorRequirementsSnapshot}
@@ -2136,7 +2127,6 @@ export default function OpportunitiesPage({
                     </div>
                   );
                 })()}
-              <ContestListStatsFooter contest={contest} isDark={isDark} />
             </CardContent>
           </div>
 
@@ -2901,11 +2891,6 @@ export default function OpportunitiesPage({
                                   Bonus Available
                                 </Badge>
                               )}
-                              <ContestListSubmissionBadges
-                                contest={contest}
-                                isDark={isDark}
-                                size="compact"
-                              />
                               <ContestRequirementBadges
                                 contest={contest}
                                 snapshot={creatorRequirementsSnapshot}
@@ -3541,8 +3526,6 @@ export default function OpportunitiesPage({
                                 </div>
                               );
                             })()}
-
-                          <ContestListStatsFooter contest={contest} isDark={isDark} />
 
                           {renderOpportunityViewDetailsLink(
                             contest,

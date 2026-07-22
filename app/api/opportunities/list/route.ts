@@ -7,6 +7,7 @@ import {
   parseOpportunitiesSort,
   type OpportunitiesStatusTab,
 } from "@/lib/contest-list-query";
+import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +31,9 @@ export async function GET(request: NextRequest) {
       STATUS_TABS.has(tabRaw) ? tabRaw : "all"
     ) as OpportunitiesStatusTab;
 
-    const countriesRaw = sp.get("countries") || "";
-    const userCountries = countriesRaw
-      .split(",")
-      .map((c) => c.trim())
-      .filter(Boolean);
+    // Always resolve countries from the authenticated user — never trust
+    // client-supplied ?countries= (geo spoof / empty bypass).
+    const userCountries = await getCreatorUserCountries(supabase, user.id);
 
     const result = await listCampaignsPaginated({
       supabase,

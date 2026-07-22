@@ -294,9 +294,13 @@ function applyContestFormatFilter(
   if (contestFormat === "video") {
     return query.eq("contest_format", "video");
   }
-  return query.or(
-    "contest_format.in.(text_image,text-image,text,image),contest_format.is.null,contest_format.eq.",
-  );
+  // Do not treat null/empty format as text_image (would mis-bucket unknown rows).
+  return query.in("contest_format", [
+    "text_image",
+    "text-image",
+    "text",
+    "image",
+  ]);
 }
 
 function applyTabFilter(
@@ -461,6 +465,15 @@ function applyListFilters(
   return q;
 }
 
+function isRpcAuthzError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "42501") return true;
+  const msg = error.message || "";
+  return /authentication required|admin access required|permission denied|invalid campaign list scope/i.test(
+    msg,
+  );
+}
+
 async function fetchTabCountsFromRpc(
   supabase: SupabaseClient,
   params: ListCampaignsParams,
@@ -479,6 +492,13 @@ async function fetchTabCountsFromRpc(
   });
 
   if (error || !data) {
+    if (isRpcAuthzError(error)) {
+      console.error(
+        "[contest-list-query] tab counts RPC authz failed:",
+        error?.message,
+      );
+      throw new Error(error?.message || "Forbidden");
+    }
     console.warn("[contest-list-query] tab counts RPC failed:", error?.message);
     return null;
   }
@@ -529,6 +549,13 @@ async function fetchFilteredPageSql(
   );
 
   if (pageError || !pagePayload) {
+    if (isRpcAuthzError(pageError)) {
+      console.error(
+        "[contest-list-query] page ids RPC authz failed:",
+        pageError?.message,
+      );
+      throw new Error(pageError?.message || "Forbidden");
+    }
     console.warn(
       "[contest-list-query] page ids RPC failed, falling back to PostgREST range:",
       pageError?.message,
@@ -745,14 +772,8 @@ export async function listCampaignsPaginated(
     availablePlatforms = ["all", ...Array.from(platforms).sort()];
   }
 
-  if (params.platform && params.platform !== "all") {
-    const platforms = new Set(
-      pageRows.map((c) => c.platform).filter(Boolean) as string[],
-    );
-    if (platforms.size > 0) {
-      availablePlatforms = ["all", ...Array.from(platforms).sort()];
-    }
-  }
+  // Keep full availablePlatforms from tab-counts RPC (or fallback above).
+  // Never shrink the dropdown to the current page when a platform filter is on.
 
   // Budget trackers need live budget_spent (stored JSON is often 0 until
   // metrics refresh). Enrich only this page — not the full campaign set —

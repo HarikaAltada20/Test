@@ -268,7 +268,17 @@ DECLARE
   v_search text := NULLIF(btrim(COALESCE(p_search, '')), '');
   v_total bigint;
   v_ids uuid[];
+  v_advertiser_id uuid;
+  v_user_countries text[];
 BEGIN
+  SELECT *
+  INTO v_advertiser_id, v_user_countries
+  FROM public.campaign_list_authorize_caller(
+    p_scope,
+    p_advertiser_id,
+    p_user_countries
+  );
+
   WITH base AS (
     SELECT
       c.id,
@@ -313,7 +323,7 @@ BEGIN
     WHERE
       (
         p_scope <> 'advertiser'
-        OR (p_advertiser_id IS NOT NULL AND c.advertiser_id = p_advertiser_id)
+        OR (v_advertiser_id IS NOT NULL AND c.advertiser_id = v_advertiser_id)
       )
       AND (
         p_scope <> 'opportunities'
@@ -321,7 +331,7 @@ BEGIN
       )
       AND (
         p_scope <> 'opportunities'
-        OR public.contest_matches_user_countries(c.region, p_user_countries)
+        OR public.contest_matches_user_countries(c.region, v_user_countries)
       )
       AND (
         COALESCE(p_contest_format, 'all') = 'all'
@@ -332,7 +342,7 @@ BEGIN
         OR (
           p_contest_format = 'text_image'
           AND lower(coalesce(c.contest_format, '')) IN (
-            'text_image', 'text-image', 'text', 'image', ''
+            'text_image', 'text-image', 'text', 'image'
           )
         )
       )
