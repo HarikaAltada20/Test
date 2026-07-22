@@ -79,6 +79,38 @@ export const VIEW_MODE_OPTIONS = ["grid", "list"] as const;
 
 export const PAGE_SIZE_OPTIONS = [9, 15, 21, 30] as const;
 
+/** ContestsListLoader SSR always fetches this query shape. */
+export const SSR_CAMPAIGN_LIST_DEFAULTS = {
+  tab: "all",
+  sort: "created_at_desc" as const,
+  page: 1,
+  limit: 9,
+  platform: "all",
+  contestType: "all",
+  contestFormat: "all",
+  postContestPhase: "all",
+  search: "",
+} as const;
+
+export type CampaignListTabId =
+  | "all"
+  | "draft"
+  | "pending_approval"
+  | "ready"
+  | "upcoming"
+  | "live"
+  | "ended"
+  | "rejected";
+
+export type CampaignListTabCounts = Record<CampaignListTabId, number>;
+
+export type PostPhaseCounts = {
+  post_pending_review: number;
+  post_in_review: number;
+  post_payment_pending: number;
+  post_paid: number;
+};
+
 export type ContestListSortOption = (typeof CONTEST_LIST_SORT_OPTIONS)[number];
 export type OpportunitiesSortOption = (typeof OPPORTUNITIES_SORT_OPTIONS)[number];
 export type ContestTypeFilterOption = (typeof CONTEST_TYPE_FILTER_OPTIONS)[number];

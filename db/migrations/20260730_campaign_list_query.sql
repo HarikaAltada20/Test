@@ -13,21 +13,25 @@ LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT
+    -- Unrestricted campaigns are always visible.
     p_region IS NULL
     OR p_region = '{}'::jsonb
-    OR p_countries IS NULL
-    OR cardinality(p_countries) = 0
-    OR EXISTS (
-      SELECT 1
-      FROM jsonb_each(p_region) AS e(region_name, countries_json)
-      CROSS JOIN LATERAL jsonb_array_elements_text(countries_json) AS rc(region_country)
-      CROSS JOIN unnest(p_countries) AS uc(country)
-      WHERE rc.region_country = uc.country
+    -- Empty/null countries must NOT bypass geo locks (no "see everything" hole).
+    OR (
+      p_countries IS NOT NULL
+      AND cardinality(p_countries) > 0
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_each(p_region) AS e(region_name, countries_json)
+        CROSS JOIN LATERAL jsonb_array_elements_text(countries_json) AS rc(region_country)
+        CROSS JOIN unnest(p_countries) AS uc(country)
+        WHERE rc.region_country = uc.country
+      )
     );
 $$;
 
 COMMENT ON FUNCTION public.contest_matches_user_countries(jsonb, text[]) IS
-  'True when contest has no region restriction or any user country is allowed.';
+  'True when contest has no region restriction, or user has countries and any is allowed. Empty countries never unlock geo-restricted contests.';
 
 -- ---------------------------------------------------------------------------
 -- Authorize list-query callers (admin / advertiser / opportunities)

@@ -6,11 +6,10 @@ import type {
   ContestFormatFilterOption,
   ContestListSortOption,
   ContestTypeFilterOption,
-} from "@/lib/campaign-list-filters-storage";
-import type {
   CampaignListTabCounts,
   PostPhaseCounts,
-} from "@/lib/contest-list-query";
+} from "@/lib/campaign-list-filters-storage";
+import { SSR_CAMPAIGN_LIST_DEFAULTS } from "@/lib/campaign-list-filters-storage";
 
 export type ServerCampaignListQuery = {
   isAdminView: boolean;
@@ -55,11 +54,27 @@ const EMPTY_POST_PHASE: PostPhaseCounts = {
 /** In-memory cache so tab/filter switches feel instant. */
 const listCache = new Map<string, ServerCampaignListResult<unknown>>();
 
-function brandPrefetchTabs(isAdminView: boolean): readonly string[] {
-  // Keep prefetch small so tab switches stay snappy.
-  return isAdminView
-    ? ["all", "live", "ended", "upcoming"]
-    : ["all", "live", "ended", "upcoming"];
+/** Prefetch only the most-used sibling tabs to limit DB load. */
+function brandPrefetchTabs(): readonly string[] {
+  return ["live", "ended"];
+}
+
+/**
+ * ContestsListLoader SSR always uses these defaults. Only seed cache when the
+ * hydrated client query matches — otherwise we cache "all" under the wrong key.
+ */
+function queryMatchesSsrDefaults(query: ServerCampaignListQuery): boolean {
+  return (
+    query.tab === SSR_CAMPAIGN_LIST_DEFAULTS.tab &&
+    query.sort === SSR_CAMPAIGN_LIST_DEFAULTS.sort &&
+    query.page === SSR_CAMPAIGN_LIST_DEFAULTS.page &&
+    query.limit === SSR_CAMPAIGN_LIST_DEFAULTS.limit &&
+    query.platform === SSR_CAMPAIGN_LIST_DEFAULTS.platform &&
+    query.contestType === SSR_CAMPAIGN_LIST_DEFAULTS.contestType &&
+    query.contestFormat === SSR_CAMPAIGN_LIST_DEFAULTS.contestFormat &&
+    query.postContestPhase === SSR_CAMPAIGN_LIST_DEFAULTS.postContestPhase &&
+    query.search === SSR_CAMPAIGN_LIST_DEFAULTS.search
+  );
 }
 
 function buildListUrl(query: ServerCampaignListQuery): string {
@@ -101,7 +116,7 @@ function parseListPayload<T>(payload: unknown): ServerCampaignListResult<T> | nu
 }
 
 async function prefetchSiblingTabs(current: ServerCampaignListQuery) {
-  const tasks = brandPrefetchTabs(current.isAdminView)
+  const tasks = brandPrefetchTabs()
     .filter((tab) => tab !== current.tab)
     .map(async (tab) => {
       // Never carry ended/all post-phase filters into other tabs.
@@ -164,8 +179,6 @@ export function useServerCampaignList<T>(
   const queryRef = useRef(query);
   queryRef.current = query;
   const seededRef = useRef(false);
-  const contestsRef = useRef(contests);
-  contestsRef.current = contests;
 
   const applyResult = useCallback((payload: ServerCampaignListResult<T>) => {
     setContests(payload.contests);
@@ -176,10 +189,11 @@ export function useServerCampaignList<T>(
     setHasLoadedOnce(true);
   }, []);
 
-  // Seed SSR/initial payload into cache so revisiting that query is instant.
+  // Seed SSR payload only when the client query matches ContestsListLoader defaults.
   useEffect(() => {
     if (!query.enabled || seededRef.current || !initial?.contests) return;
     seededRef.current = true;
+    if (!queryMatchesSsrDefaults(query)) return;
     const key = cacheKeyFromQuery(query);
     if (listCache.has(key)) return;
     listCache.set(key, {

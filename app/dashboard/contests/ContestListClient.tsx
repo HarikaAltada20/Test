@@ -612,9 +612,6 @@ export function ContestListClient({
     "all" | "text_image" | "video"
   >("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<
-    Contest[]
-  >([]);
   const [isCheckingCpmAccess, setIsCheckingCpmAccess] = useState(false);
   const [showCpmUpgradeModal, setShowCpmUpgradeModal] = useState(false);
   const [upgradeFeatureName, setUpgradeFeatureName] =
@@ -708,7 +705,6 @@ export function ContestListClient({
     loading: listLoading,
     isValidating: listValidating,
     refresh: refreshServerList,
-    setContests: setServerContests,
   } = useServerCampaignList<Contest>(
     {
       isAdminView,
@@ -772,15 +768,8 @@ export function ContestListClient({
     };
   }, []);
 
-  // Seed SSR data once ? do not re-apply initialContests on later renders
-  // (that overwrites client page 2+ results and breaks pagination).
-  const initialListSeededRef = useRef(false);
-  useEffect(() => {
-    if (initialListSeededRef.current) return;
-    initialListSeededRef.current = true;
-    setServerContests(initialContests);
-    setContests(initialContests);
-  }, [initialContests, setServerContests]);
+  // SSR seeding lives in useServerCampaignList (only when query matches SSR defaults).
+  // Do not re-apply initialContests here ? that races filter hydration and page 2+.
 
   useEffect(() => {
     const handleContestRefresh = async () => {
@@ -1014,11 +1003,6 @@ export function ContestListClient({
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, [setViewMode]);
-
-  // Server owns filter + sort + page. Keep filteredAndSortedContests in sync for display only.
-  useEffect(() => {
-    setFilteredAndSortedContests(contests);
-  }, [contests]);
 
   const getModerationStatusBadge = (moderationStatus: string) => {
     const config =

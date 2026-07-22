@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { listCampaignsPaginated } from "@/lib/contest-list-query";
+import { SSR_CAMPAIGN_LIST_DEFAULTS } from "@/lib/campaign-list-filters-storage";
 import { ContestListClient } from "./ContestListClient";
 import {
   ContestsPageClient,
@@ -20,16 +21,20 @@ export async function ContestsListLoader({
   isAdminView = false,
   creatorRouteNotice = null,
 }: ContestsListLoaderProps) {
+  if (!isAdminView && !userId) {
+    throw new Error("ContestsListLoader requires userId for advertiser scope");
+  }
+
   const supabase = await createClient();
 
   const list = await listCampaignsPaginated({
     supabase,
     scope: isAdminView ? "admin" : "advertiser",
     advertiserId: isAdminView ? undefined : userId,
-    tab: "all",
-    sort: "created_at_desc",
-    page: 1,
-    limit: 9,
+    tab: SSR_CAMPAIGN_LIST_DEFAULTS.tab,
+    sort: SSR_CAMPAIGN_LIST_DEFAULTS.sort,
+    page: SSR_CAMPAIGN_LIST_DEFAULTS.page,
+    limit: SSR_CAMPAIGN_LIST_DEFAULTS.limit,
   });
 
   const contests = isAdminView

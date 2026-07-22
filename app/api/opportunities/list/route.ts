@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     ) as OpportunitiesStatusTab;
 
     // Always resolve countries from the authenticated user — never trust
-    // client-supplied ?countries= (geo spoof / empty bypass).
+    // client-supplied ?countries=. Empty profile countries only unlock
+    // unrestricted campaigns (contest_matches_user_countries).
     const userCountries = await getCreatorUserCountries(supabase, user.id);
 
     const result = await listCampaignsPaginated({
