@@ -10,6 +10,7 @@ import {
   type OpportunitiesSortOption,
 } from "@/lib/campaign-list-filters-storage";
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
+import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
 
 export { sortCampaignsForList } from "@/lib/contest-list-sort";
 
@@ -753,20 +754,41 @@ export async function listCampaignsPaginated(
     }
   }
 
-  // List cards use stored contest_based_details + contest_stats. Skip
-  // enrichContestWithCalculatedBudgets here — it re-scans submissions per
-  // campaign and made every tab switch multi-second.
-  const enrichedPage = pageRows.map((contest) => ({
-    ...contest,
-    contest_based_details:
-      (contest.contest_based_details as Record<string, unknown> | null) ?? null,
-    advertiser_name:
-      (
-        contest as {
-          advertiser_profiles?: { company_name?: string };
-        }
-      ).advertiser_profiles?.company_name || undefined,
-  }));
+  // Budget trackers need live budget_spent (stored JSON is often 0 until
+  // metrics refresh). Enrich only this page — not the full campaign set —
+  // so tab switches stay fast while cards show real spend.
+  const enrichedPage = await Promise.all(
+    pageRows.map(async (contest) => {
+      const withBudget = await enrichContestWithCalculatedBudgets(
+        {
+          ...contest,
+          contest_based_details:
+            (contest.contest_based_details as Record<string, unknown> | null) ??
+            {},
+        },
+        params.supabase,
+      );
+
+      return {
+        ...contest,
+        ...withBudget,
+        // Keep list-card stats from contest_stats embed (do not lose them).
+        not_rejected_views: contest.not_rejected_views,
+        verified_submission_count: contest.verified_submission_count,
+        pending_submission_count: contest.pending_submission_count,
+        rejected_submission_count: contest.rejected_submission_count,
+        contest_based_details:
+          (withBudget.contest_based_details as Record<string, unknown> | null) ??
+          null,
+        advertiser_name:
+          (
+            contest as {
+              advertiser_profiles?: { company_name?: string };
+            }
+          ).advertiser_profiles?.company_name || undefined,
+      };
+    }),
+  );
 
   return {
     contests: enrichedPage as ListCampaignsResult["contests"],
