@@ -4,6 +4,7 @@ import {
   listCampaignsPaginated,
   parseListLimit,
   parseListPage,
+  parseOpportunitiesMediaType,
   parseOpportunitiesSort,
   type OpportunitiesStatusTab,
 } from "@/lib/contest-list-query";
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
       contestType: sp.get("contestType") || "all",
       contestFormat: sp.get("contestFormat") || "all",
       search: sp.get("search") || "",
-      mediaType: (sp.get("mediaType") as "all" | "text" | "media") || "all",
+      mediaType: parseOpportunitiesMediaType(sp.get("mediaType")),
       userCountries,
     });
 

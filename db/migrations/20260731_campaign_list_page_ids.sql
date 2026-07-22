@@ -3,6 +3,46 @@
 -- never load the full campaign set into application memory.
 
 -- ---------------------------------------------------------------------------
+-- Safe jsonb numeric casts — corrupt values sort as NULL instead of failing
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.contest_list_json_numeric(p_text text)
+RETURNS numeric
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+BEGIN
+  IF p_text IS NULL OR btrim(p_text) = '' THEN
+    RETURN NULL;
+  END IF;
+  RETURN btrim(p_text)::numeric;
+EXCEPTION
+  WHEN invalid_text_representation THEN
+    RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.contest_list_json_float8(p_text text)
+RETURNS double precision
+LANGUAGE plpgsql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+BEGIN
+  IF p_text IS NULL OR btrim(p_text) = '' THEN
+    RETURN NULL;
+  END IF;
+  RETURN btrim(p_text)::double precision;
+EXCEPTION
+  WHEN invalid_text_representation THEN
+    RETURN NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.contest_list_json_numeric(text) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.contest_list_json_float8(text) TO authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
 -- Pool / prize value (cents) — mirrors lib/contest-list-sort getContestValueForSort
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_sort_value_cents(
@@ -17,38 +57,86 @@ AS $$
     WHEN p_details IS NULL OR p_contest_type IS NULL THEN NULL
     WHEN p_contest_type = 'leaderboard' THEN
       CASE
-        WHEN COALESCE((p_details->'leaderboard_contest'->>'total_prize')::numeric, 0) > 0
-          THEN ROUND((p_details->'leaderboard_contest'->>'total_prize')::numeric)::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'leaderboard_contest'->>'total_prize'),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(p_details->'leaderboard_contest'->>'total_prize')
+          )::bigint
         ELSE NULL
       END
     WHEN p_contest_type = 'cpm' THEN
       CASE
-        WHEN COALESCE((p_details->'cpm_contest'->>'total_budget')::numeric, 0) > 0
-          THEN ROUND((p_details->'cpm_contest'->>'total_budget')::numeric)::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget'),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget')
+          )::bigint
         ELSE NULL
       END
     WHEN p_contest_type = 'milestone' THEN
       CASE
-        WHEN COALESCE((p_details->'milestone_contest'->>'total_budget_cents')::numeric, 0) > 0
-          THEN ROUND((p_details->'milestone_contest'->>'total_budget_cents')::numeric)::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(
+            p_details->'milestone_contest'->>'total_budget_cents'
+          ),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(
+              p_details->'milestone_contest'->>'total_budget_cents'
+            )
+          )::bigint
         ELSE NULL
       END
     WHEN p_contest_type = 'dual_rewards' THEN
       CASE
-        WHEN COALESCE((p_details->>'total_budget_cents')::numeric, 0) > 0
-          THEN ROUND((p_details->>'total_budget_cents')::numeric)::bigint
-        WHEN COALESCE((p_details->'milestone_contest'->>'total_budget_cents')::numeric, 0) > 0
-          AND COALESCE((p_details->'cpm_contest'->>'total_budget')::numeric, 0) > 0
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->>'total_budget_cents'),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(p_details->>'total_budget_cents')
+          )::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(
+            p_details->'milestone_contest'->>'total_budget_cents'
+          ),
+          0
+        ) > 0
+          AND COALESCE(
+            public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget'),
+            0
+          ) > 0
           THEN ROUND(
             GREATEST(
-              (p_details->'milestone_contest'->>'total_budget_cents')::numeric,
-              (p_details->'cpm_contest'->>'total_budget')::numeric
+              public.contest_list_json_numeric(
+                p_details->'milestone_contest'->>'total_budget_cents'
+              ),
+              public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget')
             )
           )::bigint
-        WHEN COALESCE((p_details->'milestone_contest'->>'total_budget_cents')::numeric, 0) > 0
-          THEN ROUND((p_details->'milestone_contest'->>'total_budget_cents')::numeric)::bigint
-        WHEN COALESCE((p_details->'cpm_contest'->>'total_budget')::numeric, 0) > 0
-          THEN ROUND((p_details->'cpm_contest'->>'total_budget')::numeric)::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(
+            p_details->'milestone_contest'->>'total_budget_cents'
+          ),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(
+              p_details->'milestone_contest'->>'total_budget_cents'
+            )
+          )::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget'),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget')
+          )::bigint
         ELSE NULL
       END
     ELSE NULL
@@ -68,8 +156,11 @@ IMMUTABLE
 AS $$
   SELECT CASE
     WHEN p_contest_type IN ('cpm', 'dual_rewards')
-      AND COALESCE((p_details->'cpm_contest'->>'cpm_rate_usd')::double precision, -1) >= 0
-      THEN (p_details->'cpm_contest'->>'cpm_rate_usd')::double precision
+      AND COALESCE(
+        public.contest_list_json_float8(p_details->'cpm_contest'->>'cpm_rate_usd'),
+        -1
+      ) >= 0
+      THEN public.contest_list_json_float8(p_details->'cpm_contest'->>'cpm_rate_usd')
     ELSE NULL
   END;
 $$;
@@ -89,46 +180,89 @@ AS $$
     WHEN p_details IS NULL OR p_contest_type IS NULL THEN NULL
     WHEN p_contest_type = 'leaderboard' THEN
       CASE
-        WHEN COALESCE((p_details->'leaderboard_contest'->>'total_budget')::numeric, 0) > 0
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'leaderboard_contest'->>'total_budget'),
+          0
+        ) > 0
           THEN GREATEST(
             0,
-            ROUND(COALESCE((p_details->'leaderboard_contest'->>'budget_spent')::numeric, 0))::bigint
+            ROUND(
+              COALESCE(
+                public.contest_list_json_numeric(
+                  p_details->'leaderboard_contest'->>'budget_spent'
+                ),
+                0
+              )
+            )::bigint
           )
         ELSE NULL
       END
     WHEN p_contest_type = 'milestone' THEN
       CASE
-        WHEN COALESCE((p_details->'milestone_contest'->>'total_budget_cents')::numeric, 0) > 0
+        WHEN COALESCE(
+          public.contest_list_json_numeric(
+            p_details->'milestone_contest'->>'total_budget_cents'
+          ),
+          0
+        ) > 0
           THEN GREATEST(
             0,
-            ROUND(COALESCE((p_details->'milestone_contest'->>'budget_spent')::numeric, 0))::bigint
+            ROUND(
+              COALESCE(
+                public.contest_list_json_numeric(
+                  p_details->'milestone_contest'->>'budget_spent'
+                ),
+                0
+              )
+            )::bigint
           )
         ELSE NULL
       END
     WHEN p_contest_type = 'cpm' THEN
       CASE
-        WHEN COALESCE((p_details->'cpm_contest'->>'total_budget')::numeric, 0) > 0
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'cpm_contest'->>'total_budget'),
+          0
+        ) > 0
           THEN GREATEST(
             0,
-            ROUND(COALESCE((p_details->'cpm_contest'->>'budget_spent')::numeric, 0))::bigint
+            ROUND(
+              COALESCE(
+                public.contest_list_json_numeric(p_details->'cpm_contest'->>'budget_spent'),
+                0
+              )
+            )::bigint
           )
         ELSE NULL
       END
     WHEN p_contest_type = 'dual_rewards' THEN
       CASE
         WHEN public.contest_list_sort_value_cents(p_contest_type, p_details) IS NULL THEN NULL
-        WHEN COALESCE((p_details->>'pool_budget_spent_cents')::numeric, -1) >= 0
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->>'pool_budget_spent_cents'),
+          -1
+        ) >= 0
           THEN GREATEST(
             0,
-            ROUND((p_details->>'pool_budget_spent_cents')::numeric)::bigint
+            ROUND(
+              public.contest_list_json_numeric(p_details->>'pool_budget_spent_cents')
+            )::bigint
           )
         ELSE LEAST(
           public.contest_list_sort_value_cents(p_contest_type, p_details),
           GREATEST(
             0,
             ROUND(
-              COALESCE((p_details->'cpm_contest'->>'budget_spent')::numeric, 0)
-              + COALESCE((p_details->'milestone_contest'->>'budget_spent')::numeric, 0)
+              COALESCE(
+                public.contest_list_json_numeric(p_details->'cpm_contest'->>'budget_spent'),
+                0
+              )
+              + COALESCE(
+                public.contest_list_json_numeric(
+                  p_details->'milestone_contest'->>'budget_spent'
+                ),
+                0
+              )
             )::bigint
           )
         )
@@ -152,28 +286,63 @@ AS $$
     WHEN p_details IS NULL OR p_contest_type IS NULL THEN NULL
     WHEN p_contest_type = 'leaderboard' THEN
       CASE
-        WHEN COALESCE((p_details->'leaderboard_contest'->>'total_budget')::numeric, 0) > 0 THEN
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'leaderboard_contest'->>'total_budget'),
+          0
+        ) > 0 THEN
           GREATEST(
             0,
-            ROUND((p_details->'leaderboard_contest'->>'total_budget')::numeric)::bigint
+            ROUND(
+              public.contest_list_json_numeric(
+                p_details->'leaderboard_contest'->>'total_budget'
+              )
+            )::bigint
             - GREATEST(
               0,
-              ROUND(COALESCE((p_details->'leaderboard_contest'->>'budget_spent')::numeric, 0))::bigint
+              ROUND(
+                COALESCE(
+                  public.contest_list_json_numeric(
+                    p_details->'leaderboard_contest'->>'budget_spent'
+                  ),
+                  0
+                )
+              )::bigint
             )
           )
-        WHEN COALESCE((p_details->'leaderboard_contest'->>'total_prize')::numeric, 0) > 0
-          THEN ROUND((p_details->'leaderboard_contest'->>'total_prize')::numeric)::bigint
+        WHEN COALESCE(
+          public.contest_list_json_numeric(p_details->'leaderboard_contest'->>'total_prize'),
+          0
+        ) > 0
+          THEN ROUND(
+            public.contest_list_json_numeric(p_details->'leaderboard_contest'->>'total_prize')
+          )::bigint
         ELSE NULL
       END
     WHEN p_contest_type = 'milestone' THEN
       CASE
-        WHEN COALESCE((p_details->'milestone_contest'->>'total_budget_cents')::numeric, 0) > 0 THEN
+        WHEN COALESCE(
+          public.contest_list_json_numeric(
+            p_details->'milestone_contest'->>'total_budget_cents'
+          ),
+          0
+        ) > 0 THEN
           GREATEST(
             0,
-            ROUND((p_details->'milestone_contest'->>'total_budget_cents')::numeric)::bigint
+            ROUND(
+              public.contest_list_json_numeric(
+                p_details->'milestone_contest'->>'total_budget_cents'
+              )
+            )::bigint
             - GREATEST(
               0,
-              ROUND(COALESCE((p_details->'milestone_contest'->>'budget_spent')::numeric, 0))::bigint
+              ROUND(
+                COALESCE(
+                  public.contest_list_json_numeric(
+                    p_details->'milestone_contest'->>'budget_spent'
+                  ),
+                  0
+                )
+              )::bigint
             )
           )
         ELSE NULL
@@ -362,16 +531,14 @@ BEGIN
         p_scope <> 'opportunities'
         OR COALESCE(p_media_type, 'all') = 'all'
         OR (
-          p_media_type = 'text'
-          AND (
-            c.contest_format = 'text_image'
-            OR c.content_type = 'text_image'
-          )
+          -- Parity with opportunities client: media = video format only
+          p_media_type = 'media'
+          AND lower(coalesce(c.contest_format, '')) = 'video'
         )
         OR (
-          p_media_type = 'media'
-          AND COALESCE(c.contest_format, '') IS DISTINCT FROM 'text_image'
-          AND COALESCE(c.content_type, '') IS DISTINCT FROM 'text_image'
+          -- Parity with opportunities client: text = text_image format only
+          p_media_type = 'text'
+          AND lower(coalesce(c.contest_format, '')) = 'text_image'
         )
       )
       AND (
@@ -442,60 +609,66 @@ BEGIN
       )
   ),
   ordered AS (
-    SELECT b.id
+    SELECT
+      b.id,
+      row_number() OVER (
+        ORDER BY
+          CASE
+            WHEN p_sort = 'relevance_desc' THEN
+              CASE b.status
+                WHEN 'active' THEN 0
+                WHEN 'upcoming' THEN 1
+                WHEN 'ended' THEN 2
+                ELSE 3
+              END
+            ELSE 0
+          END ASC,
+          CASE p_sort
+            WHEN 'created_at_asc' THEN EXTRACT(EPOCH FROM b.created_at)
+            WHEN 'start_date_asc' THEN EXTRACT(EPOCH FROM b.start_date)
+            WHEN 'end_date_asc' THEN EXTRACT(EPOCH FROM b.end_date)
+            WHEN 'views_asc' THEN b.not_rejected_views::double precision
+            WHEN 'submissions_asc' THEN b.live_submission_count::double precision
+            WHEN 'value_asc' THEN b.sort_value_cents::double precision
+            WHEN 'budget_remaining_asc' THEN b.sort_budget_remaining_cents::double precision
+            WHEN 'budget_used_asc' THEN b.sort_budget_spent_cents::double precision
+            WHEN 'approval_rate_asc' THEN b.sort_approval_percent::double precision
+            WHEN 'cpm_rate_asc' THEN b.sort_cpm_rate
+            ELSE NULL
+          END ASC NULLS LAST,
+          CASE p_sort
+            WHEN 'created_at_desc' THEN EXTRACT(EPOCH FROM b.created_at)
+            WHEN 'relevance_desc' THEN EXTRACT(EPOCH FROM b.created_at)
+            WHEN 'start_date_desc' THEN EXTRACT(EPOCH FROM b.start_date)
+            WHEN 'end_date_desc' THEN EXTRACT(EPOCH FROM b.end_date)
+            WHEN 'views_desc' THEN b.not_rejected_views::double precision
+            WHEN 'submissions_desc' THEN b.live_submission_count::double precision
+            WHEN 'value_desc' THEN b.sort_value_cents::double precision
+            WHEN 'budget_remaining_desc' THEN b.sort_budget_remaining_cents::double precision
+            WHEN 'budget_used_desc' THEN b.sort_budget_spent_cents::double precision
+            WHEN 'approval_rate_desc' THEN b.sort_approval_percent::double precision
+            WHEN 'cpm_rate_desc' THEN b.sort_cpm_rate
+            ELSE EXTRACT(EPOCH FROM b.created_at)
+          END DESC NULLS LAST,
+          b.id ASC
+      ) AS sort_pos
     FROM base b
-    ORDER BY
-      CASE
-        WHEN p_sort = 'relevance_desc' THEN
-          CASE b.status
-            WHEN 'active' THEN 0
-            WHEN 'upcoming' THEN 1
-            WHEN 'ended' THEN 2
-            ELSE 3
-          END
-        ELSE 0
-      END ASC,
-      CASE p_sort
-        WHEN 'created_at_asc' THEN EXTRACT(EPOCH FROM b.created_at)
-        WHEN 'start_date_asc' THEN EXTRACT(EPOCH FROM b.start_date)
-        WHEN 'end_date_asc' THEN EXTRACT(EPOCH FROM b.end_date)
-        WHEN 'views_asc' THEN b.not_rejected_views::double precision
-        WHEN 'submissions_asc' THEN b.live_submission_count::double precision
-        WHEN 'value_asc' THEN b.sort_value_cents::double precision
-        WHEN 'budget_remaining_asc' THEN b.sort_budget_remaining_cents::double precision
-        WHEN 'budget_used_asc' THEN b.sort_budget_spent_cents::double precision
-        WHEN 'approval_rate_asc' THEN b.sort_approval_percent::double precision
-        WHEN 'cpm_rate_asc' THEN b.sort_cpm_rate
-        ELSE NULL
-      END ASC NULLS LAST,
-      CASE p_sort
-        WHEN 'created_at_desc' THEN EXTRACT(EPOCH FROM b.created_at)
-        WHEN 'relevance_desc' THEN EXTRACT(EPOCH FROM b.created_at)
-        WHEN 'start_date_desc' THEN EXTRACT(EPOCH FROM b.start_date)
-        WHEN 'end_date_desc' THEN EXTRACT(EPOCH FROM b.end_date)
-        WHEN 'views_desc' THEN b.not_rejected_views::double precision
-        WHEN 'submissions_desc' THEN b.live_submission_count::double precision
-        WHEN 'value_desc' THEN b.sort_value_cents::double precision
-        WHEN 'budget_remaining_desc' THEN b.sort_budget_remaining_cents::double precision
-        WHEN 'budget_used_desc' THEN b.sort_budget_spent_cents::double precision
-        WHEN 'approval_rate_desc' THEN b.sort_approval_percent::double precision
-        WHEN 'cpm_rate_desc' THEN b.sort_cpm_rate
-        ELSE EXTRACT(EPOCH FROM b.created_at)
-      END DESC NULLS LAST,
-      b.id ASC
   ),
   counted AS (
     SELECT count(*)::bigint AS total FROM base
   ),
   page AS (
-    SELECT o.id
+    SELECT o.id, o.sort_pos
     FROM ordered o
-    OFFSET v_offset
-    LIMIT v_limit
+    WHERE o.sort_pos > v_offset
+      AND o.sort_pos <= v_offset + v_limit
   )
   SELECT
     (SELECT total FROM counted),
-    COALESCE((SELECT array_agg(p.id) FROM page p), ARRAY[]::uuid[])
+    COALESCE(
+      (SELECT array_agg(p.id ORDER BY p.sort_pos) FROM page p),
+      ARRAY[]::uuid[]
+    )
   INTO v_total, v_ids;
 
   RETURN jsonb_build_object(

@@ -234,21 +234,6 @@ function getDualUnifiedBudgetMeta(contest: any): {
 }
 
 // Helper function to get contests filtered by media type
-const getContestsByMediaType = (contests: any[], mediaType: string) => {
-  return contests.filter((contest) => {
-    const format = contest.contest_format;
-
-    if (mediaType === "all") {
-      return true; // Show all contests
-    } else if (mediaType === "media") {
-      return format === "video";
-    } else if (mediaType === "text") {
-      return format === "text_image";
-    }
-    return true;
-  });
-};
-
 function filterContestsByEligibility(
   contests: any[],
   eligibilityFilter: EligibilityFilterType,

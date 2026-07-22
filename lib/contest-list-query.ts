@@ -171,6 +171,17 @@ export function parseOpportunitiesSort(
   return "relevance_desc";
 }
 
+const MEDIA_TYPES = new Set(["all", "text", "media"]);
+
+export function parseOpportunitiesMediaType(
+  raw: string | null | undefined,
+): "all" | "text" | "media" {
+  if (raw && MEDIA_TYPES.has(raw)) {
+    return raw as "all" | "text" | "media";
+  }
+  return "all";
+}
+
 function emptyTabCounts(): CampaignListTabCounts {
   return {
     all: 0,
@@ -387,15 +398,13 @@ function applyListFilters(
     q = q.ilike("title", `%${params.search.trim()}%`);
   }
 
+  // Parity with opportunities client: text = text_image, media = video only.
   if (params.scope === "opportunities" && params.mediaType === "text") {
-    q = q.or("contest_format.eq.text_image,content_type.eq.text_image");
+    q = q.eq("contest_format", "text_image");
   }
 
   if (params.scope === "opportunities" && params.mediaType === "media") {
-    // Exclude text_image on either format or content_type (nulls count as media).
-    q = q
-      .or("contest_format.is.null,contest_format.neq.text_image")
-      .or("content_type.is.null,content_type.neq.text_image");
+    q = q.eq("contest_format", "video");
   }
 
   return q;
@@ -538,13 +547,12 @@ async function fetchFilteredPageSql(
     .map((id) => byId.get(id))
     .filter((row): row is LightweightContest => Boolean(row));
 
-  // Partial hydrate (RLS) — never report a total larger than rows we can show
-  // for this page request when zero rows came back despite non-empty ids.
+  // Partial hydrate (RLS / race) — keep RPC total so pagination stays honest.
   if (rows.length === 0 && ids.length > 0) {
     console.warn(
       "[contest-list-query] hydrate returned no rows for page ids (RLS or stale ids)",
     );
-    return { rows: [], total: 0 };
+    return { rows: [], total };
   }
 
   return { rows, total };
