@@ -1079,3 +1079,173 @@ export async function authorizeProcessWarmUpSends(
   if (cronSecret) return false;
   return process.env.NODE_ENV === "development";
 }
+
+/** Stable QStash schedule id for contest_stats safety-net refresh. */
+export const REFRESH_STALE_CONTEST_STATS_SCHEDULE_ID =
+  "goviral-refresh-stale-contest-stats";
+
+/** Every 10 minutes. */
+export const REFRESH_STALE_CONTEST_STATS_CRON = "*/10 * * * *";
+
+function getRefreshStaleContestStatsUrl(baseUrl?: string): string {
+  return `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/refresh-stale-contest-stats`;
+}
+
+async function verifyQStashSignatureRefreshStaleContestStats(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getRefreshStaleContestStatsUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/refresh-stale-contest-stats`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/refresh-stale-contest-stats`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize refresh-stale-contest-stats: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeRefreshStaleContestStats(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureRefreshStaleContestStats(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) {
+    return auth === `Bearer ${cronSecret}`;
+  }
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Upsert the recurring QStash schedule (every 10 min) for stale contest_stats refresh.
+ * Idempotent via fixed scheduleId — safe to call from metrics paths / manual trigger.
+ */
+export async function ensureRefreshStaleContestStatsSchedule(
+  baseUrl?: string,
+): Promise<{ scheduleId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+
+  const destination = getRefreshStaleContestStatsUrl(baseUrl);
+  if (isLoopbackUrl(destination)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+
+  try {
+    const res = await client.schedules.create({
+      destination,
+      cron: REFRESH_STALE_CONTEST_STATS_CRON,
+      scheduleId: REFRESH_STALE_CONTEST_STATS_SCHEDULE_ID,
+      method: "POST",
+      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        ...getQStashAuthHeaders(),
+      },
+      retries: 2,
+      label: "refresh-stale-contest-stats",
+    });
+    return { scheduleId: res.scheduleId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] ensureRefreshStaleContestStatsSchedule failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/** One-shot trigger (manual / bootstrap). Prefer the recurring schedule for production. */
+export async function triggerRefreshStaleContestStats(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = getRefreshStaleContestStatsUrl(baseUrl);
+  if (isLoopbackUrl(url)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+      headers: getQStashAuthHeaders(),
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerRefreshStaleContestStats failed:", message);
+    return { error: message };
+  }
+}
+
+let ensureStaleStatsSchedulePromise: Promise<void> | null = null;
+
+/**
+ * Fire-and-forget: create/update the QStash schedule once per process.
+ * Call from metrics paths so the schedule exists without a Vercel cron.
+ */
+export function ensureRefreshStaleContestStatsScheduleOnce(
+  baseUrl?: string,
+): void {
+  if (!isQStashEnabled()) return;
+  if (ensureStaleStatsSchedulePromise) return;
+  ensureStaleStatsSchedulePromise = ensureRefreshStaleContestStatsSchedule(
+    baseUrl,
+  )
+    .then((res) => {
+      if (res.scheduleId) {
+        console.log(
+          "[qstash] refresh-stale-contest-stats schedule ready:",
+          res.scheduleId,
+        );
+      } else if (res.error) {
+        // Allow retry on next process if destination URL was wrong at first call.
+        ensureStaleStatsSchedulePromise = null;
+        console.warn(
+          "[qstash] refresh-stale-contest-stats schedule not ready:",
+          res.error,
+        );
+      }
+    })
+    .catch((err) => {
+      ensureStaleStatsSchedulePromise = null;
+      console.warn(
+        "[qstash] refresh-stale-contest-stats schedule ensure error:",
+        err,
+      );
+    });
+}

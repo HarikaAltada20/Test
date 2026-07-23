@@ -498,7 +498,13 @@ function contestPassesEligibility(
   });
 }
 
-async function enrichListPage(
+/**
+ * List cards need live budget_spent / pool_budget_spent_cents for the tracker.
+ * Stored JSON is often stale/0 until metrics jobs persist spend — recompute for
+ * the current page only (not the full catalog). contest_stats views/counts stay
+ * from the SQL embed so we don't wipe Layer-1 precompute.
+ */
+async function hydrateListPage(
   params: ListCampaignsParams,
   pageRows: ContestWithStats[],
 ): Promise<ListCampaignsResult["contests"]> {
@@ -599,6 +605,11 @@ async function fetchFilteredPageSql(
   limit: number,
 ): Promise<{ rows: LightweightContest[]; total: number }> {
   if (pageIdsRpcState === "missing") {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "Campaign list pagination unavailable. Apply campaign list SQL migrations.",
+      );
+    }
     return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
   }
 
@@ -633,6 +644,14 @@ async function fetchFilteredPageSql(
     }
     if (isCampaignListRpcMissingError(pageError)) {
       markPageIdsRpcMissing(pageError?.message || "unknown");
+      if (process.env.NODE_ENV === "production") {
+        console.error(
+          "[contest-list-query] campaign_list_page_ids missing in production — apply db/migrations/20260731_campaign_list_page_ids.sql",
+        );
+        throw new Error(
+          "Campaign list pagination unavailable. Apply campaign list SQL migrations.",
+        );
+      }
       return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
     }
     console.warn(
@@ -810,8 +829,8 @@ async function fetchFilteredPageViaPostgrest(
 /**
  * List campaigns with SQL filter → sort → paginate. Tab counts via grouped RPC.
  *
- * Budget/value sorts use stored contest_based_details / contest_stats (SQL helpers).
- * Card enrichment may recompute live spend for display — order follows stored metrics.
+ * Sort uses stored contest_based_details / contest_stats. Page hydrate recomputes
+ * budget trackers for the current page only (list UI depends on budget_spent).
  */
 export async function listCampaignsPaginated(
   params: ListCampaignsParams,
@@ -855,7 +874,7 @@ export async function listCampaignsPaginated(
     );
   }
 
-  const enrichedPage = await enrichListPage(params, pageRows);
+  const enrichedPage = await hydrateListPage(params, pageRows);
 
   return {
     contests: enrichedPage,
@@ -930,7 +949,7 @@ async function listCampaignsPaginatedEligible(
     );
   }
 
-  const enrichedPage = await enrichListPage(params, pageRows);
+  const enrichedPage = await hydrateListPage(params, pageRows);
 
   return {
     contests: enrichedPage,

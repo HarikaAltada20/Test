@@ -9,6 +9,11 @@ import {
   parseListPage,
   type CampaignListTabId,
 } from "@/lib/contest-list-query";
+import {
+  buildCampaignListCacheKey,
+  getCampaignListCache,
+  setCampaignListCache,
+} from "@/lib/campaign-list-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -37,22 +42,55 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams;
     const tabRaw = sp.get("tab") || "all";
     const tab = (TAB_IDS.has(tabRaw) ? tabRaw : "all") as CampaignListTabId;
+    const sort = parseContestListSort(sp.get("sort"));
+    const page = parseListPage(sp.get("page"));
+    const limit = parseListLimit(sp.get("limit"));
+    const platform = sp.get("platform") || "all";
+    const contestType = sp.get("contestType") || "all";
+    const contestFormat = sp.get("contestFormat") || "all";
+    const postContestPhase = sp.get("postContestPhase") || "all";
+    const search = sp.get("search") || "";
+
+    const cacheKey = buildCampaignListCacheKey({
+      scope: "admin",
+      ownerId: "shared",
+      tab,
+      sort,
+      page,
+      limit,
+      platform,
+      contestType,
+      contestFormat,
+      postContestPhase,
+      search,
+    });
+
+    const cached = await getCampaignListCache(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: { "X-Campaign-List-Cache": "HIT" },
+      });
+    }
 
     const result = await listCampaignsPaginated({
       supabase,
       scope: "admin",
       tab,
-      sort: parseContestListSort(sp.get("sort")),
-      page: parseListPage(sp.get("page")),
-      limit: parseListLimit(sp.get("limit")),
-      platform: sp.get("platform") || "all",
-      contestType: sp.get("contestType") || "all",
-      contestFormat: sp.get("contestFormat") || "all",
-      postContestPhase: sp.get("postContestPhase") || "all",
-      search: sp.get("search") || "",
+      sort,
+      page,
+      limit,
+      platform,
+      contestType,
+      contestFormat,
+      postContestPhase,
+      search,
     });
 
-    return NextResponse.json(result);
+    await setCampaignListCache(cacheKey, result, "admin");
+
+    return NextResponse.json(result, {
+      headers: { "X-Campaign-List-Cache": "MISS" },
+    });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to fetch contests";

@@ -11,6 +11,7 @@ import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
 import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
 import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { refreshContestStats } from "@/lib/contest-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -1745,6 +1746,9 @@ export async function POST(
         (typeof batchIndex === "number" &&
           typeof totalBatches === "number" &&
           batchIndex === totalBatches - 1);
+      // Refresh list stats after impressions updates (no per-row views triggers).
+      await refreshContestStats(contestId);
+
       if (isLastRaidBatch) {
         const currentTime = new Date().toISOString();
         console.log(

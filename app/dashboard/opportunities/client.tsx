@@ -1041,9 +1041,9 @@ export default function OpportunitiesPage({
           applyRawListToUiRef.current(entry);
           listHasLoadedRef.current = true;
 
-          // Prefetch sibling tabs in parallel (same filters, page 1).
+          // Prefetch only the most-used sibling tab (live) to limit list load.
           void Promise.all(
-            (["all", "live", "upcoming", "ended"] as const)
+            (["live"] as const)
               .filter((tab) => tab !== statusFilter)
               .map(async (tab) => {
                 const prefetchKey = buildKey({ tab, page: 1 });

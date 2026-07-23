@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { verifyAdminAccess } from '@/utils/admin-auth';
+import {
+  invalidateAdminCampaignListCache,
+  invalidateCampaignListCacheForAdvertiser,
+  invalidateOpportunitiesListCache,
+} from '@/lib/campaign-list-cache';
 
 // POST: Admin approve/reject contest
 export async function POST(request: Request) {
@@ -69,6 +74,12 @@ export async function POST(request: Request) {
       console.error('Error updating contest moderation status:', updateError);
       return NextResponse.json({ error: 'Failed to update contest status' }, { status: 500 });
     }
+
+    await Promise.all([
+      invalidateCampaignListCacheForAdvertiser(contest.advertiser_id),
+      invalidateAdminCampaignListCache(),
+      invalidateOpportunitiesListCache(),
+    ]);
 
     // TODO: Send email notification to advertiser about approval/rejection
     // This would be implemented based on your email service

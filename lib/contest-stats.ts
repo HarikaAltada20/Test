@@ -11,11 +11,22 @@ export type ContestStatsRow = {
 
 /**
  * Recompute contest_stats for one contest (or all when omitted).
- * Prefer DB triggers; call this after bulk metric updates that bypass row triggers.
+ * Prefer status/moderation DB triggers for counters; call this once after
+ * bulk views/impressions sync (metrics jobs) and from the stale-stats cron.
  */
 export async function refreshContestStats(
   contestId?: string | null,
 ): Promise<void> {
+  // Keep QStash safety-net schedule alive without Vercel Cron.
+  try {
+    const { ensureRefreshStaleContestStatsScheduleOnce } = await import(
+      "@/lib/qstash"
+    );
+    ensureRefreshStaleContestStatsScheduleOnce();
+  } catch {
+    // optional
+  }
+
   const supabase = createAdminClient();
   const { error } = await supabase.rpc("refresh_contest_stats", {
     p_contest_id: contestId ?? null,
@@ -27,6 +38,66 @@ export async function refreshContestStats(
       error.message,
     );
   }
+}
+
+/**
+ * Refresh stats for many contests after a metrics job finishes.
+ * One full recompute per contest (not per submission row).
+ */
+export async function refreshContestStatsForContestIds(
+  contestIds: string[],
+  options?: { concurrency?: number },
+): Promise<void> {
+  const unique = [...new Set(contestIds.filter(Boolean))];
+  if (unique.length === 0) return;
+
+  const concurrency = Math.max(1, Math.min(options?.concurrency ?? 5, 10));
+  let index = 0;
+
+  async function worker() {
+    while (index < unique.length) {
+      const contestId = unique[index++];
+      await refreshContestStats(contestId);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, unique.length) }, () =>
+      worker(),
+    ),
+  );
+}
+
+/**
+ * Safety-net: contests whose metrics landed after the last stats recompute,
+ * missing stats rows, or active campaigns with old stats.
+ */
+export async function findStaleContestStatsIds(
+  limit = 50,
+  staleMinutes = 15,
+): Promise<string[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("find_stale_contest_stats_ids", {
+    p_limit: limit,
+    p_stale_minutes: staleMinutes,
+  });
+
+  if (error) {
+    console.error(
+      "[contest-stats] find_stale_contest_stats_ids failed:",
+      error.message,
+    );
+    return [];
+  }
+
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((row) =>
+      typeof row === "string"
+        ? row
+        : (row as { contest_id?: string })?.contest_id,
+    )
+    .filter((id): id is string => Boolean(id));
 }
 
 export async function loadContestStatsByContestIds(

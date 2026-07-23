@@ -11,6 +11,11 @@ import {
 } from "@/lib/contest-list-query";
 import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
 import { getCreatorRequirementsSnapshot } from "@/lib/creator-requirements";
+import {
+  buildCampaignListCacheKey,
+  getCampaignListCache,
+  setCampaignListCache,
+} from "@/lib/campaign-list-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -50,24 +55,71 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const sort = parseOpportunitiesSort(sp.get("sort"));
+    const page = parseListPage(sp.get("page"));
+    const limit = parseListLimit(sp.get("limit"));
+    const platform = sp.get("platform") || "all";
+    const contestType = sp.get("contestType") || "all";
+    const contestFormat = sp.get("contestFormat") || "all";
+    const search = sp.get("search") || "";
+    const mediaType = parseOpportunitiesMediaType(sp.get("mediaType"));
+    const countriesKey = [...(userCountries || [])].sort().join(",");
+
+    // Skip Redis for eligibleOnly — results are user-gate specific and heavier.
+    const cacheKey =
+      eligibleOnly
+        ? null
+        : buildCampaignListCacheKey({
+            scope: "opportunities",
+            ownerId: user.id,
+            tab,
+            sort,
+            page,
+            limit,
+            platform,
+            contestType,
+            contestFormat,
+            search,
+            mediaType,
+            eligibleOnly: false,
+            countriesKey,
+          });
+
+    if (cacheKey) {
+      const cached = await getCampaignListCache(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: { "X-Campaign-List-Cache": "HIT" },
+        });
+      }
+    }
+
     const result = await listCampaignsPaginated({
       supabase,
       scope: "opportunities",
       tab,
-      sort: parseOpportunitiesSort(sp.get("sort")),
-      page: parseListPage(sp.get("page")),
-      limit: parseListLimit(sp.get("limit")),
-      platform: sp.get("platform") || "all",
-      contestType: sp.get("contestType") || "all",
-      contestFormat: sp.get("contestFormat") || "all",
-      search: sp.get("search") || "",
-      mediaType: parseOpportunitiesMediaType(sp.get("mediaType")),
+      sort,
+      page,
+      limit,
+      platform,
+      contestType,
+      contestFormat,
+      search,
+      mediaType,
       userCountries,
       eligibleOnly,
       creatorEligibilitySnapshot,
     });
 
-    return NextResponse.json(result);
+    if (cacheKey) {
+      await setCampaignListCache(cacheKey, result, "opportunities");
+    }
+
+    return NextResponse.json(result, {
+      headers: {
+        "X-Campaign-List-Cache": cacheKey ? "MISS" : "BYPASS",
+      },
+    });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to fetch opportunities";
