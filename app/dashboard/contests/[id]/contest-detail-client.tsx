@@ -6784,7 +6784,10 @@ export default function ContestDetailClient({
         console.log(
           "[contest-detail-client] Calling clear cache API before contests:refresh...",
         );
-        await fetch("/api/contests/clear-cache", { method: "POST" });
+        await fetch("/api/contests/clear-cache?scope=self", {
+          method: "POST",
+          credentials: "same-origin",
+        });
         console.log("[contest-detail-client] Direct cache clear completed");
       } catch (error) {
         console.error(
@@ -6961,7 +6964,10 @@ export default function ContestDetailClient({
       });
 
       try {
-        await fetch("/api/contests/clear-cache", { method: "POST" });
+        await fetch("/api/contests/clear-cache?scope=self", {
+          method: "POST",
+          credentials: "same-origin",
+        });
       } catch {
         /* ignore */
       }
@@ -10581,7 +10587,10 @@ export default function ContestDetailClient({
         console.log(
           "[contest-detail-client] Calling clear cache API before contests:refresh (Twitter moderation)...",
         );
-        await fetch("/api/contests/clear-cache", { method: "POST" });
+        await fetch("/api/contests/clear-cache?scope=self", {
+          method: "POST",
+          credentials: "same-origin",
+        });
         console.log(
           "[contest-detail-client] Direct cache clear completed from Twitter moderation",
         );

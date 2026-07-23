@@ -13,10 +13,11 @@ export type ContestStatsRow = {
  * Recompute contest_stats for one contest (or all when omitted).
  * Prefer status/moderation DB triggers for counters; call this once after
  * bulk views/impressions sync (metrics jobs) and from the stale-stats cron.
+ * @returns true when the RPC succeeded.
  */
 export async function refreshContestStats(
   contestId?: string | null,
-): Promise<void> {
+): Promise<boolean> {
   // Keep QStash safety-net schedule alive without Vercel Cron.
   try {
     const { ensureRefreshStaleContestStatsScheduleOnce } = await import(
@@ -35,9 +36,16 @@ export async function refreshContestStats(
   if (error) {
     console.error(
       "[contest-stats] refresh_contest_stats failed:",
-      error.message,
+      {
+        contestId: contestId ?? null,
+        message: error.message,
+        code: error.code,
+        details: error.details,
+      },
     );
+    return false;
   }
+  return true;
 }
 
 /**
@@ -54,10 +62,13 @@ export async function refreshContestStatsForContestIds(
   const concurrency = Math.max(1, Math.min(options?.concurrency ?? 5, 10));
   let index = 0;
 
+  let failures = 0;
+
   async function worker() {
     while (index < unique.length) {
       const contestId = unique[index++];
-      await refreshContestStats(contestId);
+      const ok = await refreshContestStats(contestId);
+      if (!ok) failures += 1;
     }
   }
 
@@ -66,6 +77,12 @@ export async function refreshContestStatsForContestIds(
       worker(),
     ),
   );
+
+  if (failures > 0) {
+    console.error(
+      `[contest-stats] refreshContestStatsForContestIds: ${failures}/${unique.length} failed`,
+    );
+  }
 }
 
 /**

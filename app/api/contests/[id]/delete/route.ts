@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceRoleClient } from '@supabase/supabase-js';
+import { invalidateCampaignListCachesAfterMutation } from '@/lib/campaign-list-cache';
 
 // Type definitions for better type safety
 interface ResourceItem {
@@ -251,6 +252,12 @@ export async function DELETE(
     if (deleteError) {
       throw new Error(`Failed to delete contest: ${deleteError.message}`);
     }
+
+    await invalidateCampaignListCachesAfterMutation({
+      advertiserId: contest.advertiser_id,
+      // Published contests disappear from opportunities; drafts only hit brand/admin.
+      touchOpportunities: contest.moderation_status === 'published',
+    });
 
     const message = refundAmount > 0
         ? `Contest deleted successfully. ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(refundAmount / 100)} has been refunded to your wallet.`

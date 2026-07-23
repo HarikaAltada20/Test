@@ -1107,7 +1107,10 @@ export default function OpportunitiesPage({
   useEffect(() => {
     const handleRefresh = async () => {
       try {
-        await fetch("/api/contests/clear-cache", { method: "POST" });
+        await fetch("/api/contests/clear-cache?scope=self", {
+          method: "POST",
+          credentials: "same-origin",
+        });
       } catch {
         // still refetch
       }

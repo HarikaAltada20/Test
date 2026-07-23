@@ -216,8 +216,26 @@ CREATE TRIGGER trg_contest_stats_on_twitter_tweet_change
   FOR EACH ROW
   EXECUTE FUNCTION public.contest_stats_on_twitter_tweet_change();
 
--- Backfill all existing contests
-SELECT public.refresh_contest_stats(NULL);
+-- Backfill existing contests in batches to avoid a single long lock/timeout
+-- on large catalogs. Prefer running the stale-stats cron afterward as a safety net.
+DO $$
+DECLARE
+  r record;
+  n integer := 0;
+BEGIN
+  FOR r IN
+    SELECT c.id
+    FROM public.contests c
+    ORDER BY c.created_at NULLS LAST, c.id
+  LOOP
+    PERFORM public.refresh_contest_stats(r.id);
+    n := n + 1;
+    IF n % 100 = 0 THEN
+      RAISE NOTICE 'contest_stats backfill progress: %', n;
+    END IF;
+  END LOOP;
+  RAISE NOTICE 'contest_stats backfill complete: % contests', n;
+END $$;
 
 ALTER TABLE public.contest_stats ENABLE ROW LEVEL SECURITY;
 

@@ -8,6 +8,7 @@ import {
   validateCreatorRequirementFields,
   type CreatorRequirementFieldInput,
 } from "@/lib/contest-creator-requirements-validation";
+import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
 
 export async function POST(
   request: Request,
@@ -222,7 +223,7 @@ export async function POST(
       .from("contests")
       .update(updateData)
       .eq("id", contestId)
-      .select("id")
+      .select("id, advertiser_id, moderation_status")
       .maybeSingle();
 
     if (error) {
@@ -261,6 +262,21 @@ export async function POST(
         // Don't fail the request if sync fails
       }
     }
+
+    const touchesVisibility =
+      updateData.moderation_status !== undefined ||
+      updateData.region !== undefined ||
+      updateData.title !== undefined ||
+      updateData.platform !== undefined ||
+      updateData.contest_format !== undefined ||
+      updateData.start_date !== undefined ||
+      updateData.end_date !== undefined;
+
+    await invalidateCampaignListCachesAfterMutation({
+      advertiserId: data.advertiser_id,
+      touchOpportunities:
+        touchesVisibility || data.moderation_status === "published",
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

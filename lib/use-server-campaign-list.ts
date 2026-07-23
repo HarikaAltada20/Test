@@ -244,10 +244,13 @@ export function useServerCampaignList<T>(
 
       try {
         if (opts?.bustCache) {
+          // Drop client tab cache only for this session — never wipe global Redis.
           listCache.clear();
-          await fetch("/api/contests/clear-cache", { method: "POST" }).catch(
-            () => undefined,
-          );
+          const clearScope = current.isAdminView ? "admin" : "self";
+          await fetch(
+            `/api/contests/clear-cache?scope=${encodeURIComponent(clearScope)}`,
+            { method: "POST", credentials: "same-origin" },
+          ).catch(() => undefined);
         }
 
         const url = buildListUrl(current);

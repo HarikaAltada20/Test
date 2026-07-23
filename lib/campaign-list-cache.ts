@@ -135,8 +135,39 @@ export async function invalidateOpportunitiesListCache(): Promise<number> {
   return invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:opportunities:`);
 }
 
+/** Invalidate one creator’s opportunity list pages only. */
+export async function invalidateOpportunitiesListCacheForUser(
+  userId: string | null | undefined,
+): Promise<number> {
+  if (!userId) return 0;
+  return invalidateCampaignListCacheByPrefix(
+    `${KEY_PREFIX}:opportunities:${userId}:`,
+  );
+}
+
 export async function invalidateAllCampaignListCache(): Promise<number> {
   return invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:`);
+}
+
+/**
+ * After a contest create/update/delete/publish/status change:
+ * always clear that advertiser + admin lists; clear opportunities when
+ * visibility to creators may change (publish, unpublish, delete, region, etc.).
+ */
+export async function invalidateCampaignListCachesAfterMutation(options: {
+  advertiserId: string | null | undefined;
+  /** Default true — brand-only draft edits can pass false. */
+  touchOpportunities?: boolean;
+}): Promise<{ advertiser: number; admin: number; opportunities: number }> {
+  const touchOpportunities = options.touchOpportunities !== false;
+  const [advertiser, admin, opportunities] = await Promise.all([
+    invalidateCampaignListCacheForAdvertiser(options.advertiserId),
+    invalidateAdminCampaignListCache(),
+    touchOpportunities
+      ? invalidateOpportunitiesListCache()
+      : Promise.resolve(0),
+  ]);
+  return { advertiser, admin, opportunities };
 }
 
 async function invalidateCampaignListCacheByPrefix(
