@@ -3969,7 +3969,7 @@ export function ContestListClient({
                     Approval Rate: Low
                   </SelectItem>
                   <SelectItem isDark={isDark} value="views_desc">
-                    Views: High
+                    Views: High 
                   </SelectItem>
                   <SelectItem isDark={isDark} value="views_asc">
                     Views: Low

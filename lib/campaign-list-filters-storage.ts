@@ -1,6 +1,8 @@
 export const BRAND_CONTEST_LIST_FILTERS_KEY = "gv-dashboard-contests-filters";
-export const ADMIN_CONTEST_LIST_FILTERS_KEY = "gv-dashboard-admin-contests-filters";
-export const OPPORTUNITIES_LIST_FILTERS_KEY = "gv-dashboard-opportunities-filters";
+export const ADMIN_CONTEST_LIST_FILTERS_KEY =
+  "gv-dashboard-admin-contests-filters";
+export const OPPORTUNITIES_LIST_FILTERS_KEY =
+  "gv-dashboard-opportunities-filters";
 
 export const CONTEST_LIST_SORT_OPTIONS = [
   "created_at_desc",
@@ -53,7 +55,11 @@ export const CONTEST_TYPE_FILTER_OPTIONS = [
   "dual_rewards",
 ] as const;
 
-export const CONTEST_FORMAT_FILTER_OPTIONS = ["all", "text_image", "video"] as const;
+export const CONTEST_FORMAT_FILTER_OPTIONS = [
+  "all",
+  "text_image",
+  "video",
+] as const;
 
 export const BRAND_POST_PHASE_FILTER_OPTIONS = [
   "all",
@@ -71,9 +77,16 @@ export const OPPORTUNITIES_PLATFORM_FILTER_OPTIONS = [
   "tiktok",
 ] as const;
 
-export const OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS = ["all", "eligible"] as const;
+export const OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS = [
+  "all",
+  "eligible",
+] as const;
 
-export const OPPORTUNITIES_MEDIA_TYPE_OPTIONS = ["all", "text", "media"] as const;
+export const OPPORTUNITIES_MEDIA_TYPE_OPTIONS = [
+  "all",
+  "text",
+  "media",
+] as const;
 
 export const VIEW_MODE_OPTIONS = ["grid", "list"] as const;
 
@@ -112,16 +125,20 @@ export type PostPhaseCounts = {
 };
 
 export type ContestListSortOption = (typeof CONTEST_LIST_SORT_OPTIONS)[number];
-export type OpportunitiesSortOption = (typeof OPPORTUNITIES_SORT_OPTIONS)[number];
-export type ContestTypeFilterOption = (typeof CONTEST_TYPE_FILTER_OPTIONS)[number];
-export type ContestFormatFilterOption = (typeof CONTEST_FORMAT_FILTER_OPTIONS)[number];
+export type OpportunitiesSortOption =
+  (typeof OPPORTUNITIES_SORT_OPTIONS)[number];
+export type ContestTypeFilterOption =
+  (typeof CONTEST_TYPE_FILTER_OPTIONS)[number];
+export type ContestFormatFilterOption =
+  (typeof CONTEST_FORMAT_FILTER_OPTIONS)[number];
 export type BrandPostPhaseFilterOption =
   (typeof BRAND_POST_PHASE_FILTER_OPTIONS)[number];
 export type OpportunitiesPlatformFilterOption =
   (typeof OPPORTUNITIES_PLATFORM_FILTER_OPTIONS)[number];
 export type OpportunitiesEligibilityFilterOption =
   (typeof OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS)[number];
-export type OpportunitiesMediaTypeOption = (typeof OPPORTUNITIES_MEDIA_TYPE_OPTIONS)[number];
+export type OpportunitiesMediaTypeOption =
+  (typeof OPPORTUNITIES_MEDIA_TYPE_OPTIONS)[number];
 export type ViewModeOption = (typeof VIEW_MODE_OPTIONS)[number];
 export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
 
@@ -169,7 +186,9 @@ function isOneOf<T extends string>(
   value: unknown,
   allowed: readonly T[],
 ): value is T {
-  return typeof value === "string" && (allowed as readonly string[]).includes(value);
+  return (
+    typeof value === "string" && (allowed as readonly string[]).includes(value)
+  );
 }
 
 function pickString(
@@ -182,7 +201,10 @@ function pickString(
   return value;
 }
 
-function pickPageSize(value: unknown, fallback: PageSizeOption): PageSizeOption {
+function pickPageSize(
+  value: unknown,
+  fallback: PageSizeOption,
+): PageSizeOption {
   const numeric =
     typeof value === "number"
       ? value
@@ -209,8 +231,14 @@ export function readStoredContestListFilters(
       sortOption: isOneOf(parsed.sortOption, CONTEST_LIST_SORT_OPTIONS)
         ? parsed.sortOption
         : defaults.sortOption,
-      platformFilter: pickString(parsed.platformFilter, defaults.platformFilter),
-      contestTypeFilter: isOneOf(parsed.contestTypeFilter, CONTEST_TYPE_FILTER_OPTIONS)
+      platformFilter: pickString(
+        parsed.platformFilter,
+        defaults.platformFilter,
+      ),
+      contestTypeFilter: isOneOf(
+        parsed.contestTypeFilter,
+        CONTEST_TYPE_FILTER_OPTIONS,
+      )
         ? parsed.contestTypeFilter
         : defaults.contestTypeFilter,
       contestFormatFilter: isOneOf(

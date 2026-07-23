@@ -120,9 +120,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
-import {
-  type CreatorRequirementsSnapshot,
-} from "@/lib/creator-requirements";
+import { type CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 
 import {
   isCountryInContestRegions,
@@ -936,12 +934,7 @@ export default function OpportunitiesPage({
       total: initialTotal,
       tabCounts: initialTabCounts,
     });
-  }, [
-    initialContests,
-    initialTotal,
-    initialTabCounts,
-    initialListQueryKey,
-  ]);
+  }, [initialContests, initialTotal, initialTabCounts, initialListQueryKey]);
 
   const applyRawListToUi = useCallback((entry: OpportunitiesListCacheEntry) => {
     rawListRef.current = entry;
@@ -2610,8 +2603,7 @@ export default function OpportunitiesPage({
           id="opportunities-results"
           className="space-y-6 scroll-mt-4"
         >
-          {listLoading ||
-          (listValidating && filteredContests.length === 0) ? (
+          {listLoading || (listValidating && filteredContests.length === 0) ? (
             <div className="flex min-h-[40vh] items-center justify-center py-16">
               <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
             </div>

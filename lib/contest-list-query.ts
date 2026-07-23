@@ -20,8 +20,9 @@ import {
   parseContestCreatorRequirements,
   type CreatorRequirementsSnapshot,
 } from "@/lib/creator-requirements";
+import { sortCampaignsForList } from "@/lib/contest-list-sort";
 
-export { sortCampaignsForList } from "@/lib/contest-list-sort";
+export { sortCampaignsForList };
 export {
   SSR_CAMPAIGN_LIST_DEFAULTS,
   type CampaignListTabCounts,
@@ -91,7 +92,10 @@ const SQL_SORTABLE = new Set<string>([
 
 /**
  * Sorts PostgREST can approximate without campaign_list_page_ids.
- * Budget/value/approval/CPM/relevance need the SQL RPC — never silently remap.
+ * Budget/value/approval/CPM need the SQL RPC — never silently remap.
+ * Views cannot use foreignTable order (PostgREST ignores contest_stats
+ * embed order) — memory-sort fallback until page_ids RPC is available.
+ * relevance_desc has a status+created_at approximation in applySqlOrder.
  */
 const POSTGREST_SAFE_SORTS = new Set<string>([
   "created_at_desc",
@@ -100,12 +104,10 @@ const POSTGREST_SAFE_SORTS = new Set<string>([
   "start_date_asc",
   "end_date_desc",
   "end_date_asc",
-  "views_desc",
-  "views_asc",
   "submissions_desc",
   "submissions_asc",
+  "relevance_desc",
 ]);
-
 export type ListCampaignsParams = {
   supabase: SupabaseClient;
   scope: "advertiser" | "admin" | "opportunities";
@@ -435,6 +437,40 @@ function isRpcAuthzError(error: { code?: string; message?: string } | null): boo
   );
 }
 
+/** Missing authorize_caller / page_ids / tab_counts — skip RPC until process restart. */
+function isCampaignListRpcMissingError(
+  error: { message?: string } | null | undefined,
+): boolean {
+  const msg = error?.message || "";
+  return /campaign_list_authorize_caller|campaign_list_page_ids|campaign_list_tab_counts|does not exist|Could not find the function/i.test(
+    msg,
+  );
+}
+
+type CampaignListRpcState = "unknown" | "ready" | "missing";
+let pageIdsRpcState: CampaignListRpcState = "unknown";
+let tabCountsRpcState: CampaignListRpcState = "unknown";
+
+function markPageIdsRpcMissing(reason: string): void {
+  if (pageIdsRpcState === "missing") return;
+  pageIdsRpcState = "missing";
+  console.warn(
+    "[contest-list-query] campaign_list_page_ids unavailable; using PostgREST until migrations are applied:",
+    reason,
+    "→ db/migrations/20260730_campaign_list_query.sql then db/migrations/20260731_campaign_list_page_ids.sql",
+  );
+}
+
+function markTabCountsRpcMissing(reason: string): void {
+  if (tabCountsRpcState === "missing") return;
+  tabCountsRpcState = "missing";
+  console.warn(
+    "[contest-list-query] campaign_list_tab_counts unavailable:",
+    reason,
+    "→ apply db/migrations/20260730_campaign_list_query.sql",
+  );
+}
+
 /** True when listCampaignsPaginated failed closed on authz (map to HTTP 403). */
 export function isCampaignListForbiddenError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -509,6 +545,8 @@ async function fetchTabCountsFromRpc(
   postPhaseCounts: PostPhaseCounts;
   availablePlatforms: string[];
 } | null> {
+  if (tabCountsRpcState === "missing") return null;
+
   const { data, error } = await supabase.rpc("campaign_list_tab_counts", {
     p_scope: params.scope,
     p_advertiser_id:
@@ -526,9 +564,15 @@ async function fetchTabCountsFromRpc(
       );
       throw new Error(error?.message || "Forbidden");
     }
+    if (isCampaignListRpcMissingError(error)) {
+      markTabCountsRpcMissing(error?.message || "unknown");
+      return null;
+    }
     console.warn("[contest-list-query] tab counts RPC failed:", error?.message);
     return null;
   }
+
+  tabCountsRpcState = "ready";
 
   const payload = data as {
     tabCounts?: CampaignListTabCounts;
@@ -554,6 +598,10 @@ async function fetchFilteredPageSql(
   offset: number,
   limit: number,
 ): Promise<{ rows: LightweightContest[]; total: number }> {
+  if (pageIdsRpcState === "missing") {
+    return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
+  }
+
   const { data: pagePayload, error: pageError } = await supabase.rpc(
     "campaign_list_page_ids",
     {
@@ -583,22 +631,19 @@ async function fetchFilteredPageSql(
       );
       throw new Error(pageError?.message || "Forbidden");
     }
-    if (!POSTGREST_SAFE_SORTS.has(params.sort)) {
-      console.error(
-        "[contest-list-query] campaign_list_page_ids unavailable for sort:",
-        params.sort,
-        pageError?.message,
-      );
-      throw new Error(
-        "Campaign list pagination RPC unavailable. Apply db/migrations/20260731_campaign_list_page_ids.sql",
-      );
+    if (isCampaignListRpcMissingError(pageError)) {
+      markPageIdsRpcMissing(pageError?.message || "unknown");
+      return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
     }
     console.warn(
-      "[contest-list-query] page ids RPC failed, falling back to PostgREST range:",
+      "[contest-list-query] page ids RPC failed, falling back to PostgREST:",
+      params.sort,
       pageError?.message,
     );
     return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
   }
+
+  pageIdsRpcState = "ready";
 
   const payload = pagePayload as { total?: number; ids?: string[] };
   const ids = Array.isArray(payload.ids) ? payload.ids.filter(Boolean) : [];
@@ -662,7 +707,13 @@ async function resolveOpportunityRegionIds(
   return (data as string[] | null) || [];
 }
 
-/** Legacy PostgREST range path when campaign_list_page_ids is unavailable. */
+/**
+ * Legacy PostgREST path when campaign_list_page_ids is unavailable.
+ * Safe sorts paginate in SQL; budget/value/approval/CPM hydrate a bounded
+ * set and sort in memory so list pages still work before migrations land.
+ */
+const POSTGREST_MEMORY_SORT_CAP = 1500;
+
 async function fetchFilteredPageViaPostgrest(
   supabase: SupabaseClient,
   params: ListCampaignsParams,
@@ -680,6 +731,49 @@ async function fetchFilteredPageViaPostgrest(
     if (regionIds.length === 0) return { rows: [], total: 0 };
   }
 
+  const selectClause =
+    params.scope === "admin" ? SELECT_WITH_ADVERTISER_STATS : SELECT_WITH_STATS;
+  const useMemorySort = !POSTGREST_SAFE_SORTS.has(params.sort);
+
+  if (useMemorySort) {
+    let dataQuery = applyListFilters(
+      supabase.from("contests_with_status").select(selectClause),
+      params,
+    );
+    if (regionIds) dataQuery = dataQuery.in("id", regionIds);
+
+    const { data, error } = await dataQuery
+      .order("created_at", { ascending: false })
+      .range(0, POSTGREST_MEMORY_SORT_CAP - 1);
+
+    if (error) {
+      console.error(
+        "[contest-list-query] memory-sort fetch failed:",
+        error.message,
+      );
+      throw new Error(`Campaign list page fetch failed: ${error.message}`);
+    }
+
+    const rows = (data || []) as LightweightContest[];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const sortedIds = sortCampaignsForList(
+      rows.map(flattenContestStats),
+      params.sort,
+    ).map((row) => row.id);
+    if (rows.length >= POSTGREST_MEMORY_SORT_CAP) {
+      console.warn(
+        `[contest-list-query] memory-sort hit cap (${POSTGREST_MEMORY_SORT_CAP}); apply campaign list SQL migrations for correct pagination`,
+      );
+    }
+    return {
+      rows: sortedIds
+        .slice(offset, offset + limit)
+        .map((id) => byId.get(id))
+        .filter((row): row is LightweightContest => Boolean(row)),
+      total: sortedIds.length,
+    };
+  }
+
   let countQuery = applyListFilters(
     supabase.from("contests_with_status").select("id", {
       count: "exact",
@@ -695,9 +789,6 @@ async function fetchFilteredPageViaPostgrest(
     console.error("[contest-list-query] count failed:", countError.message);
     throw new Error(`Campaign list count failed: ${countError.message}`);
   }
-
-  const selectClause =
-    params.scope === "admin" ? SELECT_WITH_ADVERTISER_STATS : SELECT_WITH_STATS;
 
   let dataQuery = applyListFilters(
     supabase.from("contests_with_status").select(selectClause),
