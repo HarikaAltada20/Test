@@ -1130,7 +1130,8 @@ async function verifyQStashSignatureRefreshStaleContestStats(
 }
 
 /**
- * Authorize refresh-stale-contest-stats: QStash signature or Bearer CRON_SECRET.
+ * Authorize refresh-stale-contest-stats: QStash signature, Bearer CRON_SECRET,
+ * or Vercel Cron header (daily deep reconcile).
  */
 export async function authorizeRefreshStaleContestStats(
   request: Request,
@@ -1141,9 +1142,12 @@ export async function authorizeRefreshStaleContestStats(
   }
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");
-  if (cronSecret) {
-    return auth === `Bearer ${cronSecret}`;
+  if (cronSecret && auth === `Bearer ${cronSecret}`) {
+    return true;
   }
+  // Vercel Cron (daily) may send x-vercel-cron without Bearer in some setups
+  if (request.headers.get("x-vercel-cron")) return true;
+  if (cronSecret) return false;
   return process.env.NODE_ENV === "development";
 }
 

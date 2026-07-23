@@ -47,16 +47,20 @@ If `QSTASH_TOKEN` is not set, the app does not use QStash and instead uses a dir
 
 ## Recurring: stale contest_stats refresh
 
-`contest_stats` views are refreshed after metrics jobs. A **QStash schedule** (not Vercel Cron) runs the safety net every 10 minutes:
+`contest_stats` views are refreshed after metrics jobs. Two schedulers run the same safety net:
 
-- **Endpoint:** `POST /api/cron/refresh-stale-contest-stats`
-- **Cron:** `*/10 * * * *`
-- **Schedule id:** `goviral-refresh-stale-contest-stats`
-- **Auth:** `Upstash-Signature` or `Authorization: Bearer CRON_SECRET`
+| Scheduler | Cadence | Role |
+| --- | --- | --- |
+| **QStash** | every 10 min (`*/10 * * * *`) | Primary |
+| **Vercel Cron** | once daily (`25 5 * * *`) | Backup |
 
-The schedule is upserted automatically when metrics refresh runs (`ensureRefreshStaleContestStatsScheduleOnce`), and again whenever the endpoint is POSTed. Requires `QSTASH_TOKEN` + public `NEXT_PUBLIC_APP_URL`.
+- **Endpoint:** `/api/cron/refresh-stale-contest-stats` (default `limit=50`)
+- **QStash schedule id:** `goviral-refresh-stale-contest-stats`
+- **Auth:** `Upstash-Signature`, `Authorization: Bearer CRON_SECRET`, or `x-vercel-cron`
 
-To bootstrap manually after deploy:
+The QStash schedule is upserted when metrics refresh runs, and on POST to this endpoint. Requires `QSTASH_TOKEN` + public `NEXT_PUBLIC_APP_URL` for the 10-minute path.
+
+To bootstrap QStash manually after deploy:
 
 ```bash
 curl -X POST "https://your-app.vercel.app/api/cron/refresh-stale-contest-stats" \

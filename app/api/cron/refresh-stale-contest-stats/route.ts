@@ -2,11 +2,11 @@
  * Safety-net: refresh contest_stats for contests that drifted after metrics sync
  * (views/impressions no longer trigger per-row recounts).
  *
- * Triggered by QStash schedule every 10 minutes (not Vercel Cron).
- * Auth: Upstash-Signature or Authorization: Bearer CRON_SECRET.
+ * Triggers:
+ * - QStash schedule every 10 minutes (primary)
+ * - Vercel Cron once daily (backup) — see vercel.json
  *
- * Schedule is upserted via ensureRefreshStaleContestStatsSchedule (fixed scheduleId)
- * when metrics refresh runs, or on a manual POST with CRON_SECRET.
+ * Auth: Upstash-Signature, Authorization: Bearer CRON_SECRET, or x-vercel-cron.
  */
 
 import { NextResponse } from "next/server";
@@ -22,12 +22,21 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function invokeSource(request: Request): string {
+  if (request.headers.get("Upstash-Signature")) return "QStash";
+  if (request.headers.get("x-vercel-cron")) return "Vercel Cron";
+  return "CRON/direct";
+}
+
 export async function GET(request: Request) {
   const authorized = await authorizeRefreshStaleContestStats(request, "");
   if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return handle(request, false);
+  console.log(
+    `[refresh-stale-contest-stats] Invoked by ${invokeSource(request)}`,
+  );
+  return handle(request);
 }
 
 export async function POST(request: Request) {
@@ -37,29 +46,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const viaQStash = !!request.headers.get("Upstash-Signature");
   console.log(
-    `[refresh-stale-contest-stats] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
+    `[refresh-stale-contest-stats] Invoked by ${invokeSource(request)}`,
   );
 
-  return handle(request, true);
-}
-
-async function handle(
-  request: Request,
-  ensureSchedule: boolean,
-): Promise<NextResponse> {
-  // Keep the recurring QStash schedule in sync (destination URL / cron).
-  if (ensureSchedule) {
-    const ensured = await ensureRefreshStaleContestStatsSchedule();
-    if (ensured.error) {
-      console.warn(
-        "[refresh-stale-contest-stats] schedule ensure:",
-        ensured.error,
-      );
-    }
+  // QStash / manual POST keeps the 10-min schedule in sync.
+  const ensured = await ensureRefreshStaleContestStatsSchedule();
+  if (ensured.error) {
+    console.warn(
+      "[refresh-stale-contest-stats] schedule ensure:",
+      ensured.error,
+    );
   }
 
+  return handle(request);
+}
+
+async function handle(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
   const limit = Math.min(
     Math.max(Number(url.searchParams.get("limit")) || 50, 1),
