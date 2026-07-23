@@ -604,12 +604,9 @@ async function fetchFilteredPageSql(
   offset: number,
   limit: number,
 ): Promise<{ rows: LightweightContest[]; total: number }> {
+  // Missing RPC: fall back to PostgREST everywhere so app deploy before SQL
+  // migrations does not hard-fail list pages (budget/views sorts are capped).
   if (pageIdsRpcState === "missing") {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "Campaign list pagination unavailable. Apply campaign list SQL migrations.",
-      );
-    }
     return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
   }
 
@@ -646,10 +643,7 @@ async function fetchFilteredPageSql(
       markPageIdsRpcMissing(pageError?.message || "unknown");
       if (process.env.NODE_ENV === "production") {
         console.error(
-          "[contest-list-query] campaign_list_page_ids missing in production — apply db/migrations/20260731_campaign_list_page_ids.sql",
-        );
-        throw new Error(
-          "Campaign list pagination unavailable. Apply campaign list SQL migrations.",
+          "[contest-list-query] campaign_list_page_ids missing in production — apply db/migrations/20260731_campaign_list_page_ids.sql (using PostgREST fallback)",
         );
       }
       return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);

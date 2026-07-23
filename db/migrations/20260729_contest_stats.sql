@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS contest_stats_verified_submission_count_desc_idx
   ON public.contest_stats (verified_submission_count DESC);
 
 COMMENT ON TABLE public.contest_stats IS
-  'Cached list-card metrics per contest. Updated on submission/tweet moderation and metrics refresh.';
+  'Cached list-card metrics per contest. Rows seeded empty on migrate; filled by status triggers, metrics jobs, and refresh-stale-contest-stats cron.';
 
 -- ---------------------------------------------------------------------------
 -- Recompute one contest (or all when p_contest_id is null)
@@ -216,26 +216,13 @@ CREATE TRIGGER trg_contest_stats_on_twitter_tweet_change
   FOR EACH ROW
   EXECUTE FUNCTION public.contest_stats_on_twitter_tweet_change();
 
--- Backfill existing contests in batches to avoid a single long lock/timeout
--- on large catalogs. Prefer running the stale-stats cron afterward as a safety net.
-DO $$
-DECLARE
-  r record;
-  n integer := 0;
-BEGIN
-  FOR r IN
-    SELECT c.id
-    FROM public.contests c
-    ORDER BY c.created_at NULLS LAST, c.id
-  LOOP
-    PERFORM public.refresh_contest_stats(r.id);
-    n := n + 1;
-    IF n % 100 = 0 THEN
-      RAISE NOTICE 'contest_stats backfill progress: %', n;
-    END IF;
-  END LOOP;
-  RAISE NOTICE 'contest_stats backfill complete: % contests', n;
-END $$;
+-- Seed empty contest_stats rows only (fast). Full views/count recompute is
+-- deferred to metrics jobs + /api/cron/refresh-stale-contest-stats so this
+-- migration stays short on large catalogs.
+INSERT INTO public.contest_stats (contest_id)
+SELECT c.id
+FROM public.contests c
+ON CONFLICT (contest_id) DO NOTHING;
 
 ALTER TABLE public.contest_stats ENABLE ROW LEVEL SECURITY;
 
