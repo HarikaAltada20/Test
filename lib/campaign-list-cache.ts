@@ -9,9 +9,9 @@ import { Redis } from "@upstash/redis";
 
 const KEY_PREFIX = "campaign_list:v1";
 
-/** Brand / admin dashboards — short TTL so publish/approve feel snappy. */
-export const CAMPAIGN_LIST_CACHE_TTL_BRAND_SEC = 45;
-/** Opportunities / discover — slightly longer shared cache. */
+/** Brand / admin dashboards — 1 min so publish/approve still feel fresh. */
+export const CAMPAIGN_LIST_CACHE_TTL_BRAND_SEC = 60;
+/** Opportunities / discover — 2 min; higher creator traffic benefits from longer sharing. */
 export const CAMPAIGN_LIST_CACHE_TTL_OPPORTUNITIES_SEC = 120;
 
 export type CampaignListCacheScope = "advertiser" | "admin" | "opportunities";
