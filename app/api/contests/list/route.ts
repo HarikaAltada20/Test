@@ -9,7 +9,7 @@ import {
   type CampaignListTabId,
 } from "@/lib/contest-list-query";
 import {
-  buildCampaignListCacheKey,
+  buildCampaignListCacheKeyAsync,
   getCampaignListCache,
   setCampaignListCache,
 } from "@/lib/campaign-list-cache";
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     const postContestPhase = sp.get("postContestPhase") || "all";
     const search = sp.get("search") || "";
 
-    const cacheKey = buildCampaignListCacheKey({
+    const cacheKey = await buildCampaignListCacheKeyAsync({
       scope: "advertiser",
       ownerId: user.id,
       tab,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       search,
     });
 
-    await setCampaignListCache(cacheKey, result, "advertiser");
+    await setCampaignListCache(cacheKey, result, "advertiser", user.id);
 
     return NextResponse.json(result, {
       headers: { "X-Campaign-List-Cache": "MISS" },

@@ -4,13 +4,15 @@
  *
  * Uses the same Upstash Redis as metrics queues when configured; no-ops otherwise.
  *
- * Opportunities invalidation uses a generation counter (INCR) so publish does not
- * SCAN every creator × page × filter key. Stale keys expire via TTL.
+ * Invalidation uses generation counters (INCR) for all scopes so mutate-during-miss
+ * cannot re-poison active keys: in-flight SETs land under the old generation, while
+ * new reads use the bumped generation. Stale keys expire via TTL.
  */
 
 import { Redis } from "@upstash/redis";
 
 const KEY_PREFIX = "campaign_list:v2";
+const ADMIN_GEN_KEY = `${KEY_PREFIX}:admin:_gen`;
 const OPPORTUNITIES_GEN_KEY = `${KEY_PREFIX}:opportunities:_gen`;
 
 /** Brand / admin dashboards — 1 min so publish/approve still feel fresh. */
@@ -48,11 +50,28 @@ function ttlForScope(scope: CampaignListCacheScope): number {
     : CAMPAIGN_LIST_CACHE_TTL_BRAND_SEC;
 }
 
-async function getOpportunitiesCacheGeneration(): Promise<number> {
+function advertiserGenKey(advertiserId: string): string {
+  return `${KEY_PREFIX}:advertiser:${advertiserId}:_gen`;
+}
+
+/** Stable short hash so long/near-identical searches cannot collide in the key. */
+export function hashCampaignListSearch(search: string | undefined): string {
+  const normalized = (search || "").trim().toLowerCase();
+  if (!normalized) return "";
+  // FNV-1a 32-bit — no Node crypto dependency (safe in any runtime).
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < normalized.length; i++) {
+    hash ^= normalized.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+async function getGeneration(genKey: string): Promise<number> {
   const redis = getRedis();
   if (!redis) return 0;
   try {
-    const value = await redis.get<number | string>(OPPORTUNITIES_GEN_KEY);
+    const value = await redis.get<number | string>(genKey);
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? n : 0;
   } catch (e) {
@@ -61,10 +80,34 @@ async function getOpportunitiesCacheGeneration(): Promise<number> {
   }
 }
 
+async function bumpGeneration(genKey: string): Promise<number> {
+  const redis = getRedis();
+  if (!redis) return 0;
+  try {
+    await redis.incr(genKey);
+    return 1;
+  } catch (e) {
+    console.warn("[campaign-list-cache] gen bump failed:", e);
+    return 0;
+  }
+}
+
+async function getScopeGeneration(
+  scope: CampaignListCacheScope,
+  ownerId: string,
+): Promise<number> {
+  if (scope === "opportunities") {
+    return getGeneration(OPPORTUNITIES_GEN_KEY);
+  }
+  if (scope === "admin") {
+    return getGeneration(ADMIN_GEN_KEY);
+  }
+  return getGeneration(advertiserGenKey(ownerId));
+}
+
 /**
- * Stable cache key: list:{scope}:{owner}:{tab}:{sort}:{page}:{filters}
- * For opportunities, callers should prefer buildCampaignListCacheKeyAsync so the
- * generation segment is included (publish bumps gen instead of SCAN+DEL).
+ * Stable cache key: list:{scope}:g{gen}:{owner}:{tab}:{sort}:{page}:{filters}
+ * Prefer buildCampaignListCacheKeyAsync so the generation segment is current.
  */
 export function buildCampaignListCacheKey(parts: {
   scope: CampaignListCacheScope;
@@ -82,24 +125,21 @@ export function buildCampaignListCacheKey(parts: {
   eligibleOnly?: boolean;
   /** Hash or joined countries for opportunities geo. */
   countriesKey?: string;
-  /** Opportunities generation — omit only for non-opportunities scopes. */
-  opportunitiesGen?: number;
+  /** Generation — omit only when building legacy/debug keys. */
+  cacheGen?: number;
 }): string {
   const filters = [
     parts.platform || "all",
     parts.contestType || "all",
     parts.contestFormat || "all",
     parts.postContestPhase || "all",
-    (parts.search || "").trim().toLowerCase().slice(0, 80),
+    hashCampaignListSearch(parts.search),
     parts.mediaType || "all",
     parts.eligibleOnly ? "1" : "0",
     parts.countriesKey || "",
   ].join("|");
 
-  const ownerSegment =
-    parts.scope === "opportunities"
-      ? `g${parts.opportunitiesGen ?? 0}:${parts.ownerId}`
-      : parts.ownerId;
+  const ownerSegment = `g${parts.cacheGen ?? 0}:${parts.ownerId}`;
 
   return [
     KEY_PREFIX,
@@ -113,7 +153,7 @@ export function buildCampaignListCacheKey(parts: {
   ].join(":");
 }
 
-/** Opportunities keys include the current generation (O(1) invalidate via INCR). */
+/** Keys include the current generation (O(1) invalidate via INCR). */
 export async function buildCampaignListCacheKeyAsync(parts: {
   scope: CampaignListCacheScope;
   ownerId: string;
@@ -130,11 +170,8 @@ export async function buildCampaignListCacheKeyAsync(parts: {
   eligibleOnly?: boolean;
   countriesKey?: string;
 }): Promise<string> {
-  const opportunitiesGen =
-    parts.scope === "opportunities"
-      ? await getOpportunitiesCacheGeneration()
-      : undefined;
-  return buildCampaignListCacheKey({ ...parts, opportunitiesGen });
+  const cacheGen = await getScopeGeneration(parts.scope, parts.ownerId);
+  return buildCampaignListCacheKey({ ...parts, cacheGen });
 }
 
 export async function getCampaignListCache<T>(
@@ -151,33 +188,52 @@ export async function getCampaignListCache<T>(
   }
 }
 
+/**
+ * Write list payload only if the scope generation still matches the key.
+ * Prevents a slow miss that started before invalidate from re-poisoning
+ * the active generation (key embeds gN; we re-check gen before SET).
+ */
 export async function setCampaignListCache<T>(
   key: string,
   value: T,
   scope: CampaignListCacheScope,
+  ownerId?: string,
 ): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
+
   try {
+    const genMatch = key.match(
+      new RegExp(
+        `^${KEY_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:${scope}:g(\\d+):([^:]+):`,
+      ),
+    );
+    if (genMatch) {
+      const keyGen = Number(genMatch[1]);
+      const keyOwner = genMatch[2];
+      const currentGen = await getScopeGeneration(scope, ownerId || keyOwner);
+      if (Number.isFinite(keyGen) && keyGen !== currentGen) {
+        return;
+      }
+    }
+
     await redis.set(key, value, { ex: ttlForScope(scope) });
   } catch (e) {
     console.warn("[campaign-list-cache] set failed:", e);
   }
 }
 
-/** Invalidate brand list keys after publish / approve / end. */
+/** Invalidate brand list keys after publish / approve / end (O(1) gen bump). */
 export async function invalidateCampaignListCacheForAdvertiser(
   advertiserId: string | null | undefined,
 ): Promise<number> {
   if (!advertiserId) return 0;
-  return invalidateCampaignListCacheByPrefix(
-    `${KEY_PREFIX}:advertiser:${advertiserId}:`,
-  );
+  return bumpGeneration(advertiserGenKey(advertiserId));
 }
 
 /** Invalidate admin list pages (shared across admins). */
 export async function invalidateAdminCampaignListCache(): Promise<number> {
-  return invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:admin:`);
+  return bumpGeneration(ADMIN_GEN_KEY);
 }
 
 /**
@@ -185,15 +241,7 @@ export async function invalidateAdminCampaignListCache(): Promise<number> {
  * Bumps generation so new reads miss; old keys expire via TTL.
  */
 export async function invalidateOpportunitiesListCache(): Promise<number> {
-  const redis = getRedis();
-  if (!redis) return 0;
-  try {
-    await redis.incr(OPPORTUNITIES_GEN_KEY);
-    return 1;
-  } catch (e) {
-    console.warn("[campaign-list-cache] opportunities gen bump failed:", e);
-    return 0;
-  }
+  return bumpGeneration(OPPORTUNITIES_GEN_KEY);
 }
 
 /** Invalidate one creator’s opportunity list pages only (still SCAN — narrow prefix). */
@@ -209,11 +257,14 @@ export async function invalidateOpportunitiesListCacheForUser(
 }
 
 export async function invalidateAllCampaignListCache(): Promise<number> {
-  // SCAN clears advertiser/admin/legacy opportunities keys; then bump gen so
-  // new opportunities writes use a fresh namespace (also recreates _gen if deleted).
+  // SCAN clears orphaned payloads + per-advertiser gen keys; bump shared gens so
+  // new reads/writes use a fresh namespace (also recreates _gen if deleted).
   const rest = await invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:`);
-  const opportunities = await invalidateOpportunitiesListCache();
-  return rest + opportunities;
+  const [admin, opportunities] = await Promise.all([
+    invalidateAdminCampaignListCache(),
+    invalidateOpportunitiesListCache(),
+  ]);
+  return rest + admin + opportunities;
 }
 
 /**

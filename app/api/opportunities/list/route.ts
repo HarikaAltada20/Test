@@ -111,7 +111,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (cacheKey) {
-      await setCampaignListCache(cacheKey, result, "opportunities");
+      await setCampaignListCache(
+        cacheKey,
+        result,
+        "opportunities",
+        user.id,
+      );
     }
 
     return NextResponse.json(result, {

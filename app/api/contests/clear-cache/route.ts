@@ -5,6 +5,7 @@ import {
   invalidateAdminCampaignListCache,
   invalidateAllCampaignListCache,
   invalidateCampaignListCacheForAdvertiser,
+  invalidateCampaignListCachesAfterMutation,
   invalidateOpportunitiesListCacheForUser,
 } from "@/lib/campaign-list-cache";
 
@@ -12,12 +13,14 @@ export const dynamic = "force-dynamic";
 
 /**
  * Clear in-process contest cache + scoped Redis campaign-list keys.
- * Auth required. Callers may only clear their own advertiser/opportunities keys.
- * Admins may clear admin keys, a specific advertiser, or all (scope=all).
+ * Auth required. Callers may only clear their own advertiser keys (+ admin gens
+ * so brand creates appear on admin lists). Admins may clear admin keys, a
+ * specific advertiser, or all (scope=all).
  *
  * Query:
- *   scope=self (default) — caller’s advertiser + opportunities keys;
- *     admins get admin keys (+ optional ?advertiserId=)
+ *   scope=self (default) — advertiser + admin gens for the caller;
+ *     optional touchOpportunities=1; admins also clear admin keys
+ *     (+ optional ?advertiserId=)
  *   scope=admin — admin list keys only (admin required)
  *   scope=all — every campaign_list key (admin required)
  */
@@ -47,6 +50,9 @@ export async function POST(request: NextRequest) {
       scopeRaw === "all" || scopeRaw === "admin" || scopeRaw === "self"
         ? scopeRaw
         : "self";
+    const touchOpportunities =
+      request.nextUrl.searchParams.get("touchOpportunities") === "1" ||
+      request.nextUrl.searchParams.get("touchOpportunities") === "true";
 
     if ((scope === "all" || scope === "admin") && !isAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -70,11 +76,13 @@ export async function POST(request: NextRequest) {
       ]);
       listCacheCleared = parts.reduce((a, b) => a + b, 0);
     } else {
-      const parts = await Promise.all([
-        invalidateCampaignListCacheForAdvertiser(user.id),
-        invalidateOpportunitiesListCacheForUser(user.id),
-      ]);
-      listCacheCleared = parts.reduce((a, b) => a + b, 0);
+      // Brand create/update must also bump admin gens (shared admin list).
+      const result = await invalidateCampaignListCachesAfterMutation({
+        advertiserId: user.id,
+        touchOpportunities,
+      });
+      listCacheCleared =
+        result.advertiser + result.admin + result.opportunities;
     }
 
     console.log(

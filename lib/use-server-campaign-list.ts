@@ -54,6 +54,11 @@ const EMPTY_POST_PHASE: PostPhaseCounts = {
 /** In-memory cache so tab/filter switches feel instant. */
 const listCache = new Map<string, ServerCampaignListResult<unknown>>();
 
+/** Drop session list pages after create/update so navigation does not paint stale rows. */
+export function clearServerCampaignListClientCache(): void {
+  listCache.clear();
+}
+
 /** Prefetch only the most-used sibling tabs to limit DB load. */
 function brandPrefetchTabs(): readonly string[] {
   return ["live", "ended"];
