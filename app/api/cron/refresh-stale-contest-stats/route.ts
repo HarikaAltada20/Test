@@ -97,6 +97,11 @@ async function handle(request: Request): Promise<NextResponse> {
     }
 
     await refreshContestStatsForContestIds(staleIds, { concurrency: 5 });
+    // Heal list budget trackers (milestone/CPM/dual/leaderboard) for the same set.
+    const { persistContestBudgetSpentForContestIds } = await import(
+      "@/lib/persist-contest-budget-spent"
+    );
+    await persistContestBudgetSpentForContestIds(staleIds, { concurrency: 3 });
 
     const elapsedMs = Date.now() - started;
     logStaleContestStatsCron({

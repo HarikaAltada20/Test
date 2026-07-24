@@ -191,11 +191,10 @@ const getBudgetTrackerValues = (
   budgetSpent?: number | null,
 ) => {
   const spent = Math.max(0, budgetSpent ?? 0);
-  const clampedSpent = totalBudget > 0 ? Math.min(spent, totalBudget) : spent;
-  const percentage = totalBudget > 0 ? (clampedSpent / totalBudget) * 100 : 0;
-  const remaining = Math.max(totalBudget - clampedSpent, 0);
+  // Dollar labels use actual spend (may exceed reserved pool).
+  const percentage = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
+  const remaining = Math.max(totalBudget - spent, 0);
 
-  // Dollar labels show actual spend (may exceed pool); bar/remaining stay capped.
   return { spent, percentage, remaining };
 };
 
@@ -1942,7 +1941,7 @@ export default function OpportunitiesPage({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${tracker.percentage}%` }}
+                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div
@@ -2002,7 +2001,7 @@ export default function OpportunitiesPage({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${tracker.percentage}%` }}
+                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div
@@ -2030,9 +2029,11 @@ export default function OpportunitiesPage({
                   const totalBudget =
                     contest.contest_based_details.milestone_contest
                       .total_budget_cents;
-                  const budgetSpent =
-                    contest.contest_based_details.milestone_contest
-                      .budget_spent || 0;
+                  const budgetSpent = getPoolBudgetSpentCentsForDisplay({
+                    contest_type: contest.contest_type,
+                    post_contest_status: contest.post_contest_status,
+                    contest_based_details: contest.contest_based_details,
+                  });
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
                     budgetSpent,
@@ -3241,7 +3242,7 @@ export default function OpportunitiesPage({
                                     <div
                                       className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                       style={{
-                                        width: `${tracker.percentage}%`,
+                                        width: `${Math.min(tracker.percentage, 100)}%`,
                                       }}
                                     ></div>
                                   </div>
@@ -3318,7 +3319,7 @@ export default function OpportunitiesPage({
                                     <div
                                       className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                       style={{
-                                        width: `${tracker.percentage}%`,
+                                        width: `${Math.min(tracker.percentage, 100)}%`,
                                       }}
                                     ></div>
                                   </div>
@@ -3418,8 +3419,13 @@ export default function OpportunitiesPage({
                                 contest.contest_based_details.milestone_contest
                                   .total_budget_cents;
                               const budgetSpent =
-                                contest.contest_based_details.milestone_contest
-                                  .budget_spent || 0;
+                                getPoolBudgetSpentCentsForDisplay({
+                                  contest_type: contest.contest_type,
+                                  post_contest_status:
+                                    contest.post_contest_status,
+                                  contest_based_details:
+                                    contest.contest_based_details,
+                                });
                               const tracker = getBudgetTrackerValues(
                                 totalBudget,
                                 budgetSpent,
@@ -3460,7 +3466,7 @@ export default function OpportunitiesPage({
                                     <div
                                       className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                       style={{
-                                        width: `${tracker.percentage}%`,
+                                        width: `${Math.min(tracker.percentage, 100)}%`,
                                       }}
                                     ></div>
                                   </div>

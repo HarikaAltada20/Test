@@ -4642,8 +4642,22 @@ export default function ContestDetailClient({
 
           group.earnings.expected = finalExpectedEarnings;
 
-          // Use actual paid amount from leaderboard when creator has been paid
-          if (
+          // Prefer sum of paid tweet earnings (matches individual submission view).
+          // Leaderboard.earnings can drift high after mixed bulk + per-tweet pays
+          // (additive deltas), e.g. $14.61 tweets summing but row showing $28.48.
+          const fromPaidTweets = (group.submissions || []).reduce(
+            (sum: number, sub: any) => {
+              const status = String(
+                sub.moderation_status || sub.status || "",
+              ).toLowerCase();
+              if (status !== "paid" && !sub.paid) return sum;
+              return sum + Math.max(0, Number(sub.earnings) || 0);
+            },
+            0,
+          );
+          if (fromPaidTweets > 0) {
+            group.earnings.granted = fromPaidTweets;
+          } else if (
             (group as any).paid &&
             (group as any).earnings_from_db != null &&
             (group as any).earnings_from_db > 0
@@ -4663,6 +4677,8 @@ export default function ContestDetailClient({
               maxEarningsPerCreator: maxEarningsPerCreator,
               finalExpectedEarnings: finalExpectedEarnings,
               isCapped: group.isCapped,
+              fromPaidTweets,
+              earningsFromDb: (group as any).earnings_from_db,
             },
           );
         });

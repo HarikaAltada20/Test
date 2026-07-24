@@ -14,10 +14,7 @@ import {
   SSR_CAMPAIGN_LIST_DEFAULTS,
 } from "@/lib/campaign-list-filters-storage";
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
-import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
-import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
 import type { CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
-import { isMilestoneContestType } from "@/lib/contest-type";
 import { sortCampaignsForList } from "@/lib/contest-list-sort";
 
 export { sortCampaignsForList };
@@ -547,37 +544,10 @@ function resolveSortForSql(
 }
 
 /**
- * Prefer persisted budget_spent when metrics jobs wrote it; otherwise live-enrich
- * so list trackers are not stuck at $0 (common for dual/CPM before spend persist).
- * Milestone always live-enriches (same rule as contest-service).
- */
-function listCardNeedsLiveBudgetEnrichment(
-  contest: ContestWithStats,
-): boolean {
-  if (isMilestoneContestType(contest.contest_type)) return true;
-
-  const storedSpend = getPoolBudgetSpentCentsForDisplay({
-    contest_type: contest.contest_type,
-    post_contest_status: contest.post_contest_status,
-    max_earnings_per_creator: contest.max_earnings_per_creator as
-      | number
-      | null
-      | undefined,
-    contest_based_details:
-      (contest.contest_based_details as Record<string, unknown> | null) ?? null,
-  });
-  if (storedSpend > 0) return false;
-
-  const views = Number(contest.not_rejected_views) || 0;
-  const verified = Number(contest.verified_submission_count) || 0;
-  const pending = Number(contest.pending_submission_count) || 0;
-  const live = Number(contest.live_submission_count) || 0;
-  return views > 0 || verified > 0 || pending > 0 || live > 0;
-}
-
-/**
- * List cards: keep contest_stats from SQL; fill budget trackers from stored spend
- * when present, otherwise enrichContestWithCalculatedBudgets for this page only.
+ * List cards: use stored contest_based_details + contest_stats only.
+ * Never call enrichContestWithCalculatedBudgets here — that rescans submissions
+ * (Twitter CPM creator-cap loops) and made even small admin lists take seconds.
+ * Live budget recalculation stays on detail / payout screens.
  * Batches Twitter participant counts in one query.
  */
 async function hydrateListPage(
@@ -621,58 +591,27 @@ async function hydrateListPage(
     }
   }
 
-  const enrichedPage = await Promise.all(
-    pageRows.map(async (contest) => {
-      const metrics = twitterMetricsById.get(contest.id);
-      let withBudget: {
-        contest_based_details?: Record<string, unknown> | null;
-        twitter_participants_count?: number;
-        twitter_max_participants?: number | null;
-      } = {
-        contest_based_details:
-          (contest.contest_based_details as Record<string, unknown> | null) ??
-          null,
-      };
-
-      if (listCardNeedsLiveBudgetEnrichment(contest)) {
-        withBudget = await enrichContestWithCalculatedBudgets(
-          {
-            ...contest,
-            contest_based_details:
-              (contest.contest_based_details as Record<string, unknown> | null) ??
-              {},
-          },
-          params.supabase,
-        );
-      }
-
-      return {
-        ...contest,
-        ...withBudget,
-        not_rejected_views: contest.not_rejected_views,
-        verified_submission_count: contest.verified_submission_count,
-        pending_submission_count: contest.pending_submission_count,
-        rejected_submission_count: contest.rejected_submission_count,
-        contest_based_details:
-          (withBudget.contest_based_details as Record<string, unknown> | null) ??
-          null,
-        twitter_participants_count:
-          withBudget.twitter_participants_count ?? metrics?.total_participants,
-        twitter_max_participants:
-          withBudget.twitter_max_participants ??
-          metrics?.max_participants ??
-          null,
-        advertiser_name:
-          (
-            contest as {
-              advertiser_profiles?: { company_name?: string };
-            }
-          ).advertiser_profiles?.company_name || undefined,
-      };
-    }),
-  );
-
-  return enrichedPage as ListCampaignsResult["contests"];
+  return pageRows.map((contest) => {
+    const metrics = twitterMetricsById.get(contest.id);
+    return {
+      ...contest,
+      contest_based_details:
+        (contest.contest_based_details as Record<string, unknown> | null) ??
+        null,
+      not_rejected_views: contest.not_rejected_views,
+      verified_submission_count: contest.verified_submission_count,
+      pending_submission_count: contest.pending_submission_count,
+      rejected_submission_count: contest.rejected_submission_count,
+      twitter_participants_count: metrics?.total_participants,
+      twitter_max_participants: metrics?.max_participants ?? null,
+      advertiser_name:
+        (
+          contest as {
+            advertiser_profiles?: { company_name?: string };
+          }
+        ).advertiser_profiles?.company_name || undefined,
+    };
+  }) as ListCampaignsResult["contests"];
 }
 
 async function fetchTabCountsFromRpc(
@@ -691,6 +630,7 @@ async function fetchTabCountsFromRpc(
     return null;
   }
 
+  const snapshot = params.creatorEligibilitySnapshot;
   const { data, error } = await supabase.rpc("campaign_list_tab_counts", {
     p_scope: params.scope,
     p_advertiser_id:
@@ -698,6 +638,16 @@ async function fetchTabCountsFromRpc(
     p_contest_format: params.contestFormat || "all",
     p_user_countries:
       params.scope === "opportunities" ? params.userCountries ?? null : null,
+    p_eligible_only: Boolean(params.eligibleOnly),
+    p_creator_trust_score_pct: snapshot?.trustScorePct ?? null,
+    p_creator_trust_number: snapshot?.trustNumber ?? null,
+    p_creator_avg_quality: snapshot?.avgQualityScore ?? null,
+    p_creator_best_quality: snapshot?.bestQualityScore ?? null,
+    p_creator_quality_sum: snapshot?.qualityScoreSum ?? null,
+    p_creator_earnings_cents: snapshot?.totalPlatformEarningsCents ?? null,
+    p_creator_views: snapshot?.totalViews ?? null,
+    p_creator_verified_reels: snapshot?.verifiedReels ?? null,
+    p_creator_has_explicit_quality: snapshot?.hasExplicitQualityScores ?? null,
   });
 
   if (error || !data) {
@@ -985,7 +935,7 @@ async function fetchFilteredPageViaPostgrest(
  * List campaigns with SQL filter → sort → paginate. Tab counts via grouped RPC.
  *
  * Sort uses stored contest_based_details / contest_stats. Page hydrate uses
- * persisted budget trackers when present; otherwise live-enriches the page.
+ * stored details + batched twitter metrics only (no live budget recompute).
  * eligibleOnly is applied inside campaign_list_page_ids (no app scan cap).
  */
 export async function listCampaignsPaginated(

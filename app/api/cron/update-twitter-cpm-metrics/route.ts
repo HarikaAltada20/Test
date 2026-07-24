@@ -160,6 +160,18 @@ export async function GET(request: Request) {
               contest.title
             }): $${actualBudgetSpent.toFixed(2)}`
           );
+          // Also run unified persist (list cache invalidate + dual/leaderboard/milestone parity).
+          try {
+            const { persistContestBudgetSpent } = await import(
+              "@/lib/persist-contest-budget-spent"
+            );
+            await persistContestBudgetSpent(contest.id, supabaseAdmin as any);
+          } catch (persistErr) {
+            console.warn(
+              `[Twitter CPM Metrics] persistContestBudgetSpent failed for ${contest.id}:`,
+              persistErr,
+            );
+          }
           processedCount++;
         }
       } catch (contestError) {

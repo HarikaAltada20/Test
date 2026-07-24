@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
   METRICS_REFRESH_COOLDOWN_MS_BRAND,
@@ -630,6 +631,7 @@ export async function POST(
     }
 
     await refreshContestStats(contestId);
+    await persistContestBudgetSpent(contestId);
 
     const syncElapsedMs = Date.now() - refreshMetricsStartMs;
     console.log(

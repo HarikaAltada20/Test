@@ -191,10 +191,8 @@ export function BudgetProgress({
           : bonusPaidFromSubmissions;
 
         const totalSpentRaw = mainPaid + bonusPaidCents;
-        const totalSpent =
-          totalBudget > 0
-            ? Math.min(totalSpentRaw, totalBudget)
-            : totalSpentRaw;
+        // Show granted/paid truth even when it exceeds the reserved pool.
+        const totalSpent = totalSpentRaw;
         const cpmPercentage =
           totalBudget > 0 ? Math.min((mainPaid / totalBudget) * 100, 100) : 0;
         const bonusPercentageOfTotal =
@@ -203,7 +201,7 @@ export function BudgetProgress({
             : 0;
         const totalPercentage =
           totalBudget > 0
-            ? Math.min((totalSpent / totalBudget) * 100, 100)
+            ? Math.min((totalSpentRaw / totalBudget) * 100, 100)
             : 0;
 
         return {
@@ -619,8 +617,8 @@ export function BudgetProgress({
       };
       const subs = submissions as BudgetTileSubmission[];
       const paidTotal = computeBudgetPaidCents(tileInput, subs);
-      finalTotalSpent =
-        totalBudget > 0 ? Math.min(paidTotal, totalBudget) : paidTotal;
+      // Do not clamp to pool — tracker must show actual paid/granted total.
+      finalTotalSpent = paidTotal;
 
       if (contest.contest_type === "dual_rewards") {
         let cpmMilestonePaid = 0;

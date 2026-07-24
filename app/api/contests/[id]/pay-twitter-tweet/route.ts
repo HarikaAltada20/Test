@@ -431,19 +431,20 @@ export async function POST(
       );
     }
 
-    // CPM aggregate on leaderboard (atomic; safe for concurrent per-tweet pays)
-    const { error: rpcErr } = await supabaseAdmin.rpc(
-      "add_twitter_leaderboard_cpm_earnings_delta",
-      {
-        p_contest_id: contestId,
-        p_creator_id: creatorId,
-        p_delta_cents: rewardAmount,
-      }
+    // Recompute leaderboard CPM aggregate from paid tweet rows (avoids double-count
+    // when bulk + per-tweet pays both applied additive deltas).
+    const { reconcileTwitterLeaderboardCpmEarnings } = await import(
+      "@/lib/twitter/reconcile-leaderboard-cpm-earnings"
     );
-    if (rpcErr) {
+    const reconciled = await reconcileTwitterLeaderboardCpmEarnings(
+      contestId,
+      creatorId,
+      supabaseAdmin,
+    );
+    if (!reconciled.ok) {
       console.error(
-        "[pay-twitter-tweet] Leaderboard earnings delta RPC failed:",
-        rpcErr
+        "[pay-twitter-tweet] Leaderboard earnings reconcile failed:",
+        reconciled.error,
       );
       return NextResponse.json({
         success: true,

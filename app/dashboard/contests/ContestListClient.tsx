@@ -401,11 +401,11 @@ const getBudgetTrackerValues = (
   budgetSpent?: number | null,
 ) => {
   const spent = Math.max(0, budgetSpent ?? 0);
-  const clampedSpent = totalBudget > 0 ? Math.min(spent, totalBudget) : spent;
-  const percentage = totalBudget > 0 ? (clampedSpent / totalBudget) * 100 : 0;
-  const remaining = Math.max(totalBudget - clampedSpent, 0);
+  // Dollar labels use actual spend (may exceed reserved pool).
+  // Bar fill is capped at 100% via Math.min in the width style callers.
+  const percentage = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
+  const remaining = Math.max(totalBudget - spent, 0);
 
-  // Dollar labels show actual spend (may exceed pool); bar/remaining stay capped.
   return { spent, percentage, remaining };
 };
 
@@ -1462,7 +1462,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${tracker.percentage}%` }}
+                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div
@@ -1522,7 +1522,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${tracker.percentage}%` }}
+                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div
@@ -1538,9 +1538,8 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
-              {/* Budget Tracker for Milestone campaigns ? budget_spent is enriched server-side
-                (per-submission milestone model + verified-only ladder + creator bonus expected),
-                same basis as contest detail / opportunities. */}
+              {/* Budget Tracker for Milestone campaigns — uses persisted
+                milestone_contest.budget_spent (same helper as CPM/dual). */}
               {contest.contest_type === "milestone" &&
                 contest.contest_based_details?.milestone_contest
                   ?.total_budget_cents != null &&
@@ -1550,9 +1549,7 @@ export function ContestListClient({
                   const totalBudget =
                     contest.contest_based_details.milestone_contest
                       .total_budget_cents;
-                  const budgetSpent =
-                    contest.contest_based_details.milestone_contest
-                      .budget_spent || 0;
+                  const budgetSpent = getContestBudgetSpentForTracker(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
                     budgetSpent,
@@ -1582,7 +1579,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${tracker.percentage}%` }}
+                          style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div
@@ -2307,7 +2304,7 @@ export function ContestListClient({
                         >
                           <div
                             className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${tracker.percentage}%` }}
+                            style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                           ></div>
                         </div>
                         <div
@@ -2364,7 +2361,7 @@ export function ContestListClient({
                         <div className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
                           <div
                             className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${tracker.percentage}%` }}
+                            style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                           ></div>
                         </div>
                         <div
@@ -2382,7 +2379,7 @@ export function ContestListClient({
                       </div>
                     );
                   })()}
-                {/* Milestone budget_spent: server-enriched, same model as contest detail */}
+                {/* Milestone budget_spent: persisted field via getContestBudgetSpentForTracker */}
                 {contest.contest_type === "milestone" &&
                   contest.contest_based_details?.milestone_contest
                     ?.total_budget_cents != null &&
@@ -2393,8 +2390,7 @@ export function ContestListClient({
                       contest.contest_based_details.milestone_contest
                         .total_budget_cents;
                     const budgetSpent =
-                      contest.contest_based_details.milestone_contest
-                        .budget_spent || 0;
+                      getContestBudgetSpentForTracker(contest);
                     const tracker = getBudgetTrackerValues(
                       totalBudget,
                       budgetSpent,
@@ -2424,7 +2420,7 @@ export function ContestListClient({
                         >
                           <div
                             className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                            style={{ width: `${tracker.percentage}%` }}
+                            style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                           ></div>
                         </div>
                         <div

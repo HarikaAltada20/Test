@@ -16,10 +16,24 @@ Short checklist for deploying changes that affect production.
 2. `db/migrations/20260730_campaign_list_query.sql`
 3. `db/migrations/20260731_campaign_list_page_ids.sql` (includes eligible-only filter)
 4. `db/migrations/20260801_contest_stats_batch_refresh.sql`
+5. `db/migrations/20260802_campaign_list_tab_counts_eligible.sql` (Eligible tab badges match list totals)
 
 Confirm the RPCs exist (`campaign_list_page_ids`, `campaign_list_tab_counts`, `campaign_list_authorize_caller`, `refresh_contest_stats`, `contest_matches_creator_eligibility`), then deploy the app.
 
 **After deploy:** Ensure the `refresh-stale-contest-stats` cron / QStash schedule is authorized (`CRON_SECRET` or Upstash signature) so list card view counts stay fresh.
+
+**Budget spend on lists:** `budget_spent` / `pool_budget_spent_cents` are persisted for CPM, milestone, dual rewards, and leaderboard on verify/pay, metrics refresh, and the stale-stats cron. Existing campaigns showing `$0` used on list cards: run a one-time backfill, or open the campaign and click **Refresh Metrics**, or wait for the stale cron / next metrics job.
+
+```bash
+# Heal all contests (local or against the DB in .env.local / env)
+npm run backfill:budget-spent
+
+# Optional: preview stored spend only
+npx tsx scripts/backfill-contest-budget-spent.ts --dry-run
+
+# Optional: specific IDs
+npx tsx scripts/backfill-contest-budget-spent.ts --ids=uuid1,uuid2
+```
 
 ---
 

@@ -244,7 +244,10 @@ export async function enrichContestWithCalculatedBudgets(
             moderation_status,
             manual_points_adjustment,
             is_eligible,
-            deleted_at
+            deleted_at,
+            earnings,
+            bonus_paid,
+            bonus_amount
           `,
       {
         isEligible: true,
@@ -272,9 +275,10 @@ export async function enrichContestWithCalculatedBudgets(
         deleted_at: tweet.deleted_at ?? null,
         is_twitter_tweet: true as const,
         paid: tweet.moderation_status === "paid",
-        earnings: null,
-        bonus_paid: false,
-        bonus_amount: 0,
+        paid_at: null,
+        earnings: tweet.earnings ?? null,
+        bonus_paid: tweet.bonus_paid ?? false,
+        bonus_amount: tweet.bonus_amount ?? undefined,
         other_stats: {
           base_points: tweet.points || 0,
           manual_points_adjustment: tweet.manual_points_adjustment || 0,
@@ -298,18 +302,34 @@ export async function enrichContestWithCalculatedBudgets(
       }
     });
 
-    const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
-      submissions,
-      cpmDetails.cpm_rate_usd,
-      contest.max_earnings_per_creator ||
-        cpmDetails.max_earnings_per_creator ||
-        null,
-      cpmDetails.min_views,
-      cpmDetails.max_views,
-      cpmDetails.flat_fee_bonus || 0,
-      cpmDetails.flat_fee_bonus_cap || null,
-      manualAdjustmentMap,
-    );
+    const tileInput = {
+      contest_type: contest.contest_type,
+      post_contest_status: contest.post_contest_status,
+      max_earnings_per_creator: contest.max_earnings_per_creator,
+      contest_based_details: contestDetails,
+    };
+    const budgetSubs: BudgetTileSubmission[] = submissions.map((s) => ({
+      ...s,
+      paid_at: (s as BudgetTileSubmission).paid_at ?? null,
+    }));
+    const mode = getBudgetTileMode(contest.post_contest_status);
+    const budgetSpentCents =
+      mode === "paid"
+        ? computeBudgetPaidCents(tileInput, budgetSubs)
+        : Math.round(
+            calculateTwitterCpmBudgetSpent(
+              submissions,
+              cpmDetails.cpm_rate_usd,
+              contest.max_earnings_per_creator ||
+                cpmDetails.max_earnings_per_creator ||
+                null,
+              cpmDetails.min_views,
+              cpmDetails.max_views,
+              cpmDetails.flat_fee_bonus || 0,
+              cpmDetails.flat_fee_bonus_cap || null,
+              manualAdjustmentMap,
+            ) * 100,
+          );
 
     updatedContest = {
       ...updatedContest,
@@ -317,7 +337,7 @@ export async function enrichContestWithCalculatedBudgets(
         ...contestDetails,
         cpm_contest: {
           ...cpmDetails,
-          budget_spent: Math.round(actualBudgetSpent * 100),
+          budget_spent: budgetSpentCents,
         },
       },
     };
@@ -377,18 +397,33 @@ export async function enrichContestWithCalculatedBudgets(
         }
       });
 
-      const actualBudgetSpent = calculateTwitterCpmBudgetSpent(
-        submissionRecords,
-        cpmDetails.cpm_rate_usd,
-        contest.max_earnings_per_creator ||
-          cpmDetails.max_earnings_per_creator ||
-          null,
-        cpmDetails.min_views,
-        cpmDetails.max_views,
-        cpmDetails.flat_fee_bonus || 0,
-        cpmDetails.flat_fee_bonus_cap || null,
-        manualAdjustmentMap,
-      );
+      const tileInput = {
+        contest_type: contest.contest_type,
+        post_contest_status: contest.post_contest_status,
+        max_earnings_per_creator: contest.max_earnings_per_creator,
+        contest_based_details: contestDetails,
+      };
+      const mode = getBudgetTileMode(contest.post_contest_status);
+      const budgetSpentCents =
+        mode === "paid"
+          ? computeBudgetPaidCents(
+              tileInput,
+              submissionRecords as BudgetTileSubmission[],
+            )
+          : Math.round(
+              calculateTwitterCpmBudgetSpent(
+                submissionRecords,
+                cpmDetails.cpm_rate_usd,
+                contest.max_earnings_per_creator ||
+                  cpmDetails.max_earnings_per_creator ||
+                  null,
+                cpmDetails.min_views,
+                cpmDetails.max_views,
+                cpmDetails.flat_fee_bonus || 0,
+                cpmDetails.flat_fee_bonus_cap || null,
+                manualAdjustmentMap,
+              ) * 100,
+            );
 
       updatedContest = {
         ...updatedContest,
@@ -396,7 +431,7 @@ export async function enrichContestWithCalculatedBudgets(
           ...contestDetails,
           cpm_contest: {
             ...cpmDetails,
-            budget_spent: Math.round(actualBudgetSpent * 100),
+            budget_spent: budgetSpentCents,
           },
         },
       };

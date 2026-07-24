@@ -4,6 +4,7 @@
  * fire per-row recount triggers).
  */
 import { refreshContestStatsForContestIds } from "@/lib/contest-stats";
+import { persistContestBudgetSpentForContestIds } from "@/lib/persist-contest-budget-spent";
 
 export async function bumpContestLastMetricsUpdated(
   supabaseAdmin: { from: (t: string) => any },
@@ -27,6 +28,8 @@ export async function bumpContestLastMetricsUpdated(
   }
 
   await refreshContestStatsForContestIds(unique);
+  // Keep list/SQL budget sorts aligned for CPM, milestone, dual, leaderboard.
+  await persistContestBudgetSpentForContestIds(unique, { concurrency: 3 });
 }
 
 /** Map submission ids that were updated → distinct contest ids from the source rows. */

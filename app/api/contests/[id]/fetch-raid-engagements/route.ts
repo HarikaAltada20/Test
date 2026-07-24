@@ -12,6 +12,7 @@ import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-le
 import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export const dynamic = "force-dynamic";
 
@@ -1750,6 +1751,7 @@ export async function POST(
 
       if (isLastRaidBatch) {
         await refreshContestStats(contestId);
+        await persistContestBudgetSpent(contestId);
 
         const currentTime = new Date().toISOString();
         console.log(
