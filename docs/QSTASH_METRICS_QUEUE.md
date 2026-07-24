@@ -56,7 +56,7 @@ If `QSTASH_TOKEN` is not set, the app does not use QStash and instead uses a dir
 
 - **Endpoint:** `/api/cron/refresh-stale-contest-stats` (default `limit=50`)
 - **QStash schedule id:** `goviral-refresh-stale-contest-stats`
-- **Auth:** `Upstash-Signature`, `Authorization: Bearer CRON_SECRET`, or `x-vercel-cron`
+- **Auth:** `Upstash-Signature` or `Authorization: Bearer CRON_SECRET` (bare `x-vercel-cron` is rejected; set `CRON_SECRET` so Vercel Cron sends Bearer)
 
 The QStash schedule is upserted when metrics refresh runs, and on POST to this endpoint. Requires `QSTASH_TOKEN` + public `NEXT_PUBLIC_APP_URL` for the 10-minute path.
 

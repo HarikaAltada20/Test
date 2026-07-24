@@ -6,7 +6,8 @@
  * - QStash schedule every 10 minutes (primary)
  * - Vercel Cron once daily (backup) — see vercel.json
  *
- * Auth: Upstash-Signature, Authorization: Bearer CRON_SECRET, or x-vercel-cron.
+ * Auth: Upstash-Signature or Authorization: Bearer CRON_SECRET.
+ * (Vercel Cron must send Bearer when CRON_SECRET is set — bare x-vercel-cron is rejected.)
  */
 
 import { NextResponse } from "next/server";

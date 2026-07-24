@@ -128,7 +128,8 @@ export type ListCampaignsParams = {
   /**
    * Opportunities only: keep contests the creator passes gates for.
    * Requires creatorEligibilitySnapshot. Pagination scans SQL pages then
-   * filters so totals/pages match the eligible set.
+   * filters so totals/pages match the eligible set (capped at
+   * ELIGIBLE_SCAN_MAX_SQL_ROWS SQL rows).
    */
   eligibleOnly?: boolean;
   creatorEligibilitySnapshot?: CreatorRequirementsSnapshot;
@@ -136,6 +137,11 @@ export type ListCampaignsParams = {
 
 /** Batch size while scanning SQL pages for eligible-only lists. */
 const ELIGIBLE_SCAN_BATCH = 60;
+/**
+ * Hard cap on SQL rows scanned for eligibleOnly (batches × size).
+ * Prevents O(catalog) DoS / timeouts; totals beyond the cap are truncated.
+ */
+const ELIGIBLE_SCAN_MAX_SQL_ROWS = 600;
 
 export type ListCampaignsResult = {
   contests: Array<
@@ -449,27 +455,40 @@ function isCampaignListRpcMissingError(
 }
 
 /**
- * Production fails closed on missing list RPCs (no silent PostgREST / 1500-cap sorts).
- * Staging/dev keep fallback for migration rollouts.
+ * Production fails closed on missing *or* failing list RPCs (no silent
+ * PostgREST / 1500-cap sorts). Staging/dev keep fallback for migration rollouts.
  * Escape hatch: CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK=1
+ *
+ * Deploy migrations before app traffic:
+ * 20260729 → 20260730 → 20260731 → 20260801
  */
 function allowCampaignListPostgrestFallback(): boolean {
   if (process.env.CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK === "1") return true;
   return process.env.NODE_ENV !== "production";
 }
 
+/** Deploy order (must land before app traffic): 20260729 → 20260730 → 20260731 → 20260801. */
+const CAMPAIGN_LIST_MIGRATION_HINT =
+  "Apply db/migrations in order: 20260729_contest_stats.sql → 20260730_campaign_list_query.sql → 20260731_campaign_list_page_ids.sql → 20260801_contest_stats_batch_refresh.sql";
+
 function throwPageIdsRpcMissing(reason: string): never {
   const message =
-    `campaign_list_page_ids unavailable: ${reason}. ` +
-    "Apply db/migrations/20260730_campaign_list_query.sql then db/migrations/20260731_campaign_list_page_ids.sql";
+    `campaign_list_page_ids unavailable: ${reason}. ${CAMPAIGN_LIST_MIGRATION_HINT}`;
+  console.error("[contest-list-query]", message);
+  throw new Error(message);
+}
+
+function throwPageIdsRpcFailed(reason: string): never {
+  const message =
+    `campaign_list_page_ids failed: ${reason}. ` +
+    "Refusing PostgREST fallback in production (would silently wrong-sort / cap at 1500).";
   console.error("[contest-list-query]", message);
   throw new Error(message);
 }
 
 function throwTabCountsRpcMissing(reason: string): never {
   const message =
-    `campaign_list_tab_counts unavailable: ${reason}. ` +
-    "Apply db/migrations/20260730_campaign_list_query.sql";
+    `campaign_list_tab_counts unavailable: ${reason}. ${CAMPAIGN_LIST_MIGRATION_HINT}`;
   console.error("[contest-list-query]", message);
   throw new Error(message);
 }
@@ -508,7 +527,7 @@ function markPageIdsRpcMissing(reason: string): void {
   console.warn(
     "[contest-list-query] campaign_list_page_ids unavailable; using PostgREST (retry in 60s):",
     reason,
-    "→ db/migrations/20260730_campaign_list_query.sql then db/migrations/20260731_campaign_list_page_ids.sql",
+    `→ ${CAMPAIGN_LIST_MIGRATION_HINT}`,
   );
 }
 
@@ -520,7 +539,7 @@ function markTabCountsRpcMissing(reason: string): void {
   console.warn(
     "[contest-list-query] campaign_list_tab_counts unavailable (retry in 60s):",
     reason,
-    "→ apply db/migrations/20260730_campaign_list_query.sql",
+    `→ ${CAMPAIGN_LIST_MIGRATION_HINT}`,
   );
 }
 
@@ -794,8 +813,12 @@ async function fetchFilteredPageSql(
       markPageIdsRpcMissing(pageError?.message || "unknown");
       return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
     }
+    // Transient / unexpected RPC errors: never silently degrade sort/totals in prod.
+    if (!allowCampaignListPostgrestFallback()) {
+      throwPageIdsRpcFailed(pageError?.message || "empty payload");
+    }
     console.warn(
-      "[contest-list-query] page ids RPC failed, falling back to PostgREST:",
+      "[contest-list-query] page ids RPC failed, falling back to PostgREST (non-prod):",
       params.sort,
       pageError?.message,
     );
@@ -1029,8 +1052,9 @@ export async function listCampaignsPaginated(
 }
 
 /**
- * Eligible-only opportunities: scan all SQL-matching pages, filter by creator
- * gates, then paginate so totals/pages match the full eligible set.
+ * Eligible-only opportunities: scan SQL-matching pages (capped), filter by
+ * creator gates, then paginate. Cap avoids O(catalog) timeouts under traffic;
+ * when hit, total is the eligible count found within the scan window.
  */
 async function listCampaignsPaginatedEligible(
   params: ListCampaignsParams,
@@ -1048,13 +1072,23 @@ async function listCampaignsPaginatedEligible(
   let eligibleCount = 0;
   let sqlOffset = 0;
   let sqlTotal = 0;
+  let hitScanCap = false;
 
   for (;;) {
+    if (sqlOffset >= ELIGIBLE_SCAN_MAX_SQL_ROWS) {
+      hitScanCap = true;
+      break;
+    }
+
+    const batchLimit = Math.min(
+      ELIGIBLE_SCAN_BATCH,
+      ELIGIBLE_SCAN_MAX_SQL_ROWS - sqlOffset,
+    );
     const { rows, total } = await fetchFilteredPageSql(
       params.supabase,
       { ...params, sort: sortForSql },
       sqlOffset,
-      ELIGIBLE_SCAN_BATCH,
+      batchLimit,
     );
     sqlTotal = total;
     if (rows.length === 0) break;
@@ -1070,6 +1104,17 @@ async function listCampaignsPaginatedEligible(
 
     sqlOffset += rows.length;
     if (sqlOffset >= sqlTotal) break;
+    if (sqlOffset >= ELIGIBLE_SCAN_MAX_SQL_ROWS) {
+      hitScanCap = true;
+      break;
+    }
+  }
+
+  if (hitScanCap) {
+    console.warn(
+      `[contest-list-query] eligibleOnly scan capped at ${ELIGIBLE_SCAN_MAX_SQL_ROWS} SQL rows ` +
+        `(sqlTotal=${sqlTotal}, eligibleFound=${eligibleCount}); totals may be truncated`,
+    );
   }
 
   const countsFromRpc = await countsPromise;

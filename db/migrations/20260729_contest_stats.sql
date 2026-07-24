@@ -226,9 +226,26 @@ ON CONFLICT (contest_id) DO NOTHING;
 
 ALTER TABLE public.contest_stats ENABLE ROW LEVEL SECURITY;
 
+-- Own contests, published campaigns (opportunity cards), or admin — not open SELECT.
 DROP POLICY IF EXISTS contest_stats_select_authenticated ON public.contest_stats;
 CREATE POLICY contest_stats_select_authenticated
   ON public.contest_stats
   FOR SELECT
   TO authenticated
-  USING (true);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.contests c
+      WHERE c.id = contest_id
+        AND (
+          c.advertiser_id = auth.uid()
+          OR c.moderation_status = 'published'::public.contest_moderation_status_enum
+          OR EXISTS (
+            SELECT 1
+            FROM public.users u
+            WHERE u.id = auth.uid()
+              AND u.user_type = 'admin'
+          )
+        )
+    )
+  );
