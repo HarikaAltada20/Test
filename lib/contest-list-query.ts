@@ -448,8 +448,34 @@ function isCampaignListRpcMissingError(
   );
 }
 
+/**
+ * Production fails closed on missing list RPCs (no silent PostgREST / 1500-cap sorts).
+ * Staging/dev keep fallback for migration rollouts.
+ * Escape hatch: CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK=1
+ */
+function allowCampaignListPostgrestFallback(): boolean {
+  if (process.env.CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK === "1") return true;
+  return process.env.NODE_ENV !== "production";
+}
+
+function throwPageIdsRpcMissing(reason: string): never {
+  const message =
+    `campaign_list_page_ids unavailable: ${reason}. ` +
+    "Apply db/migrations/20260730_campaign_list_query.sql then db/migrations/20260731_campaign_list_page_ids.sql";
+  console.error("[contest-list-query]", message);
+  throw new Error(message);
+}
+
+function throwTabCountsRpcMissing(reason: string): never {
+  const message =
+    `campaign_list_tab_counts unavailable: ${reason}. ` +
+    "Apply db/migrations/20260730_campaign_list_query.sql";
+  console.error("[contest-list-query]", message);
+  throw new Error(message);
+}
+
 type CampaignListRpcState = "unknown" | "ready" | "missing";
-/** Retry sticky "missing" after migrations can land without process restart. */
+/** Retry sticky "missing" after migrations can land without process restart (non-prod only). */
 const RPC_MISSING_RETRY_MS = 60_000;
 let pageIdsRpcState: CampaignListRpcState = "unknown";
 let tabCountsRpcState: CampaignListRpcState = "unknown";
@@ -662,7 +688,13 @@ async function fetchTabCountsFromRpc(
   postPhaseCounts: PostPhaseCounts;
   availablePlatforms: string[];
 } | null> {
-  if (shouldSkipTabCountsRpc()) return null;
+  // Prod: never soft-skip missing RPCs — throw so lists do not return empty tab counts.
+  if (shouldSkipTabCountsRpc()) {
+    if (!allowCampaignListPostgrestFallback()) {
+      throwTabCountsRpcMissing("previously detected missing RPC");
+    }
+    return null;
+  }
 
   const { data, error } = await supabase.rpc("campaign_list_tab_counts", {
     p_scope: params.scope,
@@ -682,6 +714,9 @@ async function fetchTabCountsFromRpc(
       throw new Error(error?.message || "Forbidden");
     }
     if (isCampaignListRpcMissingError(error)) {
+      if (!allowCampaignListPostgrestFallback()) {
+        throwTabCountsRpcMissing(error?.message || "unknown");
+      }
       markTabCountsRpcMissing(error?.message || "unknown");
       return null;
     }
@@ -715,8 +750,11 @@ async function fetchFilteredPageSql(
   offset: number,
   limit: number,
 ): Promise<{ rows: LightweightContest[]; total: number }> {
-  // Missing RPC: fall back to PostgREST; sticky miss expires so migrations can heal.
+  // Missing RPC: PostgREST only outside production (or with escape hatch).
   if (shouldSkipPageIdsRpc()) {
+    if (!allowCampaignListPostgrestFallback()) {
+      throwPageIdsRpcMissing("previously detected missing RPC");
+    }
     return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
   }
 
@@ -750,12 +788,10 @@ async function fetchFilteredPageSql(
       throw new Error(pageError?.message || "Forbidden");
     }
     if (isCampaignListRpcMissingError(pageError)) {
-      markPageIdsRpcMissing(pageError?.message || "unknown");
-      if (process.env.NODE_ENV === "production") {
-        console.error(
-          "[contest-list-query] campaign_list_page_ids missing in production — apply db/migrations/20260731_campaign_list_page_ids.sql (using PostgREST fallback)",
-        );
+      if (!allowCampaignListPostgrestFallback()) {
+        throwPageIdsRpcMissing(pageError?.message || "unknown");
       }
+      markPageIdsRpcMissing(pageError?.message || "unknown");
       return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
     }
     console.warn(
