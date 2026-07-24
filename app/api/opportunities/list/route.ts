@@ -12,7 +12,7 @@ import {
 import { getCreatorUserCountries } from "@/lib/opportunities-user-countries";
 import { getCreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 import {
-  buildCampaignListCacheKey,
+  buildCampaignListCacheKeyAsync,
   getCampaignListCache,
   setCampaignListCache,
 } from "@/lib/campaign-list-cache";
@@ -66,24 +66,23 @@ export async function GET(request: NextRequest) {
     const countriesKey = [...(userCountries || [])].sort().join(",");
 
     // Skip Redis for eligibleOnly — results are user-gate specific and heavier.
-    const cacheKey =
-      eligibleOnly
-        ? null
-        : buildCampaignListCacheKey({
-            scope: "opportunities",
-            ownerId: user.id,
-            tab,
-            sort,
-            page,
-            limit,
-            platform,
-            contestType,
-            contestFormat,
-            search,
-            mediaType,
-            eligibleOnly: false,
-            countriesKey,
-          });
+    const cacheKey = eligibleOnly
+      ? null
+      : await buildCampaignListCacheKeyAsync({
+          scope: "opportunities",
+          ownerId: user.id,
+          tab,
+          sort,
+          page,
+          limit,
+          platform,
+          contestType,
+          contestFormat,
+          search,
+          mediaType,
+          eligibleOnly: false,
+          countriesKey,
+        });
 
     if (cacheKey) {
       const cached = await getCampaignListCache(cacheKey);

@@ -3,11 +3,15 @@
  * Freshness contract: list views may lag up to TTL; detail/payout screens stay live.
  *
  * Uses the same Upstash Redis as metrics queues when configured; no-ops otherwise.
+ *
+ * Opportunities invalidation uses a generation counter (INCR) so publish does not
+ * SCAN every creator × page × filter key. Stale keys expire via TTL.
  */
 
 import { Redis } from "@upstash/redis";
 
-const KEY_PREFIX = "campaign_list:v1";
+const KEY_PREFIX = "campaign_list:v2";
+const OPPORTUNITIES_GEN_KEY = `${KEY_PREFIX}:opportunities:_gen`;
 
 /** Brand / admin dashboards — 1 min so publish/approve still feel fresh. */
 export const CAMPAIGN_LIST_CACHE_TTL_BRAND_SEC = 60;
@@ -44,8 +48,23 @@ function ttlForScope(scope: CampaignListCacheScope): number {
     : CAMPAIGN_LIST_CACHE_TTL_BRAND_SEC;
 }
 
+async function getOpportunitiesCacheGeneration(): Promise<number> {
+  const redis = getRedis();
+  if (!redis) return 0;
+  try {
+    const value = await redis.get<number | string>(OPPORTUNITIES_GEN_KEY);
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch (e) {
+    console.warn("[campaign-list-cache] gen get failed:", e);
+    return 0;
+  }
+}
+
 /**
  * Stable cache key: list:{scope}:{owner}:{tab}:{sort}:{page}:{filters}
+ * For opportunities, callers should prefer buildCampaignListCacheKeyAsync so the
+ * generation segment is included (publish bumps gen instead of SCAN+DEL).
  */
 export function buildCampaignListCacheKey(parts: {
   scope: CampaignListCacheScope;
@@ -63,6 +82,8 @@ export function buildCampaignListCacheKey(parts: {
   eligibleOnly?: boolean;
   /** Hash or joined countries for opportunities geo. */
   countriesKey?: string;
+  /** Opportunities generation — omit only for non-opportunities scopes. */
+  opportunitiesGen?: number;
 }): string {
   const filters = [
     parts.platform || "all",
@@ -75,16 +96,45 @@ export function buildCampaignListCacheKey(parts: {
     parts.countriesKey || "",
   ].join("|");
 
+  const ownerSegment =
+    parts.scope === "opportunities"
+      ? `g${parts.opportunitiesGen ?? 0}:${parts.ownerId}`
+      : parts.ownerId;
+
   return [
     KEY_PREFIX,
     parts.scope,
-    parts.ownerId,
+    ownerSegment,
     parts.tab || "all",
     parts.sort,
     String(parts.page),
     String(parts.limit),
     filters,
   ].join(":");
+}
+
+/** Opportunities keys include the current generation (O(1) invalidate via INCR). */
+export async function buildCampaignListCacheKeyAsync(parts: {
+  scope: CampaignListCacheScope;
+  ownerId: string;
+  tab: string;
+  sort: string;
+  page: number;
+  limit: number;
+  platform?: string;
+  contestType?: string;
+  contestFormat?: string;
+  postContestPhase?: string;
+  search?: string;
+  mediaType?: string;
+  eligibleOnly?: boolean;
+  countriesKey?: string;
+}): Promise<string> {
+  const opportunitiesGen =
+    parts.scope === "opportunities"
+      ? await getOpportunitiesCacheGeneration()
+      : undefined;
+  return buildCampaignListCacheKey({ ...parts, opportunitiesGen });
 }
 
 export async function getCampaignListCache<T>(
@@ -130,23 +180,40 @@ export async function invalidateAdminCampaignListCache(): Promise<number> {
   return invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:admin:`);
 }
 
-/** Invalidate opportunity shelves (shared-ish; keyed by creator). */
+/**
+ * Invalidate opportunity shelves for all creators without SCAN.
+ * Bumps generation so new reads miss; old keys expire via TTL.
+ */
 export async function invalidateOpportunitiesListCache(): Promise<number> {
-  return invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:opportunities:`);
+  const redis = getRedis();
+  if (!redis) return 0;
+  try {
+    await redis.incr(OPPORTUNITIES_GEN_KEY);
+    return 1;
+  } catch (e) {
+    console.warn("[campaign-list-cache] opportunities gen bump failed:", e);
+    return 0;
+  }
 }
 
-/** Invalidate one creator’s opportunity list pages only. */
+/** Invalidate one creator’s opportunity list pages only (still SCAN — narrow prefix). */
 export async function invalidateOpportunitiesListCacheForUser(
   userId: string | null | undefined,
 ): Promise<number> {
   if (!userId) return 0;
+  // Keys are …:opportunities:g{N}:{userId}:… — match any generation for this user.
   return invalidateCampaignListCacheByPrefix(
-    `${KEY_PREFIX}:opportunities:${userId}:`,
+    `${KEY_PREFIX}:opportunities:`,
+    `*:${userId}:`,
   );
 }
 
 export async function invalidateAllCampaignListCache(): Promise<number> {
-  return invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:`);
+  // SCAN clears advertiser/admin/legacy opportunities keys; then bump gen so
+  // new opportunities writes use a fresh namespace (also recreates _gen if deleted).
+  const rest = await invalidateCampaignListCacheByPrefix(`${KEY_PREFIX}:`);
+  const opportunities = await invalidateOpportunitiesListCache();
+  return rest + opportunities;
 }
 
 /**
@@ -172,16 +239,20 @@ export async function invalidateCampaignListCachesAfterMutation(options: {
 
 async function invalidateCampaignListCacheByPrefix(
   prefix: string,
+  /** Optional secondary glob after prefix* (e.g. `*:userId:` for gen keys). */
+  matchSuffix?: string,
 ): Promise<number> {
   const redis = getRedis();
   if (!redis) return 0;
+
+  const match = matchSuffix ? `${prefix}${matchSuffix}*` : `${prefix}*`;
 
   let cleared = 0;
   try {
     let cursor: number | string = 0;
     do {
       const result = (await redis.scan(cursor, {
-        match: `${prefix}*`,
+        match,
         count: 100,
       })) as [string | number, string[]];
       cursor = result[0];

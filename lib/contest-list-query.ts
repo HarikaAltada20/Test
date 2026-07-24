@@ -14,12 +14,14 @@ import {
   SSR_CAMPAIGN_LIST_DEFAULTS,
 } from "@/lib/campaign-list-filters-storage";
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
+import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
 import {
   isCreatorEligibleForContest,
   parseContestCreatorRequirements,
   type CreatorRequirementsSnapshot,
 } from "@/lib/creator-requirements";
+import { isMilestoneContestType } from "@/lib/contest-type";
 import { sortCampaignsForList } from "@/lib/contest-list-sort";
 
 export { sortCampaignsForList };
@@ -126,15 +128,14 @@ export type ListCampaignsParams = {
   /**
    * Opportunities only: keep contests the creator passes gates for.
    * Requires creatorEligibilitySnapshot. Pagination scans SQL pages then
-   * filters so totals/pages match the eligible set (capped scan).
+   * filters so totals/pages match the eligible set.
    */
   eligibleOnly?: boolean;
   creatorEligibilitySnapshot?: CreatorRequirementsSnapshot;
 };
 
-/** Max contests hydrated while building an eligible-only page (DoS / latency guard). */
+/** Batch size while scanning SQL pages for eligible-only lists. */
 const ELIGIBLE_SCAN_BATCH = 60;
-const ELIGIBLE_SCAN_MAX_ROWS = 1500;
 
 export type ListCampaignsResult = {
   contests: Array<
@@ -437,7 +438,7 @@ function isRpcAuthzError(error: { code?: string; message?: string } | null): boo
   );
 }
 
-/** Missing authorize_caller / page_ids / tab_counts — skip RPC until process restart. */
+/** Missing authorize_caller / page_ids / tab_counts — soft-skip RPC, then retry. */
 function isCampaignListRpcMissingError(
   error: { message?: string } | null | undefined,
 ): boolean {
@@ -448,24 +449,50 @@ function isCampaignListRpcMissingError(
 }
 
 type CampaignListRpcState = "unknown" | "ready" | "missing";
+/** Retry sticky "missing" after migrations can land without process restart. */
+const RPC_MISSING_RETRY_MS = 60_000;
 let pageIdsRpcState: CampaignListRpcState = "unknown";
 let tabCountsRpcState: CampaignListRpcState = "unknown";
+let pageIdsRpcMissingUntil = 0;
+let tabCountsRpcMissingUntil = 0;
+
+function shouldSkipPageIdsRpc(): boolean {
+  if (pageIdsRpcState !== "missing") return false;
+  if (Date.now() >= pageIdsRpcMissingUntil) {
+    pageIdsRpcState = "unknown";
+    return false;
+  }
+  return true;
+}
+
+function shouldSkipTabCountsRpc(): boolean {
+  if (tabCountsRpcState !== "missing") return false;
+  if (Date.now() >= tabCountsRpcMissingUntil) {
+    tabCountsRpcState = "unknown";
+    return false;
+  }
+  return true;
+}
 
 function markPageIdsRpcMissing(reason: string): void {
-  if (pageIdsRpcState === "missing") return;
+  const first = pageIdsRpcState !== "missing";
   pageIdsRpcState = "missing";
+  pageIdsRpcMissingUntil = Date.now() + RPC_MISSING_RETRY_MS;
+  if (!first) return;
   console.warn(
-    "[contest-list-query] campaign_list_page_ids unavailable; using PostgREST until migrations are applied:",
+    "[contest-list-query] campaign_list_page_ids unavailable; using PostgREST (retry in 60s):",
     reason,
     "→ db/migrations/20260730_campaign_list_query.sql then db/migrations/20260731_campaign_list_page_ids.sql",
   );
 }
 
 function markTabCountsRpcMissing(reason: string): void {
-  if (tabCountsRpcState === "missing") return;
+  const first = tabCountsRpcState !== "missing";
   tabCountsRpcState = "missing";
+  tabCountsRpcMissingUntil = Date.now() + RPC_MISSING_RETRY_MS;
+  if (!first) return;
   console.warn(
-    "[contest-list-query] campaign_list_tab_counts unavailable:",
+    "[contest-list-query] campaign_list_tab_counts unavailable (retry in 60s):",
     reason,
     "→ apply db/migrations/20260730_campaign_list_query.sql",
   );
@@ -499,26 +526,104 @@ function contestPassesEligibility(
 }
 
 /**
- * List cards need live budget_spent / pool_budget_spent_cents for the tracker.
- * Stored JSON is often stale/0 until metrics jobs persist spend — recompute for
- * the current page only (not the full catalog). contest_stats views/counts stay
- * from the SQL embed so we don't wipe Layer-1 precompute.
+ * Prefer persisted budget_spent when metrics jobs wrote it; otherwise live-enrich
+ * so list trackers are not stuck at $0 (common for dual/CPM before spend persist).
+ * Milestone always live-enriches (same rule as contest-service).
+ */
+function listCardNeedsLiveBudgetEnrichment(
+  contest: ContestWithStats,
+): boolean {
+  if (isMilestoneContestType(contest.contest_type)) return true;
+
+  const storedSpend = getPoolBudgetSpentCentsForDisplay({
+    contest_type: contest.contest_type,
+    post_contest_status: contest.post_contest_status,
+    max_earnings_per_creator: contest.max_earnings_per_creator as
+      | number
+      | null
+      | undefined,
+    contest_based_details:
+      (contest.contest_based_details as Record<string, unknown> | null) ?? null,
+  });
+  if (storedSpend > 0) return false;
+
+  const views = Number(contest.not_rejected_views) || 0;
+  const verified = Number(contest.verified_submission_count) || 0;
+  const pending = Number(contest.pending_submission_count) || 0;
+  const live = Number(contest.live_submission_count) || 0;
+  return views > 0 || verified > 0 || pending > 0 || live > 0;
+}
+
+/**
+ * List cards: keep contest_stats from SQL; fill budget trackers from stored spend
+ * when present, otherwise enrichContestWithCalculatedBudgets for this page only.
+ * Batches Twitter participant counts in one query.
  */
 async function hydrateListPage(
   params: ListCampaignsParams,
   pageRows: ContestWithStats[],
 ): Promise<ListCampaignsResult["contests"]> {
+  const twitterTextImageIds = pageRows
+    .filter((contest) => {
+      const platform = (contest.platform || "").toLowerCase();
+      return (
+        (platform === "twitter" || platform === "x") &&
+        contest.contest_format === "text_image"
+      );
+    })
+    .map((contest) => contest.id);
+
+  const twitterMetricsById = new Map<
+    string,
+    { total_participants: number; max_participants: number | null }
+  >();
+
+  if (twitterTextImageIds.length > 0) {
+    const { data, error } = await params.supabase
+      .from("twitter_campaign_metrics")
+      .select("contest_id, total_participants, max_participants")
+      .in("contest_id", twitterTextImageIds);
+
+    if (error) {
+      console.warn(
+        "[contest-list-query] twitter_campaign_metrics batch failed:",
+        error.message,
+      );
+    } else {
+      for (const row of data || []) {
+        twitterMetricsById.set(row.contest_id, {
+          total_participants: Number(row.total_participants) || 0,
+          max_participants:
+            row.max_participants == null ? null : Number(row.max_participants),
+        });
+      }
+    }
+  }
+
   const enrichedPage = await Promise.all(
     pageRows.map(async (contest) => {
-      const withBudget = await enrichContestWithCalculatedBudgets(
-        {
-          ...contest,
-          contest_based_details:
-            (contest.contest_based_details as Record<string, unknown> | null) ??
-            {},
-        },
-        params.supabase,
-      );
+      const metrics = twitterMetricsById.get(contest.id);
+      let withBudget: {
+        contest_based_details?: Record<string, unknown> | null;
+        twitter_participants_count?: number;
+        twitter_max_participants?: number | null;
+      } = {
+        contest_based_details:
+          (contest.contest_based_details as Record<string, unknown> | null) ??
+          null,
+      };
+
+      if (listCardNeedsLiveBudgetEnrichment(contest)) {
+        withBudget = await enrichContestWithCalculatedBudgets(
+          {
+            ...contest,
+            contest_based_details:
+              (contest.contest_based_details as Record<string, unknown> | null) ??
+              {},
+          },
+          params.supabase,
+        );
+      }
 
       return {
         ...contest,
@@ -529,6 +634,12 @@ async function hydrateListPage(
         rejected_submission_count: contest.rejected_submission_count,
         contest_based_details:
           (withBudget.contest_based_details as Record<string, unknown> | null) ??
+          null,
+        twitter_participants_count:
+          withBudget.twitter_participants_count ?? metrics?.total_participants,
+        twitter_max_participants:
+          withBudget.twitter_max_participants ??
+          metrics?.max_participants ??
           null,
         advertiser_name:
           (
@@ -551,7 +662,7 @@ async function fetchTabCountsFromRpc(
   postPhaseCounts: PostPhaseCounts;
   availablePlatforms: string[];
 } | null> {
-  if (tabCountsRpcState === "missing") return null;
+  if (shouldSkipTabCountsRpc()) return null;
 
   const { data, error } = await supabase.rpc("campaign_list_tab_counts", {
     p_scope: params.scope,
@@ -604,9 +715,8 @@ async function fetchFilteredPageSql(
   offset: number,
   limit: number,
 ): Promise<{ rows: LightweightContest[]; total: number }> {
-  // Missing RPC: fall back to PostgREST everywhere so app deploy before SQL
-  // migrations does not hard-fail list pages (budget/views sorts are capped).
-  if (pageIdsRpcState === "missing") {
+  // Missing RPC: fall back to PostgREST; sticky miss expires so migrations can heal.
+  if (shouldSkipPageIdsRpc()) {
     return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
   }
 
@@ -823,8 +933,8 @@ async function fetchFilteredPageViaPostgrest(
 /**
  * List campaigns with SQL filter → sort → paginate. Tab counts via grouped RPC.
  *
- * Sort uses stored contest_based_details / contest_stats. Page hydrate recomputes
- * budget trackers for the current page only (list UI depends on budget_spent).
+ * Sort uses stored contest_based_details / contest_stats. Page hydrate uses
+ * persisted budget trackers when present; otherwise live-enriches the page.
  */
 export async function listCampaignsPaginated(
   params: ListCampaignsParams,
@@ -883,8 +993,8 @@ export async function listCampaignsPaginated(
 }
 
 /**
- * Eligible-only opportunities: scan SQL pages, filter by creator gates, then
- * paginate the eligible set so totals/pages are honest (bounded by scan cap).
+ * Eligible-only opportunities: scan all SQL-matching pages, filter by creator
+ * gates, then paginate so totals/pages match the full eligible set.
  */
 async function listCampaignsPaginatedEligible(
   params: ListCampaignsParams,
@@ -893,48 +1003,38 @@ async function listCampaignsPaginatedEligible(
   const page = Math.max(1, params.page || 1);
   const limit = parseListLimit(String(params.limit));
   const sortForSql = resolveSortForSql(params);
+  const pageStart = (page - 1) * limit;
+  const pageEnd = pageStart + limit;
 
   const countsPromise = fetchTabCountsFromRpc(params.supabase, params);
 
-  const eligible: ContestWithStats[] = [];
+  const pageRows: ContestWithStats[] = [];
+  let eligibleCount = 0;
   let sqlOffset = 0;
   let sqlTotal = 0;
-  let scanned = 0;
 
-  while (scanned < ELIGIBLE_SCAN_MAX_ROWS) {
-    const batchLimit = Math.min(
-      ELIGIBLE_SCAN_BATCH,
-      ELIGIBLE_SCAN_MAX_ROWS - scanned,
-    );
+  for (;;) {
     const { rows, total } = await fetchFilteredPageSql(
       params.supabase,
       { ...params, sort: sortForSql },
       sqlOffset,
-      batchLimit,
+      ELIGIBLE_SCAN_BATCH,
     );
     sqlTotal = total;
     if (rows.length === 0) break;
 
     for (const row of rows) {
       const flat = flattenContestStats(row);
-      if (contestPassesEligibility(flat, snapshot)) {
-        eligible.push(flat);
+      if (!contestPassesEligibility(flat, snapshot)) continue;
+      if (eligibleCount >= pageStart && eligibleCount < pageEnd) {
+        pageRows.push(flat);
       }
+      eligibleCount += 1;
     }
 
-    scanned += rows.length;
     sqlOffset += rows.length;
     if (sqlOffset >= sqlTotal) break;
   }
-
-  if (sqlOffset < sqlTotal && scanned >= ELIGIBLE_SCAN_MAX_ROWS) {
-    console.warn(
-      `[contest-list-query] eligible scan capped at ${ELIGIBLE_SCAN_MAX_ROWS} of ${sqlTotal} matching contests`,
-    );
-  }
-
-  const offset = (page - 1) * limit;
-  const pageRows = eligible.slice(offset, offset + limit);
 
   const countsFromRpc = await countsPromise;
   if (!countsFromRpc) {
@@ -947,7 +1047,7 @@ async function listCampaignsPaginatedEligible(
 
   return {
     contests: enrichedPage,
-    total: eligible.length,
+    total: eligibleCount,
     page,
     limit,
     tabCounts: countsFromRpc?.tabCounts ?? emptyTabCounts(),

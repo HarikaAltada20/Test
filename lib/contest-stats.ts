@@ -11,8 +11,9 @@ export type ContestStatsRow = {
 
 /**
  * Recompute contest_stats for one contest (or all when omitted).
- * Prefer status/moderation DB triggers for counters; call this once after
- * bulk views/impressions sync (metrics jobs) and from the stale-stats cron.
+ * Prefer status/moderation DB triggers (incremental deltas) for counters; call
+ * this once after bulk views/impressions sync (metrics jobs) and from the
+ * stale-stats cron. Also call after SET LOCAL app.skip_contest_stats_refresh.
  * @returns true when the RPC succeeded.
  */
 export async function refreshContestStats(
