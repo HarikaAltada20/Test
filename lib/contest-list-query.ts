@@ -445,13 +445,11 @@ function isCampaignListRpcMissingError(
 /**
  * Production fails closed on missing *or* failing list RPCs (no silent
  * PostgREST / 1500-cap sorts). Staging/dev keep fallback for migration rollouts.
- * Escape hatch: CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK=1
  *
  * Deploy migrations before app traffic:
  * 20260729 → 20260730 → 20260731 → 20260801
  */
 function allowCampaignListPostgrestFallback(): boolean {
-  if (process.env.CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK === "1") return true;
   return process.env.NODE_ENV !== "production";
 }
 

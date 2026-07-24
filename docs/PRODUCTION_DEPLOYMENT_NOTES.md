@@ -19,8 +19,6 @@ Short checklist for deploying changes that affect production.
 
 Confirm the RPCs exist (`campaign_list_page_ids`, `campaign_list_tab_counts`, `campaign_list_authorize_caller`, `refresh_contest_stats`, `contest_matches_creator_eligibility`), then deploy the app.
 
-**Do not** set `CAMPAIGN_LIST_ALLOW_POSTGREST_FALLBACK=1` in production as a substitute — fallback can wrong-sort and silently cap results.
-
 **After deploy:** Ensure the `refresh-stale-contest-stats` cron / QStash schedule is authorized (`CRON_SECRET` or Upstash signature) so list card view counts stay fresh.
 
 ---
