@@ -3,7 +3,7 @@
 -- never load the full campaign set into application memory.
 
 -- ---------------------------------------------------------------------------
--- Safe jsonb numeric casts — corrupt values sort as NULL instead of failing
+-- Safe jsonb numeric casts â€” corrupt values sort as NULL instead of failing
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_json_numeric(p_text text)
 RETURNS numeric
@@ -46,7 +46,7 @@ REVOKE ALL ON FUNCTION public.contest_list_json_numeric(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.contest_list_json_float8(text) FROM PUBLIC;
 
 -- ---------------------------------------------------------------------------
--- Pool / prize value (cents) — mirrors lib/contest-list-sort getContestValueForSort
+-- Pool / prize value (cents) â€” mirrors lib/contest-list-sort getContestValueForSort
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_sort_value_cents(
   p_contest_type text,
@@ -147,7 +147,7 @@ AS $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- CPM rate — mirrors getCpmRate (only cpm / dual_rewards)
+-- CPM rate â€” mirrors getCpmRate (only cpm / dual_rewards)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_sort_cpm_rate(
   p_contest_type text,
@@ -169,7 +169,7 @@ AS $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- Budget spent (cents) from stored JSON — mirrors getContestBudgetSpentForSort
+-- Budget spent (cents) from stored JSON â€” mirrors getContestBudgetSpentForSort
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_sort_budget_spent_cents(
   p_contest_type text,
@@ -275,7 +275,7 @@ AS $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- Budget remaining (cents) — mirrors getContestBudgetRemainingForSort
+-- Budget remaining (cents) â€” mirrors getContestBudgetRemainingForSort
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_sort_budget_remaining_cents(
   p_contest_type text,
@@ -367,7 +367,7 @@ AS $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- Approval % — mirrors getAdminApprovalPercent
+-- Approval % â€” mirrors getAdminApprovalPercent
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.contest_list_sort_approval_percent(
   p_status text,
@@ -417,8 +417,156 @@ REVOKE ALL ON FUNCTION public.contest_list_sort_budget_remaining_cents(text, jso
 REVOKE ALL ON FUNCTION public.contest_list_sort_approval_percent(text, integer, integer, integer, integer) FROM PUBLIC;
 
 -- ---------------------------------------------------------------------------
--- Paginated list IDs (filter + sort + limit), all list sorts included
+-- Creator eligibility helper + paginated list IDs (optional eligibleOnly filter)
+-- Parity: lib/creator-requirements.ts (isCreatorEligibleForContest)
 -- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.contest_matches_creator_eligibility(
+  p_contest_format text,
+  p_trust_score integer,
+  p_trust_number integer,
+  p_min_avg_quality numeric,
+  p_min_best_quality integer,
+  p_min_quality integer,
+  p_min_platform_earnings bigint,
+  p_min_platform_views bigint,
+  p_creator_trust_score_pct numeric,
+  p_creator_trust_number integer,
+  p_creator_avg_quality numeric,
+  p_creator_best_quality integer,
+  p_creator_quality_sum numeric,
+  p_creator_earnings_cents bigint,
+  p_creator_views bigint,
+  p_creator_verified_reels integer,
+  p_creator_has_explicit_quality boolean
+)
+RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  v_min_trust integer;
+  v_min_trust_number integer;
+  v_min_avg numeric;
+  v_min_best integer;
+  v_min_quality integer;
+  v_min_earnings bigint;
+  v_min_views bigint;
+  v_apply_quality boolean;
+  v_trust_pct numeric := COALESCE(p_creator_trust_score_pct, 0);
+  v_trust_number integer := COALESCE(p_creator_trust_number, 0);
+  v_earnings bigint := COALESCE(p_creator_earnings_cents, 0);
+  v_views bigint := COALESCE(p_creator_views, 0);
+BEGIN
+  -- Text/image contests have no creator gates (isVideoContestFormat).
+  IF COALESCE(p_contest_format, 'video') = 'text_image' THEN
+    RETURN true;
+  END IF;
+
+  v_min_trust := CASE
+    WHEN p_trust_score IS NOT NULL AND p_trust_score > 0 THEN p_trust_score
+    ELSE NULL
+  END;
+  v_min_trust_number := p_trust_number;
+  v_min_avg := CASE
+    WHEN p_min_avg_quality IS NOT NULL
+         AND p_min_avg_quality >= 1
+         AND p_min_avg_quality <= 3
+      THEN p_min_avg_quality
+    ELSE NULL
+  END;
+  v_min_best := CASE
+    WHEN p_min_best_quality IS NOT NULL
+         AND p_min_best_quality >= 1
+         AND p_min_best_quality <= 3
+      THEN p_min_best_quality
+    ELSE NULL
+  END;
+  v_min_quality := CASE
+    WHEN p_min_quality IS NOT NULL AND p_min_quality > 0 THEN p_min_quality
+    ELSE NULL
+  END;
+  v_min_earnings := CASE
+    WHEN p_min_platform_earnings IS NOT NULL AND p_min_platform_earnings > 0
+      THEN p_min_platform_earnings
+    ELSE NULL
+  END;
+  v_min_views := CASE
+    WHEN p_min_platform_views IS NOT NULL AND p_min_platform_views > 0
+      THEN p_min_platform_views
+    ELSE NULL
+  END;
+
+  IF v_min_trust IS NULL
+     AND v_min_trust_number IS NULL
+     AND v_min_avg IS NULL
+     AND v_min_best IS NULL
+     AND v_min_quality IS NULL
+     AND v_min_earnings IS NULL
+     AND v_min_views IS NULL THEN
+    RETURN true;
+  END IF;
+
+  -- shouldApplyQualityGates: explicit scores OR brand-new (0 verified).
+  v_apply_quality :=
+    COALESCE(p_creator_has_explicit_quality, false)
+    OR COALESCE(p_creator_verified_reels, 0) = 0;
+
+  IF v_min_trust IS NOT NULL AND v_trust_pct < v_min_trust THEN
+    RETURN false;
+  END IF;
+
+  IF v_min_trust_number IS NOT NULL AND v_trust_number < v_min_trust_number THEN
+    RETURN false;
+  END IF;
+
+  IF v_apply_quality AND v_min_best IS NOT NULL AND (
+    p_creator_best_quality IS NULL OR p_creator_best_quality < v_min_best
+  ) THEN
+    RETURN false;
+  END IF;
+
+  IF v_apply_quality AND v_min_avg IS NOT NULL AND (
+    p_creator_avg_quality IS NULL OR p_creator_avg_quality < v_min_avg
+  ) THEN
+    RETURN false;
+  END IF;
+
+  IF v_apply_quality AND v_min_quality IS NOT NULL AND (
+    p_creator_quality_sum IS NULL OR p_creator_quality_sum < v_min_quality
+  ) THEN
+    RETURN false;
+  END IF;
+
+  IF v_min_earnings IS NOT NULL AND v_earnings < v_min_earnings THEN
+    RETURN false;
+  END IF;
+
+  IF v_min_views IS NOT NULL AND v_views < v_min_views THEN
+    RETURN false;
+  END IF;
+
+  RETURN true;
+END;
+$$;
+
+COMMENT ON FUNCTION public.contest_matches_creator_eligibility(
+  text, integer, integer, numeric, integer, integer, bigint, bigint,
+  numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
+) IS
+  'True when creator snapshot meets contest gates (parity with isCreatorEligibleForContest).';
+
+REVOKE ALL ON FUNCTION public.contest_matches_creator_eligibility(
+  text, integer, integer, numeric, integer, integer, bigint, bigint,
+  numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
+) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION public.contest_matches_creator_eligibility(
+  text, integer, integer, numeric, integer, integer, bigint, bigint,
+  numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
+) TO authenticated, service_role;
+
+-- Paginated list IDs (filter + sort + limit), all list sorts + optional eligibleOnly
 CREATE OR REPLACE FUNCTION public.campaign_list_page_ids(
   p_scope text,
   p_advertiser_id uuid DEFAULT NULL,
@@ -432,7 +580,17 @@ CREATE OR REPLACE FUNCTION public.campaign_list_page_ids(
   p_post_contest_phase text DEFAULT 'all',
   p_search text DEFAULT '',
   p_media_type text DEFAULT 'all',
-  p_user_countries text[] DEFAULT NULL
+  p_user_countries text[] DEFAULT NULL,
+  p_eligible_only boolean DEFAULT false,
+  p_creator_trust_score_pct numeric DEFAULT NULL,
+  p_creator_trust_number integer DEFAULT NULL,
+  p_creator_avg_quality numeric DEFAULT NULL,
+  p_creator_best_quality integer DEFAULT NULL,
+  p_creator_quality_sum numeric DEFAULT NULL,
+  p_creator_earnings_cents bigint DEFAULT NULL,
+  p_creator_views bigint DEFAULT NULL,
+  p_creator_verified_reels integer DEFAULT NULL,
+  p_creator_has_explicit_quality boolean DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -512,6 +670,29 @@ BEGIN
         OR public.contest_matches_user_countries(c.region, v_user_countries)
       )
       AND (
+        NOT COALESCE(p_eligible_only, false)
+        OR p_scope <> 'opportunities'
+        OR public.contest_matches_creator_eligibility(
+          c.contest_format,
+          c.trust_score,
+          c.trust_number,
+          c.min_avg_quality_score,
+          c.min_best_quality_score,
+          c.min_quality_score,
+          c.min_platform_earnings,
+          c.min_platform_views,
+          p_creator_trust_score_pct,
+          p_creator_trust_number,
+          p_creator_avg_quality,
+          p_creator_best_quality,
+          p_creator_quality_sum,
+          p_creator_earnings_cents,
+          p_creator_views,
+          p_creator_verified_reels,
+          p_creator_has_explicit_quality
+        )
+      )
+      AND (
         COALESCE(p_contest_format, 'all') = 'all'
         OR (
           p_contest_format = 'video'
@@ -540,12 +721,10 @@ BEGIN
         p_scope <> 'opportunities'
         OR COALESCE(p_media_type, 'all') = 'all'
         OR (
-          -- Parity with opportunities client: media = video format only
           p_media_type = 'media'
           AND lower(coalesce(c.contest_format, '')) = 'video'
         )
         OR (
-          -- Parity with opportunities client: text = text_image format only
           p_media_type = 'text'
           AND lower(coalesce(c.contest_format, '')) = 'text_image'
         )
@@ -688,18 +867,22 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.campaign_list_page_ids(
-  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]
+  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[],
+  boolean, numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
 ) IS
-  'Returns { total, ids } for one campaign list page after SQL filter/sort (incl. budget/value/approval/CPM).';
+  'Returns { total, ids } for one campaign list page after SQL filter/sort. Optional p_eligible_only applies creator gate snapshot filter.';
 
 REVOKE ALL ON FUNCTION public.campaign_list_page_ids(
-  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]
+  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[],
+  boolean, numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
 ) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.campaign_list_page_ids(
-  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]
+  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[],
+  boolean, numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
 ) TO authenticated;
 
 GRANT EXECUTE ON FUNCTION public.campaign_list_page_ids(
-  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[]
+  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[],
+  boolean, numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
 ) TO service_role;

@@ -16,12 +16,18 @@ import {
   getCampaignListCache,
   setCampaignListCache,
 } from "@/lib/campaign-list-cache";
+import {
+  logCampaignListRequest,
+  startRequestTimer,
+} from "@/lib/campaign-list-observability";
 
 export const dynamic = "force-dynamic";
 
 const STATUS_TABS = new Set(["all", "live", "upcoming", "ended"]);
 
 export async function GET(request: NextRequest) {
+  const elapsed = startRequestTimer();
+  let eligibleOnly = false;
   try {
     const supabase = await createClient();
     const {
@@ -30,6 +36,14 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (error || !user) {
+      logCampaignListRequest({
+        route: "/api/opportunities/list",
+        durationMs: elapsed(),
+        status: 401,
+        cache: "N/A",
+        scope: "opportunities",
+        error: "Unauthorized",
+      });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -44,7 +58,7 @@ export async function GET(request: NextRequest) {
     // unrestricted campaigns (contest_matches_user_countries).
     const userCountries = await getCreatorUserCountries(supabase, user.id);
 
-    const eligibleOnly =
+    eligibleOnly =
       sp.get("eligibleOnly") === "1" || sp.get("eligibleOnly") === "true";
 
     let creatorEligibilitySnapshot;
@@ -87,6 +101,15 @@ export async function GET(request: NextRequest) {
     if (cacheKey) {
       const cached = await getCampaignListCache(cacheKey);
       if (cached) {
+        logCampaignListRequest({
+          route: "/api/opportunities/list",
+          durationMs: elapsed(),
+          status: 200,
+          cache: "HIT",
+          scope: "opportunities",
+          eligibleOnly: false,
+          total: Number((cached as { total?: number }).total) || 0,
+        });
         return NextResponse.json(cached, {
           headers: { "X-Campaign-List-Cache": "HIT" },
         });
@@ -119,9 +142,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const cacheHeader = cacheKey ? "MISS" : "BYPASS";
+    logCampaignListRequest({
+      route: "/api/opportunities/list",
+      durationMs: elapsed(),
+      status: 200,
+      cache: cacheHeader,
+      scope: "opportunities",
+      eligibleOnly,
+      total: result.total,
+    });
+
     return NextResponse.json(result, {
       headers: {
-        "X-Campaign-List-Cache": cacheKey ? "MISS" : "BYPASS",
+        "X-Campaign-List-Cache": cacheHeader,
       },
     });
   } catch (err: unknown) {
@@ -129,6 +163,15 @@ export async function GET(request: NextRequest) {
       err instanceof Error ? err.message : "Failed to fetch opportunities";
     console.error("[/api/opportunities/list] Error:", err);
     const status = isCampaignListForbiddenError(err) ? 403 : 500;
+    logCampaignListRequest({
+      route: "/api/opportunities/list",
+      durationMs: elapsed(),
+      status,
+      cache: "N/A",
+      scope: "opportunities",
+      eligibleOnly,
+      error: message,
+    });
     return NextResponse.json({ error: message }, { status });
   }
 }

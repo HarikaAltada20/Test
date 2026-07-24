@@ -14,6 +14,10 @@ import {
   getCampaignListCache,
   setCampaignListCache,
 } from "@/lib/campaign-list-cache";
+import {
+  logCampaignListRequest,
+  startRequestTimer,
+} from "@/lib/campaign-list-observability";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +33,18 @@ const TAB_IDS = new Set([
 ]);
 
 export async function GET(request: NextRequest) {
+  const elapsed = startRequestTimer();
   try {
     const { isAdmin, error: adminError } = await verifyAdminAccess();
     if (!isAdmin) {
+      logCampaignListRequest({
+        route: "/api/admin/contests/list",
+        durationMs: elapsed(),
+        status: 403,
+        cache: "N/A",
+        scope: "admin",
+        error: adminError || "Forbidden",
+      });
       return NextResponse.json(
         { error: adminError || "Forbidden" },
         { status: 403 },
@@ -67,6 +80,14 @@ export async function GET(request: NextRequest) {
 
     const cached = await getCampaignListCache(cacheKey);
     if (cached) {
+      logCampaignListRequest({
+        route: "/api/admin/contests/list",
+        durationMs: elapsed(),
+        status: 200,
+        cache: "HIT",
+        scope: "admin",
+        total: Number((cached as { total?: number }).total) || 0,
+      });
       return NextResponse.json(cached, {
         headers: { "X-Campaign-List-Cache": "HIT" },
       });
@@ -88,6 +109,15 @@ export async function GET(request: NextRequest) {
 
     await setCampaignListCache(cacheKey, result, "admin", "shared");
 
+    logCampaignListRequest({
+      route: "/api/admin/contests/list",
+      durationMs: elapsed(),
+      status: 200,
+      cache: "MISS",
+      scope: "admin",
+      total: result.total,
+    });
+
     return NextResponse.json(result, {
       headers: { "X-Campaign-List-Cache": "MISS" },
     });
@@ -96,6 +126,14 @@ export async function GET(request: NextRequest) {
       err instanceof Error ? err.message : "Failed to fetch contests";
     console.error("[/api/admin/contests/list] Error:", err);
     const status = isCampaignListForbiddenError(err) ? 403 : 500;
+    logCampaignListRequest({
+      route: "/api/admin/contests/list",
+      durationMs: elapsed(),
+      status,
+      cache: "N/A",
+      scope: "admin",
+      error: message,
+    });
     return NextResponse.json({ error: message }, { status });
   }
 }

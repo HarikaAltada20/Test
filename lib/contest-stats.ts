@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
+import { logContestStatsRefresh } from "@/lib/campaign-list-observability";
 
 export type ContestStatsRow = {
   contest_id: string;
@@ -35,6 +36,11 @@ export async function refreshContestStats(
   });
 
   if (error) {
+    logContestStatsRefresh({
+      ok: false,
+      contestId: contestId ?? null,
+      error: error.message,
+    });
     console.error(
       "[contest-stats] refresh_contest_stats failed:",
       {

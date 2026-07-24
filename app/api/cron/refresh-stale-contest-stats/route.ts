@@ -19,6 +19,7 @@ import {
   authorizeRefreshStaleContestStats,
   ensureRefreshStaleContestStatsSchedule,
 } from "@/lib/qstash";
+import { logStaleContestStatsCron } from "@/lib/campaign-list-observability";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -75,21 +76,52 @@ async function handle(request: Request): Promise<NextResponse> {
   );
 
   const started = Date.now();
-  const staleIds = await findStaleContestStatsIds(limit, staleMinutes);
+  const source = invokeSource(request);
 
-  if (staleIds.length === 0) {
-    return NextResponse.json({
-      refreshed: 0,
-      message: "No stale contest_stats",
-      elapsedMs: Date.now() - started,
+  try {
+    const staleIds = await findStaleContestStatsIds(limit, staleMinutes);
+
+    if (staleIds.length === 0) {
+      const elapsedMs = Date.now() - started;
+      logStaleContestStatsCron({
+        durationMs: elapsedMs,
+        status: 200,
+        refreshed: 0,
+        source,
+      });
+      return NextResponse.json({
+        refreshed: 0,
+        message: "No stale contest_stats",
+        elapsedMs,
+      });
+    }
+
+    await refreshContestStatsForContestIds(staleIds, { concurrency: 5 });
+
+    const elapsedMs = Date.now() - started;
+    logStaleContestStatsCron({
+      durationMs: elapsedMs,
+      status: 200,
+      refreshed: staleIds.length,
+      source,
     });
+
+    return NextResponse.json({
+      refreshed: staleIds.length,
+      contestIds: staleIds,
+      elapsedMs,
+    });
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "refresh-stale-contest-stats failed";
+    const elapsedMs = Date.now() - started;
+    logStaleContestStatsCron({
+      durationMs: elapsedMs,
+      status: 500,
+      refreshed: 0,
+      source,
+      error: message,
+    });
+    return NextResponse.json({ error: message, elapsedMs }, { status: 500 });
   }
-
-  await refreshContestStatsForContestIds(staleIds, { concurrency: 5 });
-
-  return NextResponse.json({
-    refreshed: staleIds.length,
-    contestIds: staleIds,
-    elapsedMs: Date.now() - started,
-  });
 }

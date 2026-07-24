@@ -16,11 +16,7 @@ import {
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
-import {
-  isCreatorEligibleForContest,
-  parseContestCreatorRequirements,
-  type CreatorRequirementsSnapshot,
-} from "@/lib/creator-requirements";
+import type { CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { sortCampaignsForList } from "@/lib/contest-list-sort";
 
@@ -127,21 +123,13 @@ export type ListCampaignsParams = {
   userCountries?: string[];
   /**
    * Opportunities only: keep contests the creator passes gates for.
-   * Requires creatorEligibilitySnapshot. Pagination scans SQL pages then
-   * filters so totals/pages match the eligible set (capped at
-   * ELIGIBLE_SCAN_MAX_SQL_ROWS SQL rows).
+   * Requires creatorEligibilitySnapshot. Filtering runs in
+   * campaign_list_page_ids (see 20260731_campaign_list_page_ids.sql)
+   * so totals and deep pages stay correct with no scan cap.
    */
   eligibleOnly?: boolean;
   creatorEligibilitySnapshot?: CreatorRequirementsSnapshot;
 };
-
-/** Batch size while scanning SQL pages for eligible-only lists. */
-const ELIGIBLE_SCAN_BATCH = 60;
-/**
- * Hard cap on SQL rows scanned for eligibleOnly (batches × size).
- * Prevents O(catalog) DoS / timeouts; totals beyond the cap are truncated.
- */
-const ELIGIBLE_SCAN_MAX_SQL_ROWS = 600;
 
 export type ListCampaignsResult = {
   contests: Array<
@@ -560,16 +548,6 @@ function resolveSortForSql(
     : "created_at_desc";
 }
 
-function contestPassesEligibility(
-  contest: LightweightContest,
-  snapshot: CreatorRequirementsSnapshot,
-): boolean {
-  return isCreatorEligibleForContest({
-    requirements: parseContestCreatorRequirements(contest),
-    snapshot,
-  });
-}
-
 /**
  * Prefer persisted budget_spent when metrics jobs wrote it; otherwise live-enrich
  * so list trackers are not stuck at $0 (common for dual/CPM before spend persist).
@@ -771,12 +749,18 @@ async function fetchFilteredPageSql(
 ): Promise<{ rows: LightweightContest[]; total: number }> {
   // Missing RPC: PostgREST only outside production (or with escape hatch).
   if (shouldSkipPageIdsRpc()) {
+    if (params.eligibleOnly) {
+      throwPageIdsRpcMissing(
+        "eligibleOnly requires campaign_list_page_ids with eligibility params",
+      );
+    }
     if (!allowCampaignListPostgrestFallback()) {
       throwPageIdsRpcMissing("previously detected missing RPC");
     }
     return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
   }
 
+  const snapshot = params.creatorEligibilitySnapshot;
   const { data: pagePayload, error: pageError } = await supabase.rpc(
     "campaign_list_page_ids",
     {
@@ -795,6 +779,16 @@ async function fetchFilteredPageSql(
       p_media_type: params.mediaType || "all",
       p_user_countries:
         params.scope === "opportunities" ? params.userCountries ?? null : null,
+      p_eligible_only: Boolean(params.eligibleOnly),
+      p_creator_trust_score_pct: snapshot?.trustScorePct ?? null,
+      p_creator_trust_number: snapshot?.trustNumber ?? null,
+      p_creator_avg_quality: snapshot?.avgQualityScore ?? null,
+      p_creator_best_quality: snapshot?.bestQualityScore ?? null,
+      p_creator_quality_sum: snapshot?.qualityScoreSum ?? null,
+      p_creator_earnings_cents: snapshot?.totalPlatformEarningsCents ?? null,
+      p_creator_views: snapshot?.totalViews ?? null,
+      p_creator_verified_reels: snapshot?.verifiedReels ?? null,
+      p_creator_has_explicit_quality: snapshot?.hasExplicitQualityScores ?? null,
     },
   );
 
@@ -807,14 +801,14 @@ async function fetchFilteredPageSql(
       throw new Error(pageError?.message || "Forbidden");
     }
     if (isCampaignListRpcMissingError(pageError)) {
-      if (!allowCampaignListPostgrestFallback()) {
+      if (params.eligibleOnly || !allowCampaignListPostgrestFallback()) {
         throwPageIdsRpcMissing(pageError?.message || "unknown");
       }
       markPageIdsRpcMissing(pageError?.message || "unknown");
       return fetchFilteredPageViaPostgrest(supabase, params, offset, limit);
     }
     // Transient / unexpected RPC errors: never silently degrade sort/totals in prod.
-    if (!allowCampaignListPostgrestFallback()) {
+    if (params.eligibleOnly || !allowCampaignListPostgrestFallback()) {
       throwPageIdsRpcFailed(pageError?.message || "empty payload");
     }
     console.warn(
@@ -994,6 +988,7 @@ async function fetchFilteredPageViaPostgrest(
  *
  * Sort uses stored contest_based_details / contest_stats. Page hydrate uses
  * persisted budget trackers when present; otherwise live-enriches the page.
+ * eligibleOnly is applied inside campaign_list_page_ids (no app scan cap).
  */
 export async function listCampaignsPaginated(
   params: ListCampaignsParams,
@@ -1009,10 +1004,6 @@ export async function listCampaignsPaginated(
         "eligibleOnly requires opportunities scope and creatorEligibilitySnapshot",
       );
     }
-    return listCampaignsPaginatedEligible(
-      params,
-      params.creatorEligibilitySnapshot,
-    );
   }
 
   const page = Math.max(1, params.page || 1);
@@ -1042,93 +1033,6 @@ export async function listCampaignsPaginated(
   return {
     contests: enrichedPage,
     total: sqlTotal,
-    page,
-    limit,
-    tabCounts: countsFromRpc?.tabCounts ?? emptyTabCounts(),
-    postPhaseCounts:
-      countsFromRpc?.postPhaseCounts ?? emptyPostPhaseCounts(),
-    availablePlatforms: countsFromRpc?.availablePlatforms ?? ["all"],
-  };
-}
-
-/**
- * Eligible-only opportunities: scan SQL-matching pages (capped), filter by
- * creator gates, then paginate. Cap avoids O(catalog) timeouts under traffic;
- * when hit, total is the eligible count found within the scan window.
- */
-async function listCampaignsPaginatedEligible(
-  params: ListCampaignsParams,
-  snapshot: CreatorRequirementsSnapshot,
-): Promise<ListCampaignsResult> {
-  const page = Math.max(1, params.page || 1);
-  const limit = parseListLimit(String(params.limit));
-  const sortForSql = resolveSortForSql(params);
-  const pageStart = (page - 1) * limit;
-  const pageEnd = pageStart + limit;
-
-  const countsPromise = fetchTabCountsFromRpc(params.supabase, params);
-
-  const pageRows: ContestWithStats[] = [];
-  let eligibleCount = 0;
-  let sqlOffset = 0;
-  let sqlTotal = 0;
-  let hitScanCap = false;
-
-  for (;;) {
-    if (sqlOffset >= ELIGIBLE_SCAN_MAX_SQL_ROWS) {
-      hitScanCap = true;
-      break;
-    }
-
-    const batchLimit = Math.min(
-      ELIGIBLE_SCAN_BATCH,
-      ELIGIBLE_SCAN_MAX_SQL_ROWS - sqlOffset,
-    );
-    const { rows, total } = await fetchFilteredPageSql(
-      params.supabase,
-      { ...params, sort: sortForSql },
-      sqlOffset,
-      batchLimit,
-    );
-    sqlTotal = total;
-    if (rows.length === 0) break;
-
-    for (const row of rows) {
-      const flat = flattenContestStats(row);
-      if (!contestPassesEligibility(flat, snapshot)) continue;
-      if (eligibleCount >= pageStart && eligibleCount < pageEnd) {
-        pageRows.push(flat);
-      }
-      eligibleCount += 1;
-    }
-
-    sqlOffset += rows.length;
-    if (sqlOffset >= sqlTotal) break;
-    if (sqlOffset >= ELIGIBLE_SCAN_MAX_SQL_ROWS) {
-      hitScanCap = true;
-      break;
-    }
-  }
-
-  if (hitScanCap) {
-    console.warn(
-      `[contest-list-query] eligibleOnly scan capped at ${ELIGIBLE_SCAN_MAX_SQL_ROWS} SQL rows ` +
-        `(sqlTotal=${sqlTotal}, eligibleFound=${eligibleCount}); totals may be truncated`,
-    );
-  }
-
-  const countsFromRpc = await countsPromise;
-  if (!countsFromRpc) {
-    console.error(
-      "[contest-list-query] campaign_list_tab_counts unavailable; apply db/migrations/20260730_campaign_list_query.sql (not loading full campaign set)",
-    );
-  }
-
-  const enrichedPage = await hydrateListPage(params, pageRows);
-
-  return {
-    contests: enrichedPage,
-    total: eligibleCount,
     page,
     limit,
     tabCounts: countsFromRpc?.tabCounts ?? emptyTabCounts(),

@@ -69,6 +69,8 @@ curl -X POST "https://your-app.vercel.app/api/cron/refresh-stale-contest-stats" 
   -d '{}'
 ```
 
+Structured logs: successful and failed runs emit JSON with `"type":"refresh_stale_contest_stats"` (`durationMs`, `refreshed`, `error`). List routes emit `"type":"campaign_list_request"`. See `docs/PRODUCTION_DEPLOYMENT_NOTES.md` (Campaign list monitoring).
+
 ---
 
 ## Optional: Daily Crons via QStash
