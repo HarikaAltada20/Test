@@ -818,18 +818,18 @@ export async function POST(
     }
 
     if (totalCpm > 0) {
-      const { error: rpcErr } = await supabaseAdmin.rpc(
-        "add_twitter_leaderboard_cpm_earnings_delta",
-        {
-          p_contest_id: contestId,
-          p_creator_id: creatorId,
-          p_delta_cents: totalCpm,
-        }
+      const { reconcileTwitterLeaderboardCpmEarnings } = await import(
+        "@/lib/twitter/reconcile-leaderboard-cpm-earnings"
       );
-      if (rpcErr) {
+      const reconciled = await reconcileTwitterLeaderboardCpmEarnings(
+        contestId,
+        creatorId,
+        supabaseAdmin,
+      );
+      if (!reconciled.ok) {
         console.error(
-          "[bulk-pay-twitter-cpm] Leaderboard earnings delta RPC failed:",
-          rpcErr
+          "[bulk-pay-twitter-cpm] Leaderboard earnings reconcile failed:",
+          reconciled.error,
         );
         return NextResponse.json(
           {

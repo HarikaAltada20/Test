@@ -18,6 +18,7 @@ import {
   recoverProcessingJobsToQueueYouTube,
 } from "@/lib/queue/youtube-metrics-queue";
 import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
+import { refreshContestStats } from "@/lib/contest-stats";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { isYouTubeAllLikeScope, mergePostCampaignYouTubeTimestamps } from "@/lib/youtube-submission-refresh-by-scope";
 import {
@@ -68,6 +69,7 @@ async function finalizeContestAfterYoutubeRun(
 ): Promise<void> {
   const now = new Date().toISOString();
   await supabaseAdmin.from("contests").update({ last_metrics_updated: now }).eq("id", contestId);
+  await refreshContestStats(contestId);
 
   if (scope !== "basic") {
     const { data: contestRow } = await supabaseAdmin

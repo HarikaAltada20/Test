@@ -12,6 +12,7 @@ import {
   postContestStatusLocksSubmissionModeration,
   SUBMISSION_MODERATION_LOCKED_MESSAGE,
 } from "@/lib/post-contest-moderation-lock";
+import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 /**
  * POST /api/contests/[id]/moderate-submission
@@ -387,30 +388,8 @@ export async function POST(
           }
         }
 
-        // Decrement leaderboard CPM aggregate only (atomic; safe for concurrent reversals)
-        if (cpmReversalCents > 0) {
-          const { error: rpcErr } = await supabaseAdmin.rpc(
-            "add_twitter_leaderboard_cpm_earnings_delta",
-            {
-              p_contest_id: contestId,
-              p_creator_id: creatorId,
-              p_delta_cents: -cpmReversalCents,
-            }
-          );
-          if (rpcErr) {
-            console.error(
-              "[moderate-submission] Leaderboard earnings delta RPC failed:",
-              rpcErr
-            );
-            return NextResponse.json(
-              {
-                error:
-                  "Reversal processed but failed to update leaderboard earnings. Please retry or contact support.",
-              },
-              { status: 500 }
-            );
-          }
-        }
+        // Leaderboard CPM aggregate is reconciled after the tweet row is updated below
+        // (sum of remaining paid tweet earnings) so we do not rely on additive deltas.
 
         refund = {
           cpmCents: cpmReversalCents,
@@ -482,6 +461,47 @@ export async function POST(
       );
     }
 
+    // After tweet earnings cleared/set, recompute leaderboard CPM from paid rows.
+    if (
+      isTwitterCpm &&
+      currentTweet?.creator_id &&
+      (currentTweet.moderation_status === "paid" || action === "paid")
+    ) {
+      try {
+        const { reconcileTwitterLeaderboardCpmEarnings } = await import(
+          "@/lib/twitter/reconcile-leaderboard-cpm-earnings"
+        );
+        const reconciled = await reconcileTwitterLeaderboardCpmEarnings(
+          contestId,
+          currentTweet.creator_id,
+          supabaseAdmin,
+        );
+        if (!reconciled.ok) {
+          console.error(
+            "[moderate-submission] Leaderboard earnings reconcile failed:",
+            reconciled.error,
+          );
+          if (
+            currentTweet.moderation_status === "paid" &&
+            action !== "paid"
+          ) {
+            return NextResponse.json(
+              {
+                error:
+                  "Reversal processed but failed to update leaderboard earnings. Please retry or contact support.",
+              },
+              { status: 500 },
+            );
+          }
+        }
+      } catch (reconcileErr) {
+        console.error(
+          "[moderate-submission] Leaderboard earnings reconcile error:",
+          reconcileErr,
+        );
+      }
+    }
+
     // DB-only leaderboard recompute (no Twitter/RapidAPI; preserve refresh cooldown metadata)
     if (currentTweet?.creator_id) {
       try {
@@ -505,6 +525,7 @@ export async function POST(
         : action === "paid"
         ? "marked as paid"
         : "set to pending";
+    schedulePersistContestBudgetSpent(contestId);
     return NextResponse.json({
       success: true,
       message: `Tweet ${actionMessage} successfully`,

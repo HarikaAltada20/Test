@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
   METRICS_REFRESH_COOLDOWN_MS_BRAND,
@@ -627,6 +629,9 @@ export async function POST(
         `Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`,
       );
     }
+
+    await refreshContestStats(contestId);
+    await persistContestBudgetSpent(contestId);
 
     const syncElapsedMs = Date.now() - refreshMetricsStartMs;
     console.log(

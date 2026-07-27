@@ -6,6 +6,7 @@ import {
   hasNormalizedCreatorRequirement,
   validateCreatorRequirementFields,
 } from "@/lib/contest-creator-requirements-validation";
+import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -129,6 +130,11 @@ export async function POST(request: NextRequest) {
       console.error("Admin contest insert error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    await invalidateCampaignListCachesAfterMutation({
+      advertiserId,
+      touchOpportunities: false,
+    });
 
     return NextResponse.json({ success: true, id: data.id });
   } catch (error) {

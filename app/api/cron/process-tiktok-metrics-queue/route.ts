@@ -19,6 +19,7 @@ import {
   isQStashEnabled,
   triggerProcessTikTokMetricsQueue,
 } from "@/lib/qstash";
+import { refreshContestStats } from "@/lib/contest-stats";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -273,6 +274,10 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           : { last_metrics_updated: now },
       )
       .eq("id", job.contestId);
+
+    if (!isPostCampaignTarget) {
+      await refreshContestStats(job.contestId);
+    }
   }
 
   return NextResponse.json({

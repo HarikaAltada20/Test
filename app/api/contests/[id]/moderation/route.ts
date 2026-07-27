@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { getContestBudgetPaymentMismatch } from '@/lib/contest-payment-validation';
+import { invalidateCampaignListCachesAfterMutation } from '@/lib/campaign-list-cache';
 
 // POST: Brand submit contest for approval or publish approved contest
 export async function POST(
@@ -130,6 +131,11 @@ export async function POST(
         return NextResponse.json({ error: 'Failed to submit for approval' }, { status: 500 });
       }
 
+      await invalidateCampaignListCachesAfterMutation({
+        advertiserId: contest.advertiser_id,
+        touchOpportunities: false,
+      });
+
       return NextResponse.json({ 
         success: true,
         message: 'Contest submitted for approval'
@@ -172,6 +178,11 @@ export async function POST(
       if (error) {
         return NextResponse.json({ error: 'Failed to publish contest' }, { status: 500 });
       }
+
+      await invalidateCampaignListCachesAfterMutation({
+        advertiserId: contest.advertiser_id,
+        touchOpportunities: true,
+      });
 
       return NextResponse.json({ 
         success: true,

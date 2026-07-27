@@ -58,6 +58,7 @@ import {
   consumeCreateFlowReturnStep,
 } from "@/lib/before-unload-utils";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
+import { invalidateBrandCampaignListCachesAfterMutation } from "@/lib/invalidate-brand-campaign-list-cache";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
@@ -1309,6 +1310,7 @@ export default function CreateContestPage({
         return null;
       }
 
+      invalidateBrandCampaignListCachesAfterMutation();
       return data.id;
     } catch (error) {
       console.error("Error creating draft contest:", error);
@@ -3766,6 +3768,11 @@ export default function CreateContestPage({
 
       if (responseError) throw responseError;
 
+      // Brand writes bypass mutation APIs — bump list gens so dashboards see the change.
+      if (!isAdmin) {
+        invalidateBrandCampaignListCachesAfterMutation();
+      }
+
       // Set contestId and draftId for both draft and non-draft contests to ensure we have the campaign ID
       if (responseData && responseData.length > 0) {
         const newContestId = responseData[0].id;
@@ -4625,6 +4632,7 @@ export default function CreateContestPage({
           console.error("Error creating basics draft:", error);
           return;
         }
+        invalidateBrandCampaignListCachesAfterMutation();
         setContestId(data.id);
         setDraftId(data.id);
         return data.id;
@@ -4660,6 +4668,8 @@ export default function CreateContestPage({
             .eq("advertiser_id", effectiveAdvertiserId);
           if (error) {
             console.error("Error updating basics draft:", error);
+          } else {
+            invalidateBrandCampaignListCachesAfterMutation();
           }
         }
         return currentContestId;

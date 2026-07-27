@@ -15,6 +15,8 @@ import {
 import { syncTwitterLeaderboardFromTweets } from "@/lib/twitter/sync-twitter-leaderboard-from-tweets";
 import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export const dynamic = "force-dynamic";
 
@@ -1937,6 +1939,10 @@ export async function POST(
     console.log(
       `[twitter-refresh-tweets] Preparing contest-level updates for contest ${contestId} at ${currentTime} (creatorIdOnly=${creatorIdOnly})`
     );
+
+    // Refresh contest_stats + persisted budget_spent once after impressions land.
+    await refreshContestStats(contestId);
+    await persistContestBudgetSpent(contestId);
 
     if (!creatorIdOnly) {
       // Update last_metrics_updated in contests table (same logic as Instagram and YouTube)

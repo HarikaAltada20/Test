@@ -5,6 +5,7 @@ import { MetricsService } from "@/lib/metrics-service";
 import { POST_CONTEST_STATUS } from "@/lib/constants-status";
 import { postContestStatusLocksViews } from "@/lib/contest-metrics-refresh-eligibility";
 import { CONTEST_VIEWS_SYNC_FAILED_MESSAGE } from "@/lib/submission-credited-views";
+import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
 
 export async function POST(
   request: NextRequest,
@@ -171,6 +172,11 @@ export async function POST(
           );
         }
 
+        await invalidateCampaignListCachesAfterMutation({
+          advertiserId: contest.advertiser_id,
+          touchOpportunities: false,
+        });
+
         return NextResponse.json({
           success: true,
           message: `Contest status updated to ${status}`,
@@ -213,6 +219,11 @@ export async function POST(
         { status: 500 },
       );
     }
+
+    await invalidateCampaignListCachesAfterMutation({
+      advertiserId: contest.advertiser_id,
+      touchOpportunities: false,
+    });
 
     return NextResponse.json({
       success: true,

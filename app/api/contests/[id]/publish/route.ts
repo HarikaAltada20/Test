@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { MetricsService } from "@/lib/metrics-service";
 import { clearContestsCache } from "@/lib/cache-utils";
+import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
 
 export async function POST(
   request: NextRequest,
@@ -103,6 +104,10 @@ export async function POST(
     }
 
     clearContestsCache();
+    await invalidateCampaignListCachesAfterMutation({
+      advertiserId: contest.advertiser_id,
+      touchOpportunities: true,
+    });
 
     try {
       const budgetCents =

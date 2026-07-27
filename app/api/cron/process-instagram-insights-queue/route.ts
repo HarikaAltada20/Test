@@ -16,6 +16,7 @@ import {
 } from "@/lib/queue/instagram-insights-queue";
 import { updateCpmContestBudgets } from "@/lib/instagram-insights";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { refreshContestStats } from "@/lib/contest-stats";
 import {
   authorizeProcessInstagramInsightsQueue,
   isQStashEnabled,
@@ -272,6 +273,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
 
     // Overlay refresh must not recalculate live contest budgets / leaderboard.
     if (!isPostCampaignTarget) {
+      await refreshContestStats(job.contestId);
       await updateCpmContestBudgets(supabaseAdmin, job.contestId);
       revalidateLeaderboardCache(job.contestId);
     } else {

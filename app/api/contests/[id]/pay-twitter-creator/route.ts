@@ -655,6 +655,25 @@ export async function POST(
       }
     }
 
+    // CPM: keep leaderboard.earnings aligned with sum of paid tweet earnings
+    // (prevents drift if an earlier additive delta left a stale total).
+    if (contest.contest_type === "cpm") {
+      const { reconcileTwitterLeaderboardCpmEarnings } = await import(
+        "@/lib/twitter/reconcile-leaderboard-cpm-earnings"
+      );
+      const reconciled = await reconcileTwitterLeaderboardCpmEarnings(
+        contestId,
+        creatorId,
+        supabaseAdmin,
+      );
+      if (!reconciled.ok) {
+        console.error(
+          "[pay-twitter-creator] Leaderboard earnings reconcile failed:",
+          reconciled.error,
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Payment processed successfully",

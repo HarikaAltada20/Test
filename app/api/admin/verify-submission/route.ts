@@ -16,6 +16,7 @@ import {
   shouldCreditSubmissionViewsOnStatusChange,
 } from "@/lib/creator-total-views";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import {
   postContestStatusLocksSubmissionModeration,
   SUBMISSION_MODERATION_LOCKED_MESSAGE,
@@ -785,6 +786,7 @@ export async function POST(request: Request) {
         }
 
         if (action === "mark_bonus_paid") {
+          schedulePersistContestBudgetSpent(submissionFull.contest_id);
           return NextResponse.json({
             success: true,
             message: "Milestone reward paid successfully",
@@ -1067,6 +1069,7 @@ export async function POST(request: Request) {
     // If action is mark_both_paid, continue to regular payment logic
     // Otherwise, return success for mark_bonus_paid
     if (action === "mark_bonus_paid") {
+      schedulePersistContestBudgetSpent(submissionFull.contest_id);
       return NextResponse.json({
         success: true,
         message: "Flat fee bonus paid successfully",
@@ -2085,6 +2088,9 @@ export async function POST(request: Request) {
           : ` Verification complete: no reward or bonus was debited from the creator (nothing on record to refund). Paid and bonus-paid flags were cleared.`;
       message += refundDetail;
     }
+
+    // Keep list/SQL budget trackers in sync for all contest types.
+    schedulePersistContestBudgetSpent(submissionFull.contest_id);
 
     return NextResponse.json({
       success: true,

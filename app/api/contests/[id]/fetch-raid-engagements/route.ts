@@ -11,6 +11,8 @@ import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
 import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
 import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export const dynamic = "force-dynamic";
 
@@ -1739,13 +1741,18 @@ export async function POST(
         { onConflict: "contest_id" }
       );
 
-      // 11. Update last_metrics_updated in contests table (only when full run or last batch)
+      // 11. Finalize once per contest (full run or last batch only).
+      // Mid-batch refresh would N× recount contest_stats for the same campaign.
       const isLastRaidBatch =
         !isBatchedRaid ||
         (typeof batchIndex === "number" &&
           typeof totalBatches === "number" &&
           batchIndex === totalBatches - 1);
+
       if (isLastRaidBatch) {
+        await refreshContestStats(contestId);
+        await persistContestBudgetSpent(contestId);
+
         const currentTime = new Date().toISOString();
         console.log(
           `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`

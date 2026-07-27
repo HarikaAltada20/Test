@@ -1,7 +1,11 @@
 /**
  * Bump contests.last_metrics_updated after a metrics cron refreshes submissions.
- * CPM budget rollups also set this field; this covers milestone/leaderboard campaigns too.
+ * Also refreshes contest_stats once per contest (views/impressions no longer
+ * fire per-row recount triggers).
  */
+import { refreshContestStatsForContestIds } from "@/lib/contest-stats";
+import { persistContestBudgetSpentForContestIds } from "@/lib/persist-contest-budget-spent";
+
 export async function bumpContestLastMetricsUpdated(
   supabaseAdmin: { from: (t: string) => any },
   contestIds: string[],
@@ -22,6 +26,10 @@ export async function bumpContestLastMetricsUpdated(
       error,
     );
   }
+
+  await refreshContestStatsForContestIds(unique);
+  // Keep list/SQL budget sorts aligned for CPM, milestone, dual, leaderboard.
+  await persistContestBudgetSpentForContestIds(unique, { concurrency: 3 });
 }
 
 /** Map submission ids that were updated → distinct contest ids from the source rows. */

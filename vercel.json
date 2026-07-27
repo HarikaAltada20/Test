@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/process-warm-up-sends?action=metrics",
       "schedule": "59 23 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-stale-contest-stats",
+      "schedule": "25 5 * * *"
     }
   ]
 }
