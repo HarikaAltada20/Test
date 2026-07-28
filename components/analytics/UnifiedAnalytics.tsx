@@ -1021,7 +1021,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 align="start"
                 onCloseAutoFocus={(e) => e.preventDefault()}
                 className={cn(
-                  "w-56 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+                  "w-56 border shadow-lg",
+                  isDark
+                    ? "bg-[#06021D] border-gray-800 text-white"
+                    : "bg-white border-black/5 text-black",
                 )}
               >
                 <DropdownMenuCheckboxItem
@@ -1077,7 +1080,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 align="end"
                 onCloseAutoFocus={(e) => e.preventDefault()}
                 className={cn(
-                  "w-96 bg-white border border-black/5 text-black shadow-lg dark:border-white/10 dark:bg-[#1a1a1a] dark:text-white",
+                  "w-96 border shadow-lg",
+                  isDark
+                    ? "bg-[#06021D] border-gray-800 text-white"
+                    : "bg-white border-black/5 text-black",
                 )}
               >
                 <DropdownMenuCheckboxItem
