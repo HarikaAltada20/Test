@@ -433,7 +433,7 @@ const allColumns = {
     { id: "avg_quality_score", label: "Avg Quality Score" },
     { id: "best_quality_score", label: "Best Quality Score" },
     { id: "quality_score_sum", label: "Quality Score Sum" },
-    { id: "scored_verified_count", label: "Score Verified Sum" },
+    { id: "scored_verified_count", label: "Score Verified Count" },
     { id: "quality_score_counts", label: "Quality Score Counts" },
     { id: "date_of_birth", label: "Date of Birth" },
     { id: "gender", label: "Gender" },
@@ -4182,7 +4182,7 @@ export default function AdminUsersPage() {
                         {isColumnVisible("scored_verified_count") && (
                           <SortableHeader
                             columnId="scored_verified_count"
-                            label="Score Verified Sum"
+                            label="Score Verified Count"
                           />
                         )}
                         {isColumnVisible("quality_score_counts") && (
