@@ -129,6 +129,11 @@ type CreatorProfile = {
   subcategories?: any | null;
   interests?: string[] | any | null;
   trust_score_metrics?: unknown | null;
+  avg_quality_score?: number | null;
+  best_quality_score?: number | null;
+  quality_score_sum?: number | null;
+  scored_verified_count?: number | null;
+  quality_score_counts?: any | null;
 };
 
 type User = {
@@ -419,7 +424,17 @@ const allColumns = {
     { id: "withdrawable_balance", label: "Withdrawable Balance" },
     { id: "total_submissions_made", label: "Total Submissions Made" },
     { id: "total_submissions_won", label: "Total Submissions Won" },
-    { id: "trust_score", label: "Trust Score" },
+    { id: "total_reels", label: "Total Reels" },
+    { id: "trust_score", label: "Trust %" },
+    { id: "trust_number", label: "Trust Score" },
+    { id: "pending_reels", label: "Pending Reels" },
+    { id: "rejected_reels", label: "Rejected Reels" },
+    { id: "verified_reels", label: "Verified Reels" },
+    { id: "avg_quality_score", label: "Avg Quality Score" },
+    { id: "best_quality_score", label: "Best Quality Score" },
+    { id: "quality_score_sum", label: "Quality Score Sum" },
+    { id: "scored_verified_count", label: "Score Verified Sum" },
+    { id: "quality_score_counts", label: "Quality Score Counts" },
     { id: "date_of_birth", label: "Date of Birth" },
     { id: "gender", label: "Gender" },
     { id: "country", label: "Country" },
@@ -1104,7 +1119,67 @@ export default function AdminUsersPage() {
         }
         return null;
       case "trust_score":
-        return getCreatorTrustScoreForRow(row);
+      case "trust_number":
+      case "total_reels":
+      case "pending_reels":
+      case "rejected_reels":
+      case "verified_reels": {
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const m = profiles[0]?.trust_score_metrics;
+          if (m) {
+            try {
+              const parsed = typeof m === "string" ? JSON.parse(m) : m;
+              const val = parsed?.[columnId];
+              if (val !== undefined && val !== null) return Number(val);
+            } catch {}
+          }
+        }
+        return columnId === "trust_score" ? 100 : 0;
+      }
+      case "avg_quality_score":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.avg_quality_score;
+        }
+        return null;
+      case "best_quality_score":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.best_quality_score;
+        }
+        return null;
+      case "quality_score_sum":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.quality_score_sum;
+        }
+        return null;
+      case "scored_verified_count":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          return profiles[0]?.scored_verified_count;
+        }
+        return null;
+      case "quality_score_counts":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const c = profiles[0]?.quality_score_counts;
+          return c ? JSON.stringify(c) : "";
+        }
+        return "";
       case "date_of_birth":
         if (row.creator_profiles) {
           const profiles = Array.isArray(row.creator_profiles)
@@ -2017,10 +2092,58 @@ export default function AdminUsersPage() {
               aValue = aProfile?.total_submissions_won || 0;
               bValue = bProfile?.total_submissions_won || 0;
               break;
+            case "total_reels":
             case "trust_score":
-              aValue = getCreatorTrustScoreForRow(a);
-              bValue = getCreatorTrustScoreForRow(b);
+            case "trust_number":
+            case "pending_reels":
+            case "rejected_reels":
+            case "verified_reels": {
+              const getVal = (profile: CreatorProfile | null) => {
+                const m = profile?.trust_score_metrics;
+                if (!m) return sortColumn === "trust_score" ? 100 : 0;
+                try {
+                  const parsed = typeof m === "string" ? JSON.parse(m) : m;
+                  const val = parsed?.[sortColumn];
+                  if (val === null || val === undefined) return sortColumn === "trust_score" ? 100 : 0;
+                  return Number(val);
+                } catch {
+                  return sortColumn === "trust_score" ? 100 : 0;
+                }
+              };
+              aValue = getVal(aProfile);
+              bValue = getVal(bProfile);
               break;
+            }
+            case "avg_quality_score":
+              aValue = aProfile?.avg_quality_score ? Number(aProfile.avg_quality_score) : 0;
+              bValue = bProfile?.avg_quality_score ? Number(bProfile.avg_quality_score) : 0;
+              break;
+            case "best_quality_score":
+              aValue = aProfile?.best_quality_score ?? 0;
+              bValue = bProfile?.best_quality_score ?? 0;
+              break;
+            case "quality_score_sum":
+              aValue = aProfile?.quality_score_sum ? Number(aProfile.quality_score_sum) : 0;
+              bValue = bProfile?.quality_score_sum ? Number(bProfile.quality_score_sum) : 0;
+              break;
+            case "scored_verified_count":
+              aValue = aProfile?.scored_verified_count ?? 0;
+              bValue = bProfile?.scored_verified_count ?? 0;
+              break;
+            case "quality_score_counts": {
+              const getTotalCounts = (counts: any) => {
+                if (!counts) return 0;
+                try {
+                  const c = typeof counts === "string" ? JSON.parse(counts) : counts;
+                  return (c?.score1 ?? 0) + (c?.score2 ?? 0) + (c?.score3 ?? 0);
+                } catch {
+                  return 0;
+                }
+              };
+              aValue = getTotalCounts(aProfile?.quality_score_counts);
+              bValue = getTotalCounts(bProfile?.quality_score_counts);
+              break;
+            }
             case "date_of_birth":
               // Convert dates to timestamps for proper chronological sorting
               // Use Number.MAX_SAFE_INTEGER as sentinel for empty dates to ensure they sort last
@@ -2183,13 +2306,44 @@ export default function AdminUsersPage() {
 
     // Apply filters
     if (filters.length > 0) {
-      // Helper function to check if a single filter matches a row
       const doesFilterMatch = (row: User, filter: FilterType): boolean => {
         if (!filter.value.trim()) return true; // Skip empty filters
 
         const columnValue = getColumnValue(row, filter.column);
         const rawFilterValue = filter.value.trim();
         const filterValue = rawFilterValue.toLowerCase();
+
+        // Special handling for quality_score_counts to perform numeric/operator checks on nested keys
+        if (filter.column === "quality_score_counts") {
+          if (columnValue) {
+            try {
+              const parsed = typeof columnValue === "string" ? JSON.parse(columnValue) : columnValue;
+              const numericFilter = Number(rawFilterValue);
+              if (Number.isNaN(numericFilter)) return false;
+              const operator = filter.operator || "=";
+
+              const vals = [
+                Number(parsed?.score1 ?? 0),
+                Number(parsed?.score2 ?? 0),
+                Number(parsed?.score3 ?? 0),
+              ];
+
+              return vals.some(val => {
+                switch (operator) {
+                  case ">": return val > numericFilter;
+                  case "<": return val < numericFilter;
+                  case ">=": return val >= numericFilter;
+                  case "<=": return val <= numericFilter;
+                  case "!=": return val !== numericFilter;
+                  default: return val === numericFilter;
+                }
+              });
+            } catch {
+              return false;
+            }
+          }
+          return false;
+        }
 
         // Exact numeric match for integer count columns (e.g. total_submissions_won)
         // Also supports comparison operators for rankings and other integer fields
@@ -2205,6 +2359,15 @@ export default function AdminUsersPage() {
           "total_submissions_made",
           "total_submissions_won",
           "trust_score",
+          "avg_quality_score",
+          "best_quality_score",
+          "quality_score_sum",
+          "scored_verified_count",
+          "total_reels",
+          "trust_number",
+          "pending_reels",
+          "rejected_reels",
+          "verified_reels",
           // Add "rankings" here when the field is available
         ];
 
@@ -2221,6 +2384,15 @@ export default function AdminUsersPage() {
           "total_submissions_made",
           "total_submissions_won",
           "trust_score",
+          "avg_quality_score",
+          "best_quality_score",
+          "quality_score_sum",
+          "scored_verified_count",
+          "total_reels",
+          "trust_number",
+          "pending_reels",
+          "rejected_reels",
+          "verified_reels",
           // Add "rankings" here when the field is available
         ];
 
@@ -3953,10 +4125,70 @@ export default function AdminUsersPage() {
                             </div>
                           </TableHead>
                         )}
+                        {isColumnVisible("total_reels") && (
+                          <SortableHeader
+                            columnId="total_reels"
+                            label="Total Reels"
+                          />
+                        )}
                         {isColumnVisible("trust_score") && (
                           <SortableHeader
                             columnId="trust_score"
+                            label="Trust %"
+                          />
+                        )}
+                        {isColumnVisible("trust_number") && (
+                          <SortableHeader
+                            columnId="trust_number"
                             label="Trust Score"
+                          />
+                        )}
+                        {isColumnVisible("pending_reels") && (
+                          <SortableHeader
+                            columnId="pending_reels"
+                            label="Pending Reels"
+                          />
+                        )}
+                        {isColumnVisible("rejected_reels") && (
+                          <SortableHeader
+                            columnId="rejected_reels"
+                            label="Rejected Reels"
+                          />
+                        )}
+                        {isColumnVisible("verified_reels") && (
+                          <SortableHeader
+                            columnId="verified_reels"
+                            label="Verified Reels"
+                          />
+                        )}
+                        {isColumnVisible("avg_quality_score") && (
+                          <SortableHeader
+                            columnId="avg_quality_score"
+                            label="Avg Quality Score"
+                          />
+                        )}
+                        {isColumnVisible("best_quality_score") && (
+                          <SortableHeader
+                            columnId="best_quality_score"
+                            label="Best Quality Score"
+                          />
+                        )}
+                        {isColumnVisible("quality_score_sum") && (
+                          <SortableHeader
+                            columnId="quality_score_sum"
+                            label="Quality Score Sum"
+                          />
+                        )}
+                        {isColumnVisible("scored_verified_count") && (
+                          <SortableHeader
+                            columnId="scored_verified_count"
+                            label="Score Verified Sum"
+                          />
+                        )}
+                        {isColumnVisible("quality_score_counts") && (
+                          <SortableHeader
+                            columnId="quality_score_counts"
+                            label="Quality Score Counts"
                           />
                         )}
                         {isColumnVisible("date_of_birth") && (
@@ -4468,6 +4700,15 @@ export default function AdminUsersPage() {
                           ? r.creator_profiles[0]
                           : null
                         : r.creator_profiles || null;
+                      const trustMetrics = (() => {
+                        if (!creatorProfile?.trust_score_metrics) return null;
+                        try {
+                          const raw = creatorProfile.trust_score_metrics;
+                          return typeof raw === "string" ? JSON.parse(raw) : raw;
+                        } catch {
+                          return null;
+                        }
+                      })();
                       const isSelected =
                         selectAllFiltered || selectedUserIds.has(r.id);
                       return (
@@ -5053,11 +5294,97 @@ export default function AdminUsersPage() {
                                   {creatorProfile?.total_submissions_won || 0}
                                 </TableCell>
                               )}
-                              {isColumnVisible("trust_score") && (
-                                <TableCell className="whitespace-nowrap border-r">
-                                  {formatTrustScorePct(getCreatorTrustScoreForRow(r))}
+                              {isColumnVisible("total_reels") && (
+                                <TableCell className="whitespace-nowrap border-r text-xs">
+                                  {trustMetrics?.total_reels ?? 0}
                                 </TableCell>
                               )}
+                              {isColumnVisible("trust_score") && (
+                                <TableCell className="whitespace-nowrap border-r text-xs">
+                                  {trustMetrics?.trust_score ?? 100}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("trust_number") && (
+                                <TableCell className="whitespace-nowrap border-r text-xs">
+                                  {trustMetrics?.trust_number ?? 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("pending_reels") && (
+                                <TableCell className="whitespace-nowrap border-r text-xs">
+                                  {trustMetrics?.pending_reels ?? 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("rejected_reels") && (
+                                <TableCell className="whitespace-nowrap border-r text-xs">
+                                  {trustMetrics?.rejected_reels ?? 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("verified_reels") && (
+                                <TableCell className="whitespace-nowrap border-r text-xs">
+                                  {trustMetrics?.verified_reels ?? 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("avg_quality_score") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.avg_quality_score !== null &&
+                                  creatorProfile?.avg_quality_score !== undefined
+                                    ? Number(creatorProfile.avg_quality_score).toFixed(2)
+                                    : "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("best_quality_score") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.best_quality_score !== null &&
+                                  creatorProfile?.best_quality_score !== undefined
+                                    ? creatorProfile.best_quality_score
+                                    : "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("quality_score_sum") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.quality_score_sum !== null &&
+                                  creatorProfile?.quality_score_sum !== undefined
+                                    ? Number(creatorProfile.quality_score_sum).toFixed(2)
+                                    : "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("scored_verified_count") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {creatorProfile?.scored_verified_count !== null &&
+                                  creatorProfile?.scored_verified_count !== undefined
+                                    ? creatorProfile.scored_verified_count
+                                    : "-"}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("quality_score_counts") && (() => {
+                                const counts = (() => {
+                                  if (!creatorProfile?.quality_score_counts) return null;
+                                  try {
+                                    const raw = creatorProfile.quality_score_counts;
+                                    return typeof raw === "string" ? JSON.parse(raw) : raw;
+                                  } catch {
+                                    return null;
+                                  }
+                                })();
+
+                                if (!counts) {
+                                  return (
+                                    <TableCell className="whitespace-nowrap border-r text-muted-foreground text-xs">
+                                      -
+                                    </TableCell>
+                                  );
+                                }
+
+                                return (
+                                  <TableCell className="whitespace-nowrap border-r text-sm">
+                                    <div className="flex flex-col gap-0.5 text-left text-muted-foreground">
+                                      <div>Score 1: <strong className="font-semibold text-foreground">{counts.score1 ?? 0}</strong></div>
+                                      <div>Score 2: <strong className="font-semibold text-foreground">{counts.score2 ?? 0}</strong></div>
+                                      <div>Score 3: <strong className="font-semibold text-foreground">{counts.score3 ?? 0}</strong></div>
+                                    </div>
+                                  </TableCell>
+                                );
+                              })()}
                               {isColumnVisible("date_of_birth") && (
                                 <TableCell className="whitespace-nowrap border-r">
                                   {creatorProfile?.date_of_birth
@@ -5790,6 +6117,16 @@ export default function AdminUsersPage() {
                       "total_submissions_made",
                       "total_submissions_won",
                       "trust_score",
+                      "avg_quality_score",
+                      "best_quality_score",
+                      "quality_score_sum",
+                      "scored_verified_count",
+                      "total_reels",
+                      "trust_number",
+                      "pending_reels",
+                      "rejected_reels",
+                      "verified_reels",
+                      "quality_score_counts",
                     ];
                     const dateFields = [
                       "created_at",
@@ -6286,6 +6623,16 @@ export default function AdminUsersPage() {
                           "total_submissions_made",
                           "total_submissions_won",
                           "trust_score",
+                          "avg_quality_score",
+                          "best_quality_score",
+                          "quality_score_sum",
+                          "scored_verified_count",
+                          "total_reels",
+                          "trust_number",
+                          "pending_reels",
+                          "rejected_reels",
+                          "verified_reels",
+                          "quality_score_counts",
                         ];
                         const moneyFields = [
                           "total_money_spent",

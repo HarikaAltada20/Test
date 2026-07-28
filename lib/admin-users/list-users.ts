@@ -37,7 +37,12 @@ const CREATOR_PROFILES_SELECT = `
   categories,
   subcategories,
   interests,
-  trust_score_metrics
+  trust_score_metrics,
+  avg_quality_score,
+  best_quality_score,
+  quality_score_sum,
+  scored_verified_count,
+  quality_score_counts
 `;
 
 export type AdminUserCounts = {

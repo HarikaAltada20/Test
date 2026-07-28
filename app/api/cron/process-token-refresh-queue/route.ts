@@ -79,7 +79,9 @@ export async function POST(request: Request) {
     await removeFromProcessing(rawJobString);
     await triggerNext(baseUrl);
     
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Return 200 OK so QStash knows we acknowledged the failure and handled the transition,
+    // avoiding unnecessary retries and double-triggering of the queue.
+    return NextResponse.json({ error: error.message }, { status: 200 });
   }
 }
 
