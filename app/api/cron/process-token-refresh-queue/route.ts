@@ -86,14 +86,20 @@ export async function POST(request: Request) {
 }
 
 async function triggerNext(baseUrl: string) {
-  if (isQStashEnabled()) {
-    await triggerProcessTokenRefreshQueue(baseUrl);
-  } else {
-    // Fallback for local dev
+  const doFetch = () =>
     fetch(`${baseUrl}/api/cron/process-token-refresh-queue`, {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }
     }).catch(e => console.error("[Token Refresh Queue] Self-trigger fallback failed:", e));
+
+  if (isQStashEnabled()) {
+    triggerProcessTokenRefreshQueue(baseUrl)
+      .then((res) => {
+        if (res?.error) doFetch();
+      })
+      .catch(() => doFetch());
+  } else {
+    doFetch();
   }
 }
 

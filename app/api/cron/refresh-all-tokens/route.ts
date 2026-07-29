@@ -51,7 +51,14 @@ export async function GET(request: Request) {
 
     // 3. Trigger the processor
     const baseUrl = getBaseUrlFromRequest(request);
-    await triggerProcessTokenRefreshQueue(baseUrl);
+    const triggerRes = await triggerProcessTokenRefreshQueue(baseUrl);
+    if (triggerRes?.error) {
+      console.log("[Token Refresh] QStash trigger returned error (probably loopback). Falling back to direct fetch...");
+      fetch(`${baseUrl}/api/cron/process-token-refresh-queue`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+      }).catch(e => console.error("[Token Refresh] Fallback trigger failed:", e));
+    }
 
     return NextResponse.json({
       message: "Token refresh jobs enqueued successfully",
