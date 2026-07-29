@@ -6,7 +6,8 @@ import { refreshAccessToken as refreshYouTubeToken } from "@/lib/youtube-api";
 import { 
   authorizeProcessTokenRefreshQueue, 
   triggerProcessTokenRefreshQueue,
-  isQStashEnabled 
+  isQStashEnabled,
+  getQStashPublishBaseUrl
 } from "@/lib/qstash";
 import { 
   popTokenRefreshJob, 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const baseUrl = getBaseUrlFromRequest(request);
+  const baseUrl = getQStashPublishBaseUrl(request);
   
   // 1. Recover stranded jobs occasionally
   if (Math.random() < 0.1) {
@@ -152,14 +153,4 @@ async function refreshProfileTokens(supabase: SupabaseClient, profile: any) {
   }
 }
 
-function getBaseUrlFromRequest(request: Request): string {
-  try {
-    const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-    const xfProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-    if (xfHost && xfProto) return `${xfProto}://${xfHost}`;
-    const u = new URL(request.url);
-    return u.origin;
-  } catch {
-    return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
-  }
-}
+
