@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { enqueueTokenRefreshJobs } from "@/lib/queue/token-refresh-queue";
-import { triggerProcessTokenRefreshQueue } from "@/lib/qstash";
+import { triggerProcessTokenRefreshQueue, getQStashPublishBaseUrl } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     }
 
     // 3. Trigger the processor
-    const baseUrl = getBaseUrlFromRequest(request);
+    const baseUrl = getQStashPublishBaseUrl(request);
     const triggerRes = await triggerProcessTokenRefreshQueue(baseUrl);
     if (triggerRes?.error) {
       console.log("[Token Refresh] QStash trigger returned error (probably loopback). Falling back to direct fetch...");
@@ -71,14 +71,3 @@ export async function GET(request: Request) {
   }
 }
 
-function getBaseUrlFromRequest(request: Request): string {
-  try {
-    const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-    const xfProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-    if (xfHost && xfProto) return `${xfProto}://${xfHost}`;
-    const u = new URL(request.url);
-    return u.origin;
-  } catch {
-    return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
-  }
-}
