@@ -209,6 +209,13 @@ interface CookieStatus {
   expiresSoon: boolean;
   lastModified: Date | null;
   error?: string;
+  debug?: {
+    envLength: number;
+    totalFileLines: number;
+    nonCommentLines: number;
+    sampleFirstLine?: string;
+    detectedCookies: string[];
+  };
 }
 
 async function checkCookieStatus(): Promise<CookieStatus> {
@@ -260,12 +267,24 @@ async function checkCookieStatus(): Promise<CookieStatus> {
 
     // Read and validate cookie content
     const cookieContent = await readFile(path, "utf-8");
-    const lines = cookieContent
-      .split("\n")
-      .filter((line) => line.trim() && !line.startsWith("#"));
+    const rawEnv = process.env.INSTAGRAM_COOKIES || "";
+    const allLines = cookieContent.split("\n");
+    const lines = allLines.filter((line) => line.trim() && !line.startsWith("#"));
+
+    const detectedCookieNames: string[] = [];
+
+    status.debug = {
+      envLength: rawEnv.length,
+      totalFileLines: allLines.length,
+      nonCommentLines: lines.length,
+      sampleFirstLine: lines[0]
+        ? lines[0].substring(0, 40) + "..."
+        : undefined,
+      detectedCookies: detectedCookieNames,
+    };
 
     if (lines.length === 0) {
-      status.error = "Cookies file is empty";
+      status.error = `Cookies file has 0 valid lines (out of ${allLines.length} lines total). Check env variable formatting.`;
       return status;
     }
 
@@ -284,6 +303,10 @@ async function checkCookieStatus(): Promise<CookieStatus> {
       const expiryStr = parts[4];
       const name = parts[5];
       const value = parts[6];
+
+      if (name && !detectedCookieNames.includes(name)) {
+        detectedCookieNames.push(name);
+      }
 
       // Check if it's an Instagram cookie
       if (domain.includes("instagram.com")) {
@@ -332,9 +355,30 @@ async function checkCookieStatus(): Promise<CookieStatus> {
   return status;
 }
 
-// Normalize cookies format (convert literal \n and space-separated columns back to Netscape tab-separated format)
+// Normalize cookies format (convert base64, literal \n, and space-separated columns back to Netscape tab-separated format)
 function normalizeNetscapeCookies(rawCookies: string): string {
-  let content = rawCookies;
+  let content = rawCookies.trim();
+
+  // Strip wrapping quotes if user pasted "..." or '...'
+  if (
+    (content.startsWith('"') && content.endsWith('"')) ||
+    (content.startsWith("'") && content.endsWith("'"))
+  ) {
+    content = content.slice(1, -1).trim();
+  }
+
+  // Auto-detect base64 encoded cookies
+  if (!content.includes("\n") && !content.includes("\\n") && content.length > 50) {
+    try {
+      const decoded = Buffer.from(content, "base64").toString("utf-8");
+      if (decoded.includes("instagram.com") || decoded.includes("# Netscape")) {
+        content = decoded;
+      }
+    } catch {
+      // Not base64
+    }
+  }
+
   if (content.includes("\\n")) {
     content = content.replace(/\\n/g, "\n");
   }
