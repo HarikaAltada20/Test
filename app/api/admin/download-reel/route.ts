@@ -24,7 +24,13 @@ function getYtDlpBinaryPath(): string | undefined {
       console.log(`[YTDLP] Found executable binary at: ${tmpBinary}`);
       return tmpBinary;
     } catch (chmodErr) {
-      console.warn(`[YTDLP] Could not chmod ${tmpBinary}:`, chmodErr);
+      console.warn(`[YTDLP] Could not chmod existing ${tmpBinary}, removing for re-copy:`, chmodErr);
+      try {
+        const { unlinkSync } = require("fs");
+        unlinkSync(tmpBinary);
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -42,15 +48,14 @@ function getYtDlpBinaryPath(): string | undefined {
         if (stats.isFile()) {
           // Copy to /tmp so we can safely chmod +x it in Vercel's read-only container
           try {
-            const { readFileSync, writeFileSync } = require("fs");
-            const binaryBuffer = readFileSync(srcPath);
-            writeFileSync(tmpBinary, binaryBuffer);
+            const { copyFileSync } = require("fs");
+            copyFileSync(srcPath, tmpBinary);
             chmodSync(tmpBinary, 0o755);
             console.log(`[YTDLP] Copied bundled binary to ${tmpBinary} and set 0755 permissions`);
             return tmpBinary;
           } catch (copyErr: any) {
             console.warn(`[YTDLP] Could not copy binary to /tmp: ${copyErr.message}`);
-            return srcPath;
+            // Do NOT return srcPath because ytdlp-nodejs will attempt chmodSync on read-only /var/task and throw EROFS
           }
         }
       } catch (err) {
@@ -59,7 +64,7 @@ function getYtDlpBinaryPath(): string | undefined {
     }
   }
 
-  console.log(`[YTDLP] No bundled binary found on Linux, using system PATH or auto-download`);
+  console.log(`[YTDLP] No usable bundled binary in /tmp on Linux, using system PATH or auto-download`);
   return undefined;
 }
 
@@ -208,6 +213,73 @@ function parseInstagramError(errorMessage: string): {
       "Check if the post is public and not deleted",
       "Try updating your cookies.txt file",
       "Wait a few minutes and try again",
+    ],
+  };
+}
+
+// ⭐ ADDED: Parse YouTube error messages for clear diagnostic feedback
+function parseYouTubeError(errorMessage: string): {
+  userMessage: string;
+  reason: string;
+  suggestions: string[];
+} {
+  const errorLower = errorMessage.toLowerCase();
+
+  if (
+    errorLower.includes("sign in to confirm") ||
+    errorLower.includes("bot") ||
+    errorLower.includes("confirm you're not a bot")
+  ) {
+    return {
+      userMessage:
+        "YouTube is blocking server-side download requests (bot verification). Cookies are required.",
+      reason: "YouTube bot authentication required",
+      suggestions: [
+        "Export cookies from a logged-in YouTube browser session",
+        "Set the YOUTUBE_COOKIES or INSTAGRAM_COOKIES environment variable in Vercel",
+        "Ensure cookies.txt contains valid youtube.com session cookies",
+      ],
+    };
+  }
+
+  if (
+    errorLower.includes("private video") ||
+    errorLower.includes("video unavailable") ||
+    errorLower.includes("members-only")
+  ) {
+    return {
+      userMessage:
+        "This YouTube video is private, members-only, or unavailable.",
+      reason: "Private or unavailable content",
+      suggestions: [
+        "Verify the YouTube video URL is correct and public",
+        "Check if the video was removed or marked private",
+      ],
+    };
+  }
+
+  if (
+    errorLower.includes("age") ||
+    errorLower.includes("sign in to confirm your age")
+  ) {
+    return {
+      userMessage:
+        "This YouTube video is age-restricted and requires authenticated cookies to download.",
+      reason: "Age restriction",
+      suggestions: [
+        "Export cookies from an adult YouTube account and set YOUTUBE_COOKIES or INSTAGRAM_COOKIES env variable",
+      ],
+    };
+  }
+
+  return {
+    userMessage:
+      "Failed to download YouTube video. YouTube may be restricting server requests or requiring authentication.",
+    reason: errorMessage,
+    suggestions: [
+      "Verify the video link in your browser",
+      "Ensure valid cookies are supplied in environment variables (YOUTUBE_COOKIES / INSTAGRAM_COOKIES)",
+      "Try again in a few minutes",
     ],
   };
 }
@@ -433,8 +505,12 @@ let COOKIES_SOURCE: "env" | null = null;
 
 async function initializeCookies(): Promise<void> {
   try {
-    if (process.env.INSTAGRAM_COOKIES) {
-      const formattedCookies = normalizeNetscapeCookies(process.env.INSTAGRAM_COOKIES);
+    const rawEnv =
+      process.env.YOUTUBE_COOKIES ||
+      process.env.INSTAGRAM_COOKIES ||
+      process.env.COOKIES;
+    if (rawEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawEnv);
 
       const cookiePath = join(tmpdir(), "cookies.txt");
       try {
@@ -495,10 +571,15 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 
     console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp...`, {
       binaryPath: binaryPath || "system PATH",
+      hasCookies: !!INSTAGRAM_COOKIES,
     });
     await ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
       output: tempFile,
+      cookies: INSTAGRAM_COOKIES || undefined,
+      noWarnings: true,
+      noUpdate: true,
+      additionalOptions: ["--js-runtimes", "node"],
     });
     console.log(
       `[YT-${downloadId}] [DEBUG] yt-dlp completed in ${
@@ -600,7 +681,12 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
     });
     if (downloadedFile) await unlink(downloadedFile).catch(() => {});
     await unlink(tempFile).catch(() => {});
-    throw new Error(`Failed to download YouTube video: ${error.message}`);
+
+    const parsedError = parseYouTubeError(error.message);
+    const enhancedError = new Error(parsedError.userMessage);
+    (enhancedError as any).parsedError = parsedError;
+    (enhancedError as any).originalError = error.message;
+    throw enhancedError;
   }
 }
 
@@ -652,6 +738,14 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
       format: "best[ext=mp4]/best",
       output: tempFile,
       cookies: INSTAGRAM_COOKIES || undefined,
+      noWarnings: true,
+      noUpdate: true,
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      referer: "https://www.instagram.com/",
+      addHeaders: {
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      additionalOptions: ["--js-runtimes", "node"],
     });
     console.log(
       `[IG-${downloadId}] [DEBUG] yt-dlp completed in ${
@@ -1142,6 +1236,32 @@ export async function GET(request: Request) {
 
         console.log(
           `[${requestId}] [DEBUG] Returning Instagram error response:`,
+          parsedError
+        );
+
+        return NextResponse.json(
+          {
+            error: parsedError.userMessage,
+            reason: parsedError.reason,
+            suggestions: parsedError.suggestions,
+            debug:
+              process.env.NODE_ENV === "development"
+                ? {
+                    originalError: error?.message,
+                    requestId,
+                  }
+                : undefined,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (isYouTube) {
+        const parsedError =
+          (error as any).parsedError || parseYouTubeError(error.message);
+
+        console.log(
+          `[${requestId}] [DEBUG] Returning YouTube error response:`,
           parsedError
         );
 

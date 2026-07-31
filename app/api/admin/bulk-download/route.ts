@@ -23,7 +23,13 @@ function getYtDlpBinaryPath(): string | undefined {
       chmodSync(tmpBinary, 0o755);
       return tmpBinary;
     } catch (e) {
-      console.warn(`[YTDLP] Warning chmodding ${tmpBinary}:`, e);
+      console.warn(`[YTDLP] Warning chmodding ${tmpBinary}, removing for re-copy:`, e);
+      try {
+        const { unlinkSync } = require("fs");
+        unlinkSync(tmpBinary);
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -39,15 +45,14 @@ function getYtDlpBinaryPath(): string | undefined {
         const stats = statSync(srcPath);
         if (stats.isFile()) {
           try {
-            const { readFileSync, writeFileSync } = require("fs");
-            const binaryBuffer = readFileSync(srcPath);
-            writeFileSync(tmpBinary, binaryBuffer);
+            const { copyFileSync } = require("fs");
+            copyFileSync(srcPath, tmpBinary);
             chmodSync(tmpBinary, 0o755);
             console.log(`[YTDLP] Copied binary to ${tmpBinary} and set 0755 permissions`);
             return tmpBinary;
           } catch (copyErr: any) {
             console.warn(`[YTDLP] Failed to copy binary to /tmp:`, copyErr);
-            return srcPath;
+            // Do NOT return srcPath because ytdlp-nodejs will call chmodSync on read-only /var/task and throw EROFS
           }
         }
       } catch (err) {
@@ -205,8 +210,12 @@ function normalizeNetscapeCookies(rawCookies: string): string {
 let INSTAGRAM_COOKIES: string | null = null;
 async function initializeCookies(): Promise<void> {
   try {
-    if (process.env.INSTAGRAM_COOKIES) {
-      const formattedCookies = normalizeNetscapeCookies(process.env.INSTAGRAM_COOKIES);
+    const rawEnv =
+      process.env.YOUTUBE_COOKIES ||
+      process.env.INSTAGRAM_COOKIES ||
+      process.env.COOKIES;
+    if (rawEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawEnv);
 
       const cookiePath = join(tmpdir(), "cookies.txt");
       await writeFile(cookiePath, formattedCookies, "utf-8");
@@ -234,19 +243,20 @@ function sanitizeFilename(filename: string): string {
 
 // Single video downloader logic
 async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, isInstagram: boolean): Promise<void> {
-  if (isInstagram) {
-    await initializeCookies();
-    await ytdlp.downloadAsync(url, {
-      format: "best[ext=mp4]/best",
-      output: outputPath,
-      cookies: INSTAGRAM_COOKIES || undefined,
-    });
-  } else {
-    await ytdlp.downloadAsync(url, {
-      format: "best[ext=mp4]/best",
-      output: outputPath,
-    });
-  }
+  await initializeCookies();
+  await ytdlp.downloadAsync(url, {
+    format: "best[ext=mp4]/best",
+    output: outputPath,
+    cookies: INSTAGRAM_COOKIES || undefined,
+    noWarnings: true,
+    noUpdate: true,
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    referer: isInstagram ? "https://www.instagram.com/" : "https://www.youtube.com/",
+    addHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+    additionalOptions: ["--js-runtimes", "node"],
+  });
 }
 
 async function verifyAdminOrBrandAccess() {
