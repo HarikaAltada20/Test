@@ -7,10 +7,7 @@ import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
 
-// ⭐ ADDED: Get yt-dlp binary path (bundled for Vercel)
 function getYtDlpBinaryPath(): string | undefined {
-  // Only use bundled binary on Linux (Vercel serverless environment)
-  // On Windows/Mac, let ytdlp-nodejs handle it automatically
   const isLinux = process.platform === 'linux';
   
   if (!isLinux) {
@@ -18,39 +15,50 @@ function getYtDlpBinaryPath(): string | undefined {
     return undefined;
   }
 
-  // On Linux (Vercel), check for bundled binary
+  const tmpBinary = join(tmpdir(), "yt-dlp");
+
+  // Check if binary is already prepared and executable in /tmp
+  if (existsSync(tmpBinary)) {
+    try {
+      chmodSync(tmpBinary, 0o755);
+      console.log(`[YTDLP] Found executable binary at: ${tmpBinary}`);
+      return tmpBinary;
+    } catch (chmodErr) {
+      console.warn(`[YTDLP] Could not chmod ${tmpBinary}:`, chmodErr);
+    }
+  }
+
+  // On Linux (Vercel), search for bundled binary in workspace
   const possiblePaths = [
-    // Bundled binary in bin directory (for Vercel deployment)
     join(process.cwd(), "bin", "yt-dlp"),
-    // Alternative: check if we're in a Next.js build
     join(process.cwd(), "..", "bin", "yt-dlp"),
-    // Local development (if running on Linux)
     join(__dirname, "..", "..", "..", "bin", "yt-dlp"),
-    "/tmp/yt-dlp",
   ];
 
-  for (const path of possiblePaths) {
-    if (existsSync(path)) {
-      // Verify it's actually a file (not a directory)
+  for (const srcPath of possiblePaths) {
+    if (existsSync(srcPath)) {
       try {
-        const stats = statSync(path);
+        const stats = statSync(srcPath);
         if (stats.isFile()) {
+          // Copy to /tmp so we can safely chmod +x it in Vercel's read-only container
           try {
-            chmodSync(path, 0o755);
-          } catch (chmodErr) {
-            console.warn(`[YTDLP] Could not chmod binary at ${path}:`, chmodErr);
+            const { readFileSync, writeFileSync } = require("fs");
+            const binaryBuffer = readFileSync(srcPath);
+            writeFileSync(tmpBinary, binaryBuffer);
+            chmodSync(tmpBinary, 0o755);
+            console.log(`[YTDLP] Copied bundled binary to ${tmpBinary} and set 0755 permissions`);
+            return tmpBinary;
+          } catch (copyErr: any) {
+            console.warn(`[YTDLP] Could not copy binary to /tmp: ${copyErr.message}`);
+            return srcPath;
           }
-          console.log(`[YTDLP] Found binary at: ${path}`);
-          return path;
         }
       } catch (err) {
-        // File exists but can't stat it, skip
         continue;
       }
     }
   }
 
-  // If no binary found, ytdlp-nodejs will try to download it or use system PATH
   console.log(`[YTDLP] No bundled binary found on Linux, using system PATH or auto-download`);
   return undefined;
 }

@@ -16,24 +16,39 @@ function getYtDlpBinaryPath(): string | undefined {
     return undefined;
   }
 
+  const tmpBinary = join(tmpdir(), "yt-dlp");
+
+  if (existsSync(tmpBinary)) {
+    try {
+      chmodSync(tmpBinary, 0o755);
+      return tmpBinary;
+    } catch (e) {
+      console.warn(`[YTDLP] Warning chmodding ${tmpBinary}:`, e);
+    }
+  }
+
   const possiblePaths = [
     join(process.cwd(), "bin", "yt-dlp"),
     join(process.cwd(), "..", "bin", "yt-dlp"),
     join(__dirname, "..", "..", "..", "bin", "yt-dlp"),
-    "/tmp/yt-dlp",
   ];
 
-  for (const path of possiblePaths) {
-    if (existsSync(path)) {
+  for (const srcPath of possiblePaths) {
+    if (existsSync(srcPath)) {
       try {
-        const stats = statSync(path);
+        const stats = statSync(srcPath);
         if (stats.isFile()) {
           try {
-            chmodSync(path, 0o755);
-          } catch (e) {
-            console.warn(`[YTDLP] Failed to chmod binary at ${path}:`, e);
+            const { readFileSync, writeFileSync } = require("fs");
+            const binaryBuffer = readFileSync(srcPath);
+            writeFileSync(tmpBinary, binaryBuffer);
+            chmodSync(tmpBinary, 0o755);
+            console.log(`[YTDLP] Copied binary to ${tmpBinary} and set 0755 permissions`);
+            return tmpBinary;
+          } catch (copyErr: any) {
+            console.warn(`[YTDLP] Failed to copy binary to /tmp:`, copyErr);
+            return srcPath;
           }
-          return path;
         }
       } catch (err) {
         continue;
