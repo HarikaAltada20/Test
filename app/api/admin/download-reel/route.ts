@@ -274,7 +274,10 @@ async function checkCookieStatus(): Promise<CookieStatus> {
     let earliestExpiry = Infinity;
 
     for (const line of lines) {
-      const parts = line.split("\t");
+      let parts = line.split("\t");
+      if (parts.length < 7) {
+        parts = line.trim().split(/\s+/);
+      }
       if (parts.length < 7) continue;
 
       const domain = parts[0];
@@ -329,6 +332,36 @@ async function checkCookieStatus(): Promise<CookieStatus> {
   return status;
 }
 
+// Normalize cookies format (convert literal \n and space-separated columns back to Netscape tab-separated format)
+function normalizeNetscapeCookies(rawCookies: string): string {
+  let content = rawCookies;
+  if (content.includes("\\n")) {
+    content = content.replace(/\\n/g, "\n");
+  }
+
+  const lines = content.split("\n");
+  const normalized = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return line;
+    if ((line.match(/\t/g) || []).length >= 6) return line;
+
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 7) {
+      const domain = parts[0];
+      const subdomains = parts[1];
+      const path = parts[2];
+      const secure = parts[3];
+      const expiry = parts[4];
+      const name = parts[5];
+      const value = parts.slice(6).join(" ");
+      return `${domain}\t${subdomains}\t${path}\t${secure}\t${expiry}\t${name}\t${value}`;
+    }
+    return line;
+  });
+
+  return normalized.join("\n");
+}
+
 // ⭐ ADDED: Auto-load cookies from env variable only
 let INSTAGRAM_COOKIES: string | null = null;
 let COOKIES_SOURCE: "env" | null = null;
@@ -336,15 +369,11 @@ let COOKIES_SOURCE: "env" | null = null;
 async function initializeCookies(): Promise<void> {
   try {
     if (process.env.INSTAGRAM_COOKIES) {
-      let rawCookies = process.env.INSTAGRAM_COOKIES;
-      // Handle literal '\n' escape sequences (common when stored in single-line env vars)
-      if (rawCookies.includes("\\n")) {
-        rawCookies = rawCookies.replace(/\\n/g, "\n");
-      }
+      const formattedCookies = normalizeNetscapeCookies(process.env.INSTAGRAM_COOKIES);
 
       const cookiePath = join(tmpdir(), "cookies.txt");
       try {
-        await writeFile(cookiePath, rawCookies, "utf-8");
+        await writeFile(cookiePath, formattedCookies, "utf-8");
         INSTAGRAM_COOKIES = cookiePath;
         COOKIES_SOURCE = "env";
       } catch (writeError: any) {
