@@ -20,6 +20,7 @@ import {
 import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
 import { refreshContestStats } from "@/lib/contest-stats";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import { isYouTubeAllLikeScope, mergePostCampaignYouTubeTimestamps } from "@/lib/youtube-submission-refresh-by-scope";
 import {
   authorizeProcessYouTubeMetricsQueue,
@@ -99,6 +100,10 @@ async function finalizeContestAfterYoutubeRun(
   if (scope === "basic" || isYouTubeAllLikeScope(scope)) {
     await updateYouTubeCpmContestBudgets(supabaseAdmin, contestId);
   }
+
+  // Milestone/leaderboard/dual list trackers read persisted budget_spent;
+  // CPM-only rollup above does not cover those contest types.
+  await persistContestBudgetSpent(contestId, supabaseAdmin);
 }
 
 export async function GET(request: Request) {

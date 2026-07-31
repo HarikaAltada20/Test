@@ -76,6 +76,7 @@ import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
+import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
 
 /** When paid, baseline for budget deltas must be payment_details.total_prize_pool, not saved contest budget. */
 function resolvePaidBudgetBaselineCents(
@@ -3534,7 +3535,10 @@ export default function EditContestPage({
     // Only update campaign type and details if not in datesOnly mode
     if (!datesOnly) {
       updatePayload.contest_type = contestType;
-      updatePayload.contest_based_details = contestBasedDetails;
+      updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+        contestBasedDetails,
+        contest?.contest_based_details,
+      );
 
       // Add new features (2025-10-01)
       updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
@@ -3605,6 +3609,13 @@ export default function EditContestPage({
         hasSubcategories: !!updatePayload.subcategories,
         hasInterests: !!updatePayload.interests,
       });
+
+      if (updatePayload.contest_based_details) {
+        updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+          updatePayload.contest_based_details,
+          contest?.contest_based_details,
+        );
+      }
 
       // For admins, call a secure API that uses the service role to bypass RLS
       if (isAdmin) {
@@ -4638,7 +4649,10 @@ export default function EditContestPage({
       const { error: updateError } = await supabase
         .from("contests")
         .update({
-          contest_based_details: contestBasedDetails,
+          contest_based_details: preserveExistingBudgetSpentFields(
+            contestBasedDetails,
+            contest?.contest_based_details,
+          ),
           moderation_status: "draft", // Save as draft after successful refund
         })
         .eq("id", contestId)
@@ -5680,7 +5694,10 @@ export default function EditContestPage({
           ),
           resources,
           contest_type: contestType,
-          contest_based_details: contestBasedDetails,
+          contest_based_details: preserveExistingBudgetSpentFields(
+            contestBasedDetails,
+            contest?.contest_based_details,
+          ),
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: processSubcategories(contestSubcategories),
@@ -6333,7 +6350,10 @@ export default function EditContestPage({
           ),
           resources,
           contest_type: contestType,
-          contest_based_details: contestBasedDetails2,
+          contest_based_details: preserveExistingBudgetSpentFields(
+            contestBasedDetails2,
+            contest?.contest_based_details,
+          ),
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: processSubcategories(contestSubcategories),
@@ -7338,7 +7358,10 @@ export default function EditContestPage({
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
       updatePayload.contest_type = "leaderboard";
-      updatePayload.contest_based_details = contestBasedDetails;
+      updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+        contestBasedDetails,
+        contest?.contest_based_details,
+      );
     }
 
     if (
@@ -7771,7 +7794,10 @@ export default function EditContestPage({
       }
 
       updatePayload.contest_type = contestType;
-      updatePayload.contest_based_details = contestBasedDetails;
+      updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+        contestBasedDetails,
+        contest?.contest_based_details,
+      );
     }
 
     // Add Twitter campaign config to contest_based_details
@@ -8056,7 +8082,10 @@ export default function EditContestPage({
       }
 
       contestBasedDetails.twitter_campaign = twitterCampaign;
-      updatePayload.contest_based_details = contestBasedDetails;
+      updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+        contestBasedDetails,
+        contest?.contest_based_details,
+      );
     }
 
     // Only update campaign type and details if not in datesOnly mode
@@ -8118,6 +8147,13 @@ export default function EditContestPage({
           thumbnailPreview || contest.thumbnail_url || "";
         // Save resources array directly (files are already uploaded when added)
         updatePayload.resources = resources;
+      }
+
+      if (updatePayload.contest_based_details) {
+        updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+          updatePayload.contest_based_details,
+          contest?.contest_based_details,
+        );
       }
 
       if (isAdmin) {
