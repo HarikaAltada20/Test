@@ -336,9 +336,15 @@ let COOKIES_SOURCE: "env" | null = null;
 async function initializeCookies(): Promise<void> {
   try {
     if (process.env.INSTAGRAM_COOKIES) {
+      let rawCookies = process.env.INSTAGRAM_COOKIES;
+      // Handle literal '\n' escape sequences (common when stored in single-line env vars)
+      if (rawCookies.includes("\\n")) {
+        rawCookies = rawCookies.replace(/\\n/g, "\n");
+      }
+
       const cookiePath = join(tmpdir(), "cookies.txt");
       try {
-        await writeFile(cookiePath, process.env.INSTAGRAM_COOKIES, "utf-8");
+        await writeFile(cookiePath, rawCookies, "utf-8");
         INSTAGRAM_COOKIES = cookiePath;
         COOKIES_SOURCE = "env";
       } catch (writeError: any) {
