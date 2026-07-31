@@ -5,7 +5,7 @@ import { readFile, writeFile, unlink, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { existsSync, statSync } from "fs";
+import { existsSync, statSync, chmodSync } from "fs";
 
 // ⭐ ADDED: Get yt-dlp binary path (bundled for Vercel)
 function getYtDlpBinaryPath(): string | undefined {
@@ -26,6 +26,7 @@ function getYtDlpBinaryPath(): string | undefined {
     join(process.cwd(), "..", "bin", "yt-dlp"),
     // Local development (if running on Linux)
     join(__dirname, "..", "..", "..", "bin", "yt-dlp"),
+    "/tmp/yt-dlp",
   ];
 
   for (const path of possiblePaths) {
@@ -34,6 +35,11 @@ function getYtDlpBinaryPath(): string | undefined {
       try {
         const stats = statSync(path);
         if (stats.isFile()) {
+          try {
+            chmodSync(path, 0o755);
+          } catch (chmodErr) {
+            console.warn(`[YTDLP] Could not chmod binary at ${path}:`, chmodErr);
+          }
           console.log(`[YTDLP] Found binary at: ${path}`);
           return path;
         }

@@ -25,6 +25,11 @@ const nextConfig = {
     staticGenerationRetryCount: 3,
   },
   outputFileTracingRoot: path.join(__dirname),
+  outputFileTracingIncludes: {
+    '/api/admin/download-reel': ['./bin/**/*'],
+    '/api/admin/bulk-download': ['./bin/**/*'],
+    '/api/**/*': ['./bin/**/*'],
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

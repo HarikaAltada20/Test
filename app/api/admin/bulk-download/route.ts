@@ -5,7 +5,7 @@ import { readFile, writeFile, unlink, stat, mkdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { existsSync, statSync } from "fs";
+import { existsSync, statSync, chmodSync } from "fs";
 import { ZipArchive } from "archiver";
 import { PassThrough } from "stream";
 
@@ -20,6 +20,7 @@ function getYtDlpBinaryPath(): string | undefined {
     join(process.cwd(), "bin", "yt-dlp"),
     join(process.cwd(), "..", "bin", "yt-dlp"),
     join(__dirname, "..", "..", "..", "bin", "yt-dlp"),
+    "/tmp/yt-dlp",
   ];
 
   for (const path of possiblePaths) {
@@ -27,6 +28,11 @@ function getYtDlpBinaryPath(): string | undefined {
       try {
         const stats = statSync(path);
         if (stats.isFile()) {
+          try {
+            chmodSync(path, 0o755);
+          } catch (e) {
+            console.warn(`[YTDLP] Failed to chmod binary at ${path}:`, e);
+          }
           return path;
         }
       } catch (err) {
