@@ -125,7 +125,28 @@ async function checkCookieStatus(): Promise<{ valid: boolean; exists: boolean; p
 }
 
 function normalizeNetscapeCookies(rawCookies: string): string {
-  let content = rawCookies;
+  let content = rawCookies.trim();
+
+  // Strip wrapping quotes if user pasted "..." or '...'
+  if (
+    (content.startsWith('"') && content.endsWith('"')) ||
+    (content.startsWith("'") && content.endsWith("'"))
+  ) {
+    content = content.slice(1, -1).trim();
+  }
+
+  // Auto-detect base64 encoded cookies
+  if (!content.includes("\n") && !content.includes("\\n") && content.length > 50) {
+    try {
+      const decoded = Buffer.from(content, "base64").toString("utf-8");
+      if (decoded.includes("instagram.com") || decoded.includes("# Netscape")) {
+        content = decoded;
+      }
+    } catch {
+      // Not base64
+    }
+  }
+
   if (content.includes("\\n")) {
     content = content.replace(/\\n/g, "\n");
   }
