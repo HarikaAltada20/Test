@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createClient } from "@/utils/supabase/server";
 import { YtDlp } from "ytdlp-nodejs";
 import { readFile, writeFile, unlink, stat } from "fs/promises";
@@ -668,6 +667,20 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
 // MAIN GET HANDLER
 // ---------------------------
 
+async function verifyAdminOrBrandAccess() {
+  const supabase = await createClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return { allowed: false, user: null };
+  const { data: userData } = await supabase
+    .from("users")
+    .select("user_type, email")
+    .eq("id", user.id)
+    .single();
+  const allowed =
+    userData?.user_type === "admin" || userData?.user_type === "advertiser";
+  return { allowed, user: allowed ? { id: user.id, email: userData?.email, user_type: userData?.user_type } : null };
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now();
   const requestId = randomUUID();
@@ -683,15 +696,15 @@ export async function GET(request: Request) {
       }`
     );
 
-    const { isAdmin } = await verifyAdminAccess();
-    if (!isAdmin) {
-      console.log(`[${requestId}] [DEBUG] Admin access denied`);
+    const { allowed } = await verifyAdminOrBrandAccess();
+    if (!allowed) {
+      console.log(`[${requestId}] [DEBUG] Access denied`);
       return NextResponse.json(
-        { error: "Admin access required" },
+        { error: "Admin or brand access required" },
         { status: 403 }
       );
     }
-    console.log(`[${requestId}] [DEBUG] Admin access verified`);
+    console.log(`[${requestId}] [DEBUG] Access verified (admin or brand)`);
 
     const { searchParams } = new URL(request.url);
     const submissionId = searchParams.get("submissionId");

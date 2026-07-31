@@ -1639,6 +1639,12 @@ export default function ContestDetailClient({
   const isTwitterPlatform =
     currentContest.platform?.toLowerCase() === "twitter" ||
     currentContest.platform?.toLowerCase() === "x";
+  const isInstagramContest =
+    currentContest?.platform?.toLowerCase().includes("instagram") ?? false;
+  const isYouTubeContest =
+    currentContest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const isTikTokContest =
+    currentContest?.platform?.toLowerCase().includes("tiktok") ?? false;
   const isTwitterCpmCampaign =
     isCpmContestType(currentContest?.contest_type) &&
     isTwitterPlatform &&
@@ -2496,6 +2502,7 @@ export default function ContestDetailClient({
     useState(false);
   const [normalViewSelectedSubmissions, setNormalViewSelectedSubmissions] =
     useState<Set<string>>(new Set());
+  const [normalViewBulkDownloading, setNormalViewBulkDownloading] = useState(false);
   const [normalViewBulkActiveAction, setNormalViewBulkActiveAction] = useState<
     "verify" | "reject" | "pending" | null
   >(null);
@@ -3298,6 +3305,73 @@ export default function ContestDetailClient({
       setNormalViewSelectedSubmissions(new Set());
     } finally {
       setNormalViewBulkActiveAction(null);
+    }
+  };
+
+  const handleNormalViewBulkDownload = async () => {
+    if (normalViewSelectedSubmissions.size === 0) return;
+
+    if (normalViewSelectedSubmissions.size === 1) {
+      const singleSubmissionId = Array.from(normalViewSelectedSubmissions)[0];
+      await handleDownloadReel(singleSubmissionId);
+      return;
+    }
+
+    setNormalViewBulkDownloading(true);
+    toast({
+      title: "Bulk Download Started",
+      description: "Compressing and zipping selected videos. Please wait...",
+    });
+
+    const sanitizeFilename = (filename: string): string => {
+      return filename
+        .replace(/[^a-z0-9]/gi, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .substring(0, 100);
+    };
+
+    try {
+      const response = await fetch("/api/admin/bulk-download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          submissionIds: Array.from(normalViewSelectedSubmissions),
+        }),
+      });
+
+      const contentType = response.headers.get("content-type");
+
+      if (!response.ok || contentType?.includes("application/json")) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to download ZIP archive.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bulk_submissions_${sanitizeFilename(currentContest.title || "contest")}_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Success",
+        description: "ZIP file containing videos downloaded successfully.",
+      });
+    } catch (error: any) {
+      console.error("Bulk download failed:", error);
+      toast({
+        title: "Bulk Download Failed",
+        description: error.message || "An error occurred while compiling the ZIP folder.",
+        variant: "destructive",
+      });
+    } finally {
+      setNormalViewBulkDownloading(false);
     }
   };
 
@@ -18938,6 +19012,27 @@ export default function ContestDetailClient({
                                 <Clock className="h-4 w-4 mr-1" />
                                 Mark as Pending
                               </Button>
+              {(isInstagramContest || isYouTubeContest) && (
+                <Button
+                                 size="sm"
+                                 onClick={handleNormalViewBulkDownload}
+                                 disabled={
+                                   normalViewBulkDownloading ||
+                                   normalViewBulkStatusActionsBusy
+                                 }
+                                 loading={normalViewBulkDownloading}
+                                 loadingText="Downloading ZIP..."
+                                 className={cn(
+                                   "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                   isDark
+                                     ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
+                                     : "bg-purple-600 text-white hover:bg-purple-700",
+                                 )}
+                               >
+                                 <Download className="h-4 w-4 mr-1" />
+                                 Download Videos (ZIP)
+                               </Button>
+              )}
                             </div>
                           </div>
                         )}
@@ -20309,7 +20404,7 @@ export default function ContestDetailClient({
                                               <PlayCircle className="h-3 w-3" />
                                               View Content
                                             </a>
-                                            {isAdminView && (
+                                            {((submission.platform || contest?.platform || "").toLowerCase().includes("instagram") || (submission.platform || contest?.platform || "").toLowerCase().includes("youtube") || /youtu\.?be/i.test(submission.content_link || "")) && (!((submission.platform || contest?.platform || "").toLowerCase().includes("tiktok"))) && (
                                               <button
                                                 onClick={() =>
                                                   handleDownloadReel(

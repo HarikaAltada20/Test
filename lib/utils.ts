@@ -176,3 +176,17 @@ export function isContestEnded(status?: string | null): boolean {
   const normalized = status?.toLowerCase();
   return normalized === "ended" || normalized === "completed";
 }
+
+/**
+ * Sanitizes a filename by replacing non-alphanumeric characters with underscores,
+ * collapsing multiple underscores, and trimming leading/trailing underscores.
+ * @param filename - The filename to sanitize
+ * @returns The sanitized filename string
+ */
+export function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-z0-9]/gi, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .substring(0, 100);
+}
