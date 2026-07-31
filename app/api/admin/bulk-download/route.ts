@@ -101,6 +101,9 @@ async function checkCookieStatus(): Promise<{ valid: boolean; exists: boolean; p
     for (const line of lines) {
       let parts = line.split("\t");
       if (parts.length < 7) {
+        parts = line.split("\\t");
+      }
+      if (parts.length < 7) {
         parts = line.trim().split(/\s+/);
       }
       if (parts.length < 7) continue;
@@ -155,6 +158,10 @@ function normalizeNetscapeCookies(rawCookies: string): string {
 
   if (content.includes("\\n")) {
     content = content.replace(/\\n/g, "\n");
+  }
+
+  if (content.includes("\\t")) {
+    content = content.replace(/\\t/g, "\t");
   }
 
   const lines = content.split("\n");

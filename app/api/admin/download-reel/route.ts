@@ -301,6 +301,9 @@ async function checkCookieStatus(): Promise<CookieStatus> {
     for (const line of lines) {
       let parts = line.split("\t");
       if (parts.length < 7) {
+        parts = line.split("\\t");
+      }
+      if (parts.length < 7) {
         parts = line.trim().split(/\s+/);
       }
       if (parts.length < 7) continue;
@@ -361,7 +364,7 @@ async function checkCookieStatus(): Promise<CookieStatus> {
   return status;
 }
 
-// Normalize cookies format (convert base64, literal \n, and space-separated columns back to Netscape tab-separated format)
+// Normalize cookies format (convert base64, literal \n, literal \t, and space-separated columns back to Netscape tab-separated format)
 function normalizeNetscapeCookies(rawCookies: string): string {
   let content = rawCookies.trim();
 
@@ -387,6 +390,10 @@ function normalizeNetscapeCookies(rawCookies: string): string {
 
   if (content.includes("\\n")) {
     content = content.replace(/\\n/g, "\n");
+  }
+
+  if (content.includes("\\t")) {
+    content = content.replace(/\\t/g, "\t");
   }
 
   const lines = content.split("\n");
