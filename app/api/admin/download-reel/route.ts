@@ -1,27 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { YtDlp } from "ytdlp-nodejs";
-import { Innertube, Platform } from "youtubei.js";
-import vm from "node:vm";
 import { readFile, writeFile, unlink, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
-
-// Configure Node VM evaluator for youtubei.js signature deciphering
-Platform.shim.eval = (data: any, env: any) => {
-  const codeToRun = data.output || data.code;
-  const context = vm.createContext({ ...env });
-  return vm.runInNewContext(`(() => {\n${codeToRun}\n})()`, context);
-};
-
-function extractYouTubeVideoId(url: string): string | null {
-  const match = url.match(
-    /(?:v=|\/shorts\/|\/embed\/|youtu\.be\/|\/v\/|^)([a-zA-Z0-9_-]{11})/
-  );
-  return match ? match[1] : null;
-}
 
 function getYtDlpBinaryPath(): string | undefined {
   const isLinux = process.platform === 'linux';
@@ -532,41 +516,69 @@ function normalizeNetscapeCookies(rawCookies: string): string {
   return normalized.join("\n");
 }
 
-// ⭐ ADDED: Auto-load cookies from env variable only
+// ⭐ Auto-load separate YouTube and Instagram cookies from env
 let INSTAGRAM_COOKIES: string | null = null;
-let COOKIES_SOURCE: "env" | null = null;
+let YOUTUBE_COOKIES: string | null = null;
+let COOKIES_SOURCE: "env" | "file" | null = null;
+let YOUTUBE_COOKIES_SOURCE: "env" | "file" | null = null;
 
 async function initializeCookies(): Promise<void> {
-  const cookiePath = join(tmpdir(), "cookies.txt");
-
+  // 1. YouTube Cookies
+  const ytCookiePath = join(tmpdir(), "youtube_cookies.txt");
   try {
-    const rawEnv =
-      process.env.YOUTUBE_COOKIES ||
-      process.env.INSTAGRAM_COOKIES;
-    if (rawEnv) {
-      const formattedCookies = normalizeNetscapeCookies(rawEnv);
-      try {
-        await writeFile(cookiePath, formattedCookies, "utf-8");
-        INSTAGRAM_COOKIES = cookiePath;
-        COOKIES_SOURCE = "env";
-      } catch (writeError: any) {
-        console.error(
-          "Failed to write cookies to temp file:",
-          writeError.message
-        );
+    const rawYtEnv = process.env.YOUTUBE_COOKIES;
+    if (rawYtEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawYtEnv);
+      await writeFile(ytCookiePath, formattedCookies, "utf-8");
+      YOUTUBE_COOKIES = ytCookiePath;
+      YOUTUBE_COOKIES_SOURCE = "env";
+    } else {
+      const localYtFile = join(process.cwd(), "youtube_cookies.txt");
+      if (existsSync(localYtFile)) {
+        YOUTUBE_COOKIES = localYtFile;
+        YOUTUBE_COOKIES_SOURCE = "file";
+      } else {
+        if (existsSync(ytCookiePath)) {
+          await unlink(ytCookiePath).catch(() => {});
+        }
+        YOUTUBE_COOKIES = null;
+        YOUTUBE_COOKIES_SOURCE = null;
+      }
+    }
+  } catch (error: any) {
+    console.error("Error initializing YouTube cookies:", error.message);
+    YOUTUBE_COOKIES = null;
+    YOUTUBE_COOKIES_SOURCE = null;
+  }
+
+  // 2. Instagram Cookies
+  const igCookiePath = join(tmpdir(), "instagram_cookies.txt");
+  try {
+    const rawIgEnv = process.env.INSTAGRAM_COOKIES;
+    if (rawIgEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawIgEnv);
+      await writeFile(igCookiePath, formattedCookies, "utf-8");
+      INSTAGRAM_COOKIES = igCookiePath;
+      COOKIES_SOURCE = "env";
+    } else {
+      const localIgFile = join(process.cwd(), "instagram_cookies.txt");
+      const localCookieFile = join(process.cwd(), "cookies.txt");
+      if (existsSync(localIgFile)) {
+        INSTAGRAM_COOKIES = localIgFile;
+        COOKIES_SOURCE = "file";
+      } else if (existsSync(localCookieFile)) {
+        INSTAGRAM_COOKIES = localCookieFile;
+        COOKIES_SOURCE = "file";
+      } else {
+        if (existsSync(igCookiePath)) {
+          await unlink(igCookiePath).catch(() => {});
+        }
         INSTAGRAM_COOKIES = null;
         COOKIES_SOURCE = null;
       }
-    } else {
-      // Clean up any old temp file if env var is not set
-      if (existsSync(cookiePath)) {
-        await unlink(cookiePath).catch(() => {});
-      }
-      INSTAGRAM_COOKIES = null;
-      COOKIES_SOURCE = null;
     }
   } catch (error: any) {
-    console.error("Error initializing cookies:", error.message);
+    console.error("Error initializing Instagram cookies:", error.message);
     INSTAGRAM_COOKIES = null;
     COOKIES_SOURCE = null;
   }
@@ -586,90 +598,34 @@ function sanitizeFilename(filename: string): string {
 
 async function downloadYouTubeVideo(url: string): Promise<Buffer> {
   const downloadId = randomUUID().substring(0, 8);
-  const downloadStartTime = Date.now();
-
-  console.log(`[YT-${downloadId}] [DEBUG] Starting YouTube download:`, { url });
-
-  // 1. Try pure JavaScript downloading with youtubei.js
-  const videoId = extractYouTubeVideoId(url);
-  if (videoId) {
-    try {
-      console.log(`[YT-${downloadId}] [DEBUG] Attempting youtubei.js download for videoId: ${videoId}`);
-      const yt = await Innertube.create({ retrieve_player: true });
-
-      const clients: Array<"ANDROID" | "IOS" | "WEB"> = ["ANDROID", "IOS", "WEB"];
-      let stream: any = null;
-      let lastErr: any = null;
-
-      for (const client of clients) {
-        try {
-          console.log(`[YT-${downloadId}] [DEBUG] Trying youtubei.js client: ${client}`);
-          stream = await yt.download(videoId, {
-            type: "video+audio",
-            quality: "360p",
-            client,
-          });
-          if (stream) break;
-        } catch (clientErr: any) {
-          console.warn(
-            `[YT-${downloadId}] [WARN] youtubei.js client ${client} failed:`,
-            clientErr.message || clientErr
-          );
-          lastErr = clientErr;
-        }
-      }
-
-      if (stream) {
-        const reader = stream.getReader();
-        const chunks: Uint8Array[] = [];
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) chunks.push(value);
-        }
-        const videoBuffer = Buffer.concat(chunks);
-        if (videoBuffer.length > 0) {
-          console.log(
-            `[YT-${downloadId}] [DEBUG] youtubei.js download succeeded in ${
-              Date.now() - downloadStartTime
-            }ms, buffer size: ${videoBuffer.length} bytes`
-          );
-          return videoBuffer;
-        }
-      }
-      if (lastErr) throw lastErr;
-    } catch (ytjsError: any) {
-      console.warn(
-        `[YT-${downloadId}] [WARN] youtubei.js download failed, falling back to yt-dlp:`,
-        ytjsError.message || ytjsError
-      );
-    }
-  } else {
-    console.warn(`[YT-${downloadId}] [WARN] Could not extract videoId from ${url}, falling back to yt-dlp`);
-  }
-
-  // 2. Fallback to yt-dlp
   const tempFile = join(tmpdir(), `video_${randomUUID()}.mp4`);
   let downloadedFile: string | null = null;
 
+  console.log(`[YT-${downloadId}] [DEBUG] Starting YouTube download:`, {
+    url,
+    tempFile,
+  });
+
   try {
+    // ⭐ FIXED: Configure yt-dlp with bundled binary path for Vercel
     const binaryPath = getYtDlpBinaryPath();
     const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
+    const downloadStartTime = Date.now();
 
-    console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp fallback...`, {
+    console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp...`, {
       binaryPath: binaryPath || "system PATH",
-      hasCookies: !!INSTAGRAM_COOKIES,
+      hasCookies: !!YOUTUBE_COOKIES,
     });
     await ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
       output: tempFile,
-      cookies: INSTAGRAM_COOKIES || undefined,
+      cookies: YOUTUBE_COOKIES || undefined,
       noWarnings: true,
       noUpdate: true,
       additionalOptions: ["--js-runtimes", "node"],
     });
     console.log(
-      `[YT-${downloadId}] [DEBUG] yt-dlp fallback completed in ${
+      `[YT-${downloadId}] [DEBUG] yt-dlp completed in ${
         Date.now() - downloadStartTime
       }ms`
     );
@@ -678,12 +634,28 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
     let videoBuffer: Buffer;
 
     try {
+      console.log(
+        `[YT-${downloadId}] [DEBUG] Checking if temp file exists: ${tempFile}`
+      );
       await access(tempFile, constants.F_OK);
       downloadedFile = tempFile;
       const fileStats = await stat(tempFile);
+      console.log(
+        `[YT-${downloadId}] [DEBUG] Temp file found, size: ${fileStats.size} bytes`
+      );
       videoBuffer = await readFile(tempFile);
+      console.log(
+        `[YT-${downloadId}] [DEBUG] File read successfully, buffer size: ${videoBuffer.length} bytes`
+      );
     } catch (accessError: any) {
+      console.log(
+        `[YT-${downloadId}] [DEBUG] Temp file not found, searching in tmpdir:`,
+        accessError.message
+      );
       const files = await readdir(tmpdir());
+      console.log(
+        `[YT-${downloadId}] [DEBUG] Found ${files.length} files in tmpdir`
+      );
       const videoFiles = files
         .filter((f) => {
           const lower = f.toLowerCase();
@@ -697,6 +669,10 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
           );
         })
         .map((f) => join(tmpdir(), f));
+
+      console.log(
+        `[YT-${downloadId}] [DEBUG] Found ${videoFiles.length} potential video files`
+      );
 
       if (videoFiles.length > 0) {
         const fileStats = await Promise.all(
@@ -723,6 +699,9 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
         if (validStats.length > 0) {
           validStats.sort((a, b) => b.mtime - a.mtime);
           downloadedFile = validStats[0].path;
+          console.log(
+            `[YT-${downloadId}] [DEBUG] Using most recent file: ${downloadedFile}, size: ${validStats[0].size} bytes`
+          );
           videoBuffer = await readFile(downloadedFile);
         } else {
           throw new Error("Downloaded file not found");
@@ -734,11 +713,11 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 
     if (downloadedFile) await unlink(downloadedFile).catch(() => {});
     console.log(
-      `[YT-${downloadId}] [DEBUG] yt-dlp YouTube download successful, buffer size: ${videoBuffer.length} bytes`
+      `[YT-${downloadId}] [DEBUG] YouTube download successful, buffer size: ${videoBuffer.length} bytes`
     );
     return videoBuffer;
   } catch (error: any) {
-    console.error(`[YT-${downloadId}] [ERROR] YouTube download failed completely:`, {
+    console.error(`[YT-${downloadId}] [ERROR] YouTube download failed:`, {
       message: error.message,
       stack: error.stack,
       url,

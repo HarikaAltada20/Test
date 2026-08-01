@@ -210,30 +210,57 @@ function normalizeNetscapeCookies(rawCookies: string): string {
 }
 
 let INSTAGRAM_COOKIES: string | null = null;
-async function initializeCookies(): Promise<void> {
-  const cookiePath = join(tmpdir(), "cookies.txt");
+let YOUTUBE_COOKIES: string | null = null;
 
+async function initializeCookies(): Promise<void> {
+  // 1. YouTube Cookies
+  const ytCookiePath = join(tmpdir(), "youtube_cookies.txt");
   try {
-    const rawEnv =
-      process.env.YOUTUBE_COOKIES ||
-      process.env.INSTAGRAM_COOKIES;
-    if (rawEnv) {
-      const formattedCookies = normalizeNetscapeCookies(rawEnv);
-      await writeFile(cookiePath, formattedCookies, "utf-8");
-      INSTAGRAM_COOKIES = cookiePath;
+    const rawYtEnv = process.env.YOUTUBE_COOKIES;
+    if (rawYtEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawYtEnv);
+      await writeFile(ytCookiePath, formattedCookies, "utf-8");
+      YOUTUBE_COOKIES = ytCookiePath;
     } else {
+      const localYtFile = join(process.cwd(), "youtube_cookies.txt");
+      if (existsSync(localYtFile)) {
+        YOUTUBE_COOKIES = localYtFile;
+      } else {
+        if (existsSync(ytCookiePath)) {
+          await unlink(ytCookiePath).catch(() => {});
+        }
+        YOUTUBE_COOKIES = null;
+      }
+    }
+  } catch (error: any) {
+    console.error("Error initializing YouTube cookies:", error.message);
+    YOUTUBE_COOKIES = null;
+  }
+
+  // 2. Instagram Cookies
+  const igCookiePath = join(tmpdir(), "instagram_cookies.txt");
+  try {
+    const rawIgEnv = process.env.INSTAGRAM_COOKIES;
+    if (rawIgEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawIgEnv);
+      await writeFile(igCookiePath, formattedCookies, "utf-8");
+      INSTAGRAM_COOKIES = igCookiePath;
+    } else {
+      const localIgFile = join(process.cwd(), "instagram_cookies.txt");
       const localCookieFile = join(process.cwd(), "cookies.txt");
-      if (existsSync(localCookieFile)) {
+      if (existsSync(localIgFile)) {
+        INSTAGRAM_COOKIES = localIgFile;
+      } else if (existsSync(localCookieFile)) {
         INSTAGRAM_COOKIES = localCookieFile;
       } else {
-        if (existsSync(cookiePath)) {
-          await unlink(cookiePath).catch(() => {});
+        if (existsSync(igCookiePath)) {
+          await unlink(igCookiePath).catch(() => {});
         }
         INSTAGRAM_COOKIES = null;
       }
     }
   } catch (error: any) {
-    console.error("Error initializing cookies:", error.message);
+    console.error("Error initializing Instagram cookies:", error.message);
     INSTAGRAM_COOKIES = null;
   }
 }
@@ -249,10 +276,11 @@ function sanitizeFilename(filename: string): string {
 // Single video downloader logic
 async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, isInstagram: boolean): Promise<void> {
   await initializeCookies();
+  const cookiesToUse = isInstagram ? INSTAGRAM_COOKIES : YOUTUBE_COOKIES;
   await ytdlp.downloadAsync(url, {
     format: "best[ext=mp4]/best",
     output: outputPath,
-    cookies: INSTAGRAM_COOKIES || undefined,
+    cookies: cookiesToUse || undefined,
     noWarnings: true,
     noUpdate: true,
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
