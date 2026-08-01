@@ -516,41 +516,69 @@ function normalizeNetscapeCookies(rawCookies: string): string {
   return normalized.join("\n");
 }
 
-// ⭐ ADDED: Auto-load cookies from env variable only
+// ⭐ Auto-load separate YouTube and Instagram cookies from env
 let INSTAGRAM_COOKIES: string | null = null;
-let COOKIES_SOURCE: "env" | null = null;
+let YOUTUBE_COOKIES: string | null = null;
+let COOKIES_SOURCE: "env" | "file" | null = null;
+let YOUTUBE_COOKIES_SOURCE: "env" | "file" | null = null;
 
 async function initializeCookies(): Promise<void> {
-  const cookiePath = join(tmpdir(), "cookies.txt");
-
+  // 1. YouTube Cookies
+  const ytCookiePath = join(tmpdir(), "youtube_cookies.txt");
   try {
-    const rawEnv =
-      process.env.YOUTUBE_COOKIES ||
-      process.env.INSTAGRAM_COOKIES;
-    if (rawEnv) {
-      const formattedCookies = normalizeNetscapeCookies(rawEnv);
-      try {
-        await writeFile(cookiePath, formattedCookies, "utf-8");
-        INSTAGRAM_COOKIES = cookiePath;
-        COOKIES_SOURCE = "env";
-      } catch (writeError: any) {
-        console.error(
-          "Failed to write cookies to temp file:",
-          writeError.message
-        );
+    const rawYtEnv = process.env.YOUTUBE_COOKIES;
+    if (rawYtEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawYtEnv);
+      await writeFile(ytCookiePath, formattedCookies, "utf-8");
+      YOUTUBE_COOKIES = ytCookiePath;
+      YOUTUBE_COOKIES_SOURCE = "env";
+    } else {
+      const localYtFile = join(process.cwd(), "youtube_cookies.txt");
+      if (existsSync(localYtFile)) {
+        YOUTUBE_COOKIES = localYtFile;
+        YOUTUBE_COOKIES_SOURCE = "file";
+      } else {
+        if (existsSync(ytCookiePath)) {
+          await unlink(ytCookiePath).catch(() => {});
+        }
+        YOUTUBE_COOKIES = null;
+        YOUTUBE_COOKIES_SOURCE = null;
+      }
+    }
+  } catch (error: any) {
+    console.error("Error initializing YouTube cookies:", error.message);
+    YOUTUBE_COOKIES = null;
+    YOUTUBE_COOKIES_SOURCE = null;
+  }
+
+  // 2. Instagram Cookies
+  const igCookiePath = join(tmpdir(), "instagram_cookies.txt");
+  try {
+    const rawIgEnv = process.env.INSTAGRAM_COOKIES;
+    if (rawIgEnv) {
+      const formattedCookies = normalizeNetscapeCookies(rawIgEnv);
+      await writeFile(igCookiePath, formattedCookies, "utf-8");
+      INSTAGRAM_COOKIES = igCookiePath;
+      COOKIES_SOURCE = "env";
+    } else {
+      const localIgFile = join(process.cwd(), "instagram_cookies.txt");
+      const localCookieFile = join(process.cwd(), "cookies.txt");
+      if (existsSync(localIgFile)) {
+        INSTAGRAM_COOKIES = localIgFile;
+        COOKIES_SOURCE = "file";
+      } else if (existsSync(localCookieFile)) {
+        INSTAGRAM_COOKIES = localCookieFile;
+        COOKIES_SOURCE = "file";
+      } else {
+        if (existsSync(igCookiePath)) {
+          await unlink(igCookiePath).catch(() => {});
+        }
         INSTAGRAM_COOKIES = null;
         COOKIES_SOURCE = null;
       }
-    } else {
-      // Clean up any old temp file if env var is not set
-      if (existsSync(cookiePath)) {
-        await unlink(cookiePath).catch(() => {});
-      }
-      INSTAGRAM_COOKIES = null;
-      COOKIES_SOURCE = null;
     }
   } catch (error: any) {
-    console.error("Error initializing cookies:", error.message);
+    console.error("Error initializing Instagram cookies:", error.message);
     INSTAGRAM_COOKIES = null;
     COOKIES_SOURCE = null;
   }
@@ -586,12 +614,12 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 
     console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp...`, {
       binaryPath: binaryPath || "system PATH",
-      hasCookies: !!INSTAGRAM_COOKIES,
+      hasCookies: !!YOUTUBE_COOKIES,
     });
     await ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
       output: tempFile,
-      cookies: INSTAGRAM_COOKIES || undefined,
+      cookies: YOUTUBE_COOKIES || undefined,
       noWarnings: true,
       noUpdate: true,
       additionalOptions: ["--js-runtimes", "node"],
