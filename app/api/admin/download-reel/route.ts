@@ -241,6 +241,22 @@ function parseYouTubeError(errorMessage: string): {
   const errorLower = errorMessage.toLowerCase();
 
   if (
+    errorLower.includes("downloaded file is empty") ||
+    errorLower.includes("file is empty")
+  ) {
+    return {
+      userMessage:
+        "YouTube returned an empty video file. The YouTube cookies in environment variables may be invalid/expired, or YouTube is restricting server requests.",
+      reason: "YouTube downloaded file is empty (0 bytes)",
+      suggestions: [
+        "Export fresh cookies from a logged-in YouTube session and update YOUTUBE_COOKIES env variable",
+        "If YOUTUBE_COOKIES is currently set, try updating or removing it if the cookies are invalid",
+        "Verify the YouTube video URL is public and accessible in your browser",
+      ],
+    };
+  }
+
+  if (
     errorLower.includes("sign in to confirm") ||
     errorLower.includes("bot") ||
     errorLower.includes("confirm you're not a bot")
@@ -612,23 +628,67 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
     const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
     const downloadStartTime = Date.now();
 
-    console.log(`[YT-${downloadId}] [DEBUG] Calling yt-dlp...`, {
-      binaryPath: binaryPath || "system PATH",
-      hasCookies: !!YOUTUBE_COOKIES,
-    });
-    await ytdlp.downloadAsync(url, {
-      format: "best[ext=mp4]/best",
-      output: tempFile,
-      cookies: YOUTUBE_COOKIES || undefined,
-      noWarnings: true,
-      noUpdate: true,
-      additionalOptions: ["--js-runtimes", "node"],
-    });
-    console.log(
-      `[YT-${downloadId}] [DEBUG] yt-dlp completed in ${
-        Date.now() - downloadStartTime
-      }ms`
-    );
+    const additionalOptions = [
+      "--js-runtimes",
+      "node",
+      "--extractor-args",
+      "youtube:player_client=mweb,android,web",
+    ];
+
+    const hasCookies = !!YOUTUBE_COOKIES;
+
+    try {
+      console.log(`[YT-${downloadId}] [DEBUG] Attempt 1: Calling yt-dlp...`, {
+        binaryPath: binaryPath || "system PATH",
+        hasCookies,
+      });
+      await ytdlp.downloadAsync(url, {
+        format: "best[ext=mp4]/best",
+        output: tempFile,
+        cookies: YOUTUBE_COOKIES || undefined,
+        noWarnings: true,
+        noUpdate: true,
+        additionalOptions,
+      });
+      console.log(
+        `[YT-${downloadId}] [DEBUG] yt-dlp Attempt 1 completed in ${
+          Date.now() - downloadStartTime
+        }ms`
+      );
+    } catch (attempt1Error: any) {
+      console.warn(
+        `[YT-${downloadId}] [WARN] Attempt 1 (with cookies: ${hasCookies}) failed: ${attempt1Error.message}`
+      );
+
+      // If attempt 1 failed and we used cookies, retry WITHOUT cookies as fallback
+      if (hasCookies) {
+        console.log(
+          `[YT-${downloadId}] [DEBUG] Retrying Attempt 2 WITHOUT cookies...`
+        );
+        try {
+          await ytdlp.downloadAsync(url, {
+            format: "best[ext=mp4]/best",
+            output: tempFile,
+            cookies: undefined,
+            noWarnings: true,
+            noUpdate: true,
+            additionalOptions,
+          });
+          console.log(
+            `[YT-${downloadId}] [DEBUG] yt-dlp Attempt 2 (without cookies) completed in ${
+              Date.now() - downloadStartTime
+            }ms`
+          );
+        } catch (attempt2Error: any) {
+          console.error(
+            `[YT-${downloadId}] [ERROR] Attempt 2 (without cookies) also failed: ${attempt2Error.message}`
+          );
+          throw attempt1Error;
+        }
+      } else {
+        throw attempt1Error;
+      }
+    }
 
     const { access, constants, readdir, stat } = await import("fs/promises");
     let videoBuffer: Buffer;

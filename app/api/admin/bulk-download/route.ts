@@ -277,19 +277,44 @@ function sanitizeFilename(filename: string): string {
 async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, isInstagram: boolean): Promise<void> {
   await initializeCookies();
   const cookiesToUse = isInstagram ? INSTAGRAM_COOKIES : YOUTUBE_COOKIES;
-  await ytdlp.downloadAsync(url, {
-    format: "best[ext=mp4]/best",
-    output: outputPath,
-    cookies: cookiesToUse || undefined,
-    noWarnings: true,
-    noUpdate: true,
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    referer: isInstagram ? "https://www.instagram.com/" : "https://www.youtube.com/",
-    additionalOptions: [
-      "--add-header", "Accept-Language:en-US,en;q=0.9",
-      "--js-runtimes", "node"
-    ],
-  });
+
+  const additionalOptions = [
+    "--add-header", "Accept-Language:en-US,en;q=0.9",
+    "--js-runtimes", "node",
+  ];
+
+  if (!isInstagram) {
+    additionalOptions.push("--extractor-args", "youtube:player_client=mweb,android,web");
+  }
+
+  try {
+    await ytdlp.downloadAsync(url, {
+      format: "best[ext=mp4]/best",
+      output: outputPath,
+      cookies: cookiesToUse || undefined,
+      noWarnings: true,
+      noUpdate: true,
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      referer: isInstagram ? "https://www.instagram.com/" : "https://www.youtube.com/",
+      additionalOptions,
+    });
+  } catch (firstError: any) {
+    if (!isInstagram && cookiesToUse) {
+      console.warn(`[YTDLP] YouTube download with cookies failed, retrying without cookies: ${firstError.message}`);
+      await ytdlp.downloadAsync(url, {
+        format: "best[ext=mp4]/best",
+        output: outputPath,
+        cookies: undefined,
+        noWarnings: true,
+        noUpdate: true,
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        referer: "https://www.youtube.com/",
+        additionalOptions,
+      });
+    } else {
+      throw firstError;
+    }
+  }
 }
 
 async function verifyAdminOrBrandAccess() {
