@@ -521,15 +521,14 @@ let INSTAGRAM_COOKIES: string | null = null;
 let COOKIES_SOURCE: "env" | null = null;
 
 async function initializeCookies(): Promise<void> {
+  const cookiePath = join(tmpdir(), "cookies.txt");
+
   try {
     const rawEnv =
       process.env.YOUTUBE_COOKIES ||
-      process.env.INSTAGRAM_COOKIES ||
-      process.env.COOKIES;
+      process.env.INSTAGRAM_COOKIES;
     if (rawEnv) {
       const formattedCookies = normalizeNetscapeCookies(rawEnv);
-
-      const cookiePath = join(tmpdir(), "cookies.txt");
       try {
         await writeFile(cookiePath, formattedCookies, "utf-8");
         INSTAGRAM_COOKIES = cookiePath;
@@ -544,7 +543,6 @@ async function initializeCookies(): Promise<void> {
       }
     } else {
       // Clean up any old temp file if env var is not set
-      const cookiePath = join(tmpdir(), "cookies.txt");
       if (existsSync(cookiePath)) {
         await unlink(cookiePath).catch(() => {});
       }
