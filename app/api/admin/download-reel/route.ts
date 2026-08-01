@@ -97,6 +97,21 @@ function parseInstagramError(errorMessage: string): {
   const errorLower = errorMessage.toLowerCase();
   const originalError = errorMessage;
 
+  // Invalid option or yt-dlp syntax error
+  if (
+    errorLower.includes("no such option") ||
+    errorLower.includes("unrecognized option")
+  ) {
+    return {
+      userMessage: "Internal download error: Downloader configuration issue.",
+      reason: originalError,
+      suggestions: [
+        "Check server logs for yt-dlp option errors",
+        "Report this issue to support",
+      ],
+    };
+  }
+
   // Empty media response - video not accessible
   if (
     errorLower.includes("empty media response") ||
@@ -185,11 +200,11 @@ function parseInstagramError(errorMessage: string): {
     };
   }
 
-  // Cookie/authentication issues
+  // Explicit Cookie/authentication issues
   if (
-    errorLower.includes("cookies") ||
-    errorLower.includes("authentication") ||
-    errorLower.includes("login required")
+    errorLower.includes("login required") ||
+    errorLower.includes("session expired") ||
+    errorLower.includes("invalid cookie")
   ) {
     return {
       userMessage:
@@ -468,21 +483,23 @@ function normalizeNetscapeCookies(rawCookies: string): string {
     }
   }
 
-  if (content.includes("\\n")) {
-    content = content.replace(/\\n/g, "\n");
-  }
+  // Convert all literal '\n' escape sequences (single or double escaped) to real newlines
+  content = content.replace(/\\+n/g, "\n");
 
-  if (content.includes("\\t")) {
-    content = content.replace(/\\t/g, "\t");
-  }
+  // Convert all literal '\t' escape sequences (single or double escaped) to real tab characters
+  content = content.replace(/\\+t/g, "\t");
 
   const lines = content.split("\n");
   const normalized = lines.map((line) => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) return line;
-    if ((line.match(/\t/g) || []).length >= 6) return line;
 
-    const parts = trimmed.split(/\s+/);
+    // Split on tabs if present, otherwise split on spaces
+    let parts = trimmed.split("\t");
+    if (parts.length < 7) {
+      parts = trimmed.split(/\s+/);
+    }
+
     if (parts.length >= 7) {
       const domain = parts[0];
       const subdomains = parts[1];
@@ -742,10 +759,10 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
       noUpdate: true,
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
       referer: "https://www.instagram.com/",
-      addHeaders: {
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      additionalOptions: ["--js-runtimes", "node"],
+      additionalOptions: [
+        "--add-header", "Accept-Language:en-US,en;q=0.9",
+        "--js-runtimes", "node"
+      ],
     });
     console.log(
       `[IG-${downloadId}] [DEBUG] yt-dlp completed in ${
