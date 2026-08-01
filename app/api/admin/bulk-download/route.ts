@@ -176,21 +176,23 @@ function normalizeNetscapeCookies(rawCookies: string): string {
     }
   }
 
-  if (content.includes("\\n")) {
-    content = content.replace(/\\n/g, "\n");
-  }
+  // Convert all literal '\n' escape sequences (single or double escaped) to real newlines
+  content = content.replace(/\\+n/g, "\n");
 
-  if (content.includes("\\t")) {
-    content = content.replace(/\\t/g, "\t");
-  }
+  // Convert all literal '\t' escape sequences (single or double escaped) to real tab characters
+  content = content.replace(/\\+t/g, "\t");
 
   const lines = content.split("\n");
   const normalized = lines.map((line) => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) return line;
-    if ((line.match(/\t/g) || []).length >= 6) return line;
 
-    const parts = trimmed.split(/\s+/);
+    // Split on tabs if present, otherwise split on spaces
+    let parts = trimmed.split("\t");
+    if (parts.length < 7) {
+      parts = trimmed.split(/\s+/);
+    }
+
     if (parts.length >= 7) {
       const domain = parts[0];
       const subdomains = parts[1];
@@ -252,10 +254,10 @@ async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, 
     noUpdate: true,
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     referer: isInstagram ? "https://www.instagram.com/" : "https://www.youtube.com/",
-    addHeaders: {
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-    additionalOptions: ["--js-runtimes", "node"],
+    additionalOptions: [
+      "--add-header", "Accept-Language:en-US,en;q=0.9",
+      "--js-runtimes", "node"
+    ],
   });
 }
 
