@@ -10,6 +10,17 @@ import {
 
 const PAGE_SIZE = 20;
 
+type StatusSummaryRow = {
+  status: string;
+  request_count: number | string;
+  cash_amount_cents: number | string;
+};
+
+function toNumber(value: number | string | null | undefined): number {
+  const n = typeof value === "string" ? Number(value) : Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function GET(req: NextRequest) {
   const { isAdmin } = await verifyAdminAccess();
   if (!isAdmin)
@@ -29,62 +40,89 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  const { error, data, total } = await fetchWithdrawalsPage(supabase, {
-    page,
-    pageSize,
-    tab,
-    createdFrom,
-    createdTo,
-    sort,
-    order,
-  });
+  const [{ error, data, total }, summaryRes] = await Promise.all([
+    fetchWithdrawalsPage(supabase, {
+      page,
+      pageSize,
+      tab,
+      createdFrom,
+      createdTo,
+      sort,
+      order,
+    }),
+    supabase.rpc("admin_withdrawal_status_summary"),
+  ]);
 
   if (error) {
     console.error("Withdrawals list error:", error);
     return NextResponse.json({ error }, { status: 500 });
   }
 
-  // Totals by status – full table (unchanged semantics: all-time, no date filter)
-  const { data: allRows } = await supabase
-    .from("withdrawal_requests")
-    .select("amount, amount_type, status");
+  if (summaryRes.error) {
+    console.error("Withdrawals summary error:", summaryRes.error);
+    return NextResponse.json(
+      { error: summaryRes.error.message || "Failed to load withdrawal totals" },
+      { status: 500 },
+    );
+  }
 
-  const sumCash = (statuses: string[]) =>
-    (allRows ?? []).reduce(
-      (s, r) =>
-        s +
-        (r.amount_type === "cash" && statuses.includes(r.status)
-          ? Number(r.amount)
-          : 0),
+  const summaryRows = (summaryRes.data ?? []) as StatusSummaryRow[];
+  const byStatus = new Map(
+    summaryRows.map((row) => [
+      row.status,
+      {
+        count: toNumber(row.request_count),
+        cash: toNumber(row.cash_amount_cents),
+      },
+    ]),
+  );
+
+  const cashFor = (...statuses: string[]) =>
+    statuses.reduce((sum, status) => sum + (byStatus.get(status)?.cash ?? 0), 0);
+  const countFor = (...statuses: string[]) =>
+    statuses.reduce(
+      (sum, status) => sum + (byStatus.get(status)?.count ?? 0),
       0,
     );
 
   const totals = {
-    all: (allRows ?? []).reduce(
-      (s, r) => s + (r.amount_type === "cash" ? Number(r.amount) : 0),
-      0,
+    all: cashFor(
+      "pending",
+      "in_review",
+      "approved",
+      "processed",
+      "rejected",
+      "cancelled",
+      "forfeited",
+      "failed",
     ),
-    pending: sumCash(["pending"]),
-    in_review: sumCash(["in_review"]),
-    approved: sumCash(["approved"]),
-    paid: sumCash(["processed"]),
-    rejected: sumCash(["rejected", "cancelled"]),
-    forfeited: sumCash(["forfeited"]),
-    failed: sumCash(["failed"]),
+    pending: cashFor("pending"),
+    in_review: cashFor("in_review"),
+    approved: cashFor("approved"),
+    paid: cashFor("processed"),
+    rejected: cashFor("rejected", "cancelled"),
+    forfeited: cashFor("forfeited"),
+    failed: cashFor("failed"),
   };
 
-  const rows = allRows ?? [];
   const statusCounts = {
-    all: rows.length,
-    pending: rows.filter((r) => r.status === "pending").length,
-    in_review: rows.filter((r) => r.status === "in_review").length,
-    approved: rows.filter((r) => r.status === "approved").length,
-    paid: rows.filter((r) => r.status === "processed").length,
-    rejected: rows.filter(
-      (r) => r.status === "rejected" || r.status === "cancelled",
-    ).length,
-    forfeited: rows.filter((r) => r.status === "forfeited").length,
-    failed: rows.filter((r) => r.status === "failed").length,
+    all: countFor(
+      "pending",
+      "in_review",
+      "approved",
+      "processed",
+      "rejected",
+      "cancelled",
+      "forfeited",
+      "failed",
+    ),
+    pending: countFor("pending"),
+    in_review: countFor("in_review"),
+    approved: countFor("approved"),
+    paid: countFor("processed"),
+    rejected: countFor("rejected", "cancelled"),
+    forfeited: countFor("forfeited"),
+    failed: countFor("failed"),
   };
 
   return NextResponse.json({

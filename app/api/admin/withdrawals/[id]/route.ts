@@ -116,8 +116,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) {
     const msg = error.message || "Failed to update withdrawal";
-    const isNotFound = msg.toLowerCase().includes("not found");
-    return NextResponse.json({ error: msg }, { status: isNotFound ? 404 : 500 });
+    const lower = msg.toLowerCase();
+    const isNotFound = lower.includes("not found");
+    const isBadTransition = lower.includes("invalid status transition");
+    return NextResponse.json(
+      { error: msg },
+      { status: isNotFound ? 404 : isBadTransition ? 400 : 500 },
+    );
   }
 
   return NextResponse.json({ ok: true });

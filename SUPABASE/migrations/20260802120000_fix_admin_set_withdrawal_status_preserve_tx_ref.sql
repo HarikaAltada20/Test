@@ -1,5 +1,6 @@
 -- Preserve existing transaction_reference when status updates omit it.
--- Previously Approve (and other status changes) always wrote NULL and wiped a saved UTR.
+-- Also enforce allowed status transitions and prevent double-refunds on
+-- rejected/cancelled (admin UI previously relied on client-only discipline).
 
 CREATE OR REPLACE FUNCTION public.admin_set_withdrawal_status(
   p_request_id uuid,
@@ -11,11 +12,14 @@ CREATE OR REPLACE FUNCTION public.admin_set_withdrawal_status(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_request public.withdrawal_requests%ROWTYPE;
   v_final_admin_notes text;
   v_tx_status text;
+  v_allowed text[];
+  v_should_refund boolean := false;
 BEGIN
   SELECT * INTO v_request
   FROM public.withdrawal_requests
@@ -25,6 +29,28 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Withdrawal request not found';
   END IF;
+
+  -- Allowed transitions mirror admin UI. Same-status is allowed (notes/UTR update).
+  v_allowed := CASE v_request.status
+    WHEN 'pending' THEN ARRAY['pending', 'in_review', 'approved', 'rejected', 'cancelled']
+    WHEN 'in_review' THEN ARRAY['pending', 'in_review', 'approved', 'rejected', 'cancelled']
+    WHEN 'approved' THEN ARRAY['approved', 'processed', 'rejected', 'failed', 'forfeited']
+    WHEN 'failed' THEN ARRAY['failed', 'processed', 'rejected']
+    WHEN 'processed' THEN ARRAY['processed']
+    WHEN 'rejected' THEN ARRAY['rejected']
+    WHEN 'cancelled' THEN ARRAY['cancelled']
+    WHEN 'forfeited' THEN ARRAY['forfeited']
+    ELSE ARRAY[]::text[]
+  END;
+
+  IF p_new_status IS NULL OR NOT (p_new_status = ANY (v_allowed)) THEN
+    RAISE EXCEPTION 'Invalid status transition from % to %', v_request.status, p_new_status;
+  END IF;
+
+  -- Refund only when first entering a refunded terminal status.
+  v_should_refund :=
+    p_new_status IN ('rejected', 'cancelled')
+    AND v_request.status NOT IN ('rejected', 'cancelled');
 
   -- When marking in_review, append internal reason to admin_notes
   v_final_admin_notes := COALESCE(p_admin_notes, v_request.admin_notes);
@@ -51,8 +77,8 @@ BEGIN
     END
   WHERE id = p_request_id;
 
-  -- Refund + log for rejected/cancelled
-  IF p_new_status IN ('rejected', 'cancelled') THEN
+  -- Refund + log for rejected/cancelled (once)
+  IF v_should_refund THEN
     PERFORM public._admin_refund_withdrawal_request(v_request);
 
     INSERT INTO public.money_transactions (
