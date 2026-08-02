@@ -64,7 +64,8 @@ export async function GET(req: NextRequest) {
       (s, r) => s + (r.amount_type === "cash" ? Number(r.amount) : 0),
       0,
     ),
-    pending: sumCash(["pending", "in_review"]),
+    pending: sumCash(["pending"]),
+    in_review: sumCash(["in_review"]),
     approved: sumCash(["approved"]),
     paid: sumCash(["processed"]),
     rejected: sumCash(["rejected", "cancelled"]),
@@ -75,8 +76,8 @@ export async function GET(req: NextRequest) {
   const rows = allRows ?? [];
   const statusCounts = {
     all: rows.length,
-    pending: rows.filter((r) => ["pending", "in_review"].includes(r.status))
-      .length,
+    pending: rows.filter((r) => r.status === "pending").length,
+    in_review: rows.filter((r) => r.status === "in_review").length,
     approved: rows.filter((r) => r.status === "approved").length,
     paid: rows.filter((r) => r.status === "processed").length,
     rejected: rows.filter(
