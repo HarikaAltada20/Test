@@ -168,7 +168,7 @@ function normalizeNetscapeCookies(rawCookies: string): string {
   if (!content.includes("\n") && !content.includes("\\n") && content.length > 50) {
     try {
       const decoded = Buffer.from(content, "base64").toString("utf-8");
-      if (decoded.includes("instagram.com") || decoded.includes("# Netscape")) {
+      if (decoded.includes("instagram.com") || decoded.includes("youtube.com") || decoded.includes("# Netscape")) {
         content = decoded;
       }
     } catch {
@@ -284,12 +284,17 @@ async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, 
   ];
 
   if (!isInstagram) {
-    additionalOptions.push("--extractor-args", "youtube:player_client=mweb,android,web");
+    additionalOptions.push("--extractor-args", "youtube:player_client=android,web");
+    additionalOptions.push("--merge-output-format", "mp4");
   }
+
+  const formatSelector = isInstagram 
+    ? "best[ext=mp4]/best"
+    : "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
 
   try {
     await ytdlp.downloadAsync(url, {
-      format: "best[ext=mp4]/best",
+      format: formatSelector,
       output: outputPath,
       cookies: cookiesToUse || undefined,
       noWarnings: true,
@@ -302,7 +307,7 @@ async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, 
     if (!isInstagram && cookiesToUse) {
       console.warn(`[YTDLP] YouTube download with cookies failed, retrying without cookies: ${firstError.message}`);
       await ytdlp.downloadAsync(url, {
-        format: "best[ext=mp4]/best",
+        format: formatSelector,
         output: outputPath,
         cookies: undefined,
         noWarnings: true,

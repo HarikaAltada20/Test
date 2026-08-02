@@ -241,6 +241,21 @@ function parseYouTubeError(errorMessage: string): {
   const errorLower = errorMessage.toLowerCase();
 
   if (
+    errorLower.includes("requested format is not available") ||
+    errorLower.includes("format is not available")
+  ) {
+    return {
+      userMessage:
+        "YouTube requested format was unavailable. The format selector has been relaxed, but YouTube may be restricting audio/video streams.",
+      reason: "Requested format is not available",
+      suggestions: [
+        "Check if the video is age-restricted or region-locked",
+        "Verify YouTube session cookies in YOUTUBE_COOKIES env variable",
+      ],
+    };
+  }
+
+  if (
     errorLower.includes("downloaded file is empty") ||
     errorLower.includes("file is empty")
   ) {
@@ -491,7 +506,7 @@ function normalizeNetscapeCookies(rawCookies: string): string {
   if (!content.includes("\n") && !content.includes("\\n") && content.length > 50) {
     try {
       const decoded = Buffer.from(content, "base64").toString("utf-8");
-      if (decoded.includes("instagram.com") || decoded.includes("# Netscape")) {
+      if (decoded.includes("instagram.com") || decoded.includes("youtube.com") || decoded.includes("# Netscape")) {
         content = decoded;
       }
     } catch {
@@ -632,8 +647,12 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
       "--js-runtimes",
       "node",
       "--extractor-args",
-      "youtube:player_client=mweb,android,web",
+      "youtube:player_client=android,web",
+      "--merge-output-format",
+      "mp4",
     ];
+
+    const formatSelector = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
 
     const hasCookies = !!YOUTUBE_COOKIES;
 
@@ -643,7 +662,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
         hasCookies,
       });
       await ytdlp.downloadAsync(url, {
-        format: "best[ext=mp4]/best",
+        format: formatSelector,
         output: tempFile,
         cookies: YOUTUBE_COOKIES || undefined,
         noWarnings: true,
@@ -667,7 +686,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
         );
         try {
           await ytdlp.downloadAsync(url, {
-            format: "best[ext=mp4]/best",
+            format: formatSelector,
             output: tempFile,
             cookies: undefined,
             noWarnings: true,
