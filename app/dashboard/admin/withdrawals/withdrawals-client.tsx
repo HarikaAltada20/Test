@@ -215,7 +215,30 @@ export default function WithdrawalsClient({
   const [proofRemoving, setProofRemoving] = useState(false);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataDirty, setMetadataDirty] = useState(false);
+  const [metadataSaveMsg, setMetadataSaveMsg] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkApproving, setBulkApproving] = useState(false);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
+  const metadataSaveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  /** Prefer top toasts while the details modal is open so they don't cover footer actions. */
+  const notify = useCallback(
+    (
+      type: "success" | "error",
+      message: string,
+      opts?: { duration?: number },
+    ) => {
+      const position = detailsOpen ? "top-center" : undefined;
+      if (type === "success") {
+        toast.success(message, { position, duration: opts?.duration ?? 2500 });
+      } else {
+        toast.error(message, { position, duration: opts?.duration });
+      }
+    },
+    [detailsOpen],
+  );
 
 // Get theme from parent layout instead of managing independent state
 const [isDark, setIsDark] = useState<boolean>(() => {
@@ -308,6 +331,19 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     void reloadWithdrawals();
   }, [reloadWithdrawals]);
 
+  // Clear row selection when the list context changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [selectedTab, page, pageSize, filterFromMs, filterToMs, sortKey, sortOrder]);
+
+  useEffect(() => {
+    return () => {
+      if (metadataSaveMsgTimer.current) {
+        clearTimeout(metadataSaveMsgTimer.current);
+      }
+    };
+  }, []);
+
    // Watch for theme changes from parent layout
    useEffect(() => {
     const checkTheme = () => {
@@ -386,6 +422,21 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     }
   };
 
+  const tabForStatus = (status: string): string | null => {
+    if (status === "pending" || status === "in_review") return "pending";
+    if (status === "approved") return "approved";
+    if (status === "processed") return "paid";
+    if (status === "rejected" || status === "cancelled") return "rejected";
+    if (status === "forfeited") return "forfeited";
+    if (status === "failed") return "failed";
+    return null;
+  };
+
+  const statusMatchesTab = (status: string, tab: string) => {
+    if (tab === "all") return true;
+    return tabForStatus(status) === tab;
+  };
+
   const updateStatus = async (
     id: string,
     newStatus: string,
@@ -398,10 +449,20 @@ const [isDark, setIsDark] = useState<boolean>(() => {
   ) => {
     try {
       setUpdating(true);
+      const body: Record<string, string> = { status: newStatus };
+      if (typeof extras?.transaction_reference === "string") {
+        body.transaction_reference = extras.transaction_reference;
+      }
+      if (typeof extras?.admin_notes === "string") {
+        body.admin_notes = extras.admin_notes;
+      }
+      if (typeof extras?.in_review_reason === "string") {
+        body.in_review_reason = extras.in_review_reason;
+      }
       const res = await fetch(`/api/admin/withdrawals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, ...(extras || {}) }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
       setRequests((prev) =>
@@ -421,11 +482,51 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             : r
         )
       );
-      toast.success(`Status updated to ${newStatus.replace("_", " ")}`);
+      setActive((prev) =>
+        prev && prev.id === id
+          ? {
+              ...prev,
+              status: newStatus,
+              transaction_reference:
+                extras?.transaction_reference ?? prev.transaction_reference,
+              admin_notes: extras?.admin_notes ?? prev.admin_notes,
+              processed_at:
+                newStatus === "processed"
+                  ? new Date().toISOString()
+                  : prev.processed_at,
+            }
+          : prev,
+      );
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       if (opts?.closeDetails) {
         setDetailsOpen(false);
       }
-      void reloadWithdrawals();
+
+      const nextTab = tabForStatus(newStatus);
+      const leavesCurrentTab =
+        selectedTab !== "all" &&
+        nextTab != null &&
+        !statusMatchesTab(newStatus, selectedTab);
+
+      if (leavesCurrentTab && nextTab) {
+        const label = newStatus.replace(/_/g, " ");
+        toast.success(
+          `Marked as ${label}. Switched to ${nextTab} so the request stays visible.`,
+        );
+        setPage(1);
+        setSelectedTab(nextTab);
+        // Tab change triggers reloadWithdrawals via effect
+      } else {
+        toast.success(
+          `Status updated to ${newStatus.replace(/_/g, " ")}`,
+        );
+        void reloadWithdrawals();
+      }
     } catch (e) {
       console.error("Failed to update status", e);
       alert("Failed to update status");
@@ -465,8 +566,22 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         )
       );
       setDetailsOpen(false);
-      void reloadWithdrawals();
-      alert("Withdrawal request cancelled successfully!");
+      setSelectedIds((prev) => {
+        if (!prev.has(req.id)) return prev;
+        const next = new Set(prev);
+        next.delete(req.id);
+        return next;
+      });
+      if (selectedTab !== "all" && selectedTab !== "rejected") {
+        toast.success(
+          "Withdrawal cancelled. Switched to Rejected so it stays visible.",
+        );
+        setPage(1);
+        setSelectedTab("rejected");
+      } else {
+        toast.success("Withdrawal request cancelled successfully");
+        void reloadWithdrawals();
+      }
     } catch (e) {
       console.error("Failed to cancel request", e);
       alert(
@@ -479,17 +594,29 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     }
   };
 
+  const flashMetadataSaved = (message: string) => {
+    setMetadataSaveMsg(message);
+    if (metadataSaveMsgTimer.current) {
+      clearTimeout(metadataSaveMsgTimer.current);
+    }
+    metadataSaveMsgTimer.current = setTimeout(() => {
+      setMetadataSaveMsg(null);
+      metadataSaveMsgTimer.current = null;
+    }, 3000);
+  };
+
   const openDetails = (req: Request) => {
     setActive(req);
     setAdminNotes(req.admin_notes || "");
     setTxRef(req.transaction_reference || "");
     setPaymentProofLinkDraft(req.payment_proof_link || "");
     setMetadataDirty(false);
+    setMetadataSaveMsg(null);
     setDetailsOpen(true);
   };
 
-  const saveMetadata = async () => {
-    if (!active) return;
+  const saveMetadata = async (opts?: { silent?: boolean }): Promise<boolean> => {
+    if (!active) return false;
     setSavingMetadata(true);
     try {
       const linkTrim = paymentProofLinkDraft.trim();
@@ -531,16 +658,36 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             }
           : prev,
       );
-      toast.success("Notes and proof link saved");
-      void reloadWithdrawals();
+      if (!opts?.silent) {
+        flashMetadataSaved("Saved successfully");
+        notify("success", "Notes, UTR & proof link saved");
+      }
+      return true;
     } catch (e) {
       console.error(e);
-      toast.error(
+      notify(
+        "error",
         e instanceof Error ? e.message : "Could not save metadata",
       );
+      return false;
     } finally {
       setSavingMetadata(false);
     }
+  };
+
+  const applyStatusFromDetails = async (
+    newStatus: string,
+    extras?: {
+      transaction_reference?: string;
+      admin_notes?: string;
+    },
+  ) => {
+    if (!active) return;
+    if (metadataDirty) {
+      const saved = await saveMetadata({ silent: true });
+      if (!saved) return;
+    }
+    await updateStatus(active.id, newStatus, extras, { closeDetails: true });
   };
 
   const openProofInNewTab = async (requestId: string) => {
@@ -553,7 +700,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
       if (json.url) window.open(json.url, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.error(err);
-      toast.error("Could not open payment proof file");
+      notify("error", "Could not open payment proof file");
     }
   };
 
@@ -561,7 +708,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     const file = fileList?.[0];
     if (!file || !active) return;
     if (file.size > PAYMENT_PROOF_MAX_BYTES) {
-      toast.error(
+      notify(
+        "error",
         `File is too large. Maximum size is ${PAYMENT_PROOF_MAX_BYTES / 1024 / 1024} MB.`,
       );
       return;
@@ -573,7 +721,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         uploadFile = await compressImage(file);
       }
       if (uploadFile.size > PAYMENT_PROOF_MAX_BYTES) {
-        toast.error(
+        notify(
+          "error",
           `File is still too large after processing. Maximum size is ${PAYMENT_PROOF_MAX_BYTES / 1024 / 1024} MB.`,
         );
         return;
@@ -621,11 +770,11 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             }
           : prev,
       );
-      toast.success("Payment proof file uploaded");
+      notify("success", "Payment proof file uploaded");
       void reloadWithdrawals();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Upload failed");
+      notify("error", e instanceof Error ? e.message : "Upload failed");
     } finally {
       setProofUploading(false);
       if (proofFileInputRef.current) proofFileInputRef.current.value = "";
@@ -678,11 +827,14 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             }
           : prev,
       );
-      toast.success("Payment proof file removed");
+      notify("success", "Payment proof file removed");
       void reloadWithdrawals();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Could not remove file");
+      notify(
+        "error",
+        e instanceof Error ? e.message : "Could not remove file",
+      );
     } finally {
       setProofRemoving(false);
     }
@@ -995,6 +1147,100 @@ const [isDark, setIsDark] = useState<boolean>(() => {
 
   const FINAL_STATUSES = ["processed", "forfeited", "cancelled", "rejected"];
   const isFinalStatus = (s: string) => FINAL_STATUSES.includes(s);
+  const isApprovableStatus = (s: string) =>
+    s === "pending" || s === "in_review";
+
+  const approvableOnPage = useMemo(
+    () => requests.filter((r) => isApprovableStatus(r.status)),
+    [requests],
+  );
+  const allApprovableSelected =
+    approvableOnPage.length > 0 &&
+    approvableOnPage.every((r) => selectedIds.has(r.id));
+  const someApprovableSelected = approvableOnPage.some((r) =>
+    selectedIds.has(r.id),
+  );
+
+  const toggleSelectId = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllApprovable = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const r of approvableOnPage) {
+        if (checked) next.add(r.id);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  };
+
+  const bulkApproveSelected = async () => {
+    const ids = approvableOnPage
+      .filter((r) => selectedIds.has(r.id))
+      .map((r) => r.id);
+    if (ids.length === 0) {
+      toast.error("Select at least one pending request to approve");
+      return;
+    }
+    if (
+      !confirm(
+        `Approve ${ids.length} withdrawal request${ids.length === 1 ? "" : "s"}? They will move to the Approved tab.`,
+      )
+    ) {
+      return;
+    }
+    setBulkApproving(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/admin/withdrawals/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "approved" }),
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `Failed for ${id}`);
+          }
+          return id;
+        }),
+      );
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - succeeded;
+      setSelectedIds(new Set());
+      if (succeeded > 0 && selectedTab === "pending") {
+        toast.success(
+          failed > 0
+            ? `Approved ${succeeded}, ${failed} failed. Showing Approved tab.`
+            : `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}. Showing Approved tab.`,
+        );
+        setPage(1);
+        setSelectedTab("approved");
+      } else {
+        if (succeeded > 0) {
+          toast.success(
+            `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}`,
+          );
+        }
+        if (failed > 0) {
+          toast.error(`${failed} approval${failed === 1 ? "" : "s"} failed`);
+        }
+        void reloadWithdrawals();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Bulk approve failed");
+    } finally {
+      setBulkApproving(false);
+    }
+  };
 
   const handleSortColumn = (key: WithdrawalsSortKey) => {
     setPage(1);
@@ -1058,6 +1304,21 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
             )}
           >
+            <TableHead className="w-10 pr-0">
+              <Checkbox
+                checked={
+                  someApprovableSelected && !allApprovableSelected
+                    ? "indeterminate"
+                    : allApprovableSelected
+                }
+                onCheckedChange={(v) =>
+                  toggleSelectAllApprovable(v === true)
+                }
+                disabled={loading || approvableOnPage.length === 0 || bulkApproving}
+                aria-label="Select all approvable on this page"
+                className={cn(isDark && "border-white/60")}
+              />
+            </TableHead>
             <SortableTh
               colKey="created_at"
               label="Created"
@@ -1101,6 +1362,17 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                 key={r.id}
                 className="hover:bg-muted/30 transition-colors"
               >
+                <TableCell className="w-10 pr-0 align-middle">
+                  <Checkbox
+                    checked={selectedIds.has(r.id)}
+                    onCheckedChange={(v) =>
+                      toggleSelectId(r.id, v === true)
+                    }
+                    disabled={!isApprovableStatus(r.status) || bulkApproving}
+                    aria-label={`Select withdrawal for ${r.users?.full_name || r.id}`}
+                    className={cn(isDark && "border-white/60")}
+                  />
+                </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <div className="text-sm text-muted-foreground">
                     {new Date(r.created_at).toLocaleDateString()}
@@ -1650,8 +1922,57 @@ const [isDark, setIsDark] = useState<boolean>(() => {
           </Button>
         </div>
 
-        <div className="mb-2 text-xs text-muted-foreground">
-          Tip: tap/click any column header to sort.
+        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Tip: tap/click any column header to sort.
+          </p>
+          {(selectedIds.size > 0 ||
+            selectedTab === "pending" ||
+            selectedTab === "all") && (
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedIds.size > 0 && (
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-slate-300" : "text-slate-600",
+                  )}
+                >
+                  {selectedIds.size} selected
+                </span>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  selectedIds.size === 0 ||
+                  bulkApproving ||
+                  updating ||
+                  !someApprovableSelected
+                }
+                onClick={() => void bulkApproveSelected()}
+                className={cn(isDark && "border-gray-600")}
+              >
+                {bulkApproving ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                )}
+                Approve selected
+              </Button>
+              {selectedIds.size > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={bulkApproving}
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto pb-1">
@@ -1890,11 +2211,19 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         {/* Enhanced Details Modal */}
         <Dialog
           open={detailsOpen}
-          onOpenChange={setDetailsOpen}
+          onOpenChange={(open) => {
+            setDetailsOpen(open);
+            if (!open) setMetadataSaveMsg(null);
+          }}
           isdark={isDark}
         >
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent
+            className={cn(
+              "sm:max-w-[700px] max-h-[min(92vh,900px)] w-[calc(100%-1.5rem)] p-0 gap-0 overflow-hidden flex flex-col",
+              isDark && "border-gray-600",
+            )}
+          >
+            <DialogHeader className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 pr-12">
               <DialogTitle
                 className={cn(
                   "flex items-center gap-2",
@@ -1909,7 +2238,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
               </DialogDescription>
             </DialogHeader>
             {active && (
-              <div className="space-y-4 py-4">
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 space-y-4 py-2">
                 {/* Key Information Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Created Date Card */}
@@ -2325,6 +2654,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             onChange={(e) => {
                               setAdminNotes(e.target.value);
                               setMetadataDirty(true);
+                              setMetadataSaveMsg(null);
                             }}
                             placeholder="Internal notes, campaign context…"
                             className={cn(
@@ -2345,6 +2675,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             onChange={(e) => {
                               setTxRef(e.target.value);
                               setMetadataDirty(true);
+                              setMetadataSaveMsg(null);
                             }}
                             placeholder="UTR / TXID / reference #"
                             className={cn(
@@ -2418,6 +2749,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             onChange={(e) => {
                               setPaymentProofLinkDraft(e.target.value);
                               setMetadataDirty(true);
+                              setMetadataSaveMsg(null);
                             }}
                             placeholder="https://…"
                             className={cn(
@@ -2560,11 +2892,25 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
+                      {metadataSaveMsg ? (
+                        <p
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-sm font-medium order-2 sm:order-1",
+                            isDark ? "text-emerald-300" : "text-emerald-700",
+                          )}
+                          role="status"
+                        >
+                          <CheckCircle className="h-4 w-4 shrink-0" />
+                          {metadataSaveMsg}
+                        </p>
+                      ) : (
+                        <span className="hidden sm:block order-1" />
+                      )}
                       <Button
                         type="button"
                         className={cn(
-                          "w-full sm:w-auto min-w-[200px]",
+                          "w-full sm:w-auto sm:min-w-[180px] order-1 sm:order-2",
                           isDark && "bg-violet-600 hover:bg-violet-500",
                         )}
                         disabled={savingMetadata || !metadataDirty}
@@ -2572,188 +2918,209 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                       >
                         {savingMetadata
                           ? "Saving…"
-                          : "Save notes, UTR & proof link"}
+                          : (
+                            <>
+                              <span className="sm:hidden">Save notes & UTR</span>
+                              <span className="hidden sm:inline">
+                                Save notes, UTR & proof link
+                              </span>
+                            </>
+                          )}
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
               </div>
             )}
-            <DialogFooter className="border-t pt-4 mt-4">
-              <div className="flex flex-wrap gap-2 w-full justify-between">
-                <div className="flex flex-wrap gap-2">
-                  {active && !isFinalStatus(active.status) && (
-                    <>
-                      {/* Cancel - pending and in_review */}
-                      {["pending", "in_review"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => cancelRequest(active!)}
-                              disabled={updating}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Cancel
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Cancel and refund user balance</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Approve - pending and in_review */}
-                      {["pending", "in_review"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                updateStatus(active!.id, "approved", {
-                                  admin_notes: adminNotes,
-                                }, { closeDetails: true })
-                              }
-                              disabled={updating}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Approve for payment processing</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Reject - pending, in_review, approved, failed */}
-                      {["pending", "in_review", "approved", "failed"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openRejectDialog(active!)}
-                              disabled={updating}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Reject
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Reject request (optionally add reason for user)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Back to pending - in_review only */}
-                      {active.status === "in_review" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                updateStatus(
-                                  active!.id,
-                                  "pending",
-                                  undefined,
-                                  { closeDetails: true },
-                                )
-                              }
-                              disabled={updating}
-                            >
-                              <RotateCcw className="h-4 w-4 mr-1" />
-                              Back to pending
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Revert to pending</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {active && !isFinalStatus(active.status) && (
-                    <>
-                      {/* Mark In Review - pending or in_review (add internal reason) */}
-                      {["pending", "in_review"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openInReviewDialog(active!)}
-                              disabled={updating}
-                            >
-                              <Clock className="h-4 w-4 mr-1" />
-                              Review
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Mark as under review (add internal reason for other reviewers)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Mark Paid - approved or failed */}
-                      {["approved", "failed"].includes(active.status) && (
+            <DialogFooter
+              className={cn(
+                "shrink-0 border-t px-4 sm:px-6 py-3 sm:py-4 gap-2",
+                isDark
+                  ? "bg-[#06021D] border-gray-700"
+                  : "bg-white border-slate-200",
+              )}
+            >
+              {active && !isFinalStatus(active.status) ? (
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full">
+                  {["pending", "in_review"].includes(active.status) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                         <Button
                           size="sm"
-                          onClick={() =>
-                            updateStatus(active!.id, "processed", {
-                              transaction_reference: txRef,
-                              admin_notes: adminNotes,
-                            }, { closeDetails: true })
-                          }
-                          disabled={updating}
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => cancelRequest(active)}
+                          disabled={updating || savingMetadata}
                         >
-                          <DollarSign className="h-4 w-4 mr-1" />
-                          Mark Paid
+                          <X className="h-4 w-4 mr-1 shrink-0" />
+                          Cancel
                         </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Cancel and refund user balance</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["pending", "in_review"].includes(active.status) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          className={cn(
+                            "w-full sm:w-auto justify-center",
+                            isDark
+                              ? "bg-violet-600 hover:bg-violet-500"
+                              : "bg-violet-600 hover:bg-violet-700 text-white",
+                          )}
+                          onClick={() =>
+                            void applyStatusFromDetails("approved", {
+                              admin_notes: adminNotes,
+                              transaction_reference: txRef,
+                            })
+                          }
+                          disabled={updating || savingMetadata}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1 shrink-0" />
+                          Approve
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>
+                          Approve for payment processing (keeps transaction
+                          reference)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["pending", "in_review", "approved", "failed"].includes(
+                    active.status,
+                  ) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openRejectDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <XCircle className="h-4 w-4 mr-1 shrink-0" />
+                          Reject
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Reject request (optionally add reason for user)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["pending", "in_review"].includes(active.status) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openInReviewDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <Clock className="h-4 w-4 mr-1 shrink-0" />
+                          Review
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>
+                          Mark as under review (add internal reason for other
+                          reviewers)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {active.status === "in_review" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center col-span-2 sm:col-span-1"
+                          onClick={() =>
+                            void updateStatus(active.id, "pending", undefined, {
+                              closeDetails: true,
+                            })
+                          }
+                          disabled={updating || savingMetadata}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1 shrink-0" />
+                          Back to pending
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Revert to pending</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["approved", "failed"].includes(active.status) && (
+                    <Button
+                      size="sm"
+                      className={cn(
+                        "w-full sm:w-auto justify-center col-span-2 sm:col-span-1",
+                        isDark && "bg-violet-600 hover:bg-violet-500",
                       )}
-                      {/* Mark Failed - approved only */}
-                      {active.status === "approved" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openFailedDialog(active!)}
-                              disabled={updating}
-                            >
-                              <AlertTriangle className="h-4 w-4 mr-1" />
-                              Failed
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Payment failed (internal tracking)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Forfeited - approved only */}
-                      {active.status === "approved" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openForfeitDialog(active!)}
-                              disabled={updating}
-                            >
-                              <ShieldOff className="h-4 w-4 mr-1" />
-                              Forfeit
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Forfeit (no refund)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </>
+                      onClick={() =>
+                        void applyStatusFromDetails("processed", {
+                          transaction_reference: txRef,
+                          admin_notes: adminNotes,
+                        })
+                      }
+                      disabled={updating || savingMetadata}
+                    >
+                      <DollarSign className="h-4 w-4 mr-1 shrink-0" />
+                      Mark Paid
+                    </Button>
+                  )}
+                  {active.status === "approved" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openFailedDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
+                          Failed
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Payment failed (internal tracking)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {active.status === "approved" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openForfeitDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <ShieldOff className="h-4 w-4 mr-1 shrink-0" />
+                          Forfeit
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Forfeit (no refund)</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
-              </div>
+              ) : active ? (
+                <p className="text-sm text-muted-foreground w-full text-center sm:text-left">
+                  This request is in a final status and can no longer be updated.
+                </p>
+              ) : null}
             </DialogFooter>
           </DialogContent>
         </Dialog>

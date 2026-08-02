@@ -102,12 +102,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
+  // Only forward optional fields when explicitly provided so the RPC can
+  // preserve existing transaction_reference / admin_notes (COALESCE).
   const { error } = await supabase.rpc("admin_set_withdrawal_status", {
     p_request_id: id,
     p_new_status: status,
-    p_transaction_reference: transaction_reference ?? null,
-    p_admin_notes: admin_notes ?? null,
-    p_in_review_reason: in_review_reason ?? null,
+    p_transaction_reference:
+      typeof transaction_reference === "string" ? transaction_reference : null,
+    p_admin_notes: typeof admin_notes === "string" ? admin_notes : null,
+    p_in_review_reason:
+      typeof in_review_reason === "string" ? in_review_reason : null,
   });
 
   if (error) {
