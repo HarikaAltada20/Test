@@ -1,19 +1,64 @@
-Good question — the practical way is to re-export fresh Instagram cookies and replace INSTAGRAM_COOKIES.
+# Instagram download cookies (production)
 
-Quick refresh workflow
-Log into the same Instagram account in your browser.
-Export cookies in Netscape cookie format (cookies.txt)
-Common way: browser extension like “Get cookies.txt LOCALLY”.
-Copy full cookies.txt content.
-Update INSTAGRAM_COOKIES (in Vercel/local env) with that new content.
-Redeploy/restart so the server reads the new env var.
-Test one Instagram download endpoint call.
-Important formatting note
-Your backend writes process.env.INSTAGRAM_COOKIES directly to cookies.txt, so the value must represent a valid Netscape cookie file.
-Use real line breaks in the env value (or ensure your platform preserves them correctly), not a broken/partial string.
+## Why cookies “work once” then fail
 
-How often to refresh
-Usually when downloads start failing (session invalid / missing sessionid / auth errors).
-Preventive refresh every 2–4 weeks is common.
-Also refresh immediately after logout/password/security changes.
-If you want, I can give you a 1-minute exact checklist for Vercel UI (where to paste and how to verify format) based on your current setup.
+Instagram **rotates / invalidates `sessionid`** when:
+
+1. You keep using the **same account in a browser** after exporting cookies
+2. Downloads run from **cloud IPs** (Vercel) while the browser session is still active
+3. Concurrent serverless requests shared one `/tmp/instagram_cookies.txt` file (fixed)
+4. Rotated cookies were **not saved** anywhere durable (fixed via DB)
+
+Local works more often because your IP/session stay aligned with the browser. Production does not.
+
+There is **no forever cookie**. Cookie scraping is inherently temporary. What we can do is make sessions last much longer and make refresh easy.
+
+## Permanent ops workflow (required)
+
+1. Create a **dedicated Instagram account** used only for server downloads (not your personal/admin IG).
+2. Log into that account once in a browser → export Netscape `cookies.txt` (e.g. “Get cookies.txt LOCALLY”).
+3. **Immediately log out of that account in the browser** (or stop using it entirely).  
+   If you stay logged in, Instagram rotates `sessionid` and production dies after ~1 download.
+4. Upload cookies (no redeploy needed):
+
+```http
+PUT /api/admin/instagram-cookies
+Content-Type: application/json
+
+{ "cookies": "<full Netscape cookies.txt content>", "note": "refresh 2026-08-03" }
+```
+
+Or set `INSTAGRAM_COOKIES` env (seed). Live rotated cookies are stored in Supabase table `instagram_download_cookies`.
+
+5. Apply migration if not already applied:
+
+`SUPABASE/migrations/20260803_instagram_download_cookies.sql`
+
+6. Verify:
+
+```http
+GET /api/admin/instagram-cookies
+GET /api/admin/download-reel?checkCookies=true
+```
+
+## What the app does now
+
+- Loads cookies from **DB first** (live session), then env/file seed
+- Writes a **unique temp cookie file per request** (no serverless race)
+- After a successful download, **persists cookies yt-dlp refreshed** back to DB
+- Admin can **hot-swap cookies** via `PUT /api/admin/instagram-cookies` without redeploy
+- Avoids a hardcoded mismatched User-Agent that often invalidates Instagram sessions
+
+## Env formatting note
+
+`INSTAGRAM_COOKIES` must be a valid Netscape cookie file (real newlines, or base64 of that file). Include `sessionid` and `csrftoken` for `instagram.com`.
+
+## When to refresh
+
+- Auth / “cookies expired” errors
+- After password / security / logout on the dedicated account
+- Preventive: every few weeks if downloads are heavy
+
+## Still failing after a correct dedicated-account export?
+
+Instagram may still kill cloud sessions under heavy load. Then options are: lower download rate, residential proxy, or move download workers off Vercel to a persistent host.
