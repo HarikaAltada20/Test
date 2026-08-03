@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { YtDlp } from "ytdlp-nodejs";
-import { unlink, mkdir, rm } from "fs/promises";
+import { mkdir, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
 import { ZipArchive } from "archiver";
 import { PassThrough } from "stream";
+import { prepareYouTubeCookies } from "@/lib/instagram-cookies";
 import {
-  checkInstagramCookieStatus,
-  instagramYtDlpOptions,
-  persistRefreshedInstagramCookies,
-  prepareInstagramCookies,
-  prepareYouTubeCookies,
-} from "@/lib/instagram-cookies";
+  downloadInstagramVideoBuffer,
+  InstagramDownloadError,
+} from "@/lib/instagram-download/download";
 
 // ⭐ Get yt-dlp binary path (bundled for Vercel)
 function getYtDlpBinaryPath(): string | undefined {
@@ -100,8 +98,6 @@ function parseInstagramError(errorMessage: string): {
   };
 }
 
-// Cookie helpers live in lib/instagram-cookies.ts
-
 function sanitizeFilename(filename: string): string {
   return filename
     .replace(/[^a-z0-9]/gi, "_")
@@ -110,60 +106,57 @@ function sanitizeFilename(filename: string): string {
     .substring(0, 100);
 }
 
-// Single video downloader logic
-async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, isInstagram: boolean): Promise<void> {
-  const prepared = isInstagram
-    ? await prepareInstagramCookies()
-    : await prepareYouTubeCookies();
+async function downloadVideoFile(
+  ytdlp: YtDlp,
+  url: string,
+  outputPath: string,
+  isInstagram: boolean
+): Promise<void> {
+  if (isInstagram) {
+    const buffer = await downloadInstagramVideoBuffer(url);
+    await writeFile(outputPath, buffer);
+    return;
+  }
+
+  const prepared = await prepareYouTubeCookies();
 
   const additionalOptions = [
     "--add-header", "Accept-Language:en-US,en;q=0.9",
     "--js-runtimes", "node",
+    "--extractor-args", "youtube:player_client=android,web",
+    "--merge-output-format", "mp4",
   ];
 
-  if (!isInstagram) {
-    additionalOptions.push("--extractor-args", "youtube:player_client=android,web");
-    additionalOptions.push("--merge-output-format", "mp4");
-  }
-
-  const formatSelector = isInstagram
-    ? "best[ext=mp4]/best"
-    : "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
+  const formatSelector =
+    "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
 
   try {
-    if (isInstagram) {
+    try {
       await ytdlp.downloadAsync(url, {
         format: formatSelector,
         output: outputPath,
-        ...instagramYtDlpOptions(prepared.path),
+        cookies: prepared.path || undefined,
+        noWarnings: true,
+        noUpdate: true,
+        referer: "https://www.youtube.com/",
+        additionalOptions,
       });
-      await persistRefreshedInstagramCookies(prepared.path, prepared.contentHash);
-    } else {
-      try {
+    } catch (firstError: any) {
+      if (prepared.path) {
+        console.warn(
+          `[YTDLP] YouTube download with cookies failed, retrying without cookies: ${firstError.message}`
+        );
         await ytdlp.downloadAsync(url, {
           format: formatSelector,
           output: outputPath,
-          cookies: prepared.path || undefined,
+          cookies: undefined,
           noWarnings: true,
           noUpdate: true,
           referer: "https://www.youtube.com/",
           additionalOptions,
         });
-      } catch (firstError: any) {
-        if (prepared.path) {
-          console.warn(`[YTDLP] YouTube download with cookies failed, retrying without cookies: ${firstError.message}`);
-          await ytdlp.downloadAsync(url, {
-            format: formatSelector,
-            output: outputPath,
-            cookies: undefined,
-            noWarnings: true,
-            noUpdate: true,
-            referer: "https://www.youtube.com/",
-            additionalOptions,
-          });
-        } else {
-          throw firstError;
-        }
+      } else {
+        throw firstError;
       }
     }
   } finally {
@@ -289,8 +282,12 @@ export async function POST(request: Request) {
         }
       } catch (err: any) {
         console.error(`[BULK-${requestId}] Failed downloading ${item.url}:`, err.message);
-        const parsed = parseInstagramError(err.message);
-        failedQueue.push({ url: item.url, error: parsed.userMessage });
+        if (item.isInstagram && err instanceof InstagramDownloadError) {
+          failedQueue.push({ url: item.url, error: err.message });
+        } else {
+          const parsed = parseInstagramError(err.message);
+          failedQueue.push({ url: item.url, error: parsed.userMessage });
+        }
       }
     }
 
