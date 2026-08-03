@@ -15,10 +15,12 @@ import {
 } from "@/lib/instagram-cookies";
 
 function getYtDlpBinaryPath(): string | undefined {
-  const isLinux = process.platform === 'linux';
-  
+  const isLinux = process.platform === "linux";
+
   if (!isLinux) {
-    console.log(`[YTDLP] Platform is ${process.platform}, letting ytdlp-nodejs handle binary automatically`);
+    console.log(
+      `[YTDLP] Platform is ${process.platform}, letting ytdlp-nodejs handle binary automatically`,
+    );
     return undefined;
   }
 
@@ -31,7 +33,10 @@ function getYtDlpBinaryPath(): string | undefined {
       console.log(`[YTDLP] Found executable binary at: ${tmpBinary}`);
       return tmpBinary;
     } catch (chmodErr) {
-      console.warn(`[YTDLP] Could not chmod existing ${tmpBinary}, removing for re-copy:`, chmodErr);
+      console.warn(
+        `[YTDLP] Could not chmod existing ${tmpBinary}, removing for re-copy:`,
+        chmodErr,
+      );
       try {
         const { unlinkSync } = require("fs");
         unlinkSync(tmpBinary);
@@ -58,10 +63,14 @@ function getYtDlpBinaryPath(): string | undefined {
             const { copyFileSync } = require("fs");
             copyFileSync(srcPath, tmpBinary);
             chmodSync(tmpBinary, 0o755);
-            console.log(`[YTDLP] Copied bundled binary to ${tmpBinary} and set 0755 permissions`);
+            console.log(
+              `[YTDLP] Copied bundled binary to ${tmpBinary} and set 0755 permissions`,
+            );
             return tmpBinary;
           } catch (copyErr: any) {
-            console.warn(`[YTDLP] Could not copy binary to /tmp: ${copyErr.message}`);
+            console.warn(
+              `[YTDLP] Could not copy binary to /tmp: ${copyErr.message}`,
+            );
             // Do NOT return srcPath because ytdlp-nodejs will attempt chmodSync on read-only /var/task and throw EROFS
           }
         }
@@ -71,7 +80,9 @@ function getYtDlpBinaryPath(): string | undefined {
     }
   }
 
-  console.log(`[YTDLP] No usable bundled binary in /tmp on Linux, using system PATH or auto-download`);
+  console.log(
+    `[YTDLP] No usable bundled binary in /tmp on Linux, using system PATH or auto-download`,
+  );
   return undefined;
 }
 
@@ -377,7 +388,8 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
       "mp4",
     ];
 
-    const formatSelector = "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
+    const formatSelector =
+      "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
 
     const hasCookies = !!ytCookies.path;
 
@@ -397,17 +409,17 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
       console.log(
         `[YT-${downloadId}] [DEBUG] yt-dlp Attempt 1 completed in ${
           Date.now() - downloadStartTime
-        }ms`
+        }ms`,
       );
     } catch (attempt1Error: any) {
       console.warn(
-        `[YT-${downloadId}] [WARN] Attempt 1 (with cookies: ${hasCookies}) failed: ${attempt1Error.message}`
+        `[YT-${downloadId}] [WARN] Attempt 1 (with cookies: ${hasCookies}) failed: ${attempt1Error.message}`,
       );
 
       // If attempt 1 failed and we used cookies, retry WITHOUT cookies as fallback
       if (hasCookies) {
         console.log(
-          `[YT-${downloadId}] [DEBUG] Retrying Attempt 2 WITHOUT cookies...`
+          `[YT-${downloadId}] [DEBUG] Retrying Attempt 2 WITHOUT cookies...`,
         );
         try {
           await ytdlp.downloadAsync(url, {
@@ -421,11 +433,11 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
           console.log(
             `[YT-${downloadId}] [DEBUG] yt-dlp Attempt 2 (without cookies) completed in ${
               Date.now() - downloadStartTime
-            }ms`
+            }ms`,
           );
         } catch (attempt2Error: any) {
           console.error(
-            `[YT-${downloadId}] [ERROR] Attempt 2 (without cookies) also failed: ${attempt2Error.message}`
+            `[YT-${downloadId}] [ERROR] Attempt 2 (without cookies) also failed: ${attempt2Error.message}`,
           );
           throw attempt1Error;
         }
@@ -439,26 +451,26 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 
     try {
       console.log(
-        `[YT-${downloadId}] [DEBUG] Checking if temp file exists: ${tempFile}`
+        `[YT-${downloadId}] [DEBUG] Checking if temp file exists: ${tempFile}`,
       );
       await access(tempFile, constants.F_OK);
       downloadedFile = tempFile;
       const fileStats = await stat(tempFile);
       console.log(
-        `[YT-${downloadId}] [DEBUG] Temp file found, size: ${fileStats.size} bytes`
+        `[YT-${downloadId}] [DEBUG] Temp file found, size: ${fileStats.size} bytes`,
       );
       videoBuffer = await readFile(tempFile);
       console.log(
-        `[YT-${downloadId}] [DEBUG] File read successfully, buffer size: ${videoBuffer.length} bytes`
+        `[YT-${downloadId}] [DEBUG] File read successfully, buffer size: ${videoBuffer.length} bytes`,
       );
     } catch (accessError: any) {
       console.log(
         `[YT-${downloadId}] [DEBUG] Temp file not found, searching in tmpdir:`,
-        accessError.message
+        accessError.message,
       );
       const files = await readdir(tmpdir());
       console.log(
-        `[YT-${downloadId}] [DEBUG] Found ${files.length} files in tmpdir`
+        `[YT-${downloadId}] [DEBUG] Found ${files.length} files in tmpdir`,
       );
       const videoFiles = files
         .filter((f) => {
@@ -475,7 +487,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
         .map((f) => join(tmpdir(), f));
 
       console.log(
-        `[YT-${downloadId}] [DEBUG] Found ${videoFiles.length} potential video files`
+        `[YT-${downloadId}] [DEBUG] Found ${videoFiles.length} potential video files`,
       );
 
       if (videoFiles.length > 0) {
@@ -491,7 +503,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
             } catch {
               return null;
             }
-          })
+          }),
         );
 
         const validStats = fileStats.filter(Boolean) as Array<{
@@ -504,7 +516,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
           validStats.sort((a, b) => b.mtime - a.mtime);
           downloadedFile = validStats[0].path;
           console.log(
-            `[YT-${downloadId}] [DEBUG] Using most recent file: ${downloadedFile}, size: ${validStats[0].size} bytes`
+            `[YT-${downloadId}] [DEBUG] Using most recent file: ${downloadedFile}, size: ${validStats[0].size} bytes`,
           );
           videoBuffer = await readFile(downloadedFile);
         } else {
@@ -517,7 +529,7 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 
     if (downloadedFile) await unlink(downloadedFile).catch(() => {});
     console.log(
-      `[YT-${downloadId}] [DEBUG] YouTube download successful, buffer size: ${videoBuffer.length} bytes`
+      `[YT-${downloadId}] [DEBUG] YouTube download successful, buffer size: ${videoBuffer.length} bytes`,
     );
     return videoBuffer;
   } catch (error: any) {
@@ -559,7 +571,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
     const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
     const cookieStatus = await checkInstagramCookieStatus(
       igCookies.path,
-      igCookies.source
+      igCookies.source,
     );
 
     console.log(
@@ -576,14 +588,14 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
         error: cookieStatus.error,
         cookiePath: igCookies.path,
         binaryPath: binaryPath || "system PATH",
-      }
+      },
     );
 
     const downloadStartTime = Date.now();
     console.log(
       `[IG-${downloadId}] [DEBUG] Calling yt-dlp with cookies: ${
         igCookies.path || "none"
-      }...`
+      }...`,
     );
     await ytdlp.downloadAsync(url, {
       format: "best[ext=mp4]/best",
@@ -593,13 +605,13 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
     console.log(
       `[IG-${downloadId}] [DEBUG] yt-dlp completed in ${
         Date.now() - downloadStartTime
-      }ms`
+      }ms`,
     );
 
     // Persist rotated session cookies so the next serverless invocation still works.
     await persistRefreshedInstagramCookies(
       igCookies.path,
-      igCookies.contentHash
+      igCookies.contentHash,
     );
 
     const { access, constants, readdir, stat } = await import("fs/promises");
@@ -607,26 +619,26 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
 
     try {
       console.log(
-        `[IG-${downloadId}] [DEBUG] Checking if temp file exists: ${tempFile}`
+        `[IG-${downloadId}] [DEBUG] Checking if temp file exists: ${tempFile}`,
       );
       await access(tempFile, constants.F_OK);
       downloadedFile = tempFile;
       const fileStats = await stat(tempFile);
       console.log(
-        `[IG-${downloadId}] [DEBUG] Temp file found, size: ${fileStats.size} bytes`
+        `[IG-${downloadId}] [DEBUG] Temp file found, size: ${fileStats.size} bytes`,
       );
       videoBuffer = await readFile(tempFile);
       console.log(
-        `[IG-${downloadId}] [DEBUG] File read successfully, buffer size: ${videoBuffer.length} bytes`
+        `[IG-${downloadId}] [DEBUG] File read successfully, buffer size: ${videoBuffer.length} bytes`,
       );
     } catch (accessError: any) {
       console.log(
         `[IG-${downloadId}] [DEBUG] Temp file not found, searching in tmpdir:`,
-        accessError.message
+        accessError.message,
       );
       const files = await readdir(tmpdir());
       console.log(
-        `[IG-${downloadId}] [DEBUG] Found ${files.length} files in tmpdir`
+        `[IG-${downloadId}] [DEBUG] Found ${files.length} files in tmpdir`,
       );
       const videoFiles = files
         .filter((f) => {
@@ -641,7 +653,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
         .map((f) => join(tmpdir(), f));
 
       console.log(
-        `[IG-${downloadId}] [DEBUG] Found ${videoFiles.length} potential video files`
+        `[IG-${downloadId}] [DEBUG] Found ${videoFiles.length} potential video files`,
       );
 
       if (videoFiles.length > 0) {
@@ -657,7 +669,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
             } catch {
               return null;
             }
-          })
+          }),
         );
 
         const validStats = fileStats.filter(Boolean) as Array<{
@@ -670,7 +682,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
           validStats.sort((a, b) => b.mtime - a.mtime);
           downloadedFile = validStats[0].path;
           console.log(
-            `[IG-${downloadId}] [DEBUG] Using most recent file: ${downloadedFile}, size: ${validStats[0].size} bytes`
+            `[IG-${downloadId}] [DEBUG] Using most recent file: ${downloadedFile}, size: ${validStats[0].size} bytes`,
           );
           videoBuffer = await readFile(downloadedFile);
         } else {
@@ -683,7 +695,7 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
 
     if (downloadedFile) await unlink(downloadedFile).catch(() => {});
     console.log(
-      `[IG-${downloadId}] [DEBUG] Instagram download successful, buffer size: ${videoBuffer.length} bytes`
+      `[IG-${downloadId}] [DEBUG] Instagram download successful, buffer size: ${videoBuffer.length} bytes`,
     );
     return videoBuffer;
   } catch (error: any) {
@@ -713,7 +725,10 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
 
 async function verifyAdminOrBrandAccess() {
   const supabase = await createClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
   if (userError || !user) return { allowed: false, user: null };
   const { data: userData } = await supabase
     .from("users")
@@ -722,7 +737,12 @@ async function verifyAdminOrBrandAccess() {
     .single();
   const allowed =
     userData?.user_type === "admin" || userData?.user_type === "advertiser";
-  return { allowed, user: allowed ? { id: user.id, email: userData?.email, user_type: userData?.user_type } : null };
+  return {
+    allowed,
+    user: allowed
+      ? { id: user.id, email: userData?.email, user_type: userData?.user_type }
+      : null,
+  };
 }
 
 export async function GET(request: Request) {
@@ -737,7 +757,7 @@ export async function GET(request: Request) {
       console.log(`[${requestId}] [DEBUG] Access denied`);
       return NextResponse.json(
         { error: "Admin or brand access required" },
-        { status: 403 }
+        { status: 403 },
       );
     }
     console.log(`[${requestId}] [DEBUG] Access verified (admin or brand)`);
@@ -762,10 +782,10 @@ export async function GET(request: Request) {
         cookieStatus.source === "db"
           ? "database (live refreshed session)"
           : cookieStatus.source === "env"
-          ? "environment variable (INSTAGRAM_COOKIES)"
-          : cookieStatus.source === "file"
-          ? "local cookies file"
-          : "none (no cookies found)";
+            ? "environment variable (INSTAGRAM_COOKIES)"
+            : cookieStatus.source === "file"
+              ? "local cookies file"
+              : "none (no cookies found)";
 
       return NextResponse.json({
         cookies: cookieStatus,
@@ -773,15 +793,15 @@ export async function GET(request: Request) {
         status: cookieStatus.valid
           ? "valid"
           : cookieStatus.exists
-          ? "invalid"
-          : "missing",
+            ? "invalid"
+            : "missing",
         message: cookieStatus.valid
           ? "✅ Cookies are valid and ready to use"
           : cookieStatus.exists
-          ? `⚠️ Cookies file exists but has issues: ${
-              cookieStatus.error || "Invalid format"
-            }`
-          : "❌ Cookies not found. Upload via PUT /api/admin/instagram-cookies or set INSTAGRAM_COOKIES.",
+            ? `⚠️ Cookies file exists but has issues: ${
+                cookieStatus.error || "Invalid format"
+              }`
+            : "❌ Cookies not found. Upload via PUT /api/admin/instagram-cookies or set INSTAGRAM_COOKIES.",
         recommendations: !cookieStatus.valid
           ? [
               cookieStatus.exists && !cookieStatus.hasSessionId
@@ -815,7 +835,7 @@ export async function GET(request: Request) {
             message: "Cannot test cookies - they are invalid or missing",
             cookies: cookieStatus,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -827,7 +847,7 @@ export async function GET(request: Request) {
             example:
               "/api/admin/download-reel?testCookies=true&testUrl=https://www.instagram.com/reel/ABC123/",
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -837,7 +857,7 @@ export async function GET(request: Request) {
             success: false,
             message: "Test URL must be an Instagram URL",
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -855,7 +875,7 @@ export async function GET(request: Request) {
 
         await persistRefreshedInstagramCookies(
           igCookies.path,
-          igCookies.contentHash
+          igCookies.contentHash,
         );
 
         const fileExists = existsSync(tempFile);
@@ -876,7 +896,7 @@ export async function GET(request: Request) {
             message: "Download started but no file was created",
             cookies: cookieStatus,
           },
-          { status: 500 }
+          { status: 500 },
         );
       } catch (error: any) {
         const parsedError = parseInstagramError(error.message);
@@ -889,7 +909,7 @@ export async function GET(request: Request) {
             suggestions: parsedError.suggestions,
             cookies: cookieStatus,
           },
-          { status: 500 }
+          { status: 500 },
         );
       } finally {
         await igCookies.cleanup();
@@ -901,18 +921,18 @@ export async function GET(request: Request) {
       console.log(`[${requestId}] [DEBUG] Missing submissionId`);
       return NextResponse.json(
         { error: "Submission ID is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.log(
-      `[${requestId}] [DEBUG] Fetching submission from database: ${submissionId}`
+      `[${requestId}] [DEBUG] Fetching submission from database: ${submissionId}`,
     );
     let supabase;
     try {
       supabase = await createClient();
       console.log(
-        `[${requestId}] [DEBUG] Supabase client created successfully`
+        `[${requestId}] [DEBUG] Supabase client created successfully`,
       );
     } catch (clientError: any) {
       console.error(
@@ -920,11 +940,11 @@ export async function GET(request: Request) {
         {
           message: clientError.message,
           stack: clientError.stack,
-        }
+        },
       );
       return NextResponse.json(
         { error: "Database connection failed" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -937,7 +957,7 @@ export async function GET(request: Request) {
         platform,
         contests!inner(id, title),
         users!creator_id(username)
-      `
+      `,
       )
       .eq("id", submissionId)
       .single();
@@ -951,17 +971,17 @@ export async function GET(request: Request) {
       });
       return NextResponse.json(
         { error: submissionError.message || "Failed to fetch submission" },
-        { status: submissionError.code === "PGRST116" ? 404 : 500 }
+        { status: submissionError.code === "PGRST116" ? 404 : 500 },
       );
     }
 
     if (!submission) {
       console.log(
-        `[${requestId}] [DEBUG] Submission not found: ${submissionId}`
+        `[${requestId}] [DEBUG] Submission not found: ${submissionId}`,
       );
       return NextResponse.json(
         { error: "Submission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -988,7 +1008,7 @@ export async function GET(request: Request) {
       console.log(`[${requestId}] [DEBUG] Unsupported platform`);
       return NextResponse.json(
         { error: "Only Instagram & YouTube supported" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -1004,13 +1024,13 @@ export async function GET(request: Request) {
 
       if (isYouTube) {
         console.log(
-          `[${requestId}] [DEBUG] Starting YouTube download: ${contentLink}`
+          `[${requestId}] [DEBUG] Starting YouTube download: ${contentLink}`,
         );
         videoBuffer = await downloadYouTubeVideo(contentLink);
         console.log(
           `[${requestId}] [DEBUG] YouTube download completed in ${
             Date.now() - downloadStartTime
-          }ms, size: ${videoBuffer.length} bytes`
+          }ms, size: ${videoBuffer.length} bytes`,
         );
       } else {
         // Check cookie status before attempting download
@@ -1021,22 +1041,22 @@ export async function GET(request: Request) {
             valid: cookieStatus.valid,
             exists: cookieStatus.exists,
             error: cookieStatus.error,
-          }
+          },
         );
         if (!cookieStatus.valid && cookieStatus.exists) {
           console.warn(
             `[${requestId}] [WARN] Instagram download attempted with invalid/expired cookies:`,
-            cookieStatus.error
+            cookieStatus.error,
           );
         }
         console.log(
-          `[${requestId}] [DEBUG] Starting Instagram download: ${contentLink}`
+          `[${requestId}] [DEBUG] Starting Instagram download: ${contentLink}`,
         );
         videoBuffer = await downloadInstagramVideo(contentLink);
         console.log(
           `[${requestId}] [DEBUG] Instagram download completed in ${
             Date.now() - downloadStartTime
-          }ms, size: ${videoBuffer.length} bytes`
+          }ms, size: ${videoBuffer.length} bytes`,
         );
       }
 
@@ -1052,8 +1072,8 @@ export async function GET(request: Request) {
         headers["X-Cookie-Status"] = cookieStatus.valid
           ? "valid"
           : cookieStatus.exists
-          ? "invalid"
-          : "missing";
+            ? "invalid"
+            : "missing";
         if (cookieStatus.expiresSoon) {
           headers["X-Cookie-Warning"] = "Cookies expire soon";
         }
@@ -1062,7 +1082,7 @@ export async function GET(request: Request) {
       console.log(
         `[${requestId}] [DEBUG] Sending video response, total time: ${
           Date.now() - startTime
-        }ms`
+        }ms`,
       );
       return new NextResponse(new Uint8Array(videoBuffer), { headers });
     } catch (error: any) {
@@ -1084,7 +1104,7 @@ export async function GET(request: Request) {
 
         console.log(
           `[${requestId}] [DEBUG] Returning Instagram error response:`,
-          parsedError
+          parsedError,
         );
 
         return NextResponse.json(
@@ -1100,7 +1120,7 @@ export async function GET(request: Request) {
                   }
                 : undefined,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -1110,7 +1130,7 @@ export async function GET(request: Request) {
 
         console.log(
           `[${requestId}] [DEBUG] Returning YouTube error response:`,
-          parsedError
+          parsedError,
         );
 
         return NextResponse.json(
@@ -1126,7 +1146,7 @@ export async function GET(request: Request) {
                   }
                 : undefined,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -1141,7 +1161,7 @@ export async function GET(request: Request) {
                 }
               : undefined,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
   } catch (error: any) {
@@ -1163,9 +1183,8 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         error: errorMessage,
-      
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

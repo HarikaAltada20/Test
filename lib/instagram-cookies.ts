@@ -420,26 +420,108 @@ export async function checkInstagramCookieStatus(
   return status;
 }
 
-/** Shared yt-dlp options that reduce Instagram session invalidation. */
-export function instagramYtDlpOptions(cookiePath: string | null): {
+export type InstagramYtDlpMode = "impersonate" | "cookies-only";
+
+/**
+ * Shared yt-dlp options for Instagram.
+ * Prefer impersonate+cookies — Instagram blocks bare API calls (empty media response)
+ * even when a cookie file is present, unless the TLS fingerprint looks like a browser.
+ */
+export function instagramYtDlpOptions(
+  cookiePath: string | null,
+  mode: InstagramYtDlpMode = "impersonate"
+): {
   cookies: string | undefined;
   noWarnings: boolean;
   noUpdate: boolean;
-  referer: string;
+  impersonate?: string[];
   additionalOptions: string[];
 } {
+  const additionalOptions = [
+    "--js-runtimes",
+    "node",
+    "--no-cookies-from-browser",
+  ];
+
+  // Keep headers minimal. Custom UA/Accept-Language often causes empty media / 403.
+  if (mode === "impersonate") {
+    return {
+      cookies: cookiePath || undefined,
+      noWarnings: true,
+      noUpdate: true,
+      impersonate: ["chrome"],
+      additionalOptions,
+    };
+  }
+
   return {
     cookies: cookiePath || undefined,
     noWarnings: true,
     noUpdate: true,
-    // Do not override UA — mismatched UA often invalidates Instagram sessions.
-    referer: "https://www.instagram.com/",
-    additionalOptions: [
-      "--add-header",
-      "Accept-Language:en-US,en;q=0.9",
-      "--js-runtimes",
-      "node",
-      "--no-cookies-from-browser",
-    ],
+    additionalOptions,
   };
+}
+
+/** True when Instagram rejected the request in a way that usually means soft-dead cookies or missing fingerprint. */
+export function isInstagramEmptyMediaError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("empty media response") ||
+    lower.includes("instagram sent an empty media response")
+  );
+}
+
+export function isImpersonationUnavailableError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("no impersonate target") ||
+    (lower.includes("impersonating") && lower.includes("not supported")) ||
+    lower.includes("impersonate target is available")
+  );
+}
+
+/**
+ * Run Instagram yt-dlp with impersonate+cookies, then cookies-only fallback.
+ */
+export async function runInstagramYtDlpDownload(params: {
+  downloadAsync: (url: string, options: Record<string, unknown>) => Promise<unknown>;
+  url: string;
+  output: string;
+  cookiePath: string | null;
+  logPrefix?: string;
+}): Promise<{ mode: InstagramYtDlpMode }> {
+  const { downloadAsync, url, output, cookiePath, logPrefix = "[IG]" } = params;
+  const base = { format: "best[ext=mp4]/best", output };
+
+  try {
+    console.log(`${logPrefix} Attempt 1: cookies + impersonate chrome`);
+    await downloadAsync(url, {
+      ...base,
+      ...instagramYtDlpOptions(cookiePath, "impersonate"),
+    });
+    return { mode: "impersonate" };
+  } catch (firstError: any) {
+    const msg = String(firstError?.message || firstError);
+    console.warn(`${logPrefix} Attempt 1 failed: ${msg.slice(0, 300)}`);
+
+    // Always try cookies-only once — impersonation may be missing on older binaries,
+    // and empty-media sometimes succeeds on a second fingerprint path.
+    console.log(`${logPrefix} Attempt 2: cookies only (no impersonate)`);
+    try {
+      await downloadAsync(url, {
+        ...base,
+        ...instagramYtDlpOptions(cookiePath, "cookies-only"),
+      });
+      return { mode: "cookies-only" };
+    } catch (secondError: any) {
+      // Prefer the more informative first error when impersonation was the intended path.
+      if (
+        isImpersonationUnavailableError(msg) ||
+        isInstagramEmptyMediaError(String(secondError?.message || ""))
+      ) {
+        throw secondError;
+      }
+      throw firstError;
+    }
+  }
 }
