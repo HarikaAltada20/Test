@@ -76,7 +76,7 @@ async function downloadWithYtDlp(watchUrl: string): Promise<Buffer> {
       format: "b[ext=mp4]/best[ext=mp4]/best",
       additionalOptions: [
         "--extractor-args",
-        "youtube:player_client=android,ios,mweb",
+        "youtube:player_client=android,ios",
         "--no-warnings",
       ],
     });
@@ -209,7 +209,7 @@ export async function getYouTubeVideoTitle(
     const info = await ytdlp.getInfoAsync(watchUrl, {
       additionalOptions: [
         "--extractor-args",
-        "youtube:player_client=android,ios,mweb",
+        "youtube:player_client=android,ios",
         "--no-warnings",
       ],
     });
