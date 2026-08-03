@@ -81,10 +81,11 @@ async function main() {
             fs.mkdirSync(BIN_DIR, { recursive: true });
         }
 
-        // Check if binary already exists
+        // Always fetch fresh yt-dlp binary during deployment to keep up with YouTube player changes
         if (fs.existsSync(YTDLP_PATH)) {
-            console.log('yt-dlp binary already exists, skipping download');
-            return;
+            try {
+                fs.unlinkSync(YTDLP_PATH);
+            } catch (err) {}
         }
 
         console.log('Downloading yt-dlp binary for Linux (Vercel deployment)...');
