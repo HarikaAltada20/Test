@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { YtDlp } from "ytdlp-nodejs";
-import { readFile, writeFile, unlink, stat, mkdir, rm } from "fs/promises";
+import { unlink, mkdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
 import { ZipArchive } from "archiver";
 import { PassThrough } from "stream";
+import {
+  checkInstagramCookieStatus,
+  instagramYtDlpOptions,
+  persistRefreshedInstagramCookies,
+  prepareInstagramCookies,
+  prepareYouTubeCookies,
+} from "@/lib/instagram-cookies";
 
 // ⭐ Get yt-dlp binary path (bundled for Vercel)
 function getYtDlpBinaryPath(): string | undefined {
@@ -93,177 +100,7 @@ function parseInstagramError(errorMessage: string): {
   };
 }
 
-async function checkCookieStatus(): Promise<{ valid: boolean; exists: boolean; path: string | null; error?: string }> {
-  await initializeCookies();
-  const cookiePath = INSTAGRAM_COOKIES;
-  const status = { exists: false, path: null as string | null, valid: false, error: undefined as string | undefined };
-
-  try {
-    if (!cookiePath || !existsSync(cookiePath)) {
-      status.error = "Cookies file not found";
-      return status;
-    }
-    status.exists = true;
-    status.path = cookiePath;
-
-    const cookieContent = await readFile(cookiePath, "utf-8");
-    const lines = cookieContent.split("\n").filter((line) => line.trim() && !line.startsWith("#"));
-
-    if (lines.length === 0) {
-      status.error = "Cookies file is empty";
-      return status;
-    }
-
-    let hasValidCookie = false;
-    let hasSessionId = false;
-    let hasCsrfToken = false;
-
-    for (const line of lines) {
-      let parts = line.split("\t");
-      if (parts.length < 7) {
-        parts = line.split("\\t");
-      }
-      if (parts.length < 7) {
-        parts = line.trim().split(/\s+/);
-      }
-      if (parts.length < 7) continue;
-
-      const domain = parts[0];
-      const name = parts[5];
-      const value = parts[6];
-
-      if (domain.includes("instagram.com")) {
-        hasValidCookie = true;
-        if (name === "sessionid" && value && value.length > 10) {
-          hasSessionId = true;
-        }
-        if (name === "csrftoken" && value && value.length > 5) {
-          hasCsrfToken = true;
-        }
-      }
-    }
-
-    status.valid = hasValidCookie && hasSessionId && hasCsrfToken;
-    if (!hasValidCookie) status.error = "No Instagram cookies found";
-    else if (!hasSessionId) status.error = "Missing sessionid cookie";
-    else if (!hasCsrfToken) status.error = "Missing csrftoken cookie";
-  } catch (error: any) {
-    status.error = error.message;
-  }
-  return status;
-}
-
-function normalizeNetscapeCookies(rawCookies: string): string {
-  let content = rawCookies.trim();
-
-  // Strip wrapping quotes if user pasted "..." or '...'
-  if (
-    (content.startsWith('"') && content.endsWith('"')) ||
-    (content.startsWith("'") && content.endsWith("'"))
-  ) {
-    content = content.slice(1, -1).trim();
-  }
-
-  // Auto-detect base64 encoded cookies
-  if (!content.includes("\n") && !content.includes("\\n") && content.length > 50) {
-    try {
-      const decoded = Buffer.from(content, "base64").toString("utf-8");
-      if (decoded.includes("instagram.com") || decoded.includes("youtube.com") || decoded.includes("# Netscape")) {
-        content = decoded;
-      }
-    } catch {
-      // Not base64
-    }
-  }
-
-  // Convert all literal '\n' escape sequences (single or double escaped) to real newlines
-  content = content.replace(/\\+n/g, "\n");
-
-  // Convert all literal '\t' escape sequences (single or double escaped) to real tab characters
-  content = content.replace(/\\+t/g, "\t");
-
-  const lines = content.split("\n");
-  const normalized = lines.map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return line;
-
-    // Split on tabs if present, otherwise split on spaces
-    let parts = trimmed.split("\t");
-    if (parts.length < 7) {
-      parts = trimmed.split(/\s+/);
-    }
-
-    if (parts.length >= 7) {
-      const domain = parts[0];
-      const subdomains = parts[1];
-      const path = parts[2];
-      const secure = parts[3];
-      const expiry = parts[4];
-      const name = parts[5];
-      const value = parts.slice(6).join(" ");
-      return `${domain}\t${subdomains}\t${path}\t${secure}\t${expiry}\t${name}\t${value}`;
-    }
-    return line;
-  });
-
-  return normalized.join("\n");
-}
-
-let INSTAGRAM_COOKIES: string | null = null;
-let YOUTUBE_COOKIES: string | null = null;
-
-async function initializeCookies(): Promise<void> {
-  // 1. YouTube Cookies
-  const ytCookiePath = join(tmpdir(), "youtube_cookies.txt");
-  try {
-    const rawYtEnv = process.env.YOUTUBE_COOKIES;
-    if (rawYtEnv) {
-      const formattedCookies = normalizeNetscapeCookies(rawYtEnv);
-      await writeFile(ytCookiePath, formattedCookies, "utf-8");
-      YOUTUBE_COOKIES = ytCookiePath;
-    } else {
-      const localYtFile = join(process.cwd(), "youtube_cookies.txt");
-      if (existsSync(localYtFile)) {
-        YOUTUBE_COOKIES = localYtFile;
-      } else {
-        if (existsSync(ytCookiePath)) {
-          await unlink(ytCookiePath).catch(() => {});
-        }
-        YOUTUBE_COOKIES = null;
-      }
-    }
-  } catch (error: any) {
-    console.error("Error initializing YouTube cookies:", error.message);
-    YOUTUBE_COOKIES = null;
-  }
-
-  // 2. Instagram Cookies
-  const igCookiePath = join(tmpdir(), "instagram_cookies.txt");
-  try {
-    const rawIgEnv = process.env.INSTAGRAM_COOKIES;
-    if (rawIgEnv) {
-      const formattedCookies = normalizeNetscapeCookies(rawIgEnv);
-      await writeFile(igCookiePath, formattedCookies, "utf-8");
-      INSTAGRAM_COOKIES = igCookiePath;
-    } else {
-      const localIgFile = join(process.cwd(), "instagram_cookies.txt");
-      const localCookieFile = join(process.cwd(), "cookies.txt");
-      if (existsSync(localIgFile)) {
-        INSTAGRAM_COOKIES = localIgFile;
-      } else if (existsSync(localCookieFile)) {
-        INSTAGRAM_COOKIES = localCookieFile;
-      } else {
-        if (existsSync(igCookiePath)) {
-          await unlink(igCookiePath).catch(() => {});
-        }
-        INSTAGRAM_COOKIES = null;
-      }
-    }
-  } catch (error: any) {
-    console.error("Error initializing Instagram cookies:", error.message);
-    INSTAGRAM_COOKIES = null;
-  }
-}
+// Cookie helpers live in lib/instagram-cookies.ts
 
 function sanitizeFilename(filename: string): string {
   return filename
@@ -275,8 +112,9 @@ function sanitizeFilename(filename: string): string {
 
 // Single video downloader logic
 async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, isInstagram: boolean): Promise<void> {
-  await initializeCookies();
-  const cookiesToUse = isInstagram ? INSTAGRAM_COOKIES : YOUTUBE_COOKIES;
+  const prepared = isInstagram
+    ? await prepareInstagramCookies()
+    : await prepareYouTubeCookies();
 
   const additionalOptions = [
     "--add-header", "Accept-Language:en-US,en;q=0.9",
@@ -288,37 +126,48 @@ async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, 
     additionalOptions.push("--merge-output-format", "mp4");
   }
 
-  const formatSelector = isInstagram 
+  const formatSelector = isInstagram
     ? "best[ext=mp4]/best"
     : "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bestvideo+bestaudio/best";
 
   try {
-    await ytdlp.downloadAsync(url, {
-      format: formatSelector,
-      output: outputPath,
-      cookies: cookiesToUse || undefined,
-      noWarnings: true,
-      noUpdate: true,
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-      referer: isInstagram ? "https://www.instagram.com/" : "https://www.youtube.com/",
-      additionalOptions,
-    });
-  } catch (firstError: any) {
-    if (!isInstagram && cookiesToUse) {
-      console.warn(`[YTDLP] YouTube download with cookies failed, retrying without cookies: ${firstError.message}`);
+    if (isInstagram) {
       await ytdlp.downloadAsync(url, {
         format: formatSelector,
         output: outputPath,
-        cookies: undefined,
-        noWarnings: true,
-        noUpdate: true,
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        referer: "https://www.youtube.com/",
-        additionalOptions,
+        ...instagramYtDlpOptions(prepared.path),
       });
+      await persistRefreshedInstagramCookies(prepared.path, prepared.contentHash);
     } else {
-      throw firstError;
+      try {
+        await ytdlp.downloadAsync(url, {
+          format: formatSelector,
+          output: outputPath,
+          cookies: prepared.path || undefined,
+          noWarnings: true,
+          noUpdate: true,
+          referer: "https://www.youtube.com/",
+          additionalOptions,
+        });
+      } catch (firstError: any) {
+        if (prepared.path) {
+          console.warn(`[YTDLP] YouTube download with cookies failed, retrying without cookies: ${firstError.message}`);
+          await ytdlp.downloadAsync(url, {
+            format: formatSelector,
+            output: outputPath,
+            cookies: undefined,
+            noWarnings: true,
+            noUpdate: true,
+            referer: "https://www.youtube.com/",
+            additionalOptions,
+          });
+        } else {
+          throw firstError;
+        }
+      }
     }
+  } finally {
+    await prepared.cleanup();
   }
 }
 
