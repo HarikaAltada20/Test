@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { YtDlp } from "ytdlp-nodejs";
-import { readFile, unlink, stat } from "fs/promises";
+import { readFile, unlink } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
 import {
   checkInstagramCookieStatus,
-  instagramYtDlpOptions,
-  persistRefreshedInstagramCookies,
-  prepareInstagramCookies,
   prepareYouTubeCookies,
 } from "@/lib/instagram-cookies";
+import {
+  downloadInstagramVideoBuffer,
+  InstagramDownloadError,
+} from "@/lib/instagram-download/download";
 
 function getYtDlpBinaryPath(): string | undefined {
   const isLinux = process.platform === 'linux';
@@ -540,150 +541,22 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 }
 
 // ---------------------------
-// INSTAGRAM DOWNLOAD (with cookies + reliability)
+// INSTAGRAM DOWNLOAD (Polaris GraphQL + CDN)
 // ---------------------------
 
 async function downloadInstagramVideo(url: string): Promise<Buffer> {
   const downloadId = randomUUID().substring(0, 8);
-  const tempFile = join(tmpdir(), `video_${randomUUID()}.mp4`);
-  let downloadedFile: string | null = null;
-  const igCookies = await prepareInstagramCookies();
-
-  console.log(`[IG-${downloadId}] [DEBUG] Starting Instagram download:`, {
+  console.log(`[IG-${downloadId}] [DEBUG] Starting Instagram GraphQL download:`, {
     url,
-    tempFile,
   });
 
   try {
-    const binaryPath = getYtDlpBinaryPath();
-    const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
-    const cookieStatus = await checkInstagramCookieStatus(
-      igCookies.path,
-      igCookies.source
-    );
-
-    console.log(
-      `[IG-${downloadId}] [DEBUG] Instagram download - Cookie status:`,
-      {
-        source: igCookies.source || "none",
-        exists: cookieStatus.exists,
-        valid: cookieStatus.valid,
-        hasSessionId: cookieStatus.hasSessionId,
-        hasCsrfToken: cookieStatus.hasCsrfToken,
-        expired: cookieStatus.expired,
-        expiresSoon: cookieStatus.expiresSoon,
-        path: cookieStatus.path,
-        error: cookieStatus.error,
-        cookiePath: igCookies.path,
-        binaryPath: binaryPath || "system PATH",
-      }
-    );
-
     const downloadStartTime = Date.now();
+    const videoBuffer = await downloadInstagramVideoBuffer(url);
     console.log(
-      `[IG-${downloadId}] [DEBUG] Calling yt-dlp with cookies: ${
-        igCookies.path || "none"
-      }...`
-    );
-    await ytdlp.downloadAsync(url, {
-      format: "best[ext=mp4]/best",
-      output: tempFile,
-      ...instagramYtDlpOptions(igCookies.path),
-    });
-    console.log(
-      `[IG-${downloadId}] [DEBUG] yt-dlp completed in ${
+      `[IG-${downloadId}] [DEBUG] Instagram download successful in ${
         Date.now() - downloadStartTime
-      }ms`
-    );
-
-    // Persist rotated session cookies so the next serverless invocation still works.
-    await persistRefreshedInstagramCookies(
-      igCookies.path,
-      igCookies.contentHash
-    );
-
-    const { access, constants, readdir, stat } = await import("fs/promises");
-    let videoBuffer: Buffer;
-
-    try {
-      console.log(
-        `[IG-${downloadId}] [DEBUG] Checking if temp file exists: ${tempFile}`
-      );
-      await access(tempFile, constants.F_OK);
-      downloadedFile = tempFile;
-      const fileStats = await stat(tempFile);
-      console.log(
-        `[IG-${downloadId}] [DEBUG] Temp file found, size: ${fileStats.size} bytes`
-      );
-      videoBuffer = await readFile(tempFile);
-      console.log(
-        `[IG-${downloadId}] [DEBUG] File read successfully, buffer size: ${videoBuffer.length} bytes`
-      );
-    } catch (accessError: any) {
-      console.log(
-        `[IG-${downloadId}] [DEBUG] Temp file not found, searching in tmpdir:`,
-        accessError.message
-      );
-      const files = await readdir(tmpdir());
-      console.log(
-        `[IG-${downloadId}] [DEBUG] Found ${files.length} files in tmpdir`
-      );
-      const videoFiles = files
-        .filter((f) => {
-          const lower = f.toLowerCase();
-          return (
-            (f.startsWith("video_") || lower.includes("instagram")) &&
-            (lower.endsWith(".mp4") ||
-              lower.endsWith(".m4a") ||
-              lower.endsWith(".webm"))
-          );
-        })
-        .map((f) => join(tmpdir(), f));
-
-      console.log(
-        `[IG-${downloadId}] [DEBUG] Found ${videoFiles.length} potential video files`
-      );
-
-      if (videoFiles.length > 0) {
-        const fileStats = await Promise.all(
-          videoFiles.map(async (f) => {
-            try {
-              const stats = await stat(f);
-              return {
-                path: f,
-                mtime: stats.mtime.getTime(),
-                size: stats.size,
-              };
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        const validStats = fileStats.filter(Boolean) as Array<{
-          path: string;
-          mtime: number;
-          size: number;
-        }>;
-
-        if (validStats.length > 0) {
-          validStats.sort((a, b) => b.mtime - a.mtime);
-          downloadedFile = validStats[0].path;
-          console.log(
-            `[IG-${downloadId}] [DEBUG] Using most recent file: ${downloadedFile}, size: ${validStats[0].size} bytes`
-          );
-          videoBuffer = await readFile(downloadedFile);
-        } else {
-          throw new Error("Downloaded file not found in temp directory");
-        }
-      } else {
-        throw new Error("Downloaded file not found");
-      }
-    }
-
-    if (downloadedFile) await unlink(downloadedFile).catch(() => {});
-    console.log(
-      `[IG-${downloadId}] [DEBUG] Instagram download successful, buffer size: ${videoBuffer.length} bytes`
+      }ms, buffer size: ${videoBuffer.length} bytes`
     );
     return videoBuffer;
   } catch (error: any) {
@@ -691,19 +564,25 @@ async function downloadInstagramVideo(url: string): Promise<Buffer> {
       message: error.message,
       stack: error.stack,
       url,
-      cookiePath: igCookies.path,
     });
-    if (downloadedFile) await unlink(downloadedFile).catch(() => {});
-    await unlink(tempFile).catch(() => {});
+
+    if (error instanceof InstagramDownloadError) {
+      const parsedError = {
+        userMessage: error.message,
+        reason: error.reason,
+        suggestions: error.suggestions,
+      };
+      const enhancedError = new Error(parsedError.userMessage);
+      (enhancedError as any).parsedError = parsedError;
+      (enhancedError as any).originalError = error.reason;
+      throw enhancedError;
+    }
 
     const parsedError = parseInstagramError(error.message);
-    console.log(`[IG-${downloadId}] [DEBUG] Parsed error:`, parsedError);
     const enhancedError = new Error(parsedError.userMessage);
     (enhancedError as any).parsedError = parsedError;
     (enhancedError as any).originalError = error.message;
     throw enhancedError;
-  } finally {
-    await igCookies.cleanup();
   }
 }
 
@@ -804,26 +683,13 @@ export async function GET(request: Request) {
       });
     }
 
-    // ⭐ ADDED: Test cookies by attempting a real download
+    // Test Instagram GraphQL download path with a real reel URL
     if (testCookies) {
-      const cookieStatus = await checkInstagramCookieStatus();
-
-      if (!cookieStatus.valid) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Cannot test cookies - they are invalid or missing",
-            cookies: cookieStatus,
-          },
-          { status: 400 }
-        );
-      }
-
       if (!testUrl) {
         return NextResponse.json(
           {
             success: false,
-            message: "testUrl parameter is required for testing cookies",
+            message: "testUrl parameter is required for testing Instagram download",
             example:
               "/api/admin/download-reel?testCookies=true&testUrl=https://www.instagram.com/reel/ABC123/",
           },
@@ -841,59 +707,33 @@ export async function GET(request: Request) {
         );
       }
 
-      const igCookies = await prepareInstagramCookies();
-      const tempFile = join(tmpdir(), `test_${randomUUID()}.mp4`);
       try {
-        const binaryPath = getYtDlpBinaryPath();
-        const ytdlp = new YtDlp(binaryPath ? { binaryPath } : undefined);
-
-        await ytdlp.downloadAsync(testUrl, {
-          format: "best[ext=mp4]/best",
-          output: tempFile,
-          ...instagramYtDlpOptions(igCookies.path),
+        const videoBuffer = await downloadInstagramVideoBuffer(testUrl);
+        return NextResponse.json({
+          success: true,
+          message: "✅ Instagram GraphQL download succeeded.",
+          method: "polaris-graphql",
+          fileSize: `${(videoBuffer.length / 1024).toFixed(2)} KB`,
         });
-
-        await persistRefreshedInstagramCookies(
-          igCookies.path,
-          igCookies.contentHash
-        );
-
-        const fileExists = existsSync(tempFile);
-        const fileSize = fileExists ? (await stat(tempFile)).size : 0;
-        await unlink(tempFile).catch(() => {});
-
-        if (fileExists && fileSize > 0) {
-          return NextResponse.json({
-            success: true,
-            message: "✅ Cookies are working! Test download succeeded.",
-            fileSize: `${(fileSize / 1024).toFixed(2)} KB`,
-            cookies: cookieStatus,
-          });
-        }
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Download started but no file was created",
-            cookies: cookieStatus,
-          },
-          { status: 500 }
-        );
       } catch (error: any) {
-        const parsedError = parseInstagramError(error.message);
+        const parsedError =
+          error instanceof InstagramDownloadError
+            ? {
+                userMessage: error.message,
+                reason: error.reason,
+                suggestions: error.suggestions,
+              }
+            : parseInstagramError(error.message);
         return NextResponse.json(
           {
             success: false,
-            message: "❌ Cookies test failed",
+            message: "❌ Instagram download test failed",
             error: parsedError.userMessage,
             reason: parsedError.reason,
             suggestions: parsedError.suggestions,
-            cookies: cookieStatus,
           },
           { status: 500 }
         );
-      } finally {
-        await igCookies.cleanup();
-        await unlink(tempFile).catch(() => {});
       }
     }
 
@@ -1013,24 +853,8 @@ export async function GET(request: Request) {
           }ms, size: ${videoBuffer.length} bytes`
         );
       } else {
-        // Check cookie status before attempting download
-        const cookieStatus = await checkInstagramCookieStatus();
         console.log(
-          `[${requestId}] [DEBUG] Cookie status before Instagram download:`,
-          {
-            valid: cookieStatus.valid,
-            exists: cookieStatus.exists,
-            error: cookieStatus.error,
-          }
-        );
-        if (!cookieStatus.valid && cookieStatus.exists) {
-          console.warn(
-            `[${requestId}] [WARN] Instagram download attempted with invalid/expired cookies:`,
-            cookieStatus.error
-          );
-        }
-        console.log(
-          `[${requestId}] [DEBUG] Starting Instagram download: ${contentLink}`
+          `[${requestId}] [DEBUG] Starting Instagram GraphQL download: ${contentLink}`
         );
         videoBuffer = await downloadInstagramVideo(contentLink);
         console.log(
@@ -1040,7 +864,6 @@ export async function GET(request: Request) {
         );
       }
 
-      // Include cookie status in response headers for Instagram downloads
       const headers: Record<string, string> = {
         "Content-Type": "video/mp4",
         "Content-Disposition": `attachment; filename="${filename}.mp4"`,
@@ -1048,15 +871,7 @@ export async function GET(request: Request) {
       };
 
       if (isInstagram) {
-        const cookieStatus = await checkInstagramCookieStatus();
-        headers["X-Cookie-Status"] = cookieStatus.valid
-          ? "valid"
-          : cookieStatus.exists
-          ? "invalid"
-          : "missing";
-        if (cookieStatus.expiresSoon) {
-          headers["X-Cookie-Warning"] = "Cookies expire soon";
-        }
+        headers["X-Download-Method"] = "polaris-graphql";
       }
 
       console.log(
