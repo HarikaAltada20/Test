@@ -10,10 +10,10 @@ import { ZipArchive } from "archiver";
 import { PassThrough } from "stream";
 import {
   checkInstagramCookieStatus,
+  instagramYtDlpOptions,
   persistRefreshedInstagramCookies,
   prepareInstagramCookies,
   prepareYouTubeCookies,
-  runInstagramYtDlpDownload,
 } from "@/lib/instagram-cookies";
 
 // ⭐ Get yt-dlp binary path (bundled for Vercel)
@@ -132,12 +132,10 @@ async function downloadVideoFile(ytdlp: YtDlp, url: string, outputPath: string, 
 
   try {
     if (isInstagram) {
-      await runInstagramYtDlpDownload({
-        downloadAsync: (u, opts) => ytdlp.downloadAsync(u, opts as any),
-        url,
+      await ytdlp.downloadAsync(url, {
+        format: formatSelector,
         output: outputPath,
-        cookiePath: prepared.path,
-        logPrefix: "[IG-bulk]",
+        ...instagramYtDlpOptions(prepared.path),
       });
       await persistRefreshedInstagramCookies(prepared.path, prepared.contentHash);
     } else {
