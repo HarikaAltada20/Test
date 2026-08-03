@@ -81,13 +81,18 @@ async function main() {
             fs.mkdirSync(BIN_DIR, { recursive: true });
         }
 
-        // Check if binary already exists
+        // Always refresh on Linux builds so Vercel gets a current yt-dlp
+        // (Instagram requires recent builds + curl_cffi impersonation support).
         if (fs.existsSync(YTDLP_PATH)) {
-            console.log('yt-dlp binary already exists, skipping download');
-            return;
+            try {
+                fs.unlinkSync(YTDLP_PATH);
+                console.log('Removed cached yt-dlp binary; downloading latest...');
+            } catch (unlinkErr) {
+                console.warn('Could not remove existing yt-dlp binary, will overwrite:', unlinkErr.message);
+            }
         }
 
-        console.log('Downloading yt-dlp binary for Linux (Vercel deployment)...');
+        console.log('Downloading latest yt-dlp_linux binary (Vercel deployment)...');
         await downloadFile(YTDLP_URL, YTDLP_PATH);
         console.log(`✅ Successfully downloaded yt-dlp to ${YTDLP_PATH}`);
 

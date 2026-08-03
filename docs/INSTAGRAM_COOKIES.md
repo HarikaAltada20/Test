@@ -59,6 +59,14 @@ GET /api/admin/download-reel?checkCookies=true
 - After password / security / logout on the dedicated account
 - Preventive: every few weeks if downloads are heavy
 
-## Still failing after a correct dedicated-account export?
+## Empty media response (cookies look valid)
 
-Instagram may still kill cloud sessions under heavy load. Then options are: lower download rate, residential proxy, or move download workers off Vercel to a persistent host.
+If logs show `valid: true` / `hasSessionId: true` but yt-dlp says **empty media response**, Instagram rejected the session or fingerprint — not a missing cookie file.
+
+Fix:
+1. Redeploy (build now always pulls latest `yt-dlp_linux` with impersonation support)
+2. Re-export cookies from the **dedicated** account and `PUT /api/admin/instagram-cookies`
+3. Do not stay logged into that account in a browser
+4. Confirm the reel opens for that same account
+
+Downloads now try `cookies + --impersonate chrome`, then fall back to cookies-only.
