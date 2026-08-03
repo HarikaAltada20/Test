@@ -1,7 +1,7 @@
 import ytdl from "@distube/ytdl-core";
 import { YtDlp } from "ytdlp-nodejs";
 import { readFile, rm } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync, copyFileSync, chmodSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
@@ -21,12 +21,27 @@ export class YouTubeDownloadError extends Error {
 }
 
 function getYtDlpInstance(): YtDlp {
-  const binPath = join(process.cwd(), "bin", "yt-dlp");
-  const options =
-    process.platform === "linux" && existsSync(binPath)
-      ? { binaryPath: binPath }
-      : {};
-  return new YtDlp(options);
+  if (process.platform === "linux") {
+    const srcBin = join(process.cwd(), "bin", "yt-dlp");
+    const tmpBin = join(tmpdir(), "yt-dlp");
+
+    if (existsSync(srcBin)) {
+      try {
+        if (!existsSync(tmpBin)) {
+          copyFileSync(srcBin, tmpBin);
+        }
+        chmodSync(tmpBin, 0o755);
+        return new YtDlp({ binaryPath: tmpBin });
+      } catch (err) {
+        console.warn(
+          "[YouTube Download] Failed to copy/chmod /tmp/yt-dlp binary:",
+          err
+        );
+      }
+    }
+  }
+
+  return new YtDlp();
 }
 
 async function streamToBuffer(stream: Readable): Promise<Buffer> {
@@ -59,6 +74,11 @@ async function downloadWithYtDlp(watchUrl: string): Promise<Buffer> {
     await ytdlp.execAsync(watchUrl, {
       output: tmpFile,
       format: "b[ext=mp4]/best[ext=mp4]/best",
+      additionalOptions: [
+        "--extractor-args",
+        "youtube:player_client=android,ios,mweb",
+        "--no-warnings",
+      ],
     });
 
     if (!existsSync(tmpFile)) {
@@ -186,8 +206,14 @@ export async function getYouTubeVideoTitle(
   // Try yt-dlp first
   try {
     const ytdlp = getYtDlpInstance();
-    const title = await ytdlp.getTitleAsync(watchUrl);
-    if (title && title.trim()) return title.trim();
+    const info = await ytdlp.getInfoAsync(watchUrl, {
+      additionalOptions: [
+        "--extractor-args",
+        "youtube:player_client=android,ios,mweb",
+        "--no-warnings",
+      ],
+    });
+    if (info?.title && info.title.trim()) return info.title.trim();
   } catch {
     // ignore yt-dlp error, try fallback
   }
