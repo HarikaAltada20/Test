@@ -1,4 +1,6 @@
-import { writeFile } from "fs/promises";
+import { createWriteStream } from "fs";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { extractInstagramShortcode } from "@/lib/content-embed";
 import { resolveInstagramVideoUrl } from "@/lib/instagram-download/graphql";
 
@@ -82,10 +84,14 @@ export async function getInstagramVideoUrlFromLink(
   return { videoUrl: result.videoUrl, shortcode: result.shortcode };
 }
 
-/** Fetch Instagram video bytes via Polaris GraphQL + CDN proxy fetch. */
-export async function downloadInstagramVideoBuffer(
+/** Fetch Instagram video stream via Polaris GraphQL + CDN proxy fetch. */
+export async function getInstagramVideoStream(
   contentLink: string
-): Promise<Buffer> {
+): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  contentLength: string | null;
+  shortcode: string;
+}> {
   const { videoUrl, shortcode } = await getInstagramVideoUrlFromLink(contentLink);
 
   const videoResponse = await fetch(videoUrl, {
@@ -100,9 +106,36 @@ export async function downloadInstagramVideoBuffer(
     );
   }
 
-  const arrayBuffer = await videoResponse.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  if (!videoResponse.body) {
+    throw new InstagramDownloadError(
+      "Instagram returned an empty video stream.",
+      `Empty body for shortcode ${shortcode}`,
+      ["The post may be restricted or the CDN URL expired"]
+    );
+  }
 
+  return {
+    stream: videoResponse.body,
+    contentLength: videoResponse.headers.get("content-length"),
+    shortcode,
+  };
+}
+
+/** Fetch Instagram video bytes via stream into a Buffer (for backwards compatibility). */
+export async function downloadInstagramVideoBuffer(
+  contentLink: string
+): Promise<Buffer> {
+  const { stream, shortcode } = await getInstagramVideoStream(contentLink);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+
+  const buffer = Buffer.concat(chunks);
   if (buffer.length === 0) {
     throw new InstagramDownloadError(
       "Instagram returned an empty video file.",
@@ -114,11 +147,12 @@ export async function downloadInstagramVideoBuffer(
   return buffer;
 }
 
-/** Write Instagram video to a file path (for bulk ZIP downloads). */
+/** Write Instagram video stream directly to a file path (for bulk ZIP downloads). */
 export async function downloadInstagramVideoToFile(
   contentLink: string,
   outputPath: string
 ): Promise<void> {
-  const buffer = await downloadInstagramVideoBuffer(contentLink);
-  await writeFile(outputPath, buffer);
-}
+  const { stream } = await getInstagramVideoStream(contentLink);
+  const writeStream = createWriteStream(outputPath);
+  await pipeline(Readable.fromWeb(stream as any), writeStream);
+}

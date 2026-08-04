@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { mkdir, rm, writeFile } from "fs/promises";
+import { mkdir, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
@@ -8,11 +8,11 @@ import { existsSync } from "fs";
 import { ZipArchive } from "archiver";
 import { PassThrough } from "stream";
 import {
-  downloadInstagramVideoBuffer,
+  downloadInstagramVideoToFile,
   InstagramDownloadError,
 } from "@/lib/instagram-download/download";
 import {
-  downloadYouTubeVideoBuffer,
+  downloadYouTubeVideoToFile,
   YouTubeDownloadError,
 } from "@/lib/youtube-download/ytstream";
 
@@ -45,10 +45,11 @@ async function downloadVideoFile(
   outputPath: string,
   isInstagram: boolean
 ): Promise<void> {
-  const buffer = isInstagram
-    ? await downloadInstagramVideoBuffer(url)
-    : await downloadYouTubeVideoBuffer(url);
-  await writeFile(outputPath, buffer);
+  if (isInstagram) {
+    await downloadInstagramVideoToFile(url, outputPath);
+  } else {
+    await downloadYouTubeVideoToFile(url, outputPath);
+  }
 }
 
 async function verifyAdminOrBrandAccess() {
@@ -78,7 +79,17 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const { urls = [], submissionIds = [], options = {} } = body;
-    const format = options.format === "audio" ? "mp3" : "mp4";
+    // Only muxed video is supported (IG GraphQL + YTStream); do not claim .mp3.
+    if (options.format === "audio" || options.format === "mp3") {
+      return NextResponse.json(
+        {
+          error:
+            "Audio-only downloads are not supported. Use format mp4 (default).",
+        },
+        { status: 400 }
+      );
+    }
+    const format = "mp4";
 
     const downloadQueue: { url: string; filename: string; isInstagram: boolean }[] = [];
 

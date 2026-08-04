@@ -110,13 +110,18 @@ async function getCsrfToken(): Promise<string> {
   return extractCsrfToken(setCookieHeaders) ?? "";
 }
 
+function hasVideoUrl(media: InstagramMediaItem | null | undefined): boolean {
+  const url = media?.video_versions?.[0]?.url;
+  return typeof url === "string" && url.length > 0;
+}
+
 export function normalizeMediaToLegacyGraphQL(
   media: InstagramMediaItem
 ): LegacyShortcodeMedia {
-  const mediaType = media.media_type;
-  const isVideo = mediaType === 2;
   const candidates = media.image_versions2?.candidates ?? [];
   const videoVersions = media.video_versions ?? [];
+  // Reels/clips sometimes use media_type other than 2; trust a CDN video URL.
+  const isVideo = hasVideoUrl(media) || media.media_type === 2;
 
   return {
     xdt_shortcode_media: {
@@ -145,7 +150,9 @@ export function getMediaItemFromWebInfoResponse(
 ): InstagramMediaItem | null {
   const items =
     payload.data?.xdt_api__v1__media__shortcode__web_info?.items ?? [];
-  return items[0] ?? null;
+  if (items.length === 0) return null;
+  // Prefer an item that already has a downloadable video URL (e.g. carousel).
+  return items.find((item) => hasVideoUrl(item)) ?? items[0] ?? null;
 }
 
 export async function getInstagramPostGraphQL(shortcode: string): Promise<Response> {

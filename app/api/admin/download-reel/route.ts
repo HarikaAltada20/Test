@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { randomUUID } from "crypto";
 import {
-  downloadInstagramVideoBuffer,
+  getInstagramVideoStream,
   InstagramDownloadError,
 } from "@/lib/instagram-download/download";
 import {
-  downloadYouTubeVideoBuffer,
+  getYouTubeVideoStream,
   YouTubeDownloadError,
 } from "@/lib/youtube-download/ytstream";
 
@@ -162,19 +162,16 @@ function sanitizeFilename(filename: string): string {
 // YOUTUBE DOWNLOAD (YTStream RapidAPI)
 // ---------------------------
 
-async function downloadYouTubeVideo(url: string): Promise<Buffer> {
+async function downloadYouTubeVideoStream(url: string): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  contentLength: string | null;
+}> {
   const downloadId = randomUUID().substring(0, 8);
-  console.log(`[YT-${downloadId}] [DEBUG] Starting YTStream download:`, { url });
+  console.log(`[YT-${downloadId}] [DEBUG] Starting YTStream download stream:`, { url });
 
   try {
-    const downloadStartTime = Date.now();
-    const videoBuffer = await downloadYouTubeVideoBuffer(url);
-    console.log(
-      `[YT-${downloadId}] [DEBUG] YouTube download successful in ${
-        Date.now() - downloadStartTime
-      }ms, buffer size: ${videoBuffer.length} bytes`
-    );
-    return videoBuffer;
+    const result = await getYouTubeVideoStream(url);
+    return { stream: result.stream, contentLength: result.contentLength };
   } catch (error: any) {
     console.error(`[YT-${downloadId}] [ERROR] YouTube download failed:`, {
       message: error.message,
@@ -206,21 +203,18 @@ async function downloadYouTubeVideo(url: string): Promise<Buffer> {
 // INSTAGRAM DOWNLOAD (Polaris GraphQL + CDN)
 // ---------------------------
 
-async function downloadInstagramVideo(url: string): Promise<Buffer> {
+async function downloadInstagramVideoStream(url: string): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  contentLength: string | null;
+}> {
   const downloadId = randomUUID().substring(0, 8);
-  console.log(`[IG-${downloadId}] [DEBUG] Starting Instagram GraphQL download:`, {
+  console.log(`[IG-${downloadId}] [DEBUG] Starting Instagram GraphQL download stream:`, {
     url,
   });
 
   try {
-    const downloadStartTime = Date.now();
-    const videoBuffer = await downloadInstagramVideoBuffer(url);
-    console.log(
-      `[IG-${downloadId}] [DEBUG] Instagram download successful in ${
-        Date.now() - downloadStartTime
-      }ms, buffer size: ${videoBuffer.length} bytes`
-    );
-    return videoBuffer;
+    const result = await getInstagramVideoStream(url);
+    return { stream: result.stream, contentLength: result.contentLength };
   } catch (error: any) {
     console.error(`[IG-${downloadId}] [ERROR] Instagram download failed:`, {
       message: error.message,
@@ -319,12 +313,25 @@ export async function GET(request: Request) {
       }
 
       try {
-        const videoBuffer = await downloadInstagramVideoBuffer(testUrl);
+        const { stream, contentLength } = await getInstagramVideoStream(testUrl);
+        let sizeKB = "unknown";
+        if (contentLength) {
+          sizeKB = `${(parseInt(contentLength, 10) / 1024).toFixed(2)} KB`;
+        } else {
+          const reader = stream.getReader();
+          let bytes = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) bytes += value.length;
+          }
+          sizeKB = `${(bytes / 1024).toFixed(2)} KB`;
+        }
         return NextResponse.json({
           success: true,
           message: "✅ Instagram GraphQL download succeeded.",
           method: "polaris-graphql",
-          fileSize: `${(videoBuffer.length / 1024).toFixed(2)} KB`,
+          fileSize: sizeKB,
         });
       } catch (error: any) {
         const parsedError =
@@ -450,28 +457,33 @@ export async function GET(request: Request) {
     console.log(`[${requestId}] [DEBUG] Generated filename: ${filename}`);
 
     try {
-      let videoBuffer: Buffer;
+      let videoStream: ReadableStream<Uint8Array>;
+      let contentLengthHeader: string | null = null;
       const downloadStartTime = Date.now();
 
       if (isYouTube) {
         console.log(
-          `[${requestId}] [DEBUG] Starting YouTube download: ${contentLink}`
+          `[${requestId}] [DEBUG] Starting YouTube download stream: ${contentLink}`
         );
-        videoBuffer = await downloadYouTubeVideo(contentLink);
+        const yt = await downloadYouTubeVideoStream(contentLink);
+        videoStream = yt.stream;
+        contentLengthHeader = yt.contentLength;
         console.log(
-          `[${requestId}] [DEBUG] YouTube download completed in ${
+          `[${requestId}] [DEBUG] YouTube stream initialized in ${
             Date.now() - downloadStartTime
-          }ms, size: ${videoBuffer.length} bytes`
+          }ms`
         );
       } else {
         console.log(
-          `[${requestId}] [DEBUG] Starting Instagram GraphQL download: ${contentLink}`
+          `[${requestId}] [DEBUG] Starting Instagram GraphQL download stream: ${contentLink}`
         );
-        videoBuffer = await downloadInstagramVideo(contentLink);
+        const ig = await downloadInstagramVideoStream(contentLink);
+        videoStream = ig.stream;
+        contentLengthHeader = ig.contentLength;
         console.log(
-          `[${requestId}] [DEBUG] Instagram download completed in ${
+          `[${requestId}] [DEBUG] Instagram stream initialized in ${
             Date.now() - downloadStartTime
-          }ms, size: ${videoBuffer.length} bytes`
+          }ms`
         );
       }
 
@@ -481,6 +493,10 @@ export async function GET(request: Request) {
         "Cache-Control": "no-cache",
       };
 
+      if (contentLengthHeader) {
+        headers["Content-Length"] = contentLengthHeader;
+      }
+
       if (isInstagram) {
         headers["X-Download-Method"] = "polaris-graphql";
       } else if (isYouTube) {
@@ -488,11 +504,11 @@ export async function GET(request: Request) {
       }
 
       console.log(
-        `[${requestId}] [DEBUG] Sending video response, total time: ${
+        `[${requestId}] [DEBUG] Sending video stream response, total time: ${
           Date.now() - startTime
         }ms`
       );
-      return new NextResponse(new Uint8Array(videoBuffer), { headers });
+      return new NextResponse(videoStream, { headers });
     } catch (error: any) {
       console.error(`[${requestId}] [ERROR] Video download error:`, {
         message: error?.message,

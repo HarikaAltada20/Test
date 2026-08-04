@@ -1,3 +1,6 @@
+import { createWriteStream } from "fs";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import { extractYoutubeId } from "@/lib/youtube-url";
 
 const YTSTREAM_HOST = "ytstream-download-youtube-videos.p.rapidapi.com";
@@ -67,10 +70,13 @@ function isMp4(mimeType?: string): boolean {
   return (mimeType || "").toLowerCase().includes("video/mp4");
 }
 
-/** Prefer highest-quality muxed MP4 from `formats`, then any muxed URL. */
+/**
+ * Prefer highest-quality muxed (audio+video) MP4 from `formats`, then any
+ * progressive muxed URL. Never fall back to adaptiveFormats — those are
+ * typically video-only or audio-only and would produce silent/incomplete files.
+ */
 export function pickBestDownloadUrl(payload: YtStreamResponse): string | null {
   const progressive = (payload.formats || []).filter((f) => f.url);
-  const adaptive = (payload.adaptiveFormats || []).filter((f) => f.url);
 
   const score = (f: YtStreamFormat) => {
     const height = parseQualityHeight(f.qualityLabel || f.quality, f.height);
@@ -89,12 +95,6 @@ export function pickBestDownloadUrl(payload: YtStreamResponse): string | null {
 
   const anyProgressive = [...progressive].sort((a, b) => score(b) - score(a));
   if (anyProgressive[0]?.url) return anyProgressive[0].url;
-
-  // Last resort: adaptive video/mp4 (may be video-only).
-  const adaptiveVideo = adaptive
-    .filter((f) => (f.mimeType || "").toLowerCase().startsWith("video/"))
-    .sort((a, b) => score(b) - score(a));
-  if (adaptiveVideo[0]?.url) return adaptiveVideo[0].url;
 
   return null;
 }
@@ -182,10 +182,11 @@ export async function resolveYouTubeDownloadUrl(
   const videoUrl = pickBestDownloadUrl(payload);
   if (!videoUrl) {
     throw new YouTubeDownloadError(
-      "No downloadable YouTube stream URL was returned.",
+      "No downloadable YouTube stream with audio was returned.",
       "missing_formats",
       [
         "The video may be region-locked, private, or live-only",
+        "Only muxed audio+video streams are supported (adaptive-only is not)",
         "Try again later",
       ]
     );
@@ -194,11 +195,16 @@ export async function resolveYouTubeDownloadUrl(
   return { videoId, videoUrl, title: payload.title };
 }
 
-/** Resolve via YTStream RapidAPI, then fetch MP4 bytes. */
-export async function downloadYouTubeVideoBuffer(
+/** Resolve via YTStream RapidAPI, then fetch MP4 ReadableStream. */
+export async function getYouTubeVideoStream(
   contentLink: string
-): Promise<Buffer> {
-  const { videoId, videoUrl } = await resolveYouTubeDownloadUrl(contentLink);
+): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  contentLength: string | null;
+  videoId: string;
+  title?: string;
+}> {
+  const { videoId, videoUrl, title } = await resolveYouTubeDownloadUrl(contentLink);
 
   const videoResponse = await fetch(videoUrl, {
     headers: {
@@ -220,7 +226,37 @@ export async function downloadYouTubeVideoBuffer(
     );
   }
 
-  const buffer = Buffer.from(await videoResponse.arrayBuffer());
+  if (!videoResponse.body) {
+    throw new YouTubeDownloadError(
+      "YouTube returned an empty video stream.",
+      `Empty body for video ${videoId}`,
+      ["Try again in a few minutes"]
+    );
+  }
+
+  return {
+    stream: videoResponse.body,
+    contentLength: videoResponse.headers.get("content-length"),
+    videoId,
+    title,
+  };
+}
+
+/** Fetch YouTube video bytes via stream into a Buffer (for backwards compatibility). */
+export async function downloadYouTubeVideoBuffer(
+  contentLink: string
+): Promise<Buffer> {
+  const { stream, videoId } = await getYouTubeVideoStream(contentLink);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+
+  const buffer = Buffer.concat(chunks);
   if (buffer.length === 0) {
     throw new YouTubeDownloadError(
       "YouTube returned an empty video file.",
@@ -231,3 +267,14 @@ export async function downloadYouTubeVideoBuffer(
 
   return buffer;
 }
+
+/** Write YouTube video stream directly to a file path (for bulk ZIP downloads). */
+export async function downloadYouTubeVideoToFile(
+  contentLink: string,
+  outputPath: string
+): Promise<void> {
+  const { stream } = await getYouTubeVideoStream(contentLink);
+  const writeStream = createWriteStream(outputPath);
+  await pipeline(Readable.fromWeb(stream as any), writeStream);
+}
+
