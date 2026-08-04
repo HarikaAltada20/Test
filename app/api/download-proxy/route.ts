@@ -30,7 +30,10 @@ export async function GET(request: NextRequest) {
     const allowed =
       host.endsWith("cdninstagram.com") ||
       host.endsWith("fbcdn.net") ||
-      host.endsWith("instagram.com");
+      host.endsWith("instagram.com") ||
+      host.endsWith("googlevideo.com") ||
+      host.endsWith("ytimg.com") ||
+      host.includes("googleusercontent.com");
     if (!allowed) {
       return NextResponse.json(
         { error: "hostNotAllowed", message: "url host is not allowed" },

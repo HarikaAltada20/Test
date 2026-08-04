@@ -1334,6 +1334,8 @@ export function CreatorSubmissionsModal({
     submissionModerationUiAllowed(contest?.post_contest_status, {
       forBulkBar: true,
     });
+  const canBulkDownloadVideos =
+    !isPostCampaignView && (isInstagramContest || isYouTubeContest);
   const showRowModerationActions = (submission: (typeof submissions)[number]) =>
     !isPostCampaignView &&
     submissionModerationUiAllowed(contest?.post_contest_status, {
@@ -2035,24 +2037,6 @@ export function CreatorSubmissionsModal({
                           <Clock className="h-4 w-4 mr-1" />
                           Mark as Pending
                         </Button>
-                        {(isInstagramContest || isYouTubeContest) && (
-                          <Button
-                            size="sm"
-                            onClick={handleBulkDownloadReels}
-                            disabled={bulkDownloading || bulkStatusActionsBusy}
-                            loading={bulkDownloading}
-                            loadingText="Downloading ZIP..."
-                            className={cn(
-                              "h-8 shrink-0 whitespace-nowrap rounded-md",
-                              isDark
-                                ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
-                                : "bg-purple-600 text-white hover:bg-purple-700 ",
-                            )}
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            Download Videos (ZIP)
-                          </Button>
-                        )}
                         {bulkStatusActionsBusy && (
                           <span
                             className={cn(
@@ -2067,6 +2051,25 @@ export function CreatorSubmissionsModal({
                         )}
                       </>
                     )}
+
+                  {canBulkDownloadVideos && (
+                    <Button
+                      size="sm"
+                      onClick={handleBulkDownloadReels}
+                      disabled={bulkDownloading || bulkStatusActionsBusy}
+                      loading={bulkDownloading}
+                      loadingText="Downloading ZIP..."
+                      className={cn(
+                        "h-8 shrink-0 whitespace-nowrap rounded-md",
+                        isDark
+                          ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
+                          : "bg-purple-600 text-white hover:bg-purple-700 ",
+                      )}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download Videos (ZIP)
+                    </Button>
+                  )}
 
                   {showPaymentActions &&
                     contest?.post_contest_status !== "payouts_processed" &&

@@ -3055,6 +3055,13 @@ export default function ContestDetailClient({
       forBulkBar: true,
     });
 
+  const canNormalViewBulkDownload =
+    !isPostCampaignLeaderboard &&
+    (isInstagramContest || isYouTubeContest);
+
+  const showNormalViewSelectionUi =
+    showNormalViewBulkModeration || canNormalViewBulkDownload;
+
   const showSubmissionRowModeration = (
     submission: (typeof currentSubmissions)[number],
   ) =>
@@ -18796,7 +18803,7 @@ export default function ContestDetailClient({
                         />
                       )}
                       {isSubmissionTableView &&
-                        showNormalViewBulkModeration &&
+                        showNormalViewSelectionUi &&
                         normalViewSelectedSubmissions.size > 0 && (
                           <div
                             className={cn(
@@ -18829,6 +18836,8 @@ export default function ContestDetailClient({
                                   Clear
                                 </Button>
                               </div>
+                              {showNormalViewBulkModeration && (
+                                <>
                               <Button
                                 size="sm"
                                 onClick={() =>
@@ -18895,7 +18904,9 @@ export default function ContestDetailClient({
                                 <Clock className="h-4 w-4 mr-1" />
                                 Mark as Pending
                               </Button>
-              {(isInstagramContest || isYouTubeContest) && (
+                                </>
+                              )}
+              {canNormalViewBulkDownload && (
                 <Button
                                  size="sm"
                                  onClick={handleNormalViewBulkDownload}
@@ -18930,7 +18941,7 @@ export default function ContestDetailClient({
                                   : "bg-slate-100 hover:bg-slate-100 border-slate-200",
                               )}
                             >
-                              {showNormalViewBulkModeration && (
+                              {showNormalViewSelectionUi && (
                                 <TableHead className="w-12">
                                   <Checkbox
                                     checked={
@@ -20173,7 +20184,7 @@ export default function ContestDetailClient({
                                         : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400"),
                                   )}
                                 >
-                                  {showNormalViewBulkModeration && (
+                                  {showNormalViewSelectionUi && (
                                     <TableCell>
                                       <Checkbox
                                         checked={normalViewSelectedSubmissions.has(
