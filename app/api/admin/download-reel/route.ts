@@ -6,10 +6,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
-import {
-  checkInstagramCookieStatus,
-  prepareYouTubeCookies,
-} from "@/lib/instagram-cookies";
+import { prepareYouTubeCookies } from "@/lib/youtube-cookies";
 import {
   downloadInstagramVideoBuffer,
   InstagramDownloadError,
@@ -76,27 +73,7 @@ function getYtDlpBinaryPath(): string | undefined {
   return undefined;
 }
 
-// ⭐ ADDED: Instagram reliability info
-function getInstagramStatusMessage() {
-  return {
-    info: "Instagram videos are unreliable due to strict scraping protection.",
-    tips: [
-      "Use cookies from a logged-in browser.",
-      "Download only public reels.",
-      "Avoid sending too many requests (rate limiting).",
-      "Private/close-friends/region-locked posts will always fail.",
-    ],
-    cannotBypass: [
-      "Private accounts",
-      "Close friends stories",
-      "Region-locked while logged out",
-      "Deleted or expired posts",
-      "New platform protections until yt-dlp is updated",
-    ],
-  };
-}
-
-// ⭐ ADDED: Parse Instagram error messages to provide user-friendly feedback
+// ⭐ Parse Instagram error messages to provide user-friendly feedback
 function parseInstagramError(errorMessage: string): {
   userMessage: string;
   reason: string;
@@ -105,57 +82,24 @@ function parseInstagramError(errorMessage: string): {
   const errorLower = errorMessage.toLowerCase();
   const originalError = errorMessage;
 
-  // Invalid option or yt-dlp syntax error
-  if (
-    errorLower.includes("no such option") ||
-    errorLower.includes("unrecognized option")
-  ) {
-    return {
-      userMessage: "Internal download error: Downloader configuration issue.",
-      reason: originalError,
-      suggestions: [
-        "Check server logs for yt-dlp option errors",
-        "Report this issue to support",
-      ],
-    };
-  }
-
-  // Empty media response - video not accessible
   if (
     errorLower.includes("empty media response") ||
-    errorLower.includes("instagram sent an empty media response")
+    errorLower.includes("not found") ||
+    errorLower.includes("does not exist") ||
+    errorLower.includes("404")
   ) {
     return {
       userMessage:
-        "This Instagram video is not accessible. The post may be private, deleted, or restricted.",
-      reason: "Instagram returned empty media response",
+        "This Instagram video could not be found. It may have been deleted or restricted.",
+      reason: originalError,
       suggestions: [
-        "Check if the video is accessible in your browser while logged in",
-        "The post might be from a private account",
-        "The video may have been deleted or removed",
-        "Try updating your cookies.txt with fresh session cookies",
+        "Verify the video URL is correct",
+        "Check if the post still exists on Instagram",
+        "Only public videos can be downloaded",
       ],
     };
   }
 
-  // API access denied
-  if (
-    errorLower.includes("instagram api is not granting access") ||
-    errorLower.includes("api is not granting access")
-  ) {
-    return {
-      userMessage:
-        "Instagram is blocking access to this video. Authentication may have failed.",
-      reason: "Instagram API access denied",
-      suggestions: [
-        "Update your cookies.txt file with fresh cookies",
-        "Make sure you're logged into Instagram in your browser",
-        "The video might require special permissions",
-      ],
-    };
-  }
-
-  // Rate limiting
   if (
     errorLower.includes("rate limit") ||
     errorLower.includes("too many requests") ||
@@ -172,29 +116,21 @@ function parseInstagramError(errorMessage: string): {
     };
   }
 
-  // Video not found
   if (
-    errorLower.includes("not found") ||
-    errorLower.includes("does not exist") ||
-    errorLower.includes("404")
+    errorLower.includes("not a video") ||
+    errorLower.includes("notvideo")
   ) {
     return {
-      userMessage:
-        "This Instagram video could not be found. It may have been deleted.",
-      reason: "Video not found",
-      suggestions: [
-        "Verify the video URL is correct",
-        "Check if the post still exists on Instagram",
-        "The video may have been removed by the creator",
-      ],
+      userMessage: "This Instagram post is not a video.",
+      reason: originalError,
+      suggestions: ["Only Reels and video posts can be downloaded"],
     };
   }
 
-  // Private/restricted content
   if (
     errorLower.includes("private") ||
     errorLower.includes("restricted") ||
-    errorLower.includes("not accessible")
+    errorLower.includes("login required")
   ) {
     return {
       userMessage:
@@ -203,30 +139,10 @@ function parseInstagramError(errorMessage: string): {
       suggestions: [
         "Only public videos can be downloaded",
         "The account may be private",
-        "The post may be restricted to close friends",
       ],
     };
   }
 
-  // Explicit Cookie/authentication issues
-  if (
-    errorLower.includes("login required") ||
-    errorLower.includes("session expired") ||
-    errorLower.includes("invalid cookie")
-  ) {
-    return {
-      userMessage:
-        "Authentication failed. Your cookies may be expired or invalid.",
-      reason: "Authentication error",
-      suggestions: [
-        "Update your cookies.txt file with fresh cookies",
-        "Export new cookies from your browser while logged into Instagram",
-        "Check if your Instagram session is still active",
-      ],
-    };
-  }
-
-  // Generic error
   return {
     userMessage:
       "Unable to download this Instagram video. The video may not be accessible or Instagram may be blocking the request.",
@@ -234,7 +150,6 @@ function parseInstagramError(errorMessage: string): {
     suggestions: [
       "Verify the video URL is correct and accessible",
       "Check if the post is public and not deleted",
-      "Try updating your cookies.txt file",
       "Wait a few minutes and try again",
     ],
   };
@@ -290,7 +205,7 @@ function parseYouTubeError(errorMessage: string): {
       reason: "YouTube bot authentication required",
       suggestions: [
         "Export cookies from a logged-in YouTube browser session",
-        "Set the YOUTUBE_COOKIES or INSTAGRAM_COOKIES environment variable in Vercel",
+        "Set the YOUTUBE_COOKIES environment variable in Vercel",
         "Ensure cookies.txt contains valid youtube.com session cookies",
       ],
     };
@@ -321,7 +236,7 @@ function parseYouTubeError(errorMessage: string): {
         "This YouTube video is age-restricted and requires authenticated cookies to download.",
       reason: "Age restriction",
       suggestions: [
-        "Export cookies from an adult YouTube account and set YOUTUBE_COOKIES or INSTAGRAM_COOKIES env variable",
+        "Export cookies from an adult YouTube account and set YOUTUBE_COOKIES env variable",
       ],
     };
   }
@@ -332,13 +247,13 @@ function parseYouTubeError(errorMessage: string): {
     reason: errorMessage,
     suggestions: [
       "Verify the video link in your browser",
-      "Ensure valid cookies are supplied in environment variables (YOUTUBE_COOKIES / INSTAGRAM_COOKIES)",
+      "Ensure valid cookies are supplied in environment variables (YOUTUBE_COOKIES)",
       "Try again in a few minutes",
     ],
   };
 }
 
-// Cookie helpers live in lib/instagram-cookies.ts (DB-backed live session + unique temp files).
+// YouTube cookie helpers live in lib/youtube-cookies.ts
 
 function sanitizeFilename(filename: string): string {
   return filename
@@ -623,75 +538,24 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const submissionId = searchParams.get("submissionId");
-    const checkCookies = searchParams.get("checkCookies") === "true";
-    const testCookies = searchParams.get("testCookies") === "true";
+    const testDownload = searchParams.get("testDownload") === "true" || searchParams.get("testCookies") === "true";
     const testUrl = searchParams.get("testUrl");
 
     console.log(`[${requestId}] [DEBUG] Request params:`, {
       submissionId,
-      checkCookies,
-      testCookies,
+      testDownload,
       hasTestUrl: !!testUrl,
     });
 
-    // ⭐ ADDED: Endpoint to check cookie status
-    if (checkCookies) {
-      const cookieStatus = await checkInstagramCookieStatus();
-      const sourceLabel =
-        cookieStatus.source === "db"
-          ? "database (live refreshed session)"
-          : cookieStatus.source === "env"
-          ? "environment variable (INSTAGRAM_COOKIES)"
-          : cookieStatus.source === "file"
-          ? "local cookies file"
-          : "none (no cookies found)";
-
-      return NextResponse.json({
-        cookies: cookieStatus,
-        source: sourceLabel,
-        status: cookieStatus.valid
-          ? "valid"
-          : cookieStatus.exists
-          ? "invalid"
-          : "missing",
-        message: cookieStatus.valid
-          ? "✅ Cookies are valid and ready to use"
-          : cookieStatus.exists
-          ? `⚠️ Cookies file exists but has issues: ${
-              cookieStatus.error || "Invalid format"
-            }`
-          : "❌ Cookies not found. Upload via PUT /api/admin/instagram-cookies or set INSTAGRAM_COOKIES.",
-        recommendations: !cookieStatus.valid
-          ? [
-              cookieStatus.exists && !cookieStatus.hasSessionId
-                ? "Missing sessionid cookie - this is required for Instagram downloads"
-                : null,
-              cookieStatus.exists && !cookieStatus.hasCsrfToken
-                ? "Missing csrftoken cookie - this helps with authentication"
-                : null,
-              cookieStatus.expired
-                ? "Cookies have expired - update with fresh cookies from your browser"
-                : null,
-              cookieStatus.expiresSoon
-                ? "Cookies expire soon - consider updating them"
-                : null,
-              !cookieStatus.exists
-                ? "Use a dedicated IG account, export cookies, PUT /api/admin/instagram-cookies — then do not reuse that session in a browser"
-                : null,
-            ].filter(Boolean)
-          : [],
-      });
-    }
-
     // Test Instagram GraphQL download path with a real reel URL
-    if (testCookies) {
+    if (testDownload) {
       if (!testUrl) {
         return NextResponse.json(
           {
             success: false,
             message: "testUrl parameter is required for testing Instagram download",
             example:
-              "/api/admin/download-reel?testCookies=true&testUrl=https://www.instagram.com/reel/ABC123/",
+              "/api/admin/download-reel?testDownload=true&testUrl=https://www.instagram.com/reel/ABC123/",
           },
           { status: 400 }
         );

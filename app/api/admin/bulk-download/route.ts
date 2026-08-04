@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
 import { existsSync, statSync, chmodSync } from "fs";
 import { ZipArchive } from "archiver";
 import { PassThrough } from "stream";
-import { prepareYouTubeCookies } from "@/lib/instagram-cookies";
+import { prepareYouTubeCookies } from "@/lib/youtube-cookies";
 import {
   downloadInstagramVideoBuffer,
   InstagramDownloadError,
@@ -74,16 +74,10 @@ function parseInstagramError(errorMessage: string): {
   reason: string;
 } {
   const errorLower = errorMessage.toLowerCase();
-  if (errorLower.includes("empty media response") || errorLower.includes("instagram sent an empty media response")) {
+  if (errorLower.includes("empty media response") || errorLower.includes("not found") || errorLower.includes("404")) {
     return {
       userMessage: "This Instagram video is not accessible. The post may be private, deleted, or restricted.",
-      reason: "Instagram returned empty media response",
-    };
-  }
-  if (errorLower.includes("instagram api is not granting access") || errorLower.includes("api is not granting access")) {
-    return {
-      userMessage: "Instagram is blocking access to this video. Authentication may have failed.",
-      reason: "Instagram API access denied",
+      reason: "Instagram post not found or inaccessible",
     };
   }
   if (errorLower.includes("rate limit") || errorLower.includes("too many requests") || errorLower.includes("429")) {

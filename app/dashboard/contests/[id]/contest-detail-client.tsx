@@ -7682,88 +7682,6 @@ export default function ContestDetailClient({
     }
   };
 
-  // Check if running in development/localhost
-  const isDevelopment = () => {
-    if (typeof window === "undefined") return false;
-    return (
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname.includes("localhost")
-    );
-  };
-
-  // Check cookie status for Instagram downloads (development only)
-  const checkCookieStatus = async () => {
-    if (!isDevelopment()) {
-      console.log("🍪 [DEBUG] Not in development mode, skipping cookie check");
-      return null;
-    }
-
-    try {
-      console.log("🍪 [DEBUG] Checking cookie status...");
-      const response = await fetch(
-        `/api/admin/download-reel?checkCookies=true`,
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log("🍪 [DEBUG] Cookie status response:", data);
-        return data;
-      } else {
-        console.warn(
-          "🍪 [DEBUG] Cookie status check failed:",
-          response.status,
-          response.statusText,
-        );
-        const errorText = await response.text();
-        console.warn("🍪 [DEBUG] Error response:", errorText);
-      }
-    } catch (error) {
-      console.error("🍪 [DEBUG] Failed to check cookie status:", error);
-    }
-    return null;
-  };
-
-  // Log cookie information to console (development only)
-  const logCookieStatus = (cookieData: any, isInstagram: boolean) => {
-    console.log("🍪 [DEBUG] logCookieStatus called with:", {
-      cookieData,
-      isInstagram,
-      isDev: isDevelopment(),
-    });
-
-    if (!isDevelopment() || !isInstagram) {
-      console.log(
-        "🍪 [DEBUG] Skipping logCookieStatus - not dev or not Instagram",
-      );
-      return;
-    }
-
-    console.group("🍪 Instagram Cookie Status");
-    console.log("Source:", cookieData?.source || "unknown");
-    console.log("Status:", cookieData?.status || "unknown");
-    console.log("Message:", cookieData?.message || "N/A");
-
-    if (cookieData?.cookies) {
-      const cookies = cookieData.cookies;
-      console.log("Cookie Details:", {
-        exists: cookies.exists,
-        valid: cookies.valid,
-        hasSessionId: cookies.hasSessionId,
-        hasCsrfToken: cookies.hasCsrfToken,
-        expired: cookies.expired,
-        expiresSoon: cookies.expiresSoon,
-        path: cookies.path,
-        error: cookies.error,
-      });
-    }
-
-    if (cookieData?.recommendations && cookieData.recommendations.length > 0) {
-      console.warn("Recommendations:", cookieData.recommendations);
-    }
-    console.groupEnd();
-  };
-
   const handleDownloadReel = async (submissionId: string) => {
     const requestStartTime = Date.now();
     console.log(
@@ -7786,26 +7704,6 @@ export default function ContestDetailClient({
         isInstagram,
         platform: submission?.platform,
       });
-
-      // Check cookie status for Instagram downloads (development only)
-      if (isInstagram) {
-        console.log(
-          "🍪 [DOWNLOAD] [DEBUG] Instagram submission detected, checking cookies...",
-        );
-        const cookieData = await checkCookieStatus();
-        console.log("🍪 [DOWNLOAD] [DEBUG] Cookie data received:", cookieData);
-        if (cookieData) {
-          logCookieStatus(cookieData, isInstagram);
-        } else {
-          console.warn(
-            "🍪 [DOWNLOAD] [DEBUG] No cookie data returned from checkCookieStatus",
-          );
-        }
-      } else {
-        console.log(
-          "🍪 [DOWNLOAD] [DEBUG] Not an Instagram submission, skipping cookie check",
-        );
-      }
 
       toast({
         title: "Downloading...",
@@ -7830,21 +7728,6 @@ export default function ContestDetailClient({
 
       const contentType = response.headers.get("content-type");
       console.log(`[DOWNLOAD] [DEBUG] Content-Type: ${contentType}`);
-
-      // Log cookie status from response headers (development only)
-      if (isDevelopment() && isInstagram) {
-        const cookieStatus = response.headers.get("X-Cookie-Status");
-        const cookieWarning = response.headers.get("X-Cookie-Warning");
-        if (cookieStatus) {
-          console.log(
-            "🍪 [DOWNLOAD] Cookie Status from Response:",
-            cookieStatus,
-          );
-          if (cookieWarning) {
-            console.warn("⚠️ [DOWNLOAD] Cookie Warning:", cookieWarning);
-          }
-        }
-      }
 
       if (!response.ok || contentType?.includes("application/json")) {
         // Handle error response
