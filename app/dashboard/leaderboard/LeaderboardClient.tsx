@@ -127,6 +127,7 @@ export default function LeaderboardClient({
   const [avatarLoadErrors, setAvatarLoadErrors] = useState<
     Record<string, string>
   >({});
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Initialize mode state with proper detection to prevent flash
   const [mode, setMode] = useState<"light" | "dark">(() => {
     // Check if we're in browser environment
@@ -280,10 +281,19 @@ export default function LeaderboardClient({
       );
     };
   }, [mode]);
-  // Reset to page 1 when sortBy or platform changes
-  useEffect(() => {
+  const handleSortByChange = (value: SortBy) => {
+    setLoading(true);
+    setLeaders([]);
+    setSortBy(value);
     setCurrentPage(1);
-  }, [sortBy, platform]);
+  };
+
+  const handlePlatformChange = (value: PlatformFilter) => {
+    setLoading(true);
+    setLeaders([]);
+    setPlatform(value);
+    setCurrentPage(1);
+  };
 
   // Fetch static summary once on mount (always with platform="all")
   useEffect(() => {
@@ -291,11 +301,57 @@ export default function LeaderboardClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch leaderboard data
+  // Fetch leaderboard data; abort stale requests when filters change.
   useEffect(() => {
-    fetchLeaderboard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, platform, currentPage, limit]);
+    const controller = new AbortController();
+    let isActive = true;
+
+    const loadLeaderboard = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          sortBy,
+          platform,
+          page: currentPage.toString(),
+          limit: limit.toString(),
+        });
+        if (showAdminSummary) {
+          params.set("admin", "1");
+        }
+        const response = await fetch(`/api/creators/leaderboard?${params}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json();
+
+        if (!isActive) return;
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to fetch leaderboard");
+        }
+
+        setLeaders(data.leaders || []);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalItems(data.pagination?.totalItems || 0);
+        setSummary(data.summary || null);
+      } catch (err: any) {
+        if (!isActive || err?.name === "AbortError") return;
+        setError(err.message || "Failed to load leaderboard");
+        console.error("Error fetching leaderboard:", err);
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadLeaderboard();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [sortBy, platform, currentPage, limit, showAdminSummary, reloadNonce]);
 
   const fetchStaticSummary = async () => {
     try {
@@ -320,38 +376,6 @@ export default function LeaderboardClient({
     } catch (err: any) {
       console.error("Error fetching static summary:", err);
       // Don't set error state here to avoid blocking the UI
-    }
-  };
-
-  const fetchLeaderboard = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        sortBy,
-        platform,
-        page: currentPage.toString(),
-        limit: limit.toString(),
-      });
-      if (showAdminSummary) {
-        params.set("admin", "1");
-      }
-      const response = await fetch(`/api/creators/leaderboard?${params}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch leaderboard");
-      }
-
-      setLeaders(data.leaders || []);
-      setTotalPages(data.pagination?.totalPages || 1);
-      setTotalItems(data.pagination?.totalItems || 0);
-      setSummary(data.summary || null);
-    } catch (err: any) {
-      setError(err.message || "Failed to load leaderboard");
-      console.error("Error fetching leaderboard:", err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -763,7 +787,7 @@ export default function LeaderboardClient({
         >
           <Tabs
             value={sortBy}
-            onValueChange={(value) => setSortBy(value as SortBy)}
+            onValueChange={(value) => handleSortByChange(value as SortBy)}
           >
             <TabsList className="flex gap-1.5 sm:gap-2.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
               {sortOptions.map((option) => (
@@ -841,7 +865,7 @@ export default function LeaderboardClient({
                                 : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50",
                             )
                       }
-                      onClick={() => setPlatform("all")}
+                      onClick={() => handlePlatformChange("all")}
                     >
                       All
                     </Button>
@@ -859,7 +883,7 @@ export default function LeaderboardClient({
                                 : "text-red-600 hover:text-red-700 hover:bg-red-50",
                             )
                       }
-                      onClick={() => setPlatform("youtube")}
+                      onClick={() => handlePlatformChange("youtube")}
                     >
                       <Youtube className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
@@ -880,7 +904,7 @@ export default function LeaderboardClient({
                                 : "text-pink-600 hover:text-pink-700 hover:bg-pink-50",
                             )
                       }
-                      onClick={() => setPlatform("instagram")}
+                      onClick={() => handlePlatformChange("instagram")}
                     >
                       <Instagram className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
@@ -901,7 +925,7 @@ export default function LeaderboardClient({
                                 : "text-sky-600 hover:text-sky-700 hover:bg-sky-50",
                             )
                       }
-                      onClick={() => setPlatform("twitter")}
+                      onClick={() => handlePlatformChange("twitter")}
                     >
                       <Twitter className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
@@ -922,7 +946,7 @@ export default function LeaderboardClient({
                                 : "text-black hover:text-gray-700 hover:bg-gray-100",
                             )
                       }
-                      onClick={() => setPlatform("tiktok")}
+                      onClick={() => handlePlatformChange("tiktok")}
                     >
                       <SiTiktok className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
@@ -1016,7 +1040,7 @@ export default function LeaderboardClient({
                 </div>
                 <p className="text-destructive font-semibold mb-4">{error}</p>
                 <Button
-                  onClick={fetchLeaderboard}
+                  onClick={() => setReloadNonce((nonce) => nonce + 1)}
                   variant="outline"
                   className="hover:bg-violet-50 hover:border-violet-400 hover:text-violet-600"
                 >

@@ -156,7 +156,7 @@ export function getPlatformContestsCacheKey(platform: string): string {
  * Generate cache key for platform-specific submissions data
  */
 export function getPlatformSubmissionsCacheKey(platform: string): string {
-  return `leaderboard:platform:${platform}:submissions`;
+  return `leaderboard:platform:${platform}:submissions:v3`;
 }
 
 /**
