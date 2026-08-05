@@ -64,7 +64,10 @@ function isMissingPlatformMetricsRpc(error: { message?: string } | null): boolea
   );
 }
 
-/** Fallback when migration is not applied yet — paginates all submission rows. */
+/**
+ * Fallback when migration is not applied yet — paginates submission rows.
+ * Disabled in production unless ALLOW_LEADERBOARD_METRICS_FALLBACK=true.
+ */
 async function fetchPlatformSubmissionMetricsPaginated(
   supabase: SupabaseClient,
   platformValue: string,
@@ -76,6 +79,7 @@ async function fetchPlatformSubmissionMetricsPaginated(
   const creatorWinningsMap = new Map<string, number>();
   const creatorViewsMap = new Map<string, number>();
 
+  const normalizedPlatform = platformValue.trim().toLowerCase();
   let offset = 0;
   let page: {
     creator_id: string | null;
@@ -83,13 +87,15 @@ async function fetchPlatformSubmissionMetricsPaginated(
     status: string | null;
     earnings: number | null;
     views: number | null;
+    platform?: string | null;
   }[] = [];
 
   do {
+    // Case-insensitive match aligned with RPC lower(trim(platform)).
     const { data, error } = await supabase
       .from("submissions")
-      .select("creator_id, contest_id, status, earnings, views")
-      .eq("platform", platformValue)
+      .select("creator_id, contest_id, status, earnings, views, platform")
+      .ilike("platform", normalizedPlatform)
       .order("id", { ascending: true })
       .range(offset, offset + SUBMISSIONS_PAGE_SIZE - 1);
 
@@ -100,7 +106,11 @@ async function fetchPlatformSubmissionMetricsPaginated(
     }
 
     page = data || [];
-    page.forEach((sub) => {
+    // ilike can match unexpected patterns; enforce exact trimmed lowercase equality.
+    const matched = page.filter(
+      (sub) => (sub.platform || "").trim().toLowerCase() === normalizedPlatform,
+    );
+    matched.forEach((sub) => {
       const creatorId = sub.creator_id;
       const contestId = sub.contest_id;
       if (!creatorId || !contestId) return;
@@ -209,9 +219,20 @@ export async function fetchPlatformSubmissionMetrics(
 
   if (error) {
     if (isMissingPlatformMetricsRpc(error)) {
-      console.warn(
-        `[leaderboard] get_creator_platform_leaderboard_metrics missing; using paginated fallback. Apply migration 20260805_creator_platform_leaderboard_metrics_rpc.sql.`,
+      const allowFallback =
+        process.env.ALLOW_LEADERBOARD_METRICS_FALLBACK === "true" ||
+        process.env.NODE_ENV !== "production";
+
+      console.error(
+        `[leaderboard] get_creator_platform_leaderboard_metrics missing. Apply migration 20260805_creator_platform_leaderboard_metrics_rpc.sql. fallbackAllowed=${allowFallback}`,
       );
+
+      if (!allowFallback) {
+        throw new Error(
+          "Platform leaderboard metrics RPC is not deployed. Apply migration 20260805_creator_platform_leaderboard_metrics_rpc.sql before serving platform tabs in production.",
+        );
+      }
+
       return fetchPlatformSubmissionMetricsPaginated(supabase, platformValue);
     }
 

@@ -97,7 +97,13 @@ import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { formatLocalDateTime, formatTimeAgo, cn } from "@/lib/utils";
+import { formatLocalDateTime, formatTimeAgo, cn, sanitizeFilename } from "@/lib/utils";
+import {
+  canBulkDownloadContestVideos,
+  canDownloadSubmissionVideo,
+  downloadSubmissionVideosInChunks,
+  MAX_BULK_VIDEO_DOWNLOADS,
+} from "@/lib/video-download-ui";
 import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
@@ -1639,12 +1645,6 @@ export default function ContestDetailClient({
   const isTwitterPlatform =
     currentContest.platform?.toLowerCase() === "twitter" ||
     currentContest.platform?.toLowerCase() === "x";
-  const isInstagramContest =
-    currentContest?.platform?.toLowerCase().includes("instagram") ?? false;
-  const isYouTubeContest =
-    currentContest?.platform?.toLowerCase().includes("youtube") ?? false;
-  const isTikTokContest =
-    currentContest?.platform?.toLowerCase().includes("tiktok") ?? false;
   const isTwitterCpmCampaign =
     isCpmContestType(currentContest?.contest_type) &&
     isTwitterPlatform &&
@@ -3057,7 +3057,7 @@ export default function ContestDetailClient({
 
   const canNormalViewBulkDownload =
     !isPostCampaignLeaderboard &&
-    (isInstagramContest || isYouTubeContest);
+    canBulkDownloadContestVideos(currentContest?.platform);
 
   const showNormalViewSelectionUi =
     showNormalViewBulkModeration || canNormalViewBulkDownload;
@@ -3324,51 +3324,47 @@ export default function ContestDetailClient({
       return;
     }
 
+    const submissionIds = Array.from(normalViewSelectedSubmissions);
     setNormalViewBulkDownloading(true);
     toast({
       title: "Bulk Download Started",
-      description: "Compressing and zipping selected videos. Please wait...",
+      description:
+        submissionIds.length > MAX_BULK_VIDEO_DOWNLOADS
+          ? `Downloading ${submissionIds.length} videos in automatic batches of ${MAX_BULK_VIDEO_DOWNLOADS}...`
+          : "Compressing and zipping selected videos. Please wait...",
     });
 
-    const sanitizeFilename = (filename: string): string => {
-      return filename
-        .replace(/[^a-z0-9]/gi, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_|_$/g, "")
-        .substring(0, 100);
-    };
-
     try {
-      const response = await fetch("/api/admin/bulk-download", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const result = await downloadSubmissionVideosInChunks({
+        submissionIds,
+        fileNamePrefix: `bulk_submissions_${sanitizeFilename(currentContest.title || "contest")}`,
+        onProgress: ({ chunkIndex, totalChunks, totalVideos }) => {
+          toast({
+            title: `Downloading batch ${chunkIndex} of ${totalChunks}`,
+            description: `Processing ${totalVideos} selected videos...`,
+          });
         },
-        body: JSON.stringify({
-          submissionIds: Array.from(normalViewSelectedSubmissions),
-        }),
       });
 
-      const contentType = response.headers.get("content-type");
-
-      if (!response.ok || contentType?.includes("application/json")) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to download ZIP archive.");
+      if (result.succeededChunks === 0) {
+        throw new Error(result.errors[0] || "Failed to download ZIP archives.");
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `bulk_submissions_${sanitizeFilename(currentContest.title || "contest")}_${Date.now()}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (result.failedChunks > 0) {
+        toast({
+          title: "Bulk download partially completed",
+          description: `${result.succeededChunks}/${result.totalChunks} ZIP batches downloaded. ${result.errors[0] || "Some batches failed."}`,
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "Success",
-        description: "ZIP file containing videos downloaded successfully.",
+        description:
+          result.totalChunks > 1
+            ? `Downloaded ${result.totalVideos} videos as ${result.totalChunks} ZIP files.`
+            : "ZIP file containing videos downloaded successfully.",
       });
     } catch (error: any) {
       console.error("Bulk download failed:", error);
@@ -18915,7 +18911,7 @@ export default function ContestDetailClient({
                                    normalViewBulkStatusActionsBusy
                                  }
                                  loading={normalViewBulkDownloading}
-                                 loadingText="Downloading ZIP..."
+                                 loadingText="Downloading batches..."
                                  className={cn(
                                    "h-8 shrink-0 whitespace-nowrap rounded-md",
                                    isDark
@@ -20298,7 +20294,11 @@ export default function ContestDetailClient({
                                               <PlayCircle className="h-3 w-3" />
                                               View Content
                                             </a>
-                                            {((submission.platform || contest?.platform || "").toLowerCase().includes("instagram") || (submission.platform || contest?.platform || "").toLowerCase().includes("youtube") || /youtu\.?be/i.test(submission.content_link || "")) && (!((submission.platform || contest?.platform || "").toLowerCase().includes("tiktok"))) && (
+                                            {canDownloadSubmissionVideo({
+                                              platform: submission.platform,
+                                              contestPlatform: contest?.platform,
+                                              contentLink: submission.content_link,
+                                            }) && (
                                               <button
                                                 onClick={() =>
                                                   handleDownloadReel(

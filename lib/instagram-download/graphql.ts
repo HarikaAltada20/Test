@@ -84,12 +84,26 @@ function generateRequestBody(shortcode: string): string {
   return params.toString();
 }
 
-function extractCsrfToken(setCookieHeaders: string[]): string | null {
+function extractCsrfTokenFromSetCookie(setCookieHeaders: string[]): string | null {
   for (const header of setCookieHeaders) {
     const match = header.match(/(?:^|,\s*)csrftoken=([^;]+)/i);
     if (match?.[1]) {
       return match[1];
     }
+  }
+  return null;
+}
+
+/** Serverless environments often omit Set-Cookie; HTML still embeds csrf_token. */
+function extractCsrfTokenFromHtml(html: string): string | null {
+  const patterns = [
+    /"csrf_token"\s*:\s*"([^"]+)"/i,
+    /csrf_token["']?\s*[:=]\s*["']([^"']+)["']/i,
+    /name="csrfmiddlewaretoken"\s+value="([^"]+)"/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) return match[1];
   }
   return null;
 }
@@ -107,7 +121,15 @@ async function getCsrfToken(): Promise<string> {
       ? response.headers.getSetCookie()
       : [response.headers.get("set-cookie") ?? ""];
 
-  return extractCsrfToken(setCookieHeaders) ?? "";
+  const fromCookie = extractCsrfTokenFromSetCookie(setCookieHeaders);
+  if (fromCookie) return fromCookie;
+
+  try {
+    const html = await response.text();
+    return extractCsrfTokenFromHtml(html) ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function hasVideoUrl(media: InstagramMediaItem | null | undefined): boolean {

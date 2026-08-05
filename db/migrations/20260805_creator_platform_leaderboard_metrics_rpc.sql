@@ -1,11 +1,11 @@
 -- =============================================================================
-
-
-
---   Total winnings on platform tabs must come from submissions.earnings (paid rows)
---   filtered by submissions.platform. Scanning rows in the app does not scale.
+-- Platform leaderboard metrics (YouTube / Instagram / TikTok tabs)
 --
-
+-- Total winnings on platform tabs must come from submissions.earnings (paid rows)
+-- filtered by submissions.platform. Scanning rows in the app does not scale.
+--
+-- Apply in Supabase SQL Editor (or your migration runner) BEFORE deploying the
+-- app that calls get_creator_platform_leaderboard_metrics.
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.get_creator_platform_leaderboard_metrics(
@@ -44,6 +44,13 @@ REVOKE ALL ON FUNCTION public.get_creator_platform_leaderboard_metrics(text) FRO
 GRANT EXECUTE ON FUNCTION public.get_creator_platform_leaderboard_metrics(text)
   TO anon, authenticated, service_role;
 
+-- Expression index matches the RPC predicate (lower(trim(platform))).
+CREATE INDEX IF NOT EXISTS idx_submissions_platform_creator_leaderboard_norm
+ON public.submissions ((lower(trim(platform))), creator_id)
+WHERE creator_id IS NOT NULL
+  AND contest_id IS NOT NULL;
+
+-- Keep a plain composite for equality filters that use stored platform casing.
 CREATE INDEX IF NOT EXISTS idx_submissions_platform_creator_leaderboard
 ON public.submissions (platform, creator_id)
 WHERE creator_id IS NOT NULL

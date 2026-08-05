@@ -190,3 +190,20 @@ export function sanitizeFilename(filename: string): string {
     .replace(/^_|_$/g, "")
     .substring(0, 100);
 }
+
+/**
+ * Filename based on view count so downloaded videos sort by popularity.
+ * Zero-pads so lexical sort matches numeric order (e.g. 999 < 1500).
+ * Optional suffix disambiguates equal view counts in the same ZIP.
+ */
+export function buildViewsBasedVideoFilename(
+  views: number | null | undefined,
+  uniqueSuffix?: string | null,
+): string {
+  const n = Math.max(0, Math.floor(Number(views) || 0));
+  const padded = String(n).padStart(12, "0");
+  if (uniqueSuffix) {
+    return sanitizeFilename(`${padded}_${String(uniqueSuffix).slice(0, 12)}`);
+  }
+  return padded;
+}

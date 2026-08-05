@@ -55,6 +55,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn, sanitizeFilename } from "@/lib/utils";
+import {
+  canBulkDownloadContestVideos,
+  canDownloadSubmissionVideo,
+  downloadSubmissionVideosInChunks,
+  MAX_BULK_VIDEO_DOWNLOADS,
+} from "@/lib/video-download-ui";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -404,44 +410,48 @@ export function CreatorSubmissionsModal({
       return;
     }
 
+    const submissionIds = Array.from(selectedSubmissions);
     setBulkDownloading(true);
 
     toast({
       title: "Bulk Download Started",
-      description: "Compressing and zipping selected videos. Please wait...",
+      description:
+        submissionIds.length > MAX_BULK_VIDEO_DOWNLOADS
+          ? `Downloading ${submissionIds.length} videos in automatic batches of ${MAX_BULK_VIDEO_DOWNLOADS}...`
+          : "Compressing and zipping selected videos. Please wait...",
     });
 
     try {
-      const response = await fetch("/api/admin/bulk-download", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const result = await downloadSubmissionVideosInChunks({
+        submissionIds,
+        fileNamePrefix: `bulk_submissions_${sanitizeFilename(contest.title || "contest")}`,
+        onProgress: ({ chunkIndex, totalChunks, totalVideos }) => {
+          toast({
+            title: `Downloading batch ${chunkIndex} of ${totalChunks}`,
+            description: `Processing ${totalVideos} selected videos...`,
+          });
         },
-        body: JSON.stringify({
-          submissionIds: Array.from(selectedSubmissions),
-        }),
       });
 
-      const contentType = response.headers.get("content-type");
-
-      if (!response.ok || contentType?.includes("application/json")) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to download ZIP archive.");
+      if (result.succeededChunks === 0) {
+        throw new Error(result.errors[0] || "Failed to download ZIP archives.");
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `bulk_submissions_${sanitizeFilename(contest.title || "contest")}_${Date.now()}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      if (result.failedChunks > 0) {
+        toast({
+          title: "Bulk download partially completed",
+          description: `${result.succeededChunks}/${result.totalChunks} ZIP batches downloaded. ${result.errors[0] || "Some batches failed."}`,
+          variant: "destructive",
+        });
+        return;
+      }
 
       toast({
         title: "Success",
-        description: "ZIP file containing videos downloaded successfully.",
+        description:
+          result.totalChunks > 1
+            ? `Downloaded ${result.totalVideos} videos as ${result.totalChunks} ZIP files.`
+            : "ZIP file containing videos downloaded successfully.",
       });
     } catch (error: any) {
       console.error("Bulk download failed:", error);
@@ -1335,7 +1345,7 @@ export function CreatorSubmissionsModal({
       forBulkBar: true,
     });
   const canBulkDownloadVideos =
-    !isPostCampaignView && (isInstagramContest || isYouTubeContest);
+    !isPostCampaignView && canBulkDownloadContestVideos(contest?.platform);
   const showRowModerationActions = (submission: (typeof submissions)[number]) =>
     !isPostCampaignView &&
     submissionModerationUiAllowed(contest?.post_contest_status, {
@@ -2058,7 +2068,7 @@ export function CreatorSubmissionsModal({
                       onClick={handleBulkDownloadReels}
                       disabled={bulkDownloading || bulkStatusActionsBusy}
                       loading={bulkDownloading}
-                      loadingText="Downloading ZIP..."
+                      loadingText="Downloading batches..."
                       className={cn(
                         "h-8 shrink-0 whitespace-nowrap rounded-md",
                         isDark
@@ -4027,7 +4037,11 @@ export function CreatorSubmissionsModal({
                                           View Content
                                           <ExternalLink className="h-3 w-3" />
                                         </a>
-                                        {((submission.platform || contest?.platform || "").toLowerCase().includes("instagram") || (submission.platform || contest?.platform || "").toLowerCase().includes("youtube") || /youtu\.?be/i.test(submission.content_link || "")) && (!((submission.platform || contest?.platform || "").toLowerCase().includes("tiktok"))) && (
+                                        {canDownloadSubmissionVideo({
+                                          platform: submission.platform,
+                                          contestPlatform: contest?.platform,
+                                          contentLink: submission.content_link,
+                                        }) && (
                                            <button
                                              onClick={() =>
                                                handleDownloadReel(submission.id)
@@ -5091,7 +5105,11 @@ export function CreatorSubmissionsModal({
                                         View Content
                                       </a>
                                     </DropdownMenuItem>
-                                    {((submission.platform || contest?.platform || "").toLowerCase().includes("instagram") || (submission.platform || contest?.platform || "").toLowerCase().includes("youtube") || /youtu\.?be/i.test(submission.content_link || "")) && (!((submission.platform || contest?.platform || "").toLowerCase().includes("tiktok"))) && (
+                                    {canDownloadSubmissionVideo({
+                                      platform: submission.platform,
+                                      contestPlatform: contest?.platform,
+                                      contentLink: submission.content_link,
+                                    }) && (
                                        <DropdownMenuItem
                                          onClick={() =>
                                            handleDownloadReel(submission.id)

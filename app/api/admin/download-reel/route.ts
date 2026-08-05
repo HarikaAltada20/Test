@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
 import { randomUUID } from "crypto";
 import {
   getInstagramVideoStream,
@@ -9,6 +8,12 @@ import {
   getYouTubeVideoStream,
   YouTubeDownloadError,
 } from "@/lib/youtube-download/ytstream";
+import {
+  isAdminDownloadUser,
+  submissionOwnedByDownloadUser,
+  verifyAdminOrBrandDownloadAccess,
+} from "@/lib/video-download-auth";
+import { buildViewsBasedVideoFilename } from "@/lib/utils";
 
 function parseInstagramError(errorMessage: string): {
   userMessage: string;
@@ -150,14 +155,6 @@ function parseYouTubeError(errorMessage: string): {
   };
 }
 
-function sanitizeFilename(filename: string): string {
-  return filename
-    .replace(/[^a-z0-9]/gi, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "")
-    .substring(0, 200);
-}
-
 // ---------------------------
 // YOUTUBE DOWNLOAD (YTStream RapidAPI)
 // ---------------------------
@@ -246,20 +243,6 @@ async function downloadInstagramVideoStream(url: string): Promise<{
 // MAIN GET HANDLER
 // ---------------------------
 
-async function verifyAdminOrBrandAccess() {
-  const supabase = await createClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return { allowed: false, user: null };
-  const { data: userData } = await supabase
-    .from("users")
-    .select("user_type, email")
-    .eq("id", user.id)
-    .single();
-  const allowed =
-    userData?.user_type === "admin" || userData?.user_type === "advertiser";
-  return { allowed, user: allowed ? { id: user.id, email: userData?.email, user_type: userData?.user_type } : null };
-}
-
 export async function GET(request: Request) {
   const startTime = Date.now();
   const requestId = randomUUID();
@@ -267,15 +250,16 @@ export async function GET(request: Request) {
   try {
     console.log(`[${requestId}] [DEBUG] Download reel request started`);
 
-    const { allowed } = await verifyAdminOrBrandAccess();
-    if (!allowed) {
+    const access = await verifyAdminOrBrandDownloadAccess();
+    if (!access.allowed) {
       console.log(`[${requestId}] [DEBUG] Access denied`);
       return NextResponse.json(
-        { error: "Admin or brand access required" },
+        { error: access.error || "Admin or brand access required" },
         { status: 403 }
       );
     }
-    console.log(`[${requestId}] [DEBUG] Access verified (admin or brand)`);
+    const { user, supabase } = access;
+    console.log(`[${requestId}] [DEBUG] Access verified (${user.user_type})`);
 
     const { searchParams } = new URL(request.url);
     const submissionId = searchParams.get("submissionId");
@@ -288,8 +272,15 @@ export async function GET(request: Request) {
       hasTestUrl: !!testUrl,
     });
 
-    // Test Instagram GraphQL download path with a real reel URL
+    // Test Instagram GraphQL download path — admin only (arbitrary URL proxy).
     if (testDownload) {
+      if (!isAdminDownloadUser(user)) {
+        return NextResponse.json(
+          { error: "Admin access required for download tests" },
+          { status: 403 }
+        );
+      }
+
       if (!testUrl) {
         return NextResponse.json(
           {
@@ -366,25 +357,6 @@ export async function GET(request: Request) {
     console.log(
       `[${requestId}] [DEBUG] Fetching submission from database: ${submissionId}`
     );
-    let supabase;
-    try {
-      supabase = await createClient();
-      console.log(
-        `[${requestId}] [DEBUG] Supabase client created successfully`
-      );
-    } catch (clientError: any) {
-      console.error(
-        `[${requestId}] [ERROR] Failed to create Supabase client:`,
-        {
-          message: clientError.message,
-          stack: clientError.stack,
-        }
-      );
-      return NextResponse.json(
-        { error: "Database connection failed" },
-        { status: 500 }
-      );
-    }
 
     const { data: submission, error: submissionError } = await supabase
       .from("submissions")
@@ -393,7 +365,8 @@ export async function GET(request: Request) {
         id,
         content_link,
         platform,
-        contests!inner(id, title),
+        views,
+        contests!inner(id, title, advertiser_id),
         users!creator_id(username)
       `
       )
@@ -423,6 +396,18 @@ export async function GET(request: Request) {
       );
     }
 
+    const advertiserId = (submission.contests as { advertiser_id?: string } | null)
+      ?.advertiser_id;
+    if (!submissionOwnedByDownloadUser(user, advertiserId)) {
+      console.log(
+        `[${requestId}] [DEBUG] Advertiser ${user.id} denied access to submission ${submissionId}`
+      );
+      return NextResponse.json(
+        { error: "You can only download submissions from your own contests" },
+        { status: 403 }
+      );
+    }
+
     console.log(`[${requestId}] [DEBUG] Submission found:`, {
       id: submission.id,
       contentLink: submission.content_link,
@@ -432,6 +417,13 @@ export async function GET(request: Request) {
     });
 
     const contentLink = submission.content_link;
+    if (!contentLink || typeof contentLink !== "string") {
+      return NextResponse.json(
+        { error: "Submission has no downloadable content link" },
+        { status: 400 }
+      );
+    }
+
     const isInstagram = contentLink.includes("instagram.com");
     const isYouTube =
       contentLink.includes("youtube.com") || contentLink.includes("youtu.be");
@@ -450,11 +442,9 @@ export async function GET(request: Request) {
       );
     }
 
-    const username = (submission.users as any)?.username || "unknown";
-    const contestTitle = (submission.contests as any)?.title || "contest";
-
-    const filename = sanitizeFilename(`${username}_${contestTitle}`);
-    console.log(`[${requestId}] [DEBUG] Generated filename: ${filename}`);
+    // Name file by views so downloads sort/find easily by popularity.
+    const filename = buildViewsBasedVideoFilename(submission.views);
+    console.log(`[${requestId}] [DEBUG] Generated filename: ${filename} (views=${submission.views})`);
 
     try {
       let videoStream: ReadableStream<Uint8Array>;
