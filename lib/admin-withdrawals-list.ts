@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type WithdrawalsListTab =
   | "all"
   | "pending"
+  | "in_review"
   | "paid"
   | "rejected"
   | "approved"
@@ -20,6 +21,7 @@ export function parseWithdrawalsTab(raw: string | null): WithdrawalsListTab {
   const v = (raw || "all").toLowerCase();
   if (
     v === "pending" ||
+    v === "in_review" ||
     v === "paid" ||
     v === "rejected" ||
     v === "approved" ||
@@ -82,7 +84,9 @@ export function applyWithdrawalsTabFilter(
 ) {
   switch (tab) {
     case "pending":
-      return q.in("status", ["pending", "in_review"]);
+      return q.eq("status", "pending");
+    case "in_review":
+      return q.eq("status", "in_review");
     case "paid":
       return q.eq("status", "processed");
     case "rejected":

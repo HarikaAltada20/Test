@@ -11,7 +11,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className="toaster group pointer-events-auto"
+      // Above modal overlays (z-50) so toasts remain visible and clickable
+      style={{ zIndex: 100 }}
       toastOptions={{
         classNames: {
           toast:

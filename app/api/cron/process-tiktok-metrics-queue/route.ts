@@ -20,6 +20,7 @@ import {
   triggerProcessTikTokMetricsQueue,
 } from "@/lib/qstash";
 import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -277,6 +278,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
 
     if (!isPostCampaignTarget) {
       await refreshContestStats(job.contestId);
+      await persistContestBudgetSpent(job.contestId, supabaseAdmin);
     }
   }
 

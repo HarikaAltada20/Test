@@ -17,6 +17,7 @@ import {
 import { updateCpmContestBudgets } from "@/lib/instagram-insights";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import {
   authorizeProcessInstagramInsightsQueue,
   isQStashEnabled,
@@ -275,6 +276,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     if (!isPostCampaignTarget) {
       await refreshContestStats(job.contestId);
       await updateCpmContestBudgets(supabaseAdmin, job.contestId);
+      await persistContestBudgetSpent(job.contestId, supabaseAdmin);
       revalidateLeaderboardCache(job.contestId);
     } else {
       console.info(

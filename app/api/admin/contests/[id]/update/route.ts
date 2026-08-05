@@ -9,6 +9,8 @@ import {
   type CreatorRequirementFieldInput,
 } from "@/lib/contest-creator-requirements-validation";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
+import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
+import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export async function POST(
   request: Request,
@@ -219,6 +221,20 @@ export async function POST(
       }
     }
 
+    // Edit forms rebuild nested contest config without budget_spent; keep
+    // persisted spend so list Budget Trackers do not flash/stay at $0.
+    if (updateData.contest_based_details !== undefined) {
+      const { data: existingForSpend } = await admin
+        .from("contests")
+        .select("contest_based_details")
+        .eq("id", contestId)
+        .maybeSingle();
+      updateData.contest_based_details = preserveExistingBudgetSpentFields(
+        updateData.contest_based_details,
+        existingForSpend?.contest_based_details,
+      );
+    }
+
     const { data, error } = await admin
       .from("contests")
       .update(updateData)
@@ -261,6 +277,16 @@ export async function POST(
         );
         // Don't fail the request if sync fails
       }
+
+      // Recalculate and persist spend so list cards match live submissions.
+      schedulePersistContestBudgetSpent(contestId);
+    } else if (
+      updateData.start_date !== undefined ||
+      updateData.end_date !== undefined
+    ) {
+      // Dates-only saves invalidate list cache; heal any missing budget_spent
+      // left behind by older full-edit wipes.
+      schedulePersistContestBudgetSpent(contestId);
     }
 
     const touchesVisibility =

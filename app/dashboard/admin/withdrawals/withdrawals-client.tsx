@@ -54,7 +54,6 @@ import {
   Wallet,
   PauseCircle,
   ShieldOff,
-  ClipboardCheck,
   RotateCcw,
   MoreVertical,
   Copy,
@@ -161,6 +160,7 @@ export default function WithdrawalsClient({
   const [totalsFromApi, setTotalsFromApi] = useState<{
     all: number;
     pending: number;
+    in_review: number;
     approved: number;
     paid: number;
     rejected: number;
@@ -170,6 +170,7 @@ export default function WithdrawalsClient({
   const [statusCountsFromApi, setStatusCountsFromApi] = useState<{
     all: number;
     pending: number;
+    in_review: number;
     approved: number;
     paid: number;
     rejected: number;
@@ -215,24 +216,47 @@ export default function WithdrawalsClient({
   const [proofRemoving, setProofRemoving] = useState(false);
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [metadataDirty, setMetadataDirty] = useState(false);
+  const [metadataSaveMsg, setMetadataSaveMsg] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkApproving, setBulkApproving] = useState(false);
   const proofFileInputRef = useRef<HTMLInputElement>(null);
+  const metadataSaveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
-// Get theme from parent layout instead of managing independent state
-const [isDark, setIsDark] = useState<boolean>(() => {
-  if (typeof window !== "undefined") {
-    // Check data-mode attribute from parent layout
-    const modeElement = document.querySelector("[data-mode]");
-    if (modeElement) {
-      const dataMode = modeElement.getAttribute("data-mode");
-      return dataMode === "dark";
+  /** Prefer top toasts while the details modal is open so they don't cover footer actions. */
+  const notify = useCallback(
+    (
+      type: "success" | "error",
+      message: string,
+      opts?: { duration?: number },
+    ) => {
+      const position = detailsOpen ? "top-center" : undefined;
+      if (type === "success") {
+        toast.success(message, { position, duration: opts?.duration ?? 2500 });
+      } else {
+        toast.error(message, { position, duration: opts?.duration });
+      }
+    },
+    [detailsOpen],
+  );
+
+  // Get theme from parent layout instead of managing independent state
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      // Check data-mode attribute from parent layout
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
+      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
     }
-    // Fallback to data-theme attribute
-    const themeElement = document.documentElement;
-    const dataTheme = themeElement.getAttribute("data-theme");
-    return dataTheme === "dark";
-  }
-  return false; // Default to light mode
-});
+    return false; // Default to light mode
+  });
 
 
   const totals = useMemo(() => {
@@ -240,8 +264,9 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     const sumCash = (list: Request[]) =>
       list.reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
     const all = sumCash(requests);
-    const pending = sumCash(
-      requests.filter((r) => r.status === "pending" || r.status === "in_review")
+    const pending = sumCash(requests.filter((r) => r.status === "pending"));
+    const in_review = sumCash(
+      requests.filter((r) => r.status === "in_review"),
     );
     const approved = sumCash(requests.filter((r) => r.status === "approved"));
     const paid = sumCash(requests.filter((r) => r.status === "processed"));
@@ -250,7 +275,16 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     );
     const forfeited = sumCash(requests.filter((r) => r.status === "forfeited"));
     const failed = sumCash(requests.filter((r) => r.status === "failed"));
-    return { all, pending, approved, paid, rejected, forfeited, failed };
+    return {
+      all,
+      pending,
+      in_review,
+      approved,
+      paid,
+      rejected,
+      forfeited,
+      failed,
+    };
   }, [requests, totalsFromApi]);
 
   const filterFromMs = filterRange.from.getTime();
@@ -308,8 +342,21 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     void reloadWithdrawals();
   }, [reloadWithdrawals]);
 
-   // Watch for theme changes from parent layout
-   useEffect(() => {
+  // Clear row selection when the list context changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [selectedTab, page, pageSize, filterFromMs, filterToMs, sortKey, sortOrder]);
+
+  useEffect(() => {
+    return () => {
+      if (metadataSaveMsgTimer.current) {
+        clearTimeout(metadataSaveMsgTimer.current);
+      }
+    };
+  }, []);
+
+  // Watch for theme changes from parent layout
+  useEffect(() => {
     const checkTheme = () => {
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
@@ -386,6 +433,22 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     }
   };
 
+  const tabForStatus = (status: string): string | null => {
+    if (status === "pending") return "pending";
+    if (status === "in_review") return "in_review";
+    if (status === "approved") return "approved";
+    if (status === "processed") return "paid";
+    if (status === "rejected" || status === "cancelled") return "rejected";
+    if (status === "forfeited") return "forfeited";
+    if (status === "failed") return "failed";
+    return null;
+  };
+
+  const statusMatchesTab = (status: string, tab: string) => {
+    if (tab === "all") return true;
+    return tabForStatus(status) === tab;
+  };
+
   const updateStatus = async (
     id: string,
     newStatus: string,
@@ -398,34 +461,84 @@ const [isDark, setIsDark] = useState<boolean>(() => {
   ) => {
     try {
       setUpdating(true);
+      const body: Record<string, string> = { status: newStatus };
+      if (typeof extras?.transaction_reference === "string") {
+        body.transaction_reference = extras.transaction_reference;
+      }
+      if (typeof extras?.admin_notes === "string") {
+        body.admin_notes = extras.admin_notes;
+      }
+      if (typeof extras?.in_review_reason === "string") {
+        body.in_review_reason = extras.in_review_reason;
+      }
       const res = await fetch(`/api/admin/withdrawals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, ...(extras || {}) }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(await res.text());
       setRequests((prev) =>
         prev.map((r) =>
           r.id === id
             ? {
-                ...r,
-                status: newStatus,
-                transaction_reference:
-                  extras?.transaction_reference ?? r.transaction_reference,
-                admin_notes: extras?.admin_notes ?? r.admin_notes,
-                processed_at:
-                  newStatus === "processed"
-                    ? new Date().toISOString()
-                    : r.processed_at,
-              }
+              ...r,
+              status: newStatus,
+              transaction_reference:
+                extras?.transaction_reference ?? r.transaction_reference,
+              admin_notes: extras?.admin_notes ?? r.admin_notes,
+              processed_at:
+                newStatus === "processed"
+                  ? new Date().toISOString()
+                  : r.processed_at,
+            }
             : r
         )
       );
-      toast.success(`Status updated to ${newStatus.replace("_", " ")}`);
+      setActive((prev) =>
+        prev && prev.id === id
+          ? {
+            ...prev,
+            status: newStatus,
+            transaction_reference:
+              extras?.transaction_reference ?? prev.transaction_reference,
+            admin_notes: extras?.admin_notes ?? prev.admin_notes,
+            processed_at:
+              newStatus === "processed"
+                ? new Date().toISOString()
+                : prev.processed_at,
+          }
+          : prev,
+      );
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       if (opts?.closeDetails) {
         setDetailsOpen(false);
       }
-      void reloadWithdrawals();
+
+      const nextTab = tabForStatus(newStatus);
+      const leavesCurrentTab =
+        selectedTab !== "all" &&
+        nextTab != null &&
+        !statusMatchesTab(newStatus, selectedTab);
+
+      if (leavesCurrentTab && nextTab) {
+        const label = newStatus.replace(/_/g, " ");
+        toast.success(
+          `Marked as ${label}. Switched to ${nextTab} so the request stays visible.`,
+        );
+        setPage(1);
+        setSelectedTab(nextTab);
+        // Tab change triggers reloadWithdrawals via effect
+      } else {
+        toast.success(
+          `Status updated to ${newStatus.replace(/_/g, " ")}`,
+        );
+        void reloadWithdrawals();
+      }
     } catch (e) {
       console.error("Failed to update status", e);
       alert("Failed to update status");
@@ -465,18 +578,42 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         )
       );
       setDetailsOpen(false);
-      void reloadWithdrawals();
-      alert("Withdrawal request cancelled successfully!");
+      setSelectedIds((prev) => {
+        if (!prev.has(req.id)) return prev;
+        const next = new Set(prev);
+        next.delete(req.id);
+        return next;
+      });
+      if (selectedTab !== "all" && selectedTab !== "rejected") {
+        toast.success(
+          "Withdrawal cancelled. Switched to Rejected so it stays visible.",
+        );
+        setPage(1);
+        setSelectedTab("rejected");
+      } else {
+        toast.success("Withdrawal request cancelled successfully");
+        void reloadWithdrawals();
+      }
     } catch (e) {
       console.error("Failed to cancel request", e);
       alert(
-        `Failed to cancel request: ${
-          e instanceof Error ? e.message : "Unknown error"
+        `Failed to cancel request: ${e instanceof Error ? e.message : "Unknown error"
         }`
       );
     } finally {
       setUpdating(false);
     }
+  };
+
+  const flashMetadataSaved = (message: string) => {
+    setMetadataSaveMsg(message);
+    if (metadataSaveMsgTimer.current) {
+      clearTimeout(metadataSaveMsgTimer.current);
+    }
+    metadataSaveMsgTimer.current = setTimeout(() => {
+      setMetadataSaveMsg(null);
+      metadataSaveMsgTimer.current = null;
+    }, 3000);
   };
 
   const openDetails = (req: Request) => {
@@ -485,11 +622,12 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     setTxRef(req.transaction_reference || "");
     setPaymentProofLinkDraft(req.payment_proof_link || "");
     setMetadataDirty(false);
+    setMetadataSaveMsg(null);
     setDetailsOpen(true);
   };
 
-  const saveMetadata = async () => {
-    if (!active) return;
+  const saveMetadata = async (opts?: { silent?: boolean }): Promise<boolean> => {
+    if (!active) return false;
     setSavingMetadata(true);
     try {
       const linkTrim = paymentProofLinkDraft.trim();
@@ -513,34 +651,54 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         prev.map((r) =>
           r.id === active.id
             ? {
-                ...r,
-                admin_notes: adminNotes,
-                transaction_reference: txRef,
-                payment_proof_link: nextLink,
-              }
+              ...r,
+              admin_notes: adminNotes,
+              transaction_reference: txRef,
+              payment_proof_link: nextLink,
+            }
             : r,
         ),
       );
       setActive((prev) =>
         prev && prev.id === active.id
           ? {
-              ...prev,
-              admin_notes: adminNotes,
-              transaction_reference: txRef,
-              payment_proof_link: nextLink,
-            }
+            ...prev,
+            admin_notes: adminNotes,
+            transaction_reference: txRef,
+            payment_proof_link: nextLink,
+          }
           : prev,
       );
-      toast.success("Notes and proof link saved");
-      void reloadWithdrawals();
+      if (!opts?.silent) {
+        flashMetadataSaved("Saved successfully");
+        notify("success", "Notes, UTR & proof link saved");
+      }
+      return true;
     } catch (e) {
       console.error(e);
-      toast.error(
+      notify(
+        "error",
         e instanceof Error ? e.message : "Could not save metadata",
       );
+      return false;
     } finally {
       setSavingMetadata(false);
     }
+  };
+
+  const applyStatusFromDetails = async (
+    newStatus: string,
+    extras?: {
+      transaction_reference?: string;
+      admin_notes?: string;
+    },
+  ) => {
+    if (!active) return;
+    if (metadataDirty) {
+      const saved = await saveMetadata({ silent: true });
+      if (!saved) return;
+    }
+    await updateStatus(active.id, newStatus, extras, { closeDetails: true });
   };
 
   const openProofInNewTab = async (requestId: string) => {
@@ -553,7 +711,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
       if (json.url) window.open(json.url, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.error(err);
-      toast.error("Could not open payment proof file");
+      notify("error", "Could not open payment proof file");
     }
   };
 
@@ -561,7 +719,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     const file = fileList?.[0];
     if (!file || !active) return;
     if (file.size > PAYMENT_PROOF_MAX_BYTES) {
-      toast.error(
+      notify(
+        "error",
         `File is too large. Maximum size is ${PAYMENT_PROOF_MAX_BYTES / 1024 / 1024} MB.`,
       );
       return;
@@ -573,7 +732,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         uploadFile = await compressImage(file);
       }
       if (uploadFile.size > PAYMENT_PROOF_MAX_BYTES) {
-        toast.error(
+        notify(
+          "error",
           `File is still too large after processing. Maximum size is ${PAYMENT_PROOF_MAX_BYTES / 1024 / 1024} MB.`,
         );
         return;
@@ -605,27 +765,27 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         prev.map((r) =>
           r.id === active.id
             ? {
-                ...r,
-                payment_proof_storage_path: path,
-                payment_proof_file_size_bytes: sizeBytes,
-              }
+              ...r,
+              payment_proof_storage_path: path,
+              payment_proof_file_size_bytes: sizeBytes,
+            }
             : r,
         ),
       );
       setActive((prev) =>
         prev && prev.id === active.id
           ? {
-              ...prev,
-              payment_proof_storage_path: path,
-              payment_proof_file_size_bytes: sizeBytes,
-            }
+            ...prev,
+            payment_proof_storage_path: path,
+            payment_proof_file_size_bytes: sizeBytes,
+          }
           : prev,
       );
-      toast.success("Payment proof file uploaded");
+      notify("success", "Payment proof file uploaded");
       void reloadWithdrawals();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Upload failed");
+      notify("error", e instanceof Error ? e.message : "Upload failed");
     } finally {
       setProofUploading(false);
       if (proofFileInputRef.current) proofFileInputRef.current.value = "";
@@ -662,27 +822,30 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         prev.map((r) =>
           r.id === active.id
             ? {
-                ...r,
-                payment_proof_storage_path: null,
-                payment_proof_file_size_bytes: null,
-              }
+              ...r,
+              payment_proof_storage_path: null,
+              payment_proof_file_size_bytes: null,
+            }
             : r,
         ),
       );
       setActive((prev) =>
         prev && prev.id === active.id
           ? {
-              ...prev,
-              payment_proof_storage_path: null,
-              payment_proof_file_size_bytes: null,
-            }
+            ...prev,
+            payment_proof_storage_path: null,
+            payment_proof_file_size_bytes: null,
+          }
           : prev,
       );
-      toast.success("Payment proof file removed");
+      notify("success", "Payment proof file removed");
       void reloadWithdrawals();
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Could not remove file");
+      notify(
+        "error",
+        e instanceof Error ? e.message : "Could not remove file",
+      );
     } finally {
       setProofRemoving(false);
     }
@@ -827,16 +990,15 @@ const [isDark, setIsDark] = useState<boolean>(() => {
       const network =
         d?.network ||
         (process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet-beta" ||
-        process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet"
+          process.env.NEXT_PUBLIC_SOLANA_NETWORK === "mainnet"
           ? "mainnet"
           : "devnet");
       const address = d?.wallet_address || "";
       const addressShort = address
         ? `${address.slice(0, 8)}...${address.slice(-8)}`
         : "";
-      return `Phantom${
-        friendlyName ? ` (${friendlyName})` : ""
-      } • ${token} • ${network} • ${addressShort}`;
+      return `Phantom${friendlyName ? ` (${friendlyName})` : ""
+        } • ${token} • ${network} • ${addressShort}`;
     }
     return type ? `${type}: ${JSON.stringify(d)}` : "Unknown method";
   };
@@ -995,6 +1157,115 @@ const [isDark, setIsDark] = useState<boolean>(() => {
 
   const FINAL_STATUSES = ["processed", "forfeited", "cancelled", "rejected"];
   const isFinalStatus = (s: string) => FINAL_STATUSES.includes(s);
+  const isApprovableStatus = (s: string) =>
+    s === "pending" || s === "in_review";
+
+  const approvableOnPage = useMemo(
+    () => requests.filter((r) => isApprovableStatus(r.status)),
+    [requests],
+  );
+  const allApprovableSelected =
+    approvableOnPage.length > 0 &&
+    approvableOnPage.every((r) => selectedIds.has(r.id));
+  const someApprovableSelected = approvableOnPage.some((r) =>
+    selectedIds.has(r.id),
+  );
+
+  const toggleSelectId = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllApprovable = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const r of approvableOnPage) {
+        if (checked) next.add(r.id);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  };
+
+  const bulkApproveSelected = async () => {
+    const ids = approvableOnPage
+      .filter((r) => selectedIds.has(r.id))
+      .map((r) => r.id);
+    if (ids.length === 0) {
+      toast.error("Select at least one pending request to approve");
+      return;
+    }
+    if (
+      !confirm(
+        `Approve ${ids.length} withdrawal request${ids.length === 1 ? "" : "s"}? They will move to the Approved tab.`,
+      )
+    ) {
+      return;
+    }
+    setBulkApproving(true);
+    try {
+      // One request; server processes with limited concurrency (safe up to 200).
+      const res = await fetch("/api/admin/withdrawals/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, status: "approved" }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        succeeded?: number;
+        failed?: number;
+        skipped?: number;
+      };
+      if (!res.ok) {
+        throw new Error(json.error || "Bulk approve failed");
+      }
+
+      const succeeded = json.succeeded ?? 0;
+      const failed = json.failed ?? 0;
+      const skipped = json.skipped ?? 0;
+      setSelectedIds(new Set());
+
+      if (
+        succeeded > 0 &&
+        (selectedTab === "pending" || selectedTab === "in_review")
+      ) {
+        const parts = [
+          `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}`,
+        ];
+        if (failed > 0) parts.push(`${failed} failed`);
+        if (skipped > 0) parts.push(`${skipped} skipped`);
+        toast.success(`${parts.join(", ")}. Showing Approved tab.`);
+        setPage(1);
+        setSelectedTab("approved");
+      } else {
+        if (succeeded > 0) {
+          toast.success(
+            `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}`,
+          );
+        }
+        if (failed > 0) {
+          toast.error(`${failed} approval${failed === 1 ? "" : "s"} failed`);
+        }
+        if (skipped > 0 && succeeded === 0) {
+          toast.error(
+            `${skipped} request${skipped === 1 ? " was" : "s were"} not pending/in review`,
+          );
+        }
+        void reloadWithdrawals();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(
+        e instanceof Error ? e.message : "Bulk approve failed",
+      );
+    } finally {
+      setBulkApproving(false);
+    }
+  };
 
   const handleSortColumn = (key: WithdrawalsSortKey) => {
     setPage(1);
@@ -1058,6 +1329,21 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
             )}
           >
+            <TableHead className="w-10 pr-0">
+              <Checkbox
+                checked={
+                  someApprovableSelected && !allApprovableSelected
+                    ? "indeterminate"
+                    : allApprovableSelected
+                }
+                onCheckedChange={(v) =>
+                  toggleSelectAllApprovable(v === true)
+                }
+                disabled={loading || approvableOnPage.length === 0 || bulkApproving}
+                aria-label="Select all approvable on this page"
+                className={cn(isDark && "border-white/60")}
+              />
+            </TableHead>
             <SortableTh
               colKey="created_at"
               label="Created"
@@ -1101,6 +1387,17 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                 key={r.id}
                 className="hover:bg-muted/30 transition-colors"
               >
+                <TableCell className="w-10 pr-0 align-middle">
+                  <Checkbox
+                    checked={selectedIds.has(r.id)}
+                    onCheckedChange={(v) =>
+                      toggleSelectId(r.id, v === true)
+                    }
+                    disabled={!isApprovableStatus(r.status) || bulkApproving}
+                    aria-label={`Select withdrawal for ${r.users?.full_name || r.id}`}
+                    className={cn(isDark && "border-white/60")}
+                  />
+                </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <div className="text-sm text-muted-foreground">
                     {new Date(r.created_at).toLocaleDateString()}
@@ -1187,7 +1484,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                                       (process.env
                                         .NEXT_PUBLIC_SOLANA_NETWORK ===
                                         "mainnet-beta" ||
-                                      process.env.NEXT_PUBLIC_SOLANA_NETWORK ===
+                                        process.env.NEXT_PUBLIC_SOLANA_NETWORK ===
                                         "mainnet"
                                         ? "mainnet"
                                         : "devnet")}
@@ -1249,8 +1546,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                                     <strong>Account Number:</strong>{" "}
                                     {d?.account_number
                                       ? `****${String(
-                                          d.account_number,
-                                        ).slice(-4)}`
+                                        d.account_number,
+                                      ).slice(-4)}`
                                       : "N/A"}
                                   </div>
                                   <div>
@@ -1370,14 +1667,14 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                       {["pending", "in_review", "approved", "failed"].includes(
                         r.status,
                       ) && (
-                        <DropdownMenuItem
-                          disabled={updating}
-                          onSelect={() => openRejectDialog(r)}
-                        >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Reject
-                        </DropdownMenuItem>
-                      )}
+                          <DropdownMenuItem
+                            disabled={updating}
+                            onSelect={() => openRejectDialog(r)}
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Reject
+                          </DropdownMenuItem>
+                        )}
                       {!isFinalStatus(r.status) &&
                         r.status === "approved" && (
                           <>
@@ -1459,9 +1756,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `withdrawals-${selectedTab}-${
-        new Date().toISOString().slice(0, 10)
-      }.csv`;
+      a.download = `withdrawals-${selectedTab}-${new Date().toISOString().slice(0, 10)
+        }.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("CSV download started");
@@ -1472,152 +1768,290 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     }
   };
 
+  const statusSummaryCards: {
+    key: string;
+    label: string;
+    amount: number;
+    description: string;
+    accent: string;
+    muteWhenZero?: boolean;
+  }[] = [
+      {
+        key: "pending",
+        label: "Pending",
+        amount: totals.pending,
+        description: "New requests",
+        accent: isDark ? "bg-amber-400" : "bg-amber-500",
+      },
+      {
+        key: "approved",
+        label: "Approved",
+        amount: totals.approved,
+        description: "Approved for payment",
+        accent: isDark ? "bg-blue-400" : "bg-blue-500",
+      },
+      {
+        key: "paid",
+        label: "Paid",
+        amount: totals.paid,
+        description: "Successfully processed",
+        accent: isDark ? "bg-emerald-400" : "bg-emerald-500",
+      },
+      {
+        key: "rejected",
+        label: "Rejected",
+        amount: totals.rejected,
+        description: "Rejected or cancelled (refund)",
+        accent: isDark ? "bg-red-400" : "bg-red-500",
+      },
+      {
+        key: "forfeited",
+        label: "Forfeited",
+        amount: totals.forfeited,
+        description: "No refund (e.g. violation)",
+        accent: isDark ? "bg-slate-500" : "bg-slate-400",
+        muteWhenZero: true,
+      },
+      {
+        key: "failed",
+        label: "Failed",
+        amount: totals.failed,
+        description: "Payment failed (internal)",
+        accent: isDark ? "bg-slate-500" : "bg-slate-400",
+        muteWhenZero: true,
+      },
+    ];
+
+  const tabDotClass: Record<string, string> = {
+    all: isDark ? "bg-slate-400" : "bg-slate-500",
+    pending: isDark ? "bg-amber-400" : "bg-amber-500",
+    in_review: isDark ? "bg-indigo-400" : "bg-indigo-500",
+    approved: isDark ? "bg-blue-400" : "bg-blue-500",
+    paid: isDark ? "bg-emerald-400" : "bg-emerald-500",
+    rejected: isDark ? "bg-red-400" : "bg-red-500",
+    forfeited: isDark ? "bg-slate-500" : "bg-slate-400",
+    failed: isDark ? "bg-slate-500" : "bg-slate-400",
+  };
+
+  const renderTabLabel = (id: string, label: string, count: number) => {
+    const active = selectedTab === id;
+    return (
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            active ? "bg-white/90" : tabDotClass[id] || tabDotClass.all,
+          )}
+          aria-hidden
+        />
+        <span className="font-medium">{label}</span>
+        <span
+          className={cn(
+            "text-[11px] font-normal tabular-nums",
+            active
+              ? "text-white/65"
+              : isDark
+                ? "text-slate-400"
+                : "text-slate-500",
+          )}
+        >
+          {count}
+        </span>
+      </span>
+    );
+  };
+
   return (
     <TooltipProvider>
-      <div className="space-y-6">
-        <div className="grid gap-4 grid-cols-1 min-[440px]:grid-cols-2 md:grid-cols-4">
-          {/* Total Requested */}
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3",
-              isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-            )}
-          >
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>
-                Total Requested
-              </h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <DollarSign className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.all)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>
-                Total withdrawal amount
-              </p>
-            </CardContent>
-          </div>
-          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Pending</h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <Clock className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.pending)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Awaiting review</p>
-            </CardContent>
-          </div>
-          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Approved</h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <ClipboardCheck className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.approved)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Approved for payment</p>
-            </CardContent>
-          </div>
-          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Paid</h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <CheckCircle className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.paid)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Successfully processed</p>
-            </CardContent>
-          </div>
-          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Rejected</h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <XCircle className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{formatCurrencyFromCents(totals.rejected)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Rejected or cancelled (refund)</p>
-            </CardContent>
-          </div>
-          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Forfeited</h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <ShieldOff className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold text-amber-600">{formatCurrencyFromCents(totals.forfeited)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>No refund (e.g. violation)</p>
-            </CardContent>
-          </div>
-          <div className={cn("rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3", isDark ? "bg-[#170337] text-white" : "bg-white text-black")}>
-            <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-              <h1 className={cn("text-md font-medium", isDark ? "text-white" : "text-gray-900")}>Failed</h1>
-              <div className={cn("w-10 h-10 flex items-center justify-center rounded-full", isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]")}>
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-            </div>
-            <CardContent>
-              <div className="text-2xl font-bold text-amber-600">{formatCurrencyFromCents(totals.failed)}</div>
-              <p className={cn("text-sm mt-2", isDark ? "text-gray-300" : "text-gray-600")}>Payment failed (internal)</p>
-            </CardContent>
+      <div className="space-y-4">
+        {/* Hero: Total Requested */}
+        <div
+          className={cn(
+            "rounded-xl border p-5 sm:p-6",
+            isDark
+              ? "border-white/10 bg-gradient-to-br from-[#1c1038] via-[#14082c] to-[#0c061c] text-white"
+              : "border-slate-200 bg-gradient-to-br from-slate-100 via-slate-50 to-white text-slate-900",
+          )}
+        >
+          <div className="min-w-0">
+            <p
+              className={cn(
+                "text-sm font-medium tracking-wide",
+                isDark ? "text-slate-300" : "text-slate-600",
+              )}
+            >
+              Total Requested
+            </p>
+            <p className="mt-1 text-3xl sm:text-4xl font-semibold tracking-tight tabular-nums">
+              {formatCurrencyFromCents(totals.all)}
+            </p>
+            <p
+              className={cn(
+                "mt-2 text-sm",
+                isDark ? "text-slate-400" : "text-slate-500",
+              )}
+            >
+              Total withdrawal amount
+            </p>
           </div>
         </div>
 
-        {/* Payout method availability – pause/unpause methods globally */}
+        {/* Status cards: 2-col mobile / 3-col desktop (6 cards, no empty cell) */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {statusSummaryCards.map((card) => {
+            const muted = Boolean(card.muteWhenZero && card.amount === 0);
+            return (
+              <div
+                key={card.key}
+                className={cn(
+                  "relative overflow-hidden rounded-xl border p-3.5 sm:p-4 pl-4 sm:pl-5 transition-opacity",
+                  isDark
+                    ? "border-white/10 bg-[#170337]"
+                    : "border-slate-200 bg-white",
+                  muted && "opacity-55",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute left-0 top-3 bottom-3 w-[2px] rounded-full",
+                    muted
+                      ? isDark
+                        ? "bg-slate-600"
+                        : "bg-slate-300"
+                      : card.accent,
+                  )}
+                />
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    muted
+                      ? isDark
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                      : isDark
+                        ? "text-slate-300"
+                        : "text-slate-600",
+                  )}
+                >
+                  {card.label}
+                </p>
+                <p
+                  className={cn(
+                    "mt-2 text-xl sm:text-2xl font-semibold tabular-nums tracking-tight",
+                    muted
+                      ? isDark
+                        ? "text-slate-500"
+                        : "text-slate-400"
+                      : isDark
+                        ? "text-white"
+                        : "text-slate-900",
+                  )}
+                >
+                  {formatCurrencyFromCents(card.amount)}
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-xs",
+                    muted
+                      ? isDark
+                        ? "text-slate-600"
+                        : "text-slate-400"
+                      : isDark
+                        ? "text-slate-400"
+                        : "text-slate-500",
+                  )}
+                >
+                  {card.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Payout method availability */}
         <Card
           className={cn(
-            "shadow-sm",
-            isDark ? "bg-[#170337] border border-gray-700 text-white" : "bg-white text-black"
+            "rounded-xl border shadow-none",
+            isDark
+              ? "bg-[#170337] border-white/10 text-white"
+              : "bg-white border-slate-200 text-black",
           )}
         >
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-2 px-4 sm:px-5 pt-4">
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <PauseCircle className="h-4 w-4" />
               Payout method availability
             </CardTitle>
-            <CardDescription className={cn("text-sm", isDark ? "text-gray-400" : "text-muted-foreground")}>
-              When a method is paused, users cannot request withdrawals using that payment method. They will see a message to use another method.
+            <CardDescription
+              className={cn(
+                "text-sm",
+                isDark ? "text-slate-400" : "text-muted-foreground",
+              )}
+            >
+              When a method is paused, users cannot request withdrawals using
+              that payment method.
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="pt-0 px-4 sm:px-5 pb-4">
             {loadingPayoutSettings ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
-              <div className="flex flex-wrap gap-6">
+              <div className="flex flex-wrap gap-3">
                 {DEFAULT_METHOD_TYPES.map((methodType) => {
-                  const setting = payoutMethodSettings.find((s) => s.method_type === methodType);
+                  const setting = payoutMethodSettings.find(
+                    (s) => s.method_type === methodType,
+                  );
                   const isPaused = setting ? setting.is_paused : false;
+                  const enabled = !isPaused;
                   const updating = updatingPayoutMethod === methodType;
                   return (
                     <div
                       key={methodType}
                       className={cn(
-                        "flex items-center justify-between gap-3 rounded-lg border px-4 py-3 min-w-[180px]",
-                        isDark ? "border-gray-600 bg-[#06021D]/50" : "border-slate-200 bg-slate-50/50"
+                        "flex items-center gap-3 rounded-xl border px-3.5 py-2.5 min-w-[200px] flex-1 sm:flex-none",
+                        enabled
+                          ? isDark
+                            ? "border-emerald-500/35 bg-emerald-500/10"
+                            : "border-emerald-200 bg-emerald-50/70"
+                          : isDark
+                            ? "border-white/10 bg-white/5"
+                            : "border-slate-200 bg-slate-50",
                       )}
                     >
-                      <span className="font-medium capitalize">
-                        {PAYOUT_METHOD_LABELS[methodType] || methodType}
-                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium capitalize text-sm">
+                          {PAYOUT_METHOD_LABELS[methodType] || methodType}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-xs mt-0.5",
+                            enabled
+                              ? isDark
+                                ? "text-emerald-300"
+                                : "text-emerald-700"
+                              : isDark
+                                ? "text-slate-500"
+                                : "text-slate-500",
+                          )}
+                        >
+                          {enabled ? "Available" : "Paused"}
+                        </p>
+                      </div>
                       <Switch
-                        checked={!isPaused}
-                        onCheckedChange={(checked) => setPayoutMethodPaused(methodType, !checked)}
+                        checked={enabled}
+                        onCheckedChange={(checked) =>
+                          setPayoutMethodPaused(methodType, !checked)
+                        }
                         disabled={updating}
-                        theme={isDark ? "dark" : "light"}
-                        variant="theme-aware"
+                        className={cn(
+                          "border-transparent",
+                          "data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500",
+                          "data-[state=unchecked]:bg-slate-300 data-[state=unchecked]:border-slate-300",
+                          isDark &&
+                          "data-[state=unchecked]:bg-slate-600 data-[state=unchecked]:border-slate-600 data-[state=checked]:bg-emerald-500",
+                        )}
                       />
-                      {isPaused && (
-                        <span className="text-xs text-amber-600 dark:text-amber-400">Paused</span>
-                      )}
                     </div>
                   );
                 })}
@@ -1626,6 +2060,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
           </CardContent>
         </Card>
 
+        {/* Toolbar: date range + export */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="w-full sm:w-auto">
             <AdminDateRangePicker
@@ -1643,115 +2078,147 @@ const [isDark, setIsDark] = useState<boolean>(() => {
             type="button"
             variant="outline"
             onClick={() => setExportDialogOpen(true)}
-            className={cn("w-full sm:w-auto", isDark && "border-gray-600")}
+            className={cn(
+              "w-full sm:w-auto rounded-xl",
+              isDark && "border-white/15",
+            )}
           >
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
         </div>
 
-        <div className="mb-2 text-xs text-muted-foreground">
-          Tip: tap/click any column header to sort.
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Tip: tap/click any column header to sort.
+          </p>
+          {(selectedIds.size > 0 ||
+            selectedTab === "pending" ||
+            selectedTab === "in_review" ||
+            selectedTab === "all") && (
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedIds.size > 0 && (
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-slate-300" : "text-slate-600",
+                    )}
+                  >
+                    {selectedIds.size} selected
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    selectedIds.size === 0 ||
+                    bulkApproving ||
+                    updating ||
+                    !someApprovableSelected
+                  }
+                  onClick={() => void bulkApproveSelected()}
+                  className={cn("rounded-xl", isDark && "border-white/15")}
+                >
+                  {bulkApproving ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                  )}
+                  Approve selected
+                </Button>
+                {selectedIds.size > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={bulkApproving}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+            )}
         </div>
 
         <div className="overflow-x-auto pb-1">
           <EnhancedTabs
             tabs={[
-            {
-              id: "all",
-              label: (
-                <span>
-                  All{" "}
-                  <Badge
-                    variant="secondary"
-                    className="ml-1 px-1.5 py-0.5 text-xs"
-                  >
-                    {statusCountsFromApi?.all ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
-            {
-              id: "pending",
-              label: (
-                <span>
-                  Pending{" "}
-                  <Badge
-                    variant="secondary"
-                    className="ml-1 px-1.5 py-0.5 text-xs"
-                  >
-                    {statusCountsFromApi?.pending ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
-            {
-              id: "approved",
-              label: (
-                <span>
-                  Approved{" "}
-                  <Badge
-                    variant="secondary"
-                    className="ml-1 px-1.5 py-0.5 text-xs"
-                  >
-                    {statusCountsFromApi?.approved ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
-            {
-              id: "rejected",
-              label: (
-                <span>
-                  Rejected{" "}
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                    {statusCountsFromApi?.rejected ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
-            {
-              id: "paid",
-              label: (
-                <span>
-                  Paid{" "}
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                    {statusCountsFromApi?.paid ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
-            {
-              id: "forfeited",
-              label: (
-                <span>
-                  Forfeited{" "}
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                    {statusCountsFromApi?.forfeited ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
-            {
-              id: "failed",
-              label: (
-                <span>
-                  Failed{" "}
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                    {statusCountsFromApi?.failed ?? 0}
-                  </Badge>
-                </span>
-              ),
-            },
+              {
+                id: "all",
+                label: renderTabLabel(
+                  "all",
+                  "All",
+                  statusCountsFromApi?.all ?? 0,
+                ),
+              },
+              {
+                id: "pending",
+                label: renderTabLabel(
+                  "pending",
+                  "Pending",
+                  statusCountsFromApi?.pending ?? 0,
+                ),
+              },
+              {
+                id: "in_review",
+                label: renderTabLabel(
+                  "in_review",
+                  "In Review",
+                  statusCountsFromApi?.in_review ?? 0,
+                ),
+              },
+              {
+                id: "approved",
+                label: renderTabLabel(
+                  "approved",
+                  "Approved",
+                  statusCountsFromApi?.approved ?? 0,
+                ),
+              },
+              {
+                id: "rejected",
+                label: renderTabLabel(
+                  "rejected",
+                  "Rejected",
+                  statusCountsFromApi?.rejected ?? 0,
+                ),
+              },
+              {
+                id: "paid",
+                label: renderTabLabel(
+                  "paid",
+                  "Paid",
+                  statusCountsFromApi?.paid ?? 0,
+                ),
+              },
+              {
+                id: "forfeited",
+                label: renderTabLabel(
+                  "forfeited",
+                  "Forfeited",
+                  statusCountsFromApi?.forfeited ?? 0,
+                ),
+              },
+              {
+                id: "failed",
+                label: renderTabLabel(
+                  "failed",
+                  "Failed",
+                  statusCountsFromApi?.failed ?? 0,
+                ),
+              },
             ]}
             activeTab={selectedTab}
             onTabChange={(id) => {
               setPage(1);
               setSelectedTab(id);
             }}
-            className="mb-8 min-w-[760px]"
+            className="mb-4 w-full"
             isDark={isDark}
             light={!isDark}
+            fillWidth
           />
         </div>
 
@@ -1890,11 +2357,19 @@ const [isDark, setIsDark] = useState<boolean>(() => {
         {/* Enhanced Details Modal */}
         <Dialog
           open={detailsOpen}
-          onOpenChange={setDetailsOpen}
+          onOpenChange={(open) => {
+            setDetailsOpen(open);
+            if (!open) setMetadataSaveMsg(null);
+          }}
           isdark={isDark}
         >
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
+          <DialogContent
+            className={cn(
+              "sm:max-w-[700px] max-h-[min(92vh,900px)] w-[calc(100%-1.5rem)] p-0 gap-0 overflow-hidden flex flex-col",
+              isDark && "border-gray-600",
+            )}
+          >
+            <DialogHeader className="shrink-0 px-4 sm:px-6 pt-4 sm:pt-6 pb-3 pr-12">
               <DialogTitle
                 className={cn(
                   "flex items-center gap-2",
@@ -1909,7 +2384,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
               </DialogDescription>
             </DialogHeader>
             {active && (
-              <div className="space-y-4 py-4">
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 space-y-4 py-2">
                 {/* Key Information Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Created Date Card */}
@@ -2119,8 +2594,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                                           (process.env
                                             .NEXT_PUBLIC_SOLANA_NETWORK ===
                                             "mainnet-beta" ||
-                                          process.env
-                                            .NEXT_PUBLIC_SOLANA_NETWORK ===
+                                            process.env
+                                              .NEXT_PUBLIC_SOLANA_NETWORK ===
                                             "mainnet"
                                             ? "mainnet"
                                             : "devnet")}
@@ -2231,8 +2706,8 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                                       <span className="font-medium">
                                         {d?.account_number
                                           ? `****${String(
-                                              d.account_number
-                                            ).slice(-4)}`
+                                            d.account_number
+                                          ).slice(-4)}`
                                           : "N/A"}
                                       </span>
                                     </div>
@@ -2325,6 +2800,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             onChange={(e) => {
                               setAdminNotes(e.target.value);
                               setMetadataDirty(true);
+                              setMetadataSaveMsg(null);
                             }}
                             placeholder="Internal notes, campaign context…"
                             className={cn(
@@ -2345,6 +2821,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             onChange={(e) => {
                               setTxRef(e.target.value);
                               setMetadataDirty(true);
+                              setMetadataSaveMsg(null);
                             }}
                             placeholder="UTR / TXID / reference #"
                             className={cn(
@@ -2374,7 +2851,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                               className={cn(
                                 "text-xs font-normal gap-1",
                                 isDark &&
-                                  "bg-emerald-900/40 text-emerald-200 border-emerald-700",
+                                "bg-emerald-900/40 text-emerald-200 border-emerald-700",
                               )}
                             >
                               <FileImage className="h-3 w-3" />
@@ -2387,7 +2864,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                               className={cn(
                                 "text-xs font-normal gap-1 max-w-[220px] truncate",
                                 isDark &&
-                                  "bg-sky-900/40 text-sky-200 border-sky-700",
+                                "bg-sky-900/40 text-sky-200 border-sky-700",
                               )}
                               title={active.payment_proof_link}
                             >
@@ -2396,7 +2873,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             </Badge>
                           ) : null}
                           {!active.payment_proof_storage_path &&
-                          !active.payment_proof_link ? (
+                            !active.payment_proof_link ? (
                             <span className="text-xs text-muted-foreground">
                               None attached yet
                             </span>
@@ -2418,6 +2895,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                             onChange={(e) => {
                               setPaymentProofLinkDraft(e.target.value);
                               setMetadataDirty(true);
+                              setMetadataSaveMsg(null);
                             }}
                             placeholder="https://…"
                             className={cn(
@@ -2560,11 +3038,25 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
+                      {metadataSaveMsg ? (
+                        <p
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-sm font-medium order-2 sm:order-1",
+                            isDark ? "text-emerald-300" : "text-emerald-700",
+                          )}
+                          role="status"
+                        >
+                          <CheckCircle className="h-4 w-4 shrink-0" />
+                          {metadataSaveMsg}
+                        </p>
+                      ) : (
+                        <span className="hidden sm:block order-1" />
+                      )}
                       <Button
                         type="button"
                         className={cn(
-                          "w-full sm:w-auto min-w-[200px]",
+                          "w-full sm:w-auto sm:min-w-[180px] order-1 sm:order-2",
                           isDark && "bg-violet-600 hover:bg-violet-500",
                         )}
                         disabled={savingMetadata || !metadataDirty}
@@ -2572,188 +3064,209 @@ const [isDark, setIsDark] = useState<boolean>(() => {
                       >
                         {savingMetadata
                           ? "Saving…"
-                          : "Save notes, UTR & proof link"}
+                          : (
+                            <>
+                              <span className="sm:hidden">Save notes & UTR</span>
+                              <span className="hidden sm:inline">
+                                Save notes, UTR & proof link
+                              </span>
+                            </>
+                          )}
                       </Button>
                     </div>
                   </CardContent>
                 </Card>
               </div>
             )}
-            <DialogFooter className="border-t pt-4 mt-4">
-              <div className="flex flex-wrap gap-2 w-full justify-between">
-                <div className="flex flex-wrap gap-2">
-                  {active && !isFinalStatus(active.status) && (
-                    <>
-                      {/* Cancel - pending and in_review */}
-                      {["pending", "in_review"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => cancelRequest(active!)}
-                              disabled={updating}
-                            >
-                              <X className="h-4 w-4 mr-1" />
-                              Cancel
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Cancel and refund user balance</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Approve - pending and in_review */}
-                      {["pending", "in_review"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                updateStatus(active!.id, "approved", {
-                                  admin_notes: adminNotes,
-                                }, { closeDetails: true })
-                              }
-                              disabled={updating}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Approve for payment processing</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Reject - pending, in_review, approved, failed */}
-                      {["pending", "in_review", "approved", "failed"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openRejectDialog(active!)}
-                              disabled={updating}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Reject
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Reject request (optionally add reason for user)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Back to pending - in_review only */}
-                      {active.status === "in_review" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                updateStatus(
-                                  active!.id,
-                                  "pending",
-                                  undefined,
-                                  { closeDetails: true },
-                                )
-                              }
-                              disabled={updating}
-                            >
-                              <RotateCcw className="h-4 w-4 mr-1" />
-                              Back to pending
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Revert to pending</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {active && !isFinalStatus(active.status) && (
-                    <>
-                      {/* Mark In Review - pending or in_review (add internal reason) */}
-                      {["pending", "in_review"].includes(active.status) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openInReviewDialog(active!)}
-                              disabled={updating}
-                            >
-                              <Clock className="h-4 w-4 mr-1" />
-                              Review
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Mark as under review (add internal reason for other reviewers)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Mark Paid - approved or failed */}
-                      {["approved", "failed"].includes(active.status) && (
+            <DialogFooter
+              className={cn(
+                "shrink-0 border-t px-4 sm:px-6 py-3 sm:py-4 gap-2",
+                isDark
+                  ? "bg-[#06021D] border-gray-700"
+                  : "bg-white border-slate-200",
+              )}
+            >
+              {active && !isFinalStatus(active.status) ? (
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full">
+                  {["pending", "in_review"].includes(active.status) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                         <Button
                           size="sm"
-                          onClick={() =>
-                            updateStatus(active!.id, "processed", {
-                              transaction_reference: txRef,
-                              admin_notes: adminNotes,
-                            }, { closeDetails: true })
-                          }
-                          disabled={updating}
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => cancelRequest(active)}
+                          disabled={updating || savingMetadata}
                         >
-                          <DollarSign className="h-4 w-4 mr-1" />
-                          Mark Paid
+                          <X className="h-4 w-4 mr-1 shrink-0" />
+                          Cancel
                         </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Cancel and refund user balance</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["pending", "in_review"].includes(active.status) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          className={cn(
+                            "w-full sm:w-auto justify-center",
+                            isDark
+                              ? "bg-violet-600 hover:bg-violet-500"
+                              : "bg-violet-600 hover:bg-violet-700 text-white",
+                          )}
+                          onClick={() =>
+                            void applyStatusFromDetails("approved", {
+                              admin_notes: adminNotes,
+                              transaction_reference: txRef,
+                            })
+                          }
+                          disabled={updating || savingMetadata}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1 shrink-0" />
+                          Approve
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>
+                          Approve for payment processing (keeps transaction
+                          reference)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["pending", "in_review", "approved", "failed"].includes(
+                    active.status,
+                  ) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full sm:w-auto justify-center"
+                            onClick={() => openRejectDialog(active)}
+                            disabled={updating || savingMetadata}
+                          >
+                            <XCircle className="h-4 w-4 mr-1 shrink-0" />
+                            Reject
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent className="z-[60]">
+                          <p>Reject request (optionally add reason for user)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  {["pending", "in_review"].includes(active.status) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openInReviewDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <Clock className="h-4 w-4 mr-1 shrink-0" />
+                          Review
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>
+                          Mark as under review (add internal reason for other
+                          reviewers)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {active.status === "in_review" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center col-span-2 sm:col-span-1"
+                          onClick={() =>
+                            void updateStatus(active.id, "pending", undefined, {
+                              closeDetails: true,
+                            })
+                          }
+                          disabled={updating || savingMetadata}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1 shrink-0" />
+                          Back to pending
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Revert to pending</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {["approved", "failed"].includes(active.status) && (
+                    <Button
+                      size="sm"
+                      className={cn(
+                        "w-full sm:w-auto justify-center col-span-2 sm:col-span-1",
+                        isDark && "bg-violet-600 hover:bg-violet-500",
                       )}
-                      {/* Mark Failed - approved only */}
-                      {active.status === "approved" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openFailedDialog(active!)}
-                              disabled={updating}
-                            >
-                              <AlertTriangle className="h-4 w-4 mr-1" />
-                              Failed
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Payment failed (internal tracking)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {/* Forfeited - approved only */}
-                      {active.status === "approved" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openForfeitDialog(active!)}
-                              disabled={updating}
-                            >
-                              <ShieldOff className="h-4 w-4 mr-1" />
-                              Forfeit
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent className="z-50">
-                            <p>Forfeit (no refund)</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </>
+                      onClick={() =>
+                        void applyStatusFromDetails("processed", {
+                          transaction_reference: txRef,
+                          admin_notes: adminNotes,
+                        })
+                      }
+                      disabled={updating || savingMetadata}
+                    >
+                      <DollarSign className="h-4 w-4 mr-1 shrink-0" />
+                      Mark Paid
+                    </Button>
+                  )}
+                  {active.status === "approved" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openFailedDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
+                          Failed
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Payment failed (internal tracking)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {active.status === "approved" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full sm:w-auto justify-center"
+                          onClick={() => openForfeitDialog(active)}
+                          disabled={updating || savingMetadata}
+                        >
+                          <ShieldOff className="h-4 w-4 mr-1 shrink-0" />
+                          Forfeit
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="z-[60]">
+                        <p>Forfeit (no refund)</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
-              </div>
+              ) : active ? (
+                <p className="text-sm text-muted-foreground w-full text-center sm:text-left">
+                  This request is in a final status and can no longer be updated.
+                </p>
+              ) : null}
             </DialogFooter>
           </DialogContent>
         </Dialog>
