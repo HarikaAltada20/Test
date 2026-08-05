@@ -8,6 +8,11 @@ import {
   getPlatformContestsCacheKey,
   getPlatformSubmissionsCacheKey,
 } from "@/lib/cache-utils";
+import {
+  cachePlatformSubmissionMetrics,
+  fetchPlatformSubmissionMetrics,
+  loadPlatformSubmissionMetricsFromCache,
+} from "@/lib/leaderboard-platform-metrics";
 
 /** Chunk size for contest_id IN clauses to avoid backend/URL limits */
 const CONTEST_IDS_CHUNK_SIZE = 200;
@@ -138,50 +143,41 @@ export async function GET(request: NextRequest) {
     let platformViews: Map<string, number> = new Map();
 
     if (platform !== "all") {
-      // Allow any specific platform value (e.g. "youtube", "instagram", "twitter")
-      // to be used directly when querying contests.
       const platformValue = platform;
+      const platformSubmissionsCacheKey =
+        getPlatformSubmissionsCacheKey(platformValue);
+      const cachedPlatformData = cache.get<any>(platformSubmissionsCacheKey);
 
-      // Check cache for platform-specific contest IDs
-      const platformContestsCacheKey =
-        getPlatformContestsCacheKey(platformValue);
-      const cachedPlatformContests = cache.get<any>(platformContestsCacheKey);
+      if (cachedPlatformData) {
+        const metrics = loadPlatformSubmissionMetricsFromCache(cachedPlatformData);
+        platformContestWins = metrics.contestWins;
+        platformContestParticipations = metrics.contestParticipations;
+        platformSubmissionsWon = metrics.submissionsWon;
+        platformSubmissionsMade = metrics.submissionsMade;
+        platformWinnings = metrics.winnings;
+        platformViews = metrics.views;
+      } else if (platformValue === "twitter") {
+        const platformContestsCacheKey =
+          getPlatformContestsCacheKey(platformValue);
+        const cachedPlatformContests = cache.get<any>(platformContestsCacheKey);
 
-      let contestIds: string[] = [];
+        let contestIds: string[] = [];
 
-      if (cachedPlatformContests?.contestIds) {
-        contestIds = cachedPlatformContests.contestIds;
-      } else {
-        // First, get all contest IDs for the specified platform
-        const { data: platformContests, error: contestsError } = await supabase
-          .from("contests")
-          .select("id")
-          .eq("platform", platformValue);
-
-        if (!contestsError && platformContests && platformContests.length > 0) {
-          contestIds = platformContests.map((c) => c.id);
-          // Cache contest IDs for 10 minutes
-          cache.set(platformContestsCacheKey, { contestIds }, 600000);
-        }
-      }
-
-      if (contestIds.length > 0) {
-        // Check cache for platform-specific submissions/leaderboard data
-        const platformSubmissionsCacheKey =
-          getPlatformSubmissionsCacheKey(platformValue);
-        const cachedPlatformData = cache.get<any>(platformSubmissionsCacheKey);
-
-        if (cachedPlatformData) {
-          platformContestWins = new Map(cachedPlatformData.contestWins);
-          platformContestParticipations = new Map(
-            cachedPlatformData.contestParticipations,
-          );
-          platformSubmissionsWon = new Map(cachedPlatformData.submissionsWon);
-          platformSubmissionsMade = new Map(cachedPlatformData.submissionsMade);
-          platformWinnings = new Map(cachedPlatformData.winnings);
-          platformViews = new Map(cachedPlatformData.views);
+        if (cachedPlatformContests?.contestIds) {
+          contestIds = cachedPlatformContests.contestIds;
         } else {
-          if (platformValue === "twitter") {
+          const { data: platformContests, error: contestsError } = await supabase
+            .from("contests")
+            .select("id")
+            .eq("platform", platformValue);
+
+          if (!contestsError && platformContests && platformContests.length > 0) {
+            contestIds = platformContests.map((c) => c.id);
+            cache.set(platformContestsCacheKey, { contestIds }, 600000);
+          }
+        }
+
+        if (contestIds.length > 0) {
             // Twitter contests use twitter_campaign_leaderboard instead of submissions.
             // Fetch in chunks + paginated for scalability (avoids huge IN clauses and single large result sets).
             const creatorContestMap = new Map<string, Set<string>>();
@@ -365,135 +361,36 @@ export async function GET(request: NextRequest) {
               });
             }
 
-            // Cache platform-specific data for 10 minutes
-            cache.set(
-              platformSubmissionsCacheKey,
-              {
-                contestWins: Array.from(platformContestWins.entries()),
-                contestParticipations: Array.from(
-                  platformContestParticipations.entries(),
-                ),
-                submissionsWon: Array.from(platformSubmissionsWon.entries()),
-                submissionsMade: Array.from(platformSubmissionsMade.entries()),
-                winnings: Array.from(platformWinnings.entries()),
-                views: Array.from(platformViews.entries()),
-              },
-              600000,
-            );
-          } else {
-            // Non-Twitter platforms: use submissions + creator_contest_wins as before
-            // Get all contest wins for these contests
-            const { data: contestWinsData, error: contestWinsError } =
-              await supabase
-                .from("creator_contest_wins")
-                .select("creator_id")
-                .in("contest_id", contestIds);
-
-            if (!contestWinsError && contestWinsData) {
-              contestWinsData.forEach((win: any) => {
-                const creatorId = win.creator_id;
-                const currentCount = platformContestWins.get(creatorId) || 0;
-                platformContestWins.set(creatorId, currentCount + 1);
-              });
-            }
-
-            // Get all submissions for these contests
-            const { data: submissionsData, error: submissionsError } =
-              await supabase
-                .from("submissions")
-                .select("creator_id, contest_id, status, earnings, views")
-                .in("contest_id", contestIds);
-
-            if (!submissionsError && submissionsData) {
-              // Count distinct contests per creator for participations
-              const creatorContestMap = new Map<string, Set<string>>();
-              // Count submissions won (status = 'paid') per creator
-              const creatorSubmissionsWonMap = new Map<string, number>();
-              // Count total submissions made per creator
-              const creatorSubmissionsMadeMap = new Map<string, number>();
-              // Sum earnings from paid submissions per creator
-              const creatorWinningsMap = new Map<string, number>();
-              // Sum views per creator (platform-scoped since submissions filtered by contestIds)
-              const creatorViewsMap = new Map<string, number>();
-
-              submissionsData.forEach((sub: any) => {
-                const creatorId = sub.creator_id;
-                const contestId = sub.contest_id;
-                const status = sub.status;
-                const earnings = sub.earnings || 0;
-                const views = sub.views || 0;
-
-                // Count participations (distinct contests)
-                if (!creatorContestMap.has(creatorId)) {
-                  creatorContestMap.set(creatorId, new Set());
-                }
-                creatorContestMap.get(creatorId)?.add(contestId);
-
-                // Count submissions won (status = 'paid')
-                if (status === "paid") {
-                  const currentWon =
-                    creatorSubmissionsWonMap.get(creatorId) || 0;
-                  creatorSubmissionsWonMap.set(creatorId, currentWon + 1);
-
-                  // Sum earnings from paid submissions (winnings)
-                  const currentWinnings =
-                    creatorWinningsMap.get(creatorId) || 0;
-                  creatorWinningsMap.set(creatorId, currentWinnings + earnings);
-                }
-
-                // Count total submissions made
-                const currentMade =
-                  creatorSubmissionsMadeMap.get(creatorId) || 0;
-                creatorSubmissionsMadeMap.set(creatorId, currentMade + 1);
-
-                // Sum views per creator
-                const currentViews = creatorViewsMap.get(creatorId) || 0;
-                creatorViewsMap.set(creatorId, currentViews + views);
-              });
-
-              // Set participations (distinct contests)
-              creatorContestMap.forEach((contestSet, creatorId) => {
-                platformContestParticipations.set(creatorId, contestSet.size);
-              });
-
-              // Set submissions won
-              creatorSubmissionsWonMap.forEach((count, creatorId) => {
-                platformSubmissionsWon.set(creatorId, count);
-              });
-
-              // Set submissions made
-              creatorSubmissionsMadeMap.forEach((count, creatorId) => {
-                platformSubmissionsMade.set(creatorId, count);
-              });
-
-              // Set winnings (sum of earnings from paid submissions)
-              creatorWinningsMap.forEach((total, creatorId) => {
-                platformWinnings.set(creatorId, total);
-              });
-
-              // Set views (sum of submission views for contests on selected platform)
-              creatorViewsMap.forEach((total, creatorId) => {
-                platformViews.set(creatorId, total);
-              });
-            }
-
-            // Cache platform-specific data for 10 minutes
-            cache.set(
-              platformSubmissionsCacheKey,
-              {
-                contestWins: Array.from(platformContestWins.entries()),
-                contestParticipations: Array.from(
-                  platformContestParticipations.entries(),
-                ),
-                submissionsWon: Array.from(platformSubmissionsWon.entries()),
-                submissionsMade: Array.from(platformSubmissionsMade.entries()),
-                winnings: Array.from(platformWinnings.entries()),
-                views: Array.from(platformViews.entries()),
-              },
-              600000,
-            );
-          }
+          cache.set(
+            platformSubmissionsCacheKey,
+            cachePlatformSubmissionMetrics({
+              contestWins: platformContestWins,
+              contestParticipations: platformContestParticipations,
+              submissionsWon: platformSubmissionsWon,
+              submissionsMade: platformSubmissionsMade,
+              winnings: platformWinnings,
+              views: platformViews,
+            }),
+            600000,
+          );
         }
+      } else {
+        const metrics = await fetchPlatformSubmissionMetrics(
+          supabase,
+          platformValue,
+        );
+        platformContestWins = metrics.contestWins;
+        platformContestParticipations = metrics.contestParticipations;
+        platformSubmissionsWon = metrics.submissionsWon;
+        platformSubmissionsMade = metrics.submissionsMade;
+        platformWinnings = metrics.winnings;
+        platformViews = metrics.views;
+
+        cache.set(
+          platformSubmissionsCacheKey,
+          cachePlatformSubmissionMetrics(metrics),
+          600000,
+        );
       }
     }
 
@@ -947,13 +844,13 @@ export async function GET(request: NextRequest) {
           }
 
           if (platform === "all") return true;
-          if (platform === "youtube") return entry.platforms.has_youtube;
-          if (platform === "instagram") return entry.platforms.has_instagram;
-          if (platform === "twitter") return entry.platforms.has_twitter;
-          if (platform === "tiktok") return entry.platforms.has_tiktok;
-
-          // For any unknown platform value, fall back to including the entry
-          return true;
+          // Rank creators with activity on the selected platform (from submissions),
+          // not merely those who have a linked social account.
+          return (
+            (entry.metrics.submissions_made || 0) > 0 ||
+            (entry.metrics.winnings || 0) > 0 ||
+            (entry.metrics.contests_participated || 0) > 0
+          );
         });
 
     // Sort by selected metric

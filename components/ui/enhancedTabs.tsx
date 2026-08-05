@@ -49,10 +49,10 @@ export function EnhancedTabs({
     }
 
     const widthClasses = fillWidth
-      ? "flex-1"
+      ? "flex-1 min-w-0 whitespace-nowrap"
       : "shrink-0 flex-none whitespace-nowrap px-3 sm:px-4";
-    const baseClasses = `flex items-center justify-center gap-2 
-  ${fillWidth ? "px-4 sm:px-6 py-2 sm:py-3.5" : "py-2 sm:py-2.5"} ${widthClasses} font-medium text-sm sm:text-[0.95rem] transition-all duration-200`;
+    const baseClasses = `flex items-center justify-center gap-1 min-[480px]:gap-2 
+  ${fillWidth ? "px-1.5 min-[375px]:px-2.5 min-[480px]:px-4 sm:px-6 py-2 sm:py-3.5" : "py-2 sm:py-2.5"} ${widthClasses} font-medium text-[11px] min-[375px]:text-xs min-[480px]:text-sm sm:text-[0.95rem] transition-all duration-200`;
 
     if (isActive) {
       return `${baseClasses} ${activeRoundedClasses} bg-[#662EBD] text-white shadow-sm`;

@@ -54,7 +54,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, sanitizeFilename } from "@/lib/utils";
+import {
+  canBulkDownloadContestVideos,
+  canDownloadSubmissionVideo,
+  downloadSubmissionVideosInChunks,
+  MAX_BULK_VIDEO_DOWNLOADS,
+} from "@/lib/video-download-ui";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -270,6 +276,7 @@ export function CreatorSubmissionsModal({
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
   const [qualityEditSubmissionIds, setQualityEditSubmissionIds] = useState<
@@ -391,6 +398,70 @@ export function CreatorSubmissionsModal({
         variant: "destructive",
       });
       setDownloadingSubmissionId(null);
+    }
+  };
+
+  const handleBulkDownloadReels = async () => {
+    if (selectedSubmissions.size === 0) return;
+
+    if (selectedSubmissions.size === 1) {
+      const singleSubmissionId = Array.from(selectedSubmissions)[0];
+      await handleDownloadReel(singleSubmissionId);
+      return;
+    }
+
+    const submissionIds = Array.from(selectedSubmissions);
+    setBulkDownloading(true);
+
+    toast({
+      title: "Bulk Download Started",
+      description:
+        submissionIds.length > MAX_BULK_VIDEO_DOWNLOADS
+          ? `Downloading ${submissionIds.length} videos in automatic batches of ${MAX_BULK_VIDEO_DOWNLOADS}...`
+          : "Compressing and zipping selected videos. Please wait...",
+    });
+
+    try {
+      const result = await downloadSubmissionVideosInChunks({
+        submissionIds,
+        fileNamePrefix: `bulk_submissions_${sanitizeFilename(contest.title || "contest")}`,
+        onProgress: ({ chunkIndex, totalChunks, totalVideos }) => {
+          toast({
+            title: `Downloading batch ${chunkIndex} of ${totalChunks}`,
+            description: `Processing ${totalVideos} selected videos...`,
+          });
+        },
+      });
+
+      if (result.succeededChunks === 0) {
+        throw new Error(result.errors[0] || "Failed to download ZIP archives.");
+      }
+
+      if (result.failedChunks > 0) {
+        toast({
+          title: "Bulk download partially completed",
+          description: `${result.succeededChunks}/${result.totalChunks} ZIP batches downloaded. ${result.errors[0] || "Some batches failed."}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Success",
+        description:
+          result.totalChunks > 1
+            ? `Downloaded ${result.totalVideos} videos as ${result.totalChunks} ZIP files.`
+            : "ZIP file containing videos downloaded successfully.",
+      });
+    } catch (error: any) {
+      console.error("Bulk download failed:", error);
+      toast({
+        title: "Bulk Download Failed",
+        description: error.message || "An error occurred while compiling the ZIP folder.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkDownloading(false);
     }
   };
 
@@ -1273,6 +1344,8 @@ export function CreatorSubmissionsModal({
     submissionModerationUiAllowed(contest?.post_contest_status, {
       forBulkBar: true,
     });
+  const canBulkDownloadVideos =
+    !isPostCampaignView && canBulkDownloadContestVideos(contest?.platform);
   const showRowModerationActions = (submission: (typeof submissions)[number]) =>
     !isPostCampaignView &&
     submissionModerationUiAllowed(contest?.post_contest_status, {
@@ -1988,6 +2061,25 @@ export function CreatorSubmissionsModal({
                         )}
                       </>
                     )}
+
+                  {canBulkDownloadVideos && (
+                    <Button
+                      size="sm"
+                      onClick={handleBulkDownloadReels}
+                      disabled={bulkDownloading || bulkStatusActionsBusy}
+                      loading={bulkDownloading}
+                      loadingText="Downloading batches..."
+                      className={cn(
+                        "h-8 shrink-0 whitespace-nowrap rounded-md",
+                        isDark
+                          ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
+                          : "bg-purple-600 text-white hover:bg-purple-700 ",
+                      )}
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      Download Videos (ZIP)
+                    </Button>
+                  )}
 
                   {showPaymentActions &&
                     contest?.post_contest_status !== "payouts_processed" &&
@@ -3945,37 +4037,41 @@ export function CreatorSubmissionsModal({
                                           View Content
                                           <ExternalLink className="h-3 w-3" />
                                         </a>
-                                        {isAdminView && (
-                                          <button
-                                            onClick={() =>
-                                              handleDownloadReel(submission.id)
-                                            }
-                                            disabled={
-                                              downloadingSubmissionId ===
-                                              submission.id
-                                            }
-                                            className={cn(
-                                              "text-xs text-blue-600 hover:underline flex items-center gap-1",
-                                              downloadingSubmissionId ===
-                                                submission.id &&
-                                                "opacity-50 cursor-not-allowed",
-                                            )}
-                                            title="Download Reel/Short"
-                                          >
-                                            {downloadingSubmissionId ===
-                                            submission.id ? (
-                                              <>
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                                Downloading...
-                                              </>
-                                            ) : (
-                                              <>
-                                                <Download className="h-3 w-3" />
-                                                Download
-                                              </>
-                                            )}
-                                          </button>
-                                        )}
+                                        {canDownloadSubmissionVideo({
+                                          platform: submission.platform,
+                                          contestPlatform: contest?.platform,
+                                          contentLink: submission.content_link,
+                                        }) && (
+                                           <button
+                                             onClick={() =>
+                                               handleDownloadReel(submission.id)
+                                             }
+                                             disabled={
+                                               downloadingSubmissionId ===
+                                               submission.id
+                                             }
+                                             className={cn(
+                                               "text-xs text-blue-600 hover:underline flex items-center gap-1",
+                                               downloadingSubmissionId ===
+                                                 submission.id &&
+                                                 "opacity-50 cursor-not-allowed",
+                                             )}
+                                             title="Download Reel/Short"
+                                           >
+                                             {downloadingSubmissionId ===
+                                             submission.id ? (
+                                               <>
+                                                 <Loader2 className="h-3 w-3 animate-spin" />
+                                                 Downloading...
+                                               </>
+                                             ) : (
+                                               <>
+                                                 <Download className="h-3 w-3" />
+                                                 Download
+                                               </>
+                                             )}
+                                           </button>
+                                         )}
                                       </div>
                                     )}
                                   </div>
@@ -5009,40 +5105,40 @@ export function CreatorSubmissionsModal({
                                         View Content
                                       </a>
                                     </DropdownMenuItem>
-                                    {isAdminView &&
-                                      contest?.platform?.toLowerCase() !==
-                                        "twitter" &&
-                                      contest?.platform?.toLowerCase() !==
-                                        "x" && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            handleDownloadReel(submission.id)
-                                          }
-                                          disabled={
-                                            downloadingSubmissionId ===
-                                            submission.id
-                                          }
-                                          className={
-                                            downloadingSubmissionId ===
-                                            submission.id
-                                              ? "opacity-50 cursor-not-allowed"
-                                              : ""
-                                          }
-                                        >
-                                          {downloadingSubmissionId ===
-                                          submission.id ? (
-                                            <>
-                                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                              Downloading...
-                                            </>
-                                          ) : (
-                                            <>
-                                              <Download className="h-4 w-4 mr-2" />
-                                              Download Reel/Short
-                                            </>
-                                          )}
-                                        </DropdownMenuItem>
-                                      )}
+                                    {canDownloadSubmissionVideo({
+                                      platform: submission.platform,
+                                      contestPlatform: contest?.platform,
+                                      contentLink: submission.content_link,
+                                    }) && (
+                                       <DropdownMenuItem
+                                         onClick={() =>
+                                           handleDownloadReel(submission.id)
+                                         }
+                                         disabled={
+                                           downloadingSubmissionId ===
+                                           submission.id
+                                         }
+                                         className={
+                                           downloadingSubmissionId ===
+                                           submission.id
+                                             ? "opacity-50 cursor-not-allowed"
+                                             : ""
+                                         }
+                                       >
+                                         {downloadingSubmissionId ===
+                                         submission.id ? (
+                                           <>
+                                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                             Downloading...
+                                           </>
+                                         ) : (
+                                           <>
+                                             <Download className="h-4 w-4 mr-2" />
+                                             Download Reel/Short
+                                           </>
+                                         )}
+                                       </DropdownMenuItem>
+                                     )}
                                   </>
                                 )}
                               </DropdownMenuContent>
