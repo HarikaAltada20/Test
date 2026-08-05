@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { mkdir, rm } from "fs/promises";
+import { createWriteStream, existsSync } from "fs";
+import { mkdir, readFile, rm, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { existsSync } from "fs";
 import { ZipArchive } from "archiver";
-import { PassThrough } from "stream";
 import {
   downloadInstagramVideoToFile,
   InstagramDownloadError,
@@ -66,10 +65,46 @@ async function verifyAdminOrBrandAccess() {
   return { allowed, user: allowed ? { id: user.id, email: userData?.email, user_type: userData?.user_type } : null };
 }
 
+async function buildZipFile(
+  zipPath: string,
+  files: { path: string; name: string }[],
+  failedReport: string | null,
+): Promise<void> {
+  const output = createWriteStream(zipPath);
+  // MP4s are already compressed — store avoids CPU and speeds up zip.
+  const archive = new ZipArchive({ store: true });
+
+  await new Promise<void>((resolve, reject) => {
+    output.on("close", () => resolve());
+    output.on("error", reject);
+    archive.on("error", reject);
+
+    archive.pipe(output);
+
+    for (const file of files) {
+      archive.file(file.path, { name: file.name });
+    }
+
+    if (failedReport) {
+      archive.append(failedReport, { name: "failed_downloads_report.txt" });
+    }
+
+    void archive.finalize();
+  });
+}
+
 export async function POST(request: Request) {
   const requestId = randomUUID().substring(0, 8);
   const startTime = Date.now();
   const tempDir = join(tmpdir(), `bulk_${randomUUID()}`);
+  let cleanedUp = false;
+
+  const cleanup = async () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    console.log(`[BULK-${requestId}] Clean up temp folder: ${tempDir}`);
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  };
 
   try {
     const { allowed } = await verifyAdminOrBrandAccess();
@@ -155,7 +190,12 @@ export async function POST(request: Request) {
         await downloadVideoFile(item.url, targetPath, item.isInstagram);
 
         if (existsSync(targetPath)) {
-          zippedFiles.push({ path: targetPath, name: item.filename });
+          const fileStat = await stat(targetPath);
+          if (fileStat.size > 0) {
+            zippedFiles.push({ path: targetPath, name: item.filename });
+          } else {
+            failedQueue.push({ url: item.url, error: "Download completed but file was empty." });
+          }
         } else {
           failedQueue.push({ url: item.url, error: "Download completed but file was not generated." });
         }
@@ -169,41 +209,43 @@ export async function POST(request: Request) {
       }
     }
 
-    const passthrough = new PassThrough();
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-
-    archive.pipe(passthrough);
-
-    for (const file of zippedFiles) {
-      archive.file(file.path, { name: file.name });
+    if (zippedFiles.length === 0 && failedQueue.length === 0) {
+      await cleanup();
+      return NextResponse.json({ error: "No files to download" }, { status: 400 });
     }
 
-    if (failedQueue.length > 0) {
-      const report = failedQueue
-        .map((f, idx) => `${idx + 1}. URL: ${f.url}\n   Error: ${f.error}`)
-        .join("\n\n");
-      archive.append(report, { name: "failed_downloads_report.txt" });
-    }
+    const failedReport =
+      failedQueue.length > 0
+        ? failedQueue
+            .map((f, idx) => `${idx + 1}. URL: ${f.url}\n   Error: ${f.error}`)
+            .join("\n\n")
+        : null;
 
-    archive.finalize();
+    // Write ZIP to disk, then load into memory for the response.
+    // Streaming via Readable.toWeb(createReadStream) races with client abort in
+    // Next.js and throws "Controller is already closed" / ResponseAborted.
+    const zipPath = join(tempDir, `bulk_${requestId}.zip`);
+    console.log(`[BULK-${requestId}] Building ZIP with ${zippedFiles.length} file(s)`);
+    await buildZipFile(zipPath, zippedFiles, failedReport);
 
-    passthrough.on("close", async () => {
-      console.log(`[BULK-${requestId}] Clean up temp folder: ${tempDir}`);
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    });
+    const zipBuffer = await readFile(zipPath);
+    await cleanup();
 
-    console.log(`[BULK-${requestId}] Initiating file download stream after ${Date.now() - startTime}ms`);
-    return new NextResponse(passthrough as any, {
+    console.log(
+      `[BULK-${requestId}] Returning ZIP (${zipBuffer.byteLength} bytes) after ${Date.now() - startTime}ms`,
+    );
+
+    return new NextResponse(zipBuffer, {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="bulk_download_${requestId}.zip"`,
+        "Content-Length": String(zipBuffer.byteLength),
         "Cache-Control": "no-cache",
       },
     });
-
   } catch (error: any) {
     console.error(`[BULK-${requestId}] Fatal bulk downloader error:`, error);
-    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await cleanup();
     return NextResponse.json({ error: error.message || "Failed to initiate bulk download" }, { status: 500 });
   }
 }
