@@ -42,8 +42,6 @@ import { createClient } from "@/utils/supabase/client";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import {
   IG_GRAPH_VERSION,
-  IG_REELS_INSIGHTS_METRICS,
-  IG_REELS_INSIGHTS_METRICS_CORE,
   shouldRetryInsightsWithoutOptionalMetrics,
 } from "@/lib/instagram-clip-metrics";
 import type { UserResponse } from "@supabase/supabase-js";
@@ -268,8 +266,11 @@ function getYouTubeThumbnailUrl(
   );
 }
 
-/** Insights metrics requested at IG submit (Reels only — matches media picker filter). */
-// IG_GRAPH_VERSION / metric lists imported from instagram-clip-metrics
+/** Insights at submit omit `reposts` — Meta can reject that metric and fail the whole batch. */
+const IG_REELS_SUBMIT_METRICS =
+  "reach,likes,comments,shares,saved,total_interactions,views,reels_skip_rate,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
+const IG_REELS_SUBMIT_METRICS_CORE =
+  "reach,likes,comments,shares,saved,total_interactions,views,ig_reels_avg_watch_time,ig_reels_video_view_total_time";
 
 function buildInstagramStatsFromInsights(
   insightsData: {
@@ -319,15 +320,16 @@ function buildInstagramStatsFromInsights(
   return { primaryViews, stats };
 }
 
-/** Prefer media-object counts when Insights omits or under-reports them. */
+/** Prefer media-object counts when Insights omits or under-reports them.
+ * Submit skips `reposts_count` — cron/refresh can fill reposts later.
+ */
 async function backfillInstagramMediaCounts(
   mediaId: string,
   accessToken: string,
   stats: Record<string, number>,
 ): Promise<void> {
   try {
-    const fields =
-      "reposts_count,like_count,comments_count,shares_count";
+    const fields = "like_count,comments_count,shares_count";
     const res = await fetch(
       `https://graph.instagram.com/${IG_GRAPH_VERSION}/${mediaId}?fields=${fields}&access_token=${accessToken}`,
     );
@@ -354,7 +356,6 @@ async function backfillInstagramMediaCounts(
         stats[key] = mediaCount;
       }
     };
-    preferHigher("reposts", asFinite(json.reposts_count));
     preferHigher("likes", asFinite(json.like_count));
     preferHigher("comments", asFinite(json.comments_count));
     preferHigher("shares", asFinite(json.shares_count));
@@ -2328,7 +2329,7 @@ export default function SubmitContentPage({
     setMessage("Fetching Instagram Reel insights...");
 
     const insightsRes = await fetch(
-      `https://graph.instagram.com/${IG_GRAPH_VERSION}/${selectedReel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS}&access_token=${instagramAccount.access_token}`,
+      `https://graph.instagram.com/${IG_GRAPH_VERSION}/${selectedReel.id}/insights?metric=${IG_REELS_SUBMIT_METRICS}&access_token=${instagramAccount.access_token}`,
     );
     const insightsData = await insightsRes.json();
 
@@ -2352,7 +2353,7 @@ export default function SubmitContentPage({
       }
       // Retry without optional metrics if Graph rejects the metric list.
       const retryRes = await fetch(
-        `https://graph.instagram.com/${IG_GRAPH_VERSION}/${selectedReel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS_CORE}&access_token=${instagramAccount.access_token}`,
+        `https://graph.instagram.com/${IG_GRAPH_VERSION}/${selectedReel.id}/insights?metric=${IG_REELS_SUBMIT_METRICS_CORE}&access_token=${instagramAccount.access_token}`,
       );
       const retryData = await retryRes.json();
       if (!retryRes.ok || retryData.error) {
@@ -2468,9 +2469,9 @@ export default function SubmitContentPage({
 
     const submissionPromises = reels.map(async (reel) => {
       try {
-        // Fetch insights for each reel
+        // Fetch insights for each reel (no `reposts` at submit time)
         let insightsRes = await fetch(
-          `https://graph.instagram.com/${IG_GRAPH_VERSION}/${reel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS}&access_token=${instagramAccount.access_token}`,
+          `https://graph.instagram.com/${IG_GRAPH_VERSION}/${reel.id}/insights?metric=${IG_REELS_SUBMIT_METRICS}&access_token=${instagramAccount.access_token}`,
         );
         let insightsData = await insightsRes.json();
 
@@ -2478,7 +2479,8 @@ export default function SubmitContentPage({
         if (!insightsRes.ok || insightsData.error) {
           if (insightsData.error?.error_subcode === 2108006) {
             throw new Error(
-              `"${reel.caption || "Instagram Reel"
+              `"${
+                reel.caption || "Instagram Reel"
               }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`,
             );
           }
@@ -2495,7 +2497,7 @@ export default function SubmitContentPage({
             );
           }
           insightsRes = await fetch(
-            `https://graph.instagram.com/${IG_GRAPH_VERSION}/${reel.id}/insights?metric=${IG_REELS_INSIGHTS_METRICS_CORE}&access_token=${instagramAccount.access_token}`,
+            `https://graph.instagram.com/${IG_GRAPH_VERSION}/${reel.id}/insights?metric=${IG_REELS_SUBMIT_METRICS_CORE}&access_token=${instagramAccount.access_token}`,
           );
           insightsData = await insightsRes.json();
           if (!insightsRes.ok || insightsData.error) {
