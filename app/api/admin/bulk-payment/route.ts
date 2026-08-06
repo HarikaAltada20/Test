@@ -23,6 +23,7 @@ import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -83,14 +84,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch all submissions
-    const { data: submissions, error: submissionsError } = await supabaseAdmin
-      .from("submissions")
-      .select("*")
-      .in("id", submission_ids)
-      .eq("contest_id", contest_id);
+    // Fetch all submissions (chunked — large `.in("id", …)` fails in production)
+    const { data: submissions, error: submissionsError } =
+      await fetchByIdsInChunks({
+        ids: submission_ids.map((value: unknown) => String(value)),
+        fetchChunk: async (chunkIds) =>
+          await supabaseAdmin
+            .from("submissions")
+            .select("*")
+            .in("id", chunkIds)
+            .eq("contest_id", contest_id),
+      });
 
     if (submissionsError || !submissions || submissions.length === 0) {
+      console.error(
+        "[bulk-payment] Failed to fetch submissions:",
+        submissionsError?.message || "empty result",
+        { requested: submission_ids.length },
+      );
       return NextResponse.json(
         { error: "Failed to fetch submissions" },
         { status: 500 },
@@ -957,10 +968,14 @@ export async function POST(request: NextRequest) {
 
     const paidSubmissionIds = appliedUpdates.map((u) => String(u.id));
     if (paidSubmissionIds.length > 0) {
-      const { data: paidRows, error: paidRowsErr } = await supabaseAdmin
-        .from("submissions")
-        .select("id, views, creator_id, platform, other_stats")
-        .in("id", paidSubmissionIds);
+      const { data: paidRows, error: paidRowsErr } = await fetchByIdsInChunks({
+        ids: paidSubmissionIds,
+        fetchChunk: async (chunkIds) =>
+          await supabaseAdmin
+            .from("submissions")
+            .select("id, views, creator_id, platform, other_stats")
+            .in("id", chunkIds),
+      });
       if (paidRowsErr) {
         console.error(
           "[bulk-payment] Failed to load submissions for view credit:",

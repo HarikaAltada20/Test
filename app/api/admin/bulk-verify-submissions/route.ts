@@ -142,8 +142,17 @@ async function invokeVerifyWithRetries(
 
 export async function POST(request: Request) {
   try {
-    const { submissionIds, action, reason, paymentDetails, qualityScore } =
-      await request.json();
+    const {
+      submissionIds,
+      action,
+      reason,
+      paymentDetails,
+      qualityScore,
+      /** When set, wallet reversal runs once for this full set (not just this verify chunk). */
+      walletReversalSubmissionIds,
+      /** Later verify chunks after a full wallet preflight — do not reverse again. */
+      skipWalletReversal,
+    } = await request.json();
 
     if (!Array.isArray(submissionIds)) {
       return NextResponse.json(
@@ -151,6 +160,10 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const walletIdsForOwnership = Array.isArray(walletReversalSubmissionIds)
+      ? walletReversalSubmissionIds.map(String).filter(Boolean)
+      : [];
 
     let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
     if (action === "verified") {
@@ -204,8 +217,11 @@ export async function POST(request: Request) {
         );
       }
 
+      const ownershipIds = Array.from(
+        new Set([...submissionIds.map(String), ...walletIdsForOwnership]),
+      );
       const ownershipError = await assertAdvertiserOwnsSubmissions(
-        submissionIds,
+        ownershipIds,
         authUser.id,
       );
       if (ownershipError) {
@@ -225,17 +241,32 @@ export async function POST(request: Request) {
       }
     >();
 
-    if (isPaidReversalBulkAction(action)) {
+    const forceSkipWalletDebit = skipWalletReversal === true;
+
+    if (isPaidReversalBulkAction(action) && !forceSkipWalletDebit) {
       const supabaseAdmin = createAdminClient();
+      const reversalIds =
+        walletIdsForOwnership.length > 0
+          ? walletIdsForOwnership
+          : submissionIds.map(String);
       const walletResult = await applyBulkDualRewardsWalletReversals({
         supabaseAdmin,
-        submissionIds,
+        submissionIds: reversalIds,
       });
       if (!walletResult.ok) {
+        console.error(
+          "[bulk-verify-submissions] Wallet reversal preflight failed:",
+          walletResult.error,
+          {
+            submissionCount: reversalIds.length,
+            failedCount: walletResult.failedSubmissionIds?.length,
+          },
+        );
         return NextResponse.json(
           {
             error: walletResult.error,
-            failed: walletResult.failedSubmissionIds?.length ?? submissionIds.length,
+            failed:
+              walletResult.failedSubmissionIds?.length ?? reversalIds.length,
             failedSubmissionIds: walletResult.failedSubmissionIds,
           },
           { status: 500 },
@@ -272,7 +303,9 @@ export async function POST(request: Request) {
                 paymentDetails,
                 qualityScore:
                   action === "verified" ? resolvedBulkQualityScore : undefined,
-                skipWalletDebit: skipWalletDebitIds.has(String(id)),
+                skipWalletDebit:
+                  forceSkipWalletDebit ||
+                  skipWalletDebitIds.has(String(id)),
               }),
             });
 
@@ -316,12 +349,20 @@ export async function POST(request: Request) {
       });
     }
 
+    const walletRefundSummaries =
+      bulkRefundSummaryById.size > 0
+        ? Object.fromEntries(bulkRefundSummaryById.entries())
+        : undefined;
+
     return NextResponse.json({
       success: errors.length === 0,
       processed: results.length,
       failed: errors.length,
       results,
       errors,
+      ...(walletRefundSummaries
+        ? { wallet_refund_summaries: walletRefundSummaries }
+        : {}),
     });
   } catch (error: unknown) {
     console.error("[bulk-verify-submissions] Error:", error);

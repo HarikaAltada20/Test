@@ -31,6 +31,7 @@ import {
 } from "@/lib/payout-rules";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { MetricsService } from "@/lib/metrics-service";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 import {
   debitCreatorWithdrawableBalance,
   logTransactionAsAdmin,
@@ -121,11 +122,16 @@ export async function executeDualRewardsBulkPayment(params: {
   const component = paymentTypeToComponent(paymentType);
   const contestTitle = String(contest.title || "Contest");
 
-  const { data: submissions, error: submissionsError } = await supabaseAdmin
-    .from("submissions")
-    .select("*")
-    .in("id", submissionIds)
-    .eq("contest_id", contestId);
+  const { data: submissions, error: submissionsError } =
+    await fetchByIdsInChunks({
+      ids: submissionIds,
+      fetchChunk: async (chunkIds) =>
+        await supabaseAdmin
+          .from("submissions")
+          .select("*")
+          .in("id", chunkIds)
+          .eq("contest_id", contestId),
+    });
 
   if (submissionsError || !submissions?.length) {
     return {
@@ -657,10 +663,14 @@ export async function executeDualRewardsBulkPayment(params: {
   }
 
   if (appliedIds.length > 0) {
-    const { data: paidRows } = await supabaseAdmin
-      .from("submissions")
-      .select("id, views, creator_id, platform, other_stats")
-      .in("id", appliedIds);
+    const { data: paidRows } = await fetchByIdsInChunks({
+      ids: appliedIds,
+      fetchChunk: async (chunkIds) =>
+        await supabaseAdmin
+          .from("submissions")
+          .select("id, views, creator_id, platform, other_stats")
+          .in("id", chunkIds),
+    });
     try {
       await MetricsService.creditSubmissionViewsForCreators(paidRows || []);
     } catch (e) {

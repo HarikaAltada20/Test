@@ -20,6 +20,7 @@ import {
   sumBonusRewards,
   sumBonusRefunds,
 } from "@/lib/twitter-bonus-accounting";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 type PaymentType = "standard" | "bonus" | "both";
 
@@ -146,13 +147,17 @@ export async function POST(
 
     const supabaseAdmin = createAdminClient();
 
-    const { data: tweets, error: tweetsError } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select(
-        "id, creator_id, points, manual_points_adjustment, moderation_status, tweet_created_at, bonus_paid, bonus_paid_at, bonus_amount"
-      )
-      .eq("contest_id", contestId)
-      .in("id", tweetIds);
+    const { data: tweets, error: tweetsError } = await fetchByIdsInChunks({
+      ids: (tweetIds as unknown[]).map((value) => String(value)),
+      fetchChunk: async (chunkIds) =>
+        await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .select(
+            "id, creator_id, points, manual_points_adjustment, moderation_status, tweet_created_at, bonus_paid, bonus_paid_at, bonus_amount"
+          )
+          .eq("contest_id", contestId)
+          .in("id", chunkIds),
+    });
 
     if (tweetsError) {
       console.error("[bulk-pay-twitter-cpm] tweet fetch error:", tweetsError);

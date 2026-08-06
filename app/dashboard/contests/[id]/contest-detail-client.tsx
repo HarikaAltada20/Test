@@ -2532,6 +2532,20 @@ export default function ContestDetailClient({
   ) => creatorWiseBulkPaymentActiveKey === creatorWiseBulkPayKey(payType, isBulk);
   const isAnyCreatorWiseBulkPaymentBusy =
     creatorWiseBulkPaymentActiveKey !== null;
+  const [creatorWiseBulkModerationActiveAction, setCreatorWiseBulkModerationActiveAction] =
+    useState<"verify" | "reject" | "pending" | null>(null);
+  const creatorWiseBulkStatusActionsBusy =
+    creatorWiseBulkModerationActiveAction !== null ||
+    isAnyCreatorWiseBulkPaymentBusy ||
+    creatorModalParentBulkLoading;
+  const creatorWiseBulkModerationLoadingText = (
+    action: "verify" | "reject" | "pending",
+  ): string => {
+    if (creatorModalParentBulkLoading) return "Processing updates...";
+    if (action === "verify") return "Verifying submissions...";
+    if (action === "pending") return "Setting to pending...";
+    return "Rejecting submissions...";
+  };
   const normalViewBulkStatusActionsBusy =
     normalViewBulkActiveAction !== null || creatorModalParentBulkLoading;
   const normalViewBulkLoadingText = (
@@ -5732,10 +5746,18 @@ export default function ContestDetailClient({
   );
   const creatorWiseHasFlatFeeBonus =
     getFlatFeeBonusCentsFromContest(currentContest) > 0;
+  const showCreatorWiseBulkModeration =
+    isAdminView &&
+    !isPostCampaignLeaderboard &&
+    submissionModerationUiAllowed(currentContest?.post_contest_status, {
+      forBulkBar: true,
+    });
   const showCreatorWiseBulkPaymentActions =
     isAdminView &&
     !isPostCampaignLeaderboard &&
     currentContest?.post_contest_status === "verification_complete";
+  const showCreatorWiseSelectionUi =
+    showCreatorWiseBulkModeration || showCreatorWiseBulkPaymentActions;
 
   useEffect(() => {
     const visibleCreatorIds = new Set(
@@ -7205,7 +7227,9 @@ export default function ContestDetailClient({
     });
 
     try {
-      const promises = [];
+      const results: any[] = [];
+      /** Keep each bulk-verify request small enough for Supabase filters + serverless time. */
+      const BULK_VERIFY_CLIENT_CHUNK_SIZE = 50;
 
       if (normalIds.length > 0) {
         // Map action for normal submissions
@@ -7215,18 +7239,45 @@ export default function ContestDetailClient({
             : action === "reject"
               ? "rejected"
               : action;
-        promises.push(
-          fetch("/api/admin/bulk-verify-submissions", {
+        for (
+          let i = 0;
+          i < normalIds.length;
+          i += BULK_VERIFY_CLIENT_CHUNK_SIZE
+        ) {
+          const chunkIds = normalIds.slice(
+            i,
+            i + BULK_VERIFY_CLIENT_CHUNK_SIZE,
+          );
+          const isFirstChunk = i === 0;
+          const res = await fetch("/api/admin/bulk-verify-submissions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              submissionIds: normalIds,
+              submissionIds: chunkIds,
               action: normalAction,
               reason,
               qualityScore: options?.qualityScore,
+              // One wallet reversal for the full selection → one money_transactions
+              // row per creator (not one per 50-ID verify chunk).
+              ...(isFirstChunk
+                ? { walletReversalSubmissionIds: normalIds }
+                : { skipWalletReversal: true }),
             }),
-          }).then((res) => res.json()),
-        );
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok && !data?.results) {
+            results.push({
+              success: false,
+              error:
+                data?.error || `Bulk verify failed (HTTP ${res.status})`,
+            });
+            // Don't continue with skipWalletReversal if the full wallet preflight
+            // never completed on the first chunk.
+            if (isFirstChunk) break;
+          } else {
+            results.push(data);
+          }
+        }
       }
 
       if (twitterIds.length > 0) {
@@ -7237,20 +7288,40 @@ export default function ContestDetailClient({
             : action === "rejected" || action === "reject"
               ? "reject"
               : action;
-        promises.push(
-          fetch(`/api/contests/${contestId}/bulk-moderate-submissions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tweetIds: twitterIds,
-              action: twitterAction,
-              reason,
-            }),
-          }).then((res) => res.json()),
-        );
+        for (
+          let i = 0;
+          i < twitterIds.length;
+          i += BULK_VERIFY_CLIENT_CHUNK_SIZE
+        ) {
+          const chunkIds = twitterIds.slice(
+            i,
+            i + BULK_VERIFY_CLIENT_CHUNK_SIZE,
+          );
+          const res = await fetch(
+            `/api/contests/${contestId}/bulk-moderate-submissions`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tweetIds: chunkIds,
+                action: twitterAction,
+                reason,
+              }),
+            },
+          );
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok && !data?.results) {
+            results.push({
+              success: false,
+              error:
+                data?.error ||
+                `Bulk moderate failed (HTTP ${res.status})`,
+            });
+          } else {
+            results.push(data);
+          }
+        }
       }
-
-      const results = await Promise.all(promises);
 
       let hasError = false;
       let errorMessage = "";
@@ -7270,35 +7341,67 @@ export default function ContestDetailClient({
           continue;
         }
 
+        // Prefer full wallet preflight summaries (covers IDs beyond this verify chunk).
+        const walletSummaries = result.wallet_refund_summaries as
+          | Record<
+              string,
+              {
+                reward_refunded_cents?: number;
+                bonus_refunded_cents?: number;
+                total_refunded_cents?: number;
+                cpm_refunded_cents?: number;
+                milestone_refunded_cents?: number;
+              }
+            >
+          | undefined;
+        if (walletSummaries) {
+          for (const rs of Object.values(walletSummaries)) {
+            const rowTotal = Math.max(0, Number(rs.total_refunded_cents) || 0);
+            if (rowTotal > 0) {
+              normalRefundTotalCents += rowTotal;
+              normalRefundCpmCents +=
+                Number(rs.cpm_refunded_cents ?? rs.reward_refunded_cents) || 0;
+              normalRefundMilestoneCents +=
+                Number(
+                  rs.milestone_refunded_cents ?? rs.bonus_refunded_cents,
+                ) || 0;
+            }
+          }
+        }
+
         if (result.results && Array.isArray(result.results)) {
           result.results.forEach((item: any) => {
             const data = item.data;
             if (data?.submission) {
               updatedSubmissionsMap.set(item.id, data.submission);
               totalProcessed++;
-              const rs = data?.refund_summary as
-                | {
-                    reward_refunded_cents?: number;
-                    bonus_refunded_cents?: number;
-                    total_refunded_cents?: number;
-                    cpm_refunded_cents?: number;
-                    milestone_refunded_cents?: number;
+              // Skip per-row refund when we already summed wallet_refund_summaries.
+              if (!walletSummaries) {
+                const rs = data?.refund_summary as
+                  | {
+                      reward_refunded_cents?: number;
+                      bonus_refunded_cents?: number;
+                      total_refunded_cents?: number;
+                      cpm_refunded_cents?: number;
+                      milestone_refunded_cents?: number;
+                    }
+                  | undefined;
+                if (rs) {
+                  const rowTotal = Math.max(
+                    0,
+                    Number(rs.total_refunded_cents) || 0,
+                  );
+                  if (rowTotal > 0) {
+                    normalRefundTotalCents += rowTotal;
+                    normalRefundCpmCents +=
+                      Number(
+                        rs.cpm_refunded_cents ?? rs.reward_refunded_cents,
+                      ) || 0;
+                    normalRefundMilestoneCents +=
+                      Number(
+                        rs.milestone_refunded_cents ?? rs.bonus_refunded_cents,
+                      ) || 0;
                   }
-                | undefined;
-              if (rs) {
-                const rowTotal = Math.max(
-                  0,
-                  Number(rs.total_refunded_cents) || 0,
-                );
-                if (rowTotal > 0) {
-                  normalRefundTotalCents += rowTotal;
-                  normalRefundCpmCents +=
-                    Number(rs.cpm_refunded_cents ?? rs.reward_refunded_cents) ||
-                    0;
-                  normalRefundMilestoneCents +=
-                    Number(
-                      rs.milestone_refunded_cents ?? rs.bonus_refunded_cents,
-                    ) || 0;
                 }
               }
             } else if (data?.success) {
@@ -7553,6 +7656,7 @@ export default function ContestDetailClient({
     setRejectionModalOpen(false);
     setPendingRejectionSubmissionIds([]);
     setNormalViewSelectedSubmissions(new Set());
+    setCreatorWiseSelectedCreators(new Set());
   };
 
   const handleMarkAsPaid = (submissionId: string) => {
@@ -7775,6 +7879,105 @@ export default function ContestDetailClient({
       }
       return next;
     });
+  };
+
+  const getSelectedCreatorWiseSubmissionIds = (): string[] => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const group of filteredCreatorGroups) {
+      const creatorId = String(group.creator?.id || "");
+      if (!creatorId || !creatorWiseSelectedCreators.has(creatorId)) continue;
+      for (const submission of group.submissions || []) {
+        const submissionId = String(submission?.id || "");
+        if (!submissionId || seen.has(submissionId)) continue;
+        seen.add(submissionId);
+        ids.push(submissionId);
+      }
+    }
+    return ids;
+  };
+
+  const handleCreatorWiseBulkModeration = async (
+    action: "verify" | "reject" | "pending",
+  ) => {
+    const selectedIds = getSelectedCreatorWiseSubmissionIds();
+    if (selectedIds.length === 0) {
+      toast({
+        title: "No submissions to update",
+        description:
+          "Selected creators have no submissions in the current view.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (action === "verify") {
+      if (!assertSubmissionModerationAllowed()) return;
+
+      const { toVerify, toUpdateQualityOnly, paidToRevert } =
+        partitionSubmissionsForVerify(selectedIds);
+
+      if (paidToRevert.length > 0) {
+        setConfirmReversal({
+          submissionIds: selectedIds,
+          target: "verified",
+        });
+        return;
+      }
+
+      if (
+        isVideoContestFormat &&
+        toUpdateQualityOnly.length > 0 &&
+        toVerify.length === 0
+      ) {
+        openVerifyQualityDialog(selectedIds);
+        return;
+      }
+      if (isVideoContestFormat && toVerify.length > 0) {
+        openVerifyQualityDialog(toVerify);
+        return;
+      }
+      setCreatorWiseBulkModerationActiveAction("verify");
+      try {
+        await handleBulkUpdateSubmissionStatus(selectedIds, "verified");
+        setCreatorWiseSelectedCreators(new Set());
+      } finally {
+        setCreatorWiseBulkModerationActiveAction(null);
+      }
+      return;
+    }
+
+    if (action === "reject") {
+      if (!assertSubmissionModerationAllowed()) return;
+      if (selectionIncludesPaidRow(currentSubmissions, selectedIds)) {
+        setConfirmReversal({
+          submissionIds: selectedIds,
+          target: "rejected",
+          needRejectionReason: true,
+        });
+        return;
+      }
+      setPendingRejectionSubmissionIds(selectedIds);
+      setRejectionModalOpen(true);
+      return;
+    }
+
+    if (!assertSubmissionModerationAllowed()) return;
+
+    if (selectionIncludesPaidRow(currentSubmissions, selectedIds)) {
+      setConfirmReversal({
+        submissionIds: selectedIds,
+        target: "pending",
+      });
+      return;
+    }
+    setCreatorWiseBulkModerationActiveAction("pending");
+    try {
+      await handleBulkUpdateSubmissionStatus(selectedIds, "pending");
+      setCreatorWiseSelectedCreators(new Set());
+    } finally {
+      setCreatorWiseBulkModerationActiveAction(null);
+    }
   };
 
   const getCreatorWiseSubmissionPayStatus = (submission: any): string => {
@@ -8401,6 +8604,7 @@ export default function ContestDetailClient({
       }
     }
     setNormalViewSelectedSubmissions(new Set());
+    setCreatorWiseSelectedCreators(new Set());
   };
 
   const handleUpdateContestStatus = async () => {
@@ -23522,7 +23726,7 @@ export default function ContestDetailClient({
                                 getStatus={getStatus}
                               />
                             )}
-                            {showCreatorWiseBulkPaymentActions &&
+                            {showCreatorWiseSelectionUi &&
                               creatorWiseSelectedCreators.size > 0 && (
                                 <div
                                   className={cn(
@@ -23556,10 +23760,97 @@ export default function ContestDetailClient({
                                           new Set(),
                                         )
                                       }
-                                      disabled={isAnyCreatorWiseBulkPaymentBusy}
+                                      disabled={creatorWiseBulkStatusActionsBusy}
                                     >
                                       Clear
                                     </Button>
+                                    {showCreatorWiseBulkModeration && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkModeration(
+                                              "verify",
+                                            )
+                                          }
+                                          loading={
+                                            creatorWiseBulkModerationActiveAction ===
+                                            "verify"
+                                          }
+                                          loadingText={creatorWiseBulkModerationLoadingText(
+                                            "verify",
+                                          )}
+                                          disabled={
+                                            creatorWiseBulkStatusActionsBusy
+                                          }
+                                          className={cn(
+                                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                            isDark
+                                              ? "border bg-green-900/30 text-green-400 border-green-500"
+                                              : "bg-green-600 text-white hover:bg-green-700",
+                                          )}
+                                        >
+                                          <CheckCircle className="h-4 w-4 mr-1" />
+                                          Mark as Verified
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkModeration(
+                                              "reject",
+                                            )
+                                          }
+                                          loading={
+                                            creatorWiseBulkModerationActiveAction ===
+                                            "reject"
+                                          }
+                                          loadingText={creatorWiseBulkModerationLoadingText(
+                                            "reject",
+                                          )}
+                                          disabled={
+                                            creatorWiseBulkStatusActionsBusy
+                                          }
+                                          className={cn(
+                                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                            isDark
+                                              ? "border bg-red-900/30 text-red-400 border-red-500"
+                                              : "bg-red-600 text-white hover:bg-red-700",
+                                          )}
+                                        >
+                                          <XCircle className="h-4 w-4 mr-1" />
+                                          Mark as Rejected
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkModeration(
+                                              "pending",
+                                            )
+                                          }
+                                          loading={
+                                            creatorWiseBulkModerationActiveAction ===
+                                            "pending"
+                                          }
+                                          loadingText={creatorWiseBulkModerationLoadingText(
+                                            "pending",
+                                          )}
+                                          disabled={
+                                            creatorWiseBulkStatusActionsBusy
+                                          }
+                                          className={cn(
+                                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                            isDark
+                                              ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
+                                              : "bg-yellow-600 text-white hover:bg-yellow-700",
+                                          )}
+                                        >
+                                          <Clock className="h-4 w-4 mr-1" />
+                                          Mark as Pending
+                                        </Button>
+                                      </>
+                                    )}
+                                    {showCreatorWiseBulkPaymentActions && (
+                                      <>
                                     <Button
                                       size="sm"
                                       onClick={() =>
@@ -23568,7 +23859,7 @@ export default function ContestDetailClient({
                                           false,
                                         )
                                       }
-                                      disabled={isAnyCreatorWiseBulkPaymentBusy}
+                                      disabled={creatorWiseBulkStatusActionsBusy}
                                       className="h-8 bg-blue-600 text-white hover:bg-blue-700"
                                     >
                                       {isCreatorWiseBulkPayBtnLoading(
@@ -23599,7 +23890,7 @@ export default function ContestDetailClient({
                                             )
                                           }
                                           disabled={
-                                            isAnyCreatorWiseBulkPaymentBusy
+                                            creatorWiseBulkStatusActionsBusy
                                           }
                                           className="h-8 bg-green-600 text-white hover:bg-green-700"
                                         >
@@ -23626,7 +23917,7 @@ export default function ContestDetailClient({
                                             )
                                           }
                                           disabled={
-                                            isAnyCreatorWiseBulkPaymentBusy
+                                            creatorWiseBulkStatusActionsBusy
                                           }
                                           className="h-8 bg-purple-600 text-white hover:bg-purple-700"
                                         >
@@ -23661,7 +23952,7 @@ export default function ContestDetailClient({
                                           true,
                                         )
                                       }
-                                      disabled={isAnyCreatorWiseBulkPaymentBusy}
+                                      disabled={creatorWiseBulkStatusActionsBusy}
                                       className="h-8 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
                                     >
                                       {isCreatorWiseBulkPayBtnLoading(
@@ -23692,7 +23983,7 @@ export default function ContestDetailClient({
                                             )
                                           }
                                           disabled={
-                                            isAnyCreatorWiseBulkPaymentBusy
+                                            creatorWiseBulkStatusActionsBusy
                                           }
                                           className="h-8 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
                                         >
@@ -23719,7 +24010,7 @@ export default function ContestDetailClient({
                                             )
                                           }
                                           disabled={
-                                            isAnyCreatorWiseBulkPaymentBusy
+                                            creatorWiseBulkStatusActionsBusy
                                           }
                                           className="h-8 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
                                         >
@@ -23739,6 +24030,8 @@ export default function ContestDetailClient({
                                         </Button>
                                       </>
                                     )}
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -23752,7 +24045,7 @@ export default function ContestDetailClient({
                                       : "bg-slate-100 hover:bg-slate-100 border-slate-200",
                                   )}
                                 >
-                                  {showCreatorWiseBulkPaymentActions && (
+                                  {showCreatorWiseSelectionUi && (
                                     <TableHead className="w-12 text-center">
                                       <Checkbox
                                         checked={
@@ -24188,7 +24481,7 @@ export default function ContestDetailClient({
                                   <TableRow>
                                     <TableCell
                                       colSpan={
-                                        (showCreatorWiseBulkPaymentActions ? 1 : 0) +
+                                        (showCreatorWiseSelectionUi ? 1 : 0) +
                                         12 +
                                         creatorWiseEligibilityColumnCount +
                                         (isMilestoneContestType(
@@ -24414,7 +24707,7 @@ export default function ContestDetailClient({
                                       };
                                       return (
                                         <TableRow key={group.creator.id}>
-                                          {showCreatorWiseBulkPaymentActions && (
+                                          {showCreatorWiseSelectionUi && (
                                             <TableCell className="text-center">
                                               <Checkbox
                                                 checked={creatorWiseSelectedCreators.has(
@@ -30829,6 +31122,7 @@ export default function ContestDetailClient({
               pendingVerifySubmissionIds.forEach((id) => next.delete(id));
               return next;
             });
+            setCreatorWiseSelectedCreators(new Set());
             setVerifyQualityDialogOpen(false);
             setPendingVerifySubmissionIds([]);
           } catch (error: unknown) {

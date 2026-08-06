@@ -13,6 +13,7 @@ import {
   type DualPoolSpendSubmissionRow,
   type DualRewardsSubmissionReversalDue,
 } from "@/lib/dual-rewards-pool-budget";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 export type BulkDualReversalRefundSummary = {
   reward_refunded_cents: number;
@@ -277,12 +278,25 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     return { ok: true, skipWalletDebitIds: new Set(), refundSummaryBySubmissionId: new Map() };
   }
 
-  const { data: rows, error: rowsErr } = await params.supabaseAdmin
-    .from("submissions")
-    .select(
-      "id, contest_id, creator_id, status, earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, contests!inner(contest_type, title)",
-    )
-    .in("id", ids);
+  const { data: rows, error: rowsErr } = await fetchByIdsInChunks({
+    ids,
+    fetchChunk: async (chunkIds) => {
+      const result = await params.supabaseAdmin
+        .from("submissions")
+        .select(
+          "id, contest_id, creator_id, status, earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, contests!inner(contest_type, title)",
+        )
+        .in("id", chunkIds);
+      return {
+        data: (result.data || null) as Array<
+          SubmissionRow & {
+            contests?: ContestJoinRow | ContestJoinRow[] | null;
+          }
+        > | null,
+        error: result.error,
+      };
+    },
+  });
 
   if (rowsErr) {
     return { ok: false, error: rowsErr.message };
