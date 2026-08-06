@@ -2266,7 +2266,7 @@ function DashboardContent({
                       <div className="relative h-full flex flex-col">
                         {/* Header */}
                         <SheetHeader
-                          className="p-6 border-b flex-shrink-0"
+                          className="p-6 border-b flex-shrink-0 text-left"
                           style={{
                             borderColor: `rgba(${theme.primary}, ${
                               currentMode === "dark" ? "0.2" : "0.15"
@@ -2305,7 +2305,7 @@ function DashboardContent({
                                 {avatarFallback}
                               </div>
                             )}
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 text-left">
                               <SheetTitle
                                 className="text-lg text-start font-semibold truncate max-w-full"
                                 style={{
@@ -2316,7 +2316,7 @@ function DashboardContent({
                                 {displayName}
                               </SheetTitle>
 
-                              <div className="flex-1 min-w-0 mt-1">
+                              <div className="mt-1 flex justify-start">
                                 <span
                                   className={cn(
                                     "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide",
