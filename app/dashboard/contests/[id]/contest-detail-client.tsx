@@ -20276,7 +20276,7 @@ export default function ContestDetailClient({
                                           {submission.creator_username ||
                                             "unknown"}
                                         </p>
-                                        {submission.video_thumbnail_url && (
+                                        {submission.content_link && (
                                           <div className="flex items-center gap-2 mt-1">
                                             <a
                                               href={getSubmissionContentViewHref(
