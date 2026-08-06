@@ -108,7 +108,10 @@ import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
 } from "@/lib/currency-utils";
-import { formatRefundReversalToastLine } from "@/lib/bulk-payment-toast";
+import {
+  formatRefundReversalToastLine,
+  getBulkPaymentToastMeta,
+} from "@/lib/bulk-payment-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
   parseSubmissionMetadata,
@@ -2506,6 +2509,29 @@ export default function ContestDetailClient({
   const [normalViewBulkActiveAction, setNormalViewBulkActiveAction] = useState<
     "verify" | "reject" | "pending" | null
   >(null);
+  const [creatorWiseSelectedCreators, setCreatorWiseSelectedCreators] = useState<
+    Set<string>
+  >(new Set());
+  type CreatorWiseBulkPaymentActiveKey =
+    | "standard:0"
+    | "standard:1"
+    | "bonus:0"
+    | "bonus:1"
+    | "both:0"
+    | "both:1";
+  const [creatorWiseBulkPaymentActiveKey, setCreatorWiseBulkPaymentActiveKey] =
+    useState<CreatorWiseBulkPaymentActiveKey | null>(null);
+  const creatorWiseBulkPayKey = (
+    payType: "standard" | "bonus" | "both",
+    isBulk: boolean,
+  ): CreatorWiseBulkPaymentActiveKey =>
+    `${payType}:${isBulk ? "1" : "0"}` as CreatorWiseBulkPaymentActiveKey;
+  const isCreatorWiseBulkPayBtnLoading = (
+    payType: "standard" | "bonus" | "both",
+    isBulk: boolean,
+  ) => creatorWiseBulkPaymentActiveKey === creatorWiseBulkPayKey(payType, isBulk);
+  const isAnyCreatorWiseBulkPaymentBusy =
+    creatorWiseBulkPaymentActiveKey !== null;
   const normalViewBulkStatusActionsBusy =
     normalViewBulkActiveAction !== null || creatorModalParentBulkLoading;
   const normalViewBulkLoadingText = (
@@ -5693,6 +5719,38 @@ export default function ContestDetailClient({
         creatorWisePage * creatorWiseItemsPerPage,
       )
     : [];
+  const creatorWisePageCreatorIds = paginatedCreatorGroups
+    .map((group: any) => String(group.creator?.id || ""))
+    .filter(Boolean);
+  const creatorWiseAllPageSelected =
+    creatorWisePageCreatorIds.length > 0 &&
+    creatorWisePageCreatorIds.every((creatorId) =>
+      creatorWiseSelectedCreators.has(creatorId),
+    );
+  const creatorWiseSomePageSelected = creatorWisePageCreatorIds.some((creatorId) =>
+    creatorWiseSelectedCreators.has(creatorId),
+  );
+  const creatorWiseHasFlatFeeBonus =
+    getFlatFeeBonusCentsFromContest(currentContest) > 0;
+  const showCreatorWiseBulkPaymentActions =
+    isAdminView &&
+    !isPostCampaignLeaderboard &&
+    currentContest?.post_contest_status === "verification_complete";
+
+  useEffect(() => {
+    const visibleCreatorIds = new Set(
+      filteredCreatorGroups.map((group: any) => String(group.creator?.id || "")),
+    );
+    setCreatorWiseSelectedCreators((prev) => {
+      const next = new Set<string>();
+      prev.forEach((creatorId) => {
+        if (visibleCreatorIds.has(creatorId)) {
+          next.add(creatorId);
+        }
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredCreatorGroups]);
 
   const showTwitterCreatorManualColumns = useMemo(
     () =>
@@ -7682,6 +7740,439 @@ export default function ContestDetailClient({
       });
     } finally {
       setIsLoadingSubmission((prev) => ({ ...prev, [creatorId]: false }));
+    }
+  };
+
+  const handleCreatorWiseCheckboxChange = (
+    creatorId: string,
+    checked: boolean | "indeterminate",
+  ) => {
+    setCreatorWiseSelectedCreators((prev) => {
+      const next = new Set(prev);
+      if (checked === true) {
+        next.add(creatorId);
+      } else {
+        next.delete(creatorId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreatorWiseSelectAll = (
+    groups: Array<{ creator: { id: string } }>,
+    checked: boolean | "indeterminate",
+  ) => {
+    setCreatorWiseSelectedCreators((prev) => {
+      const next = new Set(prev);
+      for (const group of groups) {
+        const creatorId = String(group.creator?.id || "");
+        if (!creatorId) continue;
+        if (checked === true) {
+          next.add(creatorId);
+        } else {
+          next.delete(creatorId);
+        }
+      }
+      return next;
+    });
+  };
+
+  const getCreatorWiseSubmissionPayStatus = (submission: any): string => {
+    const isTwitterTweet =
+      submission?.is_twitter_tweet === true ||
+      String(submission?.platform || "").toLowerCase() === "twitter" ||
+      String(submission?.platform || "").toLowerCase() === "x";
+    const status = isTwitterTweet
+      ? submission?.moderation_status || submission?.status
+      : submission?.status;
+    return String(status || "").toLowerCase();
+  };
+
+  const filterCreatorWisePayableSubmissions = (
+    submissions: any[],
+    paymentType: "standard" | "bonus" | "both",
+    isTwitterCpmContest: boolean,
+  ) => {
+    if (paymentType === "bonus" && isTwitterCpmContest) {
+      return submissions.filter((submission) => {
+        if (submission?.is_twitter_tweet !== true) return false;
+        if (submission?.bonus_paid) return false;
+        const st = getCreatorWiseSubmissionPayStatus(submission);
+        return st === "paid" || submission?.paid === true;
+      });
+    }
+    if (paymentType === "bonus") {
+      return submissions.filter((submission) => {
+        if (submission?.bonus_paid) return false;
+        const st = getCreatorWiseSubmissionPayStatus(submission);
+        return (
+          st === "verified" ||
+          st === "approved" ||
+          st === "paid" ||
+          submission?.paid === true
+        );
+      });
+    }
+    return submissions.filter((submission) => {
+      const st = getCreatorWiseSubmissionPayStatus(submission);
+      return st === "verified" || st === "approved";
+    });
+  };
+
+  const handleCreatorWiseBulkPayment = async (
+    paymentType: "standard" | "bonus" | "both",
+    isBulkTransaction: boolean,
+  ) => {
+    const selectedGroups = filteredCreatorGroups.filter((group: any) =>
+      creatorWiseSelectedCreators.has(String(group.creator?.id || "")),
+    );
+
+    if (selectedGroups.length === 0) {
+      toast({
+        title: "No creators selected",
+        description: "Select at least one creator to process payment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const isTwitterLeaderboardCreatorWise =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image" &&
+      currentContest?.contest_type === "leaderboard";
+    const isTwitterCpmCreatorWise =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image" &&
+      isCpmContestType(currentContest?.contest_type);
+    const isDualRewardsContest = isDualRewardsContestType(
+      currentContest?.contest_type,
+    );
+    const hasFlatFeeBonus = getFlatFeeBonusCentsFromContest(currentContest) > 0;
+
+    // Preflight: ensure at least one selected creator has payable work.
+    const hasAnyPayable = selectedGroups.some((group: any) => {
+      if (isTwitterLeaderboardCreatorWise) {
+        if (
+          paymentType !== "bonus" &&
+          !group.paid &&
+          group.creator_moderation_status !== "rejected"
+        ) {
+          return true;
+        }
+        if (paymentType !== "standard" && hasFlatFeeBonus) {
+          return (group.submissions || []).some(
+            (submission: any) =>
+              submission?.is_twitter_tweet === true &&
+              !submission?.bonus_paid &&
+              ["verified", "approved", "paid"].includes(
+                getCreatorWiseSubmissionPayStatus(submission),
+              ),
+          );
+        }
+        return false;
+      }
+      return (
+        filterCreatorWisePayableSubmissions(
+          group.submissions || [],
+          paymentType,
+          isTwitterCpmCreatorWise,
+        ).length > 0
+      );
+    });
+
+    if (!hasAnyPayable) {
+      toast({
+        title: "Cannot pay",
+        description:
+          paymentType === "bonus"
+            ? "No selected creators have unpaid bonus. Bonus can be paid on verified or already-paid rows whose bonus has not been paid yet."
+            : "No selected creators have verified unpaid submissions. Only verified submissions can be paid.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCreatorWiseBulkPaymentActiveKey(
+      creatorWiseBulkPayKey(paymentType, isBulkTransaction),
+    );
+    try {
+      let paidCreators = 0;
+      let skippedCreators = 0;
+      let totalPaidCents = 0;
+      let totalRewardCents = 0;
+      let totalBonusCents = 0;
+      let totalCpmCents = 0;
+      let totalMilestoneCents = 0;
+
+      for (const group of selectedGroups) {
+        const creatorId = String(group.creator?.id || "");
+        if (!creatorId) {
+          skippedCreators++;
+          continue;
+        }
+
+        try {
+          if (isTwitterLeaderboardCreatorWise) {
+            let creatorRewardCents = 0;
+            let creatorBonusCents = 0;
+
+            if (
+              paymentType !== "bonus" &&
+              !group.paid &&
+              group.creator_moderation_status !== "rejected"
+            ) {
+              const rewardResponse = await fetch(
+                `/api/contests/${contestId}/pay-twitter-creator`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ creatorId }),
+                },
+              );
+              const rewardResult = await rewardResponse.json();
+              if (!rewardResponse.ok) {
+                throw new Error(
+                  rewardResult?.error || "Failed to process creator payment",
+                );
+              }
+              creatorRewardCents += Number(rewardResult?.amount) || 0;
+            }
+
+            if (paymentType !== "standard" && hasFlatFeeBonus) {
+              const bonusEligibleTweets = (group.submissions || []).filter(
+                (submission: any) =>
+                  submission?.is_twitter_tweet === true &&
+                  !submission?.bonus_paid &&
+                  ["verified", "approved", "paid"].includes(
+                    getCreatorWiseSubmissionPayStatus(submission),
+                  ),
+              );
+
+              for (const tweet of bonusEligibleTweets) {
+                const bonusResponse = await fetch(
+                  `/api/contests/${contestId}/pay-twitter-bonus`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ tweetId: tweet.id }),
+                  },
+                );
+                const bonusResult = await bonusResponse.json();
+                if (!bonusResponse.ok) {
+                  throw new Error(
+                    bonusResult?.error || "Failed to process creator bonus",
+                  );
+                }
+                creatorBonusCents += Number(bonusResult?.amount) || 0;
+              }
+            }
+
+            const creatorPaidNow = creatorRewardCents + creatorBonusCents;
+            if (creatorPaidNow > 0) {
+              paidCreators++;
+              totalPaidCents += creatorPaidNow;
+              totalRewardCents += creatorRewardCents;
+              totalBonusCents += creatorBonusCents;
+            } else {
+              skippedCreators++;
+            }
+            continue;
+          }
+
+          const payableSubs = filterCreatorWisePayableSubmissions(
+            group.submissions || [],
+            paymentType,
+            isTwitterCpmCreatorWise,
+          ).sort(
+            (a: any, b: any) =>
+              new Date(a.created_at || 0).getTime() -
+              new Date(b.created_at || 0).getTime(),
+          );
+
+          if (payableSubs.length === 0) {
+            skippedCreators++;
+            continue;
+          }
+
+          const submissionIds = payableSubs
+            .map((submission: any) => String(submission?.id || ""))
+            .filter(Boolean);
+
+          // Non-bulk: pay each payable submission individually (same as modal left buttons).
+          if (!isBulkTransaction) {
+            let creatorPaidAny = false;
+            for (const submission of payableSubs) {
+              try {
+                if (isDualRewardsContest) {
+                  const component =
+                    paymentType === "standard"
+                      ? "cpm"
+                      : paymentType === "bonus"
+                        ? "milestone"
+                        : "both";
+                  await handleDualRewardsFromDetailPayment(
+                    String(submission.id),
+                    component,
+                    { skipReload: true },
+                  );
+                } else {
+                  const action =
+                    paymentType === "bonus"
+                      ? "mark_bonus_paid"
+                      : paymentType === "both"
+                        ? "mark_both_paid"
+                        : "paid";
+                  await handleUpdateSubmissionStatus(
+                    String(submission.id),
+                    action,
+                    undefined,
+                    undefined,
+                    { skipReload: true },
+                  );
+                }
+                creatorPaidAny = true;
+              } catch (error) {
+                console.error(
+                  `[creator-wise-payment] Individual pay failed for ${submission.id}:`,
+                  error,
+                );
+              }
+            }
+            if (creatorPaidAny) {
+              paidCreators++;
+              // Creator-wise expected is the display source of truth for this path.
+              const expectedCents = Math.max(
+                0,
+                Number(group.earnings?.expected || 0),
+              );
+              const bonusExpectedCents = Math.max(
+                0,
+                Number(group.bonus?.expected || 0),
+              );
+              if (isDualRewardsContest) {
+                // Dual creator-wise expected is combined; split unknown without per-row maps.
+                if (paymentType === "standard") {
+                  totalCpmCents += expectedCents;
+                  totalPaidCents += expectedCents;
+                } else if (paymentType === "bonus") {
+                  totalMilestoneCents += expectedCents;
+                  totalPaidCents += expectedCents;
+                } else {
+                  totalCpmCents += expectedCents;
+                  totalPaidCents += expectedCents;
+                }
+              } else if (paymentType === "standard") {
+                totalRewardCents += expectedCents;
+                totalPaidCents += expectedCents;
+              } else if (paymentType === "bonus") {
+                totalBonusCents += bonusExpectedCents;
+                totalPaidCents += bonusExpectedCents;
+              } else {
+                totalRewardCents += expectedCents;
+                totalBonusCents += bonusExpectedCents;
+                totalPaidCents += expectedCents + bonusExpectedCents;
+              }
+            } else {
+              skippedCreators++;
+            }
+            continue;
+          }
+
+          const response = isTwitterCpmCreatorWise
+            ? await fetch(`/api/contests/${contestId}/bulk-pay-twitter-cpm`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  tweet_ids: submissionIds,
+                  payment_type: paymentType,
+                  creator_id: creatorId,
+                }),
+              })
+            : await fetch("/api/admin/bulk-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  submission_ids: submissionIds,
+                  payment_type: paymentType,
+                  contest_id: contestId,
+                  creator_id: creatorId,
+                }),
+              });
+
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result?.error || "Failed to process bulk payment");
+          }
+
+          const data = result?.data || {};
+          const creatorPaidNow = Number(data.total_amount) || 0;
+          if (creatorPaidNow > 0) {
+            paidCreators++;
+            totalPaidCents += creatorPaidNow;
+            if (isDualRewardsContest) {
+              totalCpmCents += Number(data.total_cpm) || 0;
+              totalMilestoneCents += Number(data.total_milestone) || 0;
+            } else {
+              totalRewardCents +=
+                Number(
+                  data.total_cpm ??
+                    data.total_reward ??
+                    data.total_standard ??
+                    data.total_amount,
+                ) || 0;
+              totalBonusCents += Number(data.total_bonus) || 0;
+            }
+          } else {
+            skippedCreators++;
+          }
+        } catch (error) {
+          console.error(
+            `[creator-wise-bulk-payment] Failed for creator ${creatorId}:`,
+            error,
+          );
+          skippedCreators++;
+        }
+      }
+
+      const toastMeta = getBulkPaymentToastMeta(paidCreators, skippedCreators);
+      const descriptionLines = isDualRewardsContest
+        ? [
+            `Paid creators: ${paidCreators}`,
+            `Skipped: ${skippedCreators}`,
+            ``,
+            `CPM: ${formatMoney(totalCpmCents)}`,
+            `Milestone: ${formatMoney(totalMilestoneCents)}`,
+            `Total paid: ${formatMoney(totalPaidCents)}`,
+          ]
+        : [
+            `Paid creators: ${paidCreators}`,
+            `Skipped: ${skippedCreators}`,
+            ``,
+            ...(paymentType !== "bonus"
+              ? [`Reward paid: ${formatMoney(totalRewardCents)}`]
+              : []),
+            ...(paymentType !== "standard" &&
+            (hasFlatFeeBonus || totalBonusCents > 0)
+              ? [`Bonus paid: ${formatMoney(totalBonusCents)}`]
+              : []),
+            `Total paid: ${formatMoney(totalPaidCents)}`,
+          ];
+
+      toast({
+        title: toastMeta.title,
+        description: descriptionLines.join("\n"),
+        variant:
+          toastMeta.variant === "destructive" ? "destructive" : "payment",
+      });
+
+      if (paidCreators > 0) {
+        setCreatorWiseSelectedCreators(new Set());
+        setTimeout(() => window.location.reload(), 800);
+      }
+    } finally {
+      setCreatorWiseBulkPaymentActiveKey(null);
     }
   };
 
@@ -23031,6 +23522,226 @@ export default function ContestDetailClient({
                                 getStatus={getStatus}
                               />
                             )}
+                            {showCreatorWiseBulkPaymentActions &&
+                              creatorWiseSelectedCreators.size > 0 && (
+                                <div
+                                  className={cn(
+                                    "mx-4 mb-4 rounded-xl border p-3",
+                                    isDark
+                                      ? "border-blue-500/30 bg-blue-950/20"
+                                      : "border-blue-200 bg-blue-50",
+                                  )}
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={cn(
+                                        "text-sm font-medium",
+                                        isDark
+                                          ? "text-blue-200"
+                                          : "text-blue-900",
+                                      )}
+                                    >
+                                      {creatorWiseSelectedCreators.size} creator
+                                      {creatorWiseSelectedCreators.size === 1
+                                        ? ""
+                                        : "s"}{" "}
+                                      selected
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8"
+                                      onClick={() =>
+                                        setCreatorWiseSelectedCreators(
+                                          new Set(),
+                                        )
+                                      }
+                                      disabled={isAnyCreatorWiseBulkPaymentBusy}
+                                    >
+                                      Clear
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() =>
+                                        handleCreatorWiseBulkPayment(
+                                          "standard",
+                                          false,
+                                        )
+                                      }
+                                      disabled={isAnyCreatorWiseBulkPaymentBusy}
+                                      className="h-8 bg-blue-600 text-white hover:bg-blue-700"
+                                    >
+                                      {isCreatorWiseBulkPayBtnLoading(
+                                        "standard",
+                                        false,
+                                      ) ? (
+                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                      )}
+                                      {isDualRewardsContestType(
+                                        currentContest.contest_type,
+                                      )
+                                        ? "Mark as Paid (CPM)"
+                                        : "Mark as Paid"}
+                                    </Button>
+                                    {(creatorWiseHasFlatFeeBonus ||
+                                      isDualRewardsContestType(
+                                        currentContest.contest_type,
+                                      )) && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkPayment(
+                                              "bonus",
+                                              false,
+                                            )
+                                          }
+                                          disabled={
+                                            isAnyCreatorWiseBulkPaymentBusy
+                                          }
+                                          className="h-8 bg-green-600 text-white hover:bg-green-700"
+                                        >
+                                          {isCreatorWiseBulkPayBtnLoading(
+                                            "bonus",
+                                            false,
+                                          ) ? (
+                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                          )}
+                                          {isDualRewardsContestType(
+                                            currentContest.contest_type,
+                                          )
+                                            ? "Mark as Paid (Milestone)"
+                                            : "Mark Bonus as Paid"}
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkPayment(
+                                              "both",
+                                              false,
+                                            )
+                                          }
+                                          disabled={
+                                            isAnyCreatorWiseBulkPaymentBusy
+                                          }
+                                          className="h-8 bg-purple-600 text-white hover:bg-purple-700"
+                                        >
+                                          {isCreatorWiseBulkPayBtnLoading(
+                                            "both",
+                                            false,
+                                          ) ? (
+                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                          )}
+                                          {isDualRewardsContestType(
+                                            currentContest.contest_type,
+                                          )
+                                            ? "Mark Both as Paid (CPM+Milestone)"
+                                            : "Mark Both as Paid"}
+                                        </Button>
+                                      </>
+                                    )}
+                                    <span
+                                      className={cn(
+                                        "hidden h-6 w-px shrink-0 self-center sm:block",
+                                        isDark ? "bg-white/15" : "bg-border",
+                                      )}
+                                      aria-hidden
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() =>
+                                        handleCreatorWiseBulkPayment(
+                                          "standard",
+                                          true,
+                                        )
+                                      }
+                                      disabled={isAnyCreatorWiseBulkPaymentBusy}
+                                      className="h-8 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                    >
+                                      {isCreatorWiseBulkPayBtnLoading(
+                                        "standard",
+                                        true,
+                                      ) ? (
+                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                      )}
+                                      {isDualRewardsContestType(
+                                        currentContest.contest_type,
+                                      )
+                                        ? "Mark as Paid Bulk (CPM)"
+                                        : "Mark as Paid (Bulk)"}
+                                    </Button>
+                                    {(creatorWiseHasFlatFeeBonus ||
+                                      isDualRewardsContestType(
+                                        currentContest.contest_type,
+                                      )) && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkPayment(
+                                              "bonus",
+                                              true,
+                                            )
+                                          }
+                                          disabled={
+                                            isAnyCreatorWiseBulkPaymentBusy
+                                          }
+                                          className="h-8 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                        >
+                                          {isCreatorWiseBulkPayBtnLoading(
+                                            "bonus",
+                                            true,
+                                          ) ? (
+                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                          )}
+                                          {isDualRewardsContestType(
+                                            currentContest.contest_type,
+                                          )
+                                            ? "Mark as Paid Bulk (Milestone)"
+                                            : "Mark Bonus as Paid (Bulk)"}
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleCreatorWiseBulkPayment(
+                                              "both",
+                                              true,
+                                            )
+                                          }
+                                          disabled={
+                                            isAnyCreatorWiseBulkPaymentBusy
+                                          }
+                                          className="h-8 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+                                        >
+                                          {isCreatorWiseBulkPayBtnLoading(
+                                            "both",
+                                            true,
+                                          ) ? (
+                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                          )}
+                                          {isDualRewardsContestType(
+                                            currentContest.contest_type,
+                                          )
+                                            ? "Mark Both as Paid Bulk (CPM+Milestone)"
+                                            : "Mark Both as Paid (Bulk)"}
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             <Table>
                               <TableHeader>
                                 <TableRow
@@ -23041,6 +23752,28 @@ export default function ContestDetailClient({
                                       : "bg-slate-100 hover:bg-slate-100 border-slate-200",
                                   )}
                                 >
+                                  {showCreatorWiseBulkPaymentActions && (
+                                    <TableHead className="w-12 text-center">
+                                      <Checkbox
+                                        checked={
+                                          creatorWiseAllPageSelected
+                                            ? true
+                                            : creatorWiseSomePageSelected
+                                              ? "indeterminate"
+                                              : false
+                                        }
+                                        onCheckedChange={(checked) =>
+                                          handleCreatorWiseSelectAll(
+                                            paginatedCreatorGroups as Array<{
+                                              creator: { id: string };
+                                            }>,
+                                            checked,
+                                          )
+                                        }
+                                        aria-label="Select all creators on this page"
+                                      />
+                                    </TableHead>
+                                  )}
                                   <TableHead className="w-12">#</TableHead>
                                   <TableHead>Creator</TableHead>
                                   {showCreatorWiseTrustScoreColumn && (
@@ -23455,6 +24188,7 @@ export default function ContestDetailClient({
                                   <TableRow>
                                     <TableCell
                                       colSpan={
+                                        (showCreatorWiseBulkPaymentActions ? 1 : 0) +
                                         12 +
                                         creatorWiseEligibilityColumnCount +
                                         (isMilestoneContestType(
@@ -23680,6 +24414,22 @@ export default function ContestDetailClient({
                                       };
                                       return (
                                         <TableRow key={group.creator.id}>
+                                          {showCreatorWiseBulkPaymentActions && (
+                                            <TableCell className="text-center">
+                                              <Checkbox
+                                                checked={creatorWiseSelectedCreators.has(
+                                                  String(group.creator.id),
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                  handleCreatorWiseCheckboxChange(
+                                                    String(group.creator.id),
+                                                    checked,
+                                                  )
+                                                }
+                                                aria-label={`Select creator ${creatorUsername || creatorFullName || group.creator.id}`}
+                                              />
+                                            </TableCell>
+                                          )}
                                           <TableCell className="font-medium">
                                             {globalIndex + 1}
                                           </TableCell>
