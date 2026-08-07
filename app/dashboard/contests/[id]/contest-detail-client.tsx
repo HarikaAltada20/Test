@@ -4886,48 +4886,39 @@ export default function ContestDetailClient({
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
 
-        // Keep paid creators in the ranking. After pay, statusCounts.verified is 0
-        // but statusCounts.paid > 0 — excluding them reassigns prizes to unpaid creators.
+        // Expected Reward is a live preview (same idea as Twitter leaderboard):
+        // include pending creators so standings show projected prizes before verify.
+        // Actual payout still ranks verified/paid only (see bulk-payment / prize helper).
+        const rankingViewsForDisplay = (group: any): number =>
+          (group.submissions || []).reduce((sum: number, s: any) => {
+            const st = String(s?.status || "").toLowerCase();
+            if (st === "rejected") return sum;
+            return sum + Math.max(0, Number(s?.views) || 0);
+          }, 0);
+
         const eligibleCreators = allCreators.filter((group: any) => {
-          const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
-          const hasPaidSubmissions =
-            group.statusCounts?.paid > 0 ||
-            (group.submissions || []).some((s: any) =>
-              isSubmissionPaidForGrantedReward(s),
-            );
           const creatorStatus = (
             group.creator_moderation_status || ""
           ).toLowerCase();
+          if (creatorStatus === "rejected") return false;
 
-          return (
-            hasVerifiedSubmissions ||
-            hasPaidSubmissions ||
-            creatorStatus === "verified" ||
-            creatorStatus === "paid"
+          const hasRankableSubmissions = (group.submissions || []).some(
+            (s: any) => {
+              const st = String(s?.status || "").toLowerCase();
+              return st !== "rejected";
+            },
           );
+          return hasRankableSubmissions || rankingViewsForDisplay(group) > 0;
         });
 
-        // Rank ONLY eligible creators by total verified/paid views (same as payout server).
-        eligibleCreators.sort((a: any, b: any) => {
-          const viewsA = (a.submissions || []).reduce((sum: number, s: any) => {
-            const st = String(s?.status || "").toLowerCase();
-            const paid = s?.paid === true || st === "paid";
-            if (st !== "verified" && !paid) return sum;
-            return sum + Math.max(0, Number(s?.views) || 0);
-          }, 0);
-          const viewsB = (b.submissions || []).reduce((sum: number, s: any) => {
-            const st = String(s?.status || "").toLowerCase();
-            const paid = s?.paid === true || st === "paid";
-            if (st !== "verified" && !paid) return sum;
-            return sum + Math.max(0, Number(s?.views) || 0);
-          }, 0);
-          return (
-            viewsB - viewsA ||
+        // Rank by total non-rejected views (pending + verified + paid).
+        eligibleCreators.sort(
+          (a: any, b: any) =>
+            rankingViewsForDisplay(b) - rankingViewsForDisplay(a) ||
             String(a.creator?.id || "").localeCompare(
               String(b.creator?.id || ""),
-            )
-          );
-        });
+            ),
+        );
 
         eligibleCreators.forEach((group: any, index: number) => {
           const rank = index + 1;

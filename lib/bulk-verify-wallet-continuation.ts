@@ -15,13 +15,10 @@ export type BulkVerifyWalletContinuationPayload = {
 };
 
 function getSigningSecret(): string {
-  const secret = (
-    process.env.CRON_SECRET ||
-    ""
-  ).trim();
+  const secret = (process.env.CRON_SECRET || "").trim();
   if (!secret) {
     throw new Error(
-      "ENCRYPTION_SECRET (or CRON_SECRET) is required to sign wallet continuation tokens",
+      "CRON_SECRET is required to sign wallet continuation tokens",
     );
   }
   return secret;

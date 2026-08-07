@@ -6,11 +6,23 @@ import {
 } from "./bulk-verify-wallet-continuation";
 
 describe("bulk verify wallet continuation token", () => {
-  const prevSecret = process.env.ENCRYPTION_SECRET;
+  const prevCronSecret = process.env.CRON_SECRET;
+
+  function withTestSecret(run: () => void) {
+    process.env.CRON_SECRET = "test-cron-secret-for-wallet-continuation";
+    try {
+      run();
+    } finally {
+      if (prevCronSecret === undefined) {
+        delete process.env.CRON_SECRET;
+      } else {
+        process.env.CRON_SECRET = prevCronSecret;
+      }
+    }
+  }
 
   it("issues a token that authorizes later chunks for the same actor/action", () => {
-    process.env.ENCRYPTION_SECRET = "test-secret-for-wallet-continuation";
-    try {
+    withTestSecret(() => {
       const token = issueBulkVerifyWalletContinuation({
         actorId: "admin-1",
         action: "pending",
@@ -29,14 +41,11 @@ describe("bulk verify wallet continuation token", () => {
         assert.equal(ok.skipWalletDebitIds.has("s1"), true);
         assert.equal(ok.skipWalletDebitIds.has("s2"), true);
       }
-    } finally {
-      process.env.ENCRYPTION_SECRET = prevSecret;
-    }
+    });
   });
 
   it("rejects forged tokens, actor mismatch, and IDs outside preflight", () => {
-    process.env.ENCRYPTION_SECRET = "test-secret-for-wallet-continuation";
-    try {
+    withTestSecret(() => {
       const token = issueBulkVerifyWalletContinuation({
         actorId: "admin-1",
         action: "rejected",
@@ -93,8 +102,6 @@ describe("bulk verify wallet continuation token", () => {
         }).ok,
         false,
       );
-    } finally {
-      process.env.ENCRYPTION_SECRET = prevSecret;
-    }
+    });
   });
 });
