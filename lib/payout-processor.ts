@@ -91,16 +91,25 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
           if (typeof cpm?.max_views === 'number' && effectiveViews > cpm.max_views) effectiveViews = cpm.max_views;
           rewardAmount = Math.round((effectiveViews * rate / 1000) * 100);
         } else if ((contest as any).contest_type === 'leaderboard') {
-          const { count: higherViewsCount } = await supabaseAdmin
-            .from('submissions')
-            .select('id', { count: 'exact', head: true })
-            .eq('contest_id', sub.contest_id)
-            .in('status', ['verified', 'paid'])
-            .gt('views', sub.views || 0);
-          const rank = (higherViewsCount || 0) + 1;
-          const prizes = (contest as any)?.contest_based_details?.leaderboard_contest?.prizes || [];
-          const prizeForRank = prizes.find((p: any) => p.position === rank);
-          rewardAmount = prizeForRank?.amount || 0; // cents
+          const { computeNonTwitterLeaderboardSubmissionPrizeCents } =
+            await import('@/lib/non-twitter-leaderboard-creator-prize');
+          const prizes =
+            (contest as any)?.contest_based_details?.leaderboard_contest?.prizes ||
+            [];
+          const prizeResult =
+            await computeNonTwitterLeaderboardSubmissionPrizeCents({
+              supabaseAdmin,
+              contestId: sub.contest_id,
+              submissionId: sub.id,
+              views: sub.views,
+              prizes,
+            });
+          if (prizeResult.error) {
+            throw new Error(
+              `Failed to compute leaderboard prize: ${prizeResult.error}`,
+            );
+          }
+          rewardAmount = prizeResult.prizeCents;
         }
       }
 

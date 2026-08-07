@@ -4868,8 +4868,7 @@ export default function ContestDetailClient({
     }
 
     // For non-Twitter leaderboard campaigns (e.g. Instagram / YouTube),
-    // assign expected reward at CREATOR level based on leaderboard prizes
-    // so creator-wise view matches the leaderboard expectations.
+    // Expected Reward = sum of each eligible submission's contest-wide rank prize.
     const isNonTwitterLeaderboard =
       currentContest?.contest_type === "leaderboard" &&
       !(
@@ -4885,80 +4884,55 @@ export default function ContestDetailClient({
 
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
-
-        // Expected Reward matches payout eligibility: verified/approved/paid.
-        // Pending rows are excluded so admins do not pay based on projected standings.
-        const rankingViewsForPayout = (group: any): number =>
-          (group.submissions || []).reduce((sum: number, s: any) => {
-            const st = String(s?.status || "").toLowerCase();
-            const paid = s?.paid === true;
-            if (
-              st !== "verified" &&
-              st !== "approved" &&
-              st !== "paid" &&
-              !paid
-            ) {
-              return sum;
-            }
-            return sum + Math.max(0, Number(s?.views) || 0);
-          }, 0);
-
-        // Match server payout ranking: submission eligibility only (verified /
-        // approved / paid). Do not filter on creator_moderation_status — that
-        // field is Twitter-leaderboard-centric and is usually empty here.
-        const eligibleCreators = allCreators.filter((group: any) => {
-          const hasRankableSubmissions = (group.submissions || []).some(
-            (s: any) => {
-              const st = String(s?.status || "").toLowerCase();
-              return (
-                st === "verified" ||
-                st === "approved" ||
-                st === "paid" ||
-                s?.paid === true
-              );
-            },
+        const isEligibleSubmission = (s: any): boolean => {
+          const st = String(s?.status || "").toLowerCase();
+          return (
+            st === "verified" ||
+            st === "approved" ||
+            st === "paid" ||
+            s?.paid === true
           );
-          return hasRankableSubmissions || rankingViewsForPayout(group) > 0;
-        });
+        };
 
-        // Rank by total verified/paid views (same as bulk-payment / prize helper).
-        eligibleCreators.sort(
+        const eligibleSubs: any[] = [];
+        for (const group of allCreators) {
+          for (const s of group.submissions || []) {
+            if (isEligibleSubmission(s)) eligibleSubs.push(s);
+          }
+        }
+
+        eligibleSubs.sort(
           (a: any, b: any) =>
-            rankingViewsForPayout(b) - rankingViewsForPayout(a) ||
-            String(a.creator?.id || "").localeCompare(
-              String(b.creator?.id || ""),
-            ),
+            Math.max(0, Number(b?.views) || 0) -
+              Math.max(0, Number(a?.views) || 0) ||
+            String(a?.id || "").localeCompare(String(b?.id || "")),
         );
 
-        eligibleCreators.forEach((group: any, index: number) => {
+        const prizeBySubmissionId = new Map<string, number>();
+        eligibleSubs.forEach((s: any, index: number) => {
           const rank = index + 1;
           const prizeForRank = prizes.find((p: any) => p.position === rank);
-          if (!prizeForRank) {
-            // Outside prize places: no expected prize; keep granted from paid rows.
-            group.earnings.expected = 0;
-            return;
-          }
-
-          const prizeCents = Math.max(0, Number(prizeForRank.amount) || 0);
-
-          // Expected stays the rank prize even after pay (same as Twitter leaderboard).
-          group.earnings.expected = prizeCents;
-
-          const hasPaidSubmissions = (group.submissions || []).some((s: any) =>
-            isSubmissionPaidForGrantedReward(s),
+          prizeBySubmissionId.set(
+            String(s.id),
+            Math.max(0, Number(prizeForRank?.amount) || 0),
           );
-          if (hasPaidSubmissions) {
-            const grantedFromSubs = (group.submissions || []).reduce(
-              (sum: number, s: any) => {
-                if (!isSubmissionPaidForGrantedReward(s)) return sum;
-                return sum + Math.max(0, Number(s?.earnings) || 0);
-              },
-              0,
-            );
-            // Prefer wallet/DB earnings when present; otherwise mirror the prize.
-            group.earnings.granted =
-              grantedFromSubs > 0 ? grantedFromSubs : prizeCents;
-          }
+        });
+
+        allCreators.forEach((group: any) => {
+          group.earnings.expected = (group.submissions || []).reduce(
+            (sum: number, s: any) =>
+              sum + (prizeBySubmissionId.get(String(s.id)) || 0),
+            0,
+          );
+
+          const grantedFromSubs = (group.submissions || []).reduce(
+            (sum: number, s: any) => {
+              if (!isSubmissionPaidForGrantedReward(s)) return sum;
+              return sum + Math.max(0, Number(s?.earnings) || 0);
+            },
+            0,
+          );
+          group.earnings.granted = grantedFromSubs;
         });
       }
     }
@@ -8259,13 +8233,9 @@ export default function ContestDetailClient({
             .map((submission: any) => String(submission?.id || ""))
             .filter(Boolean);
 
-          const isNonTwitterLeaderboardCreatorWise =
-            currentContest?.contest_type === "leaderboard" &&
-            !isTwitterLeaderboardCreatorWise;
-
-          // Non-bulk individual pays — except non-Twitter leaderboard, which must use
-          // the creator-prize bulk API (per-row verify-submission overpays/wrong-ranks).
-          if (!isBulkTransaction && !isNonTwitterLeaderboardCreatorWise) {
+          // Non-bulk individual pays use per-submission verify; bulk aggregates
+          // one wallet credit per creator via /api/admin/bulk-payment.
+          if (!isBulkTransaction) {
             let creatorPaidAny = false;
             for (const submission of payableSubs) {
               try {
@@ -8343,13 +8313,7 @@ export default function ContestDetailClient({
 
           const data = result?.data || {};
           const creatorPaidNow = Number(data.total_amount) || 0;
-          // Leaderboard mark-paid-only (prize already granted) still counts as paid work.
-          const leaderboardMarkedPaidOnly =
-            isNonTwitterLeaderboardCreatorWise &&
-            paymentType !== "bonus" &&
-            creatorPaidNow === 0 &&
-            Number(data.paid_count ?? data.submission_count ?? 0) > 0;
-          if (creatorPaidNow > 0 || leaderboardMarkedPaidOnly) {
+          if (creatorPaidNow > 0) {
             paidCreators++;
             totalPaidCents += creatorPaidNow;
             if (isDualRewardsContest) {
