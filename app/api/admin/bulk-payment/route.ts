@@ -24,6 +24,7 @@ import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { computeNonTwitterLeaderboardCreatorPrizeCents } from "@/lib/non-twitter-leaderboard-creator-prize";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -475,6 +476,34 @@ export async function POST(request: NextRequest) {
       ) || 0;
     runningTotal = alreadyPaidAmount;
 
+    // Non-Twitter leaderboard: one creator-level prize (by total views rank), not per-row CPM.
+    let leaderboardRemainingPrizeCents = 0;
+    let leaderboardPrizeAssigned = false;
+    const isLeaderboardContest = contest.contest_type === "leaderboard";
+    if (isLeaderboardContest && payment_type !== "bonus") {
+      const prizes =
+        (contest.contest_based_details as any)?.leaderboard_contest?.prizes ||
+        [];
+      const prizeResult = await computeNonTwitterLeaderboardCreatorPrizeCents({
+        supabaseAdmin,
+        contestId: contest_id,
+        creatorId: creator_id,
+        prizes,
+      });
+      if (prizeResult.error) {
+        return NextResponse.json(
+          {
+            error: `Failed to compute leaderboard prize: ${prizeResult.error}`,
+          },
+          { status: 500 },
+        );
+      }
+      leaderboardRemainingPrizeCents = Math.max(
+        0,
+        prizeResult.prizeCents - alreadyPaidAmount,
+      );
+    }
+
     for (const sub of sortedSubmissions) {
       // Skip if already paid
       if (sub.paid && payment_type !== "bonus") {
@@ -486,7 +515,18 @@ export async function POST(request: NextRequest) {
       let submissionEarnings = 0;
 
       if (payment_type !== "bonus") {
-        if (contest.contest_type === "milestone") {
+        if (isLeaderboardContest) {
+          if (
+            !leaderboardPrizeAssigned &&
+            leaderboardRemainingPrizeCents > 0
+          ) {
+            submissionEarnings = leaderboardRemainingPrizeCents;
+            leaderboardPrizeAssigned = true;
+            runningTotal += submissionEarnings;
+          } else {
+            submissionEarnings = 0;
+          }
+        } else if (contest.contest_type === "milestone") {
           submissionEarnings =
             milestonePayoutBySubmissionId.get(String(sub.id)) || 0;
         } else {
@@ -528,19 +568,22 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Check if adding this submission would exceed the cap
-        if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
-          // Partial payment to reach cap exactly
-          const remainingCap = maxEarnings - runningTotal;
-          if (remainingCap > 0) {
-            submissionEarnings = remainingCap;
-            runningTotal = maxEarnings;
+        // Cap applies to CPM (and stored-earnings) paths; leaderboard uses fixed prize above.
+        if (!isLeaderboardContest) {
+          // Check if adding this submission would exceed the cap
+          if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
+            // Partial payment to reach cap exactly
+            const remainingCap = maxEarnings - runningTotal;
+            if (remainingCap > 0) {
+              submissionEarnings = remainingCap;
+              runningTotal = maxEarnings;
+            } else {
+              // Cap reached, skip this submission for CPM payment
+              submissionEarnings = 0;
+            }
           } else {
-            // Cap reached, skip this submission for CPM payment
-            submissionEarnings = 0;
+            runningTotal += submissionEarnings;
           }
-        } else {
-          runningTotal += submissionEarnings;
         }
 
         // Apply contest-level adjustment to CPM (reward) if configured
@@ -610,7 +653,16 @@ export async function POST(request: NextRequest) {
             })
           : 0;
 
-      if (finalCpmAmount > 0 || finalBonusAmount > 0) {
+      if (
+        finalCpmAmount > 0 ||
+        finalBonusAmount > 0 ||
+        // Leaderboard: mark remaining verified rows paid after prize is on this
+        // creator (this batch or a prior payment). Do not mark unpaid when prize is $0.
+        (isLeaderboardContest &&
+          payment_type !== "bonus" &&
+          !(sub.paid === true) &&
+          (leaderboardPrizeAssigned || alreadyPaidAmount > 0))
+      ) {
         if (isMilestoneContest) {
           breakdown.push({
             submission_id: sub.id,
@@ -652,89 +704,93 @@ export async function POST(request: NextRequest) {
           ? " Milestone: confirm submissions are not already paid, creator max earnings is not exhausted, and view counts qualify for the ladder (pending entries count toward winner limits)."
           : "";
 
-      // For bonus payouts, surface the specific reason buckets so admins can
-      // tell whether the rows hit the bonus budget cap, fell outside the
-      // contest's expected bonus window (FCFS allocation by created_at), or
-      // were already bonus_paid. Without this, the generic message is
-      // confusing when no bonus has actually been credited yet.
-      if (payment_type === "bonus") {
-        const alreadyBonusPaid = sortedSubmissions.filter(
-          (s) => s.bonus_paid === true,
-        ).length;
-        const notExpected = bonusReasonCounts.not_expected || 0;
-        const capExhausted = bonusReasonCounts.cap_exhausted || 0;
-        const partialZero = bonusReasonCounts.partial_remainder || 0;
+      // Leaderboard: prize may already be granted; still mark remaining verified rows paid.
+      const allowLeaderboardMarkPaidOnly =
+        isLeaderboardContest &&
+        payment_type !== "bonus" &&
+        breakdown.length > 0;
 
-        // Per-submission diagnostic so admins can compare with the UI's
-        // "Expected bonus" column when the buckets above seem to disagree
-        // with what's on screen.
-        const perSubmissionDiagnostic = sortedSubmissions.map((s) => ({
-          submission_id: s.id,
-          status: s.status,
-          paid: s.paid === true,
-          bonus_paid: s.bonus_paid === true,
-          in_eligible_map: globalExpectedBonusMap.has(String(s.id)),
-          expected_bonus_cents:
-            globalExpectedBonusMap.get(String(s.id)) ?? null,
-        }));
+      if (!allowLeaderboardMarkPaidOnly) {
+        if (payment_type === "bonus") {
+          const alreadyBonusPaid = sortedSubmissions.filter(
+            (s) => s.bonus_paid === true,
+          ).length;
+          const notExpected = bonusReasonCounts.not_expected || 0;
+          const capExhausted = bonusReasonCounts.cap_exhausted || 0;
+          const partialZero = bonusReasonCounts.partial_remainder || 0;
 
-        const reasonParts: string[] = [];
-        if (alreadyBonusPaid > 0) {
-          reasonParts.push(`${alreadyBonusPaid} already had bonus paid`);
-        }
-        if (notExpected > 0) {
-          reasonParts.push(
-            `${notExpected} fall outside this contest's bonus budget allocation`,
-          );
-        }
-        if (capExhausted > 0) {
-          reasonParts.push(`${capExhausted} hit the bonus cap at runtime`);
-        }
-        if (partialZero > 0) {
-          reasonParts.push(
-            `${partialZero} had bonus adjusted to 0 by the payout adjustment`,
-          );
-        }
-        const reasonSummary = reasonParts.length
-          ? ` ${reasonParts.join("; ")}.`
-          : "";
-        const tip =
-          notExpected > 0
-            ? " Bonus is allocated first-come-first-served by submission date until flat_fee_bonus_cap (or total_budget if no cap is set) is exhausted. To pay these rows, raise the cap/budget or pick earlier submissions."
+          // Per-submission diagnostic so admins can compare with the UI's
+          // "Expected bonus" column when the buckets above seem to disagree
+          // with what's on screen.
+          const perSubmissionDiagnostic = sortedSubmissions.map((s) => ({
+            submission_id: s.id,
+            status: s.status,
+            paid: s.paid === true,
+            bonus_paid: s.bonus_paid === true,
+            in_eligible_map: globalExpectedBonusMap.has(String(s.id)),
+            expected_bonus_cents:
+              globalExpectedBonusMap.get(String(s.id)) ?? null,
+          }));
+
+          const reasonParts: string[] = [];
+          if (alreadyBonusPaid > 0) {
+            reasonParts.push(`${alreadyBonusPaid} already had bonus paid`);
+          }
+          if (notExpected > 0) {
+            reasonParts.push(
+              `${notExpected} fall outside this contest's bonus budget allocation`,
+            );
+          }
+          if (capExhausted > 0) {
+            reasonParts.push(`${capExhausted} hit the bonus cap at runtime`);
+          }
+          if (partialZero > 0) {
+            reasonParts.push(
+              `${partialZero} had bonus adjusted to 0 by the payout adjustment`,
+            );
+          }
+          const reasonSummary = reasonParts.length
+            ? ` ${reasonParts.join("; ")}.`
             : "";
+          const tip =
+            notExpected > 0
+              ? " Bonus is allocated first-come-first-served by submission date until flat_fee_bonus_cap (or total_budget if no cap is set) is exhausted. To pay these rows, raise the cap/budget or pick earlier submissions."
+              : "";
 
-        console.warn("[bulk-payment] bonus payout produced 0 total amount", {
-          contest_id,
-          creator_id,
-          flatFeeBonus,
-          flatFeeBonusCap,
-          totalBudget,
-          currentBonusSpent,
-          globalExpectedBonusMapSize: globalExpectedBonusMap.size,
-          bonusReasonCounts,
-          alreadyBonusPaid,
-          perSubmissionDiagnostic,
-        });
+          console.warn("[bulk-payment] bonus payout produced 0 total amount", {
+            contest_id,
+            creator_id,
+            flatFeeBonus,
+            flatFeeBonusCap,
+            totalBudget,
+            currentBonusSpent,
+            globalExpectedBonusMapSize: globalExpectedBonusMap.size,
+            bonusReasonCounts,
+            alreadyBonusPaid,
+            perSubmissionDiagnostic,
+          });
+
+          return NextResponse.json(
+            {
+              error: "No bonus payments to process." + reasonSummary + tip,
+              bonus_reason_counts: bonusReasonCounts,
+              already_bonus_paid: alreadyBonusPaid,
+              per_submission_diagnostic: perSubmissionDiagnostic,
+            },
+            { status: 400 },
+          );
+        }
 
         return NextResponse.json(
           {
-            error: "No bonus payments to process." + reasonSummary + tip,
-            bonus_reason_counts: bonusReasonCounts,
-            already_bonus_paid: alreadyBonusPaid,
-            per_submission_diagnostic: perSubmissionDiagnostic,
+            error: isLeaderboardContest
+              ? "No leaderboard prize to pay for this creator. They may be outside the prize ranks, already fully paid, or have no verified submissions in the ranking."
+              : "No payments to process. All submissions may be already paid or cap reached." +
+                milestoneHint,
           },
           { status: 400 },
         );
       }
-
-      return NextResponse.json(
-        {
-          error:
-            "No payments to process. All submissions may be already paid or cap reached." +
-            milestoneHint,
-        },
-        { status: 400 },
-      );
     }
 
     const ledgerBundle = await loadContestPayoutLedgerBundle(
@@ -784,47 +840,63 @@ export async function POST(request: NextRequest) {
       .digest("hex")
       .slice(0, 48)}`;
 
-    const creditResult = await creditWithWalletShortfallRetry({
-      payableCents: totalAmount,
-      walletNetBeforePay: contestWalletNetBeforePay,
-      baseIdempotencyKey: bulkPayIdempotencyKey,
-      ledger: payoutLedgerState,
-      credit: (idempotencyKey) =>
-        creditCreatorWithdrawableBalance(
-          creator_id,
-          totalAmount,
-          `Bulk payment for ${paidCount} submissions in contest: ${
-            contest.title || "Contest"
-          }`,
-          {
-            idempotencyKey,
-            remarks: `Bulk payment: ${payment_type}`,
-            metadata: {
-              contest_id: contest_id,
-              payment_type: payment_type,
-              submission_count: paidCount,
-              breakdown: breakdown,
-              ...(isMilestoneContest
-                ? {
-                    total_milestone: totalMainPaid,
-                    total_bonus: totalBonusPaid,
-                  }
-                : {
-                    total_cpm: totalMainPaid,
-                    total_bonus: totalBonusPaid,
-                  }),
-              cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
-              bonus_reason_counts: bonusReasonCounts,
-            },
-          },
-        ),
-    });
+    let creditResult: {
+      success: boolean;
+      error?: string;
+      transactionId?: string | null;
+      alreadyApplied?: boolean;
+    } = {
+      success: true,
+      transactionId: null,
+      alreadyApplied: false,
+    };
 
-    if (!creditResult.success) {
-      return NextResponse.json(
-        { error: `Failed to credit wallet: ${creditResult.error}` },
-        { status: 500 },
-      );
+    if (totalAmount > 0) {
+      creditResult = await creditWithWalletShortfallRetry({
+        payableCents: totalAmount,
+        walletNetBeforePay: contestWalletNetBeforePay,
+        baseIdempotencyKey: bulkPayIdempotencyKey,
+        ledger: payoutLedgerState,
+        credit: (idempotencyKey) =>
+          creditCreatorWithdrawableBalance(
+            creator_id,
+            totalAmount,
+            `Bulk payment for ${paidCount} submissions in contest: ${
+              contest.title || "Contest"
+            }`,
+            {
+              idempotencyKey,
+              remarks: `Bulk payment: ${payment_type}`,
+              metadata: {
+                contest_id: contest_id,
+                payment_type: payment_type,
+                submission_count: paidCount,
+                breakdown: breakdown,
+                ...(isMilestoneContest
+                  ? {
+                      total_milestone: totalMainPaid,
+                      total_bonus: totalBonusPaid,
+                    }
+                  : {
+                      total_cpm: totalMainPaid,
+                      total_bonus: totalBonusPaid,
+                    }),
+                cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+                bonus_reason_counts: bonusReasonCounts,
+                ...(isLeaderboardContest
+                  ? { leaderboard_creator_prize: true }
+                  : {}),
+              },
+            },
+          ),
+      });
+
+      if (!creditResult.success) {
+        return NextResponse.json(
+          { error: `Failed to credit wallet: ${creditResult.error}` },
+          { status: 500 },
+        );
+      }
     }
 
     // Update all submissions with earnings and payment status

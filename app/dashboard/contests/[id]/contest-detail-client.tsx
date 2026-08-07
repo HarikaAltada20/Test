@@ -4886,15 +4886,22 @@ export default function ContestDetailClient({
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
 
-        // Determine prize-eligible creators (same rule used elsewhere: verified / paid)
+        // Keep paid creators in the ranking. After pay, statusCounts.verified is 0
+        // but statusCounts.paid > 0 — excluding them reassigns prizes to unpaid creators.
         const eligibleCreators = allCreators.filter((group: any) => {
           const hasVerifiedSubmissions = group.statusCounts?.verified > 0;
+          const hasPaidSubmissions =
+            group.statusCounts?.paid > 0 ||
+            (group.submissions || []).some((s: any) =>
+              isSubmissionPaidForGrantedReward(s),
+            );
           const creatorStatus = (
             group.creator_moderation_status || ""
           ).toLowerCase();
 
           return (
             hasVerifiedSubmissions ||
+            hasPaidSubmissions ||
             creatorStatus === "verified" ||
             creatorStatus === "paid"
           );
@@ -4902,26 +4909,41 @@ export default function ContestDetailClient({
 
         // Rank ONLY eligible creators by total views (primary metric for non-Twitter leaderboards)
         eligibleCreators.sort(
-          (a: any, b: any) => (b.metrics?.views || 0) - (a.metrics?.views || 0),
+          (a: any, b: any) =>
+            (b.metrics?.views || 0) - (a.metrics?.views || 0) ||
+            String(a.creator?.id || "").localeCompare(
+              String(b.creator?.id || ""),
+            ),
         );
 
         eligibleCreators.forEach((group: any, index: number) => {
           const rank = index + 1;
           const prizeForRank = prizes.find((p: any) => p.position === rank);
-          if (!prizeForRank) return;
+          if (!prizeForRank) {
+            // Outside prize places: no expected prize; keep granted from paid rows.
+            group.earnings.expected = 0;
+            return;
+          }
 
-          // Set expected earnings to the prize amount (already in cents)
-          group.earnings.expected = prizeForRank.amount;
+          const prizeCents = Math.max(0, Number(prizeForRank.amount) || 0);
 
-          // If any submission is paid, mirror the prize in granted earnings
+          // Expected stays the rank prize even after pay (same as Twitter leaderboard).
+          group.earnings.expected = prizeCents;
+
           const hasPaidSubmissions = (group.submissions || []).some((s: any) =>
             isSubmissionPaidForGrantedReward(s),
           );
-          if (
-            hasPaidSubmissions &&
-            (!group.earnings.granted || group.earnings.granted <= 0)
-          ) {
-            group.earnings.granted = prizeForRank.amount;
+          if (hasPaidSubmissions) {
+            const grantedFromSubs = (group.submissions || []).reduce(
+              (sum: number, s: any) => {
+                if (!isSubmissionPaidForGrantedReward(s)) return sum;
+                return sum + Math.max(0, Number(s?.earnings) || 0);
+              },
+              0,
+            );
+            // Prefer wallet/DB earnings when present; otherwise mirror the prize.
+            group.earnings.granted =
+              grantedFromSubs > 0 ? grantedFromSubs : prizeCents;
           }
         });
       }
