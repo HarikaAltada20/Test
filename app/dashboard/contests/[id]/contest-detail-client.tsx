@@ -4903,12 +4903,10 @@ export default function ContestDetailClient({
             return sum + Math.max(0, Number(s?.views) || 0);
           }, 0);
 
+        // Match server payout ranking: submission eligibility only (verified /
+        // approved / paid). Do not filter on creator_moderation_status — that
+        // field is Twitter-leaderboard-centric and is usually empty here.
         const eligibleCreators = allCreators.filter((group: any) => {
-          const creatorStatus = (
-            group.creator_moderation_status || ""
-          ).toLowerCase();
-          if (creatorStatus === "rejected") return false;
-
           const hasRankableSubmissions = (group.submissions || []).some(
             (s: any) => {
               const st = String(s?.status || "").toLowerCase();

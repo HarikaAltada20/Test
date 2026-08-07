@@ -31,6 +31,7 @@ import {
   fetchCreatorLeaderboardPaidEarningsCents,
   isLeaderboardCreatorPrizeFullyPaid,
   isTwitterTextImageLeaderboardContest,
+  leaderboardPrizeWalletExcessToRollback,
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 
@@ -1170,6 +1171,12 @@ export async function POST(request: NextRequest) {
         earningsSubmissionId: prizeRow?.id ?? null,
         earningsCents: prizeRow?.cpm_amount ?? 0,
       });
+      const prizeWalletExcessCents = leaderboardPrizeWalletExcessToRollback({
+        freshCreditedCents: freshPrizeCreditedCents,
+        appliedEarningsCents: applyResult.appliedEarningsCents,
+        remainingCents: applyResult.remainingCents,
+      });
+
       if (!applyResult.ok) {
         updateFailures.push({
           submission_id: String(prizeRow?.id || creator_id),
@@ -1177,14 +1184,11 @@ export async function POST(request: NextRequest) {
             applyResult.error ||
             "Failed to apply leaderboard creator prize / mark siblings paid",
         });
-      } else if (
-        freshPrizeCreditedCents > 0 &&
-        applyResult.appliedEarningsCents < freshPrizeCreditedCents
-      ) {
-        // Concurrent pay wrote some/all prize earnings — roll back excess wallet
-        // credit. Sibling mark-paid only happens in the RPC when remaining is 0.
-        const excessCents =
-          freshPrizeCreditedCents - applyResult.appliedEarningsCents;
+      } else if (prizeWalletExcessCents > 0) {
+        // Roll back only true over-credit / failed land. Do NOT roll back when
+        // remaining=0 and applied=0: a concurrent request wrote earnings under
+        // the shared idempotency credit that THIS request funded.
+        const excessCents = prizeWalletExcessCents;
         const dupRollback = await debitCreatorWithdrawableBalance(
           creator_id,
           excessCents,
@@ -1263,8 +1267,20 @@ export async function POST(request: NextRequest) {
               "Cannot mark submissions paid: leaderboard creator prize is not fully paid yet.",
           });
         } else {
-          // Prize (or mark-paid-only) persisted. Do not refund prize on later
-          // bonus-flag failures — only bonus wallet should roll back.
+          // Prize persisted by this RPC, or concurrent RPC landed earnings while
+          // this request funded the shared wallet credit (excess=0 keep path).
+          // Do not refund prize on later bonus-flag failures.
+          if (
+            freshPrizeCreditedCents > 0 &&
+            applyResult.appliedEarningsCents <= 0 &&
+            applyResult.remainingCents === 0
+          ) {
+            payableTotalMainPaid = Math.max(
+              payableTotalMainPaid,
+              freshPrizeCreditedCents,
+            );
+            payableTotalAmount = payableTotalMainPaid + totalBonusPaid;
+          }
           appliedUpdates.push(...submissionUpdates);
           freshPrizeCreditedCents = 0;
         }

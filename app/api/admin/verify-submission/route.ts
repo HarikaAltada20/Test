@@ -49,6 +49,7 @@ import {
   fetchCreatorLeaderboardPaidEarningsCents,
   isLeaderboardCreatorPrizeFullyPaid,
   isTwitterTextImageLeaderboardContest,
+  leaderboardPrizeWalletExcessToRollback,
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -1884,21 +1885,25 @@ export async function POST(request: Request) {
                 rewardAmount > 0 ? submissionId : null,
               earningsCents: rewardAmount,
             });
+            const prizeWalletExcessCents = leaderboardPrizeWalletExcessToRollback(
+              {
+                freshCreditedCents: leaderboardFreshPrizeCreditedCents,
+                appliedEarningsCents: applyResult.appliedEarningsCents,
+                remainingCents: applyResult.remainingCents,
+              },
+            );
+
             if (!applyResult.ok) {
               paidPersistError = {
                 message:
                   applyResult.error ||
                   "Failed to apply leaderboard creator prize",
               };
-            } else if (
-              leaderboardFreshPrizeCreditedCents > 0 &&
-              applyResult.appliedEarningsCents <
-                leaderboardFreshPrizeCreditedCents
-            ) {
-              // Concurrent pay wrote some/all prize earnings — roll back excess.
-              const excessCents =
-                leaderboardFreshPrizeCreditedCents -
-                applyResult.appliedEarningsCents;
+            } else if (prizeWalletExcessCents > 0) {
+              // Roll back only true over-credit / failed land. Keep credit when
+              // remaining=0 and applied=0 (concurrent RPC wrote earnings under
+              // the shared idempotency key this request funded).
+              const excessCents = prizeWalletExcessCents;
               const dupRollback = await debitCreatorWithdrawableBalance(
                 submissionFull.creator_id,
                 excessCents,
@@ -1947,7 +1952,16 @@ export async function POST(request: Request) {
                 };
               }
             } else {
-              // Prize persist succeeded — do not refund on later failures in this path.
+              // Prize persist succeeded (or concurrent landed earnings while we
+              // funded the shared credit) — do not refund on later failures.
+              if (
+                leaderboardFreshPrizeCreditedCents > 0 &&
+                applyResult.appliedEarningsCents <= 0 &&
+                applyResult.remainingCents === 0
+              ) {
+                // Keep reported reward as the funded prize amount.
+                rewardAmount = leaderboardFreshPrizeCreditedCents;
+              }
               leaderboardFreshPrizeCreditedCents = 0;
             }
           } else if (shouldPersistEarnings) {

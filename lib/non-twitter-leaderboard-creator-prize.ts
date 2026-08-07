@@ -220,6 +220,31 @@ export function isLeaderboardCreatorPrizeFullyPaid(
 }
 
 /**
+ * How much of a fresh wallet credit to roll back after the payout RPC.
+ *
+ * Verify + bulk share one idempotency key, so only one request actually credits.
+ * The other may still win the RPC and write prize earnings (`applied=0`,
+ * `remaining=0` on the creditor). Rolling back in that case leaves the creator
+ * marked paid with earnings but $0 wallet — keep the credit instead.
+ *
+ * Roll back the unapplied portion only when the prize is still owed, or when
+ * this request applied a partial amount below what it credited.
+ */
+export function leaderboardPrizeWalletExcessToRollback(params: {
+  freshCreditedCents: number;
+  appliedEarningsCents: number;
+  remainingCents: number;
+}): number {
+  const fresh = Math.max(0, Math.round(params.freshCreditedCents) || 0);
+  const applied = Math.max(0, Math.round(params.appliedEarningsCents) || 0);
+  const remaining = Math.max(0, Math.round(params.remainingCents) || 0);
+  if (fresh <= 0 || applied >= fresh) return 0;
+  // Concurrent request landed earnings under the shared credit — keep funding.
+  if (remaining === 0 && applied === 0) return 0;
+  return fresh - applied;
+}
+
+/**
  * Persist creator prize earnings (at most once) and mark verified/approved
  * siblings paid with earnings=0 — but only when remaining prize is 0.
  * Requires the transactional RPC (advisory lock). No non-atomic fallback —

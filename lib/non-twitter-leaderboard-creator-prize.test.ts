@@ -8,6 +8,7 @@ import {
   isLeaderboardCreatorPrizeFullyPaid,
   isTwitterTextImageLeaderboardContest,
   LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX,
+  leaderboardPrizeWalletExcessToRollback,
   prizeCentsForLeaderboardRank,
   rankCreatorsByTotalViews,
   rankOfCreator,
@@ -111,6 +112,53 @@ describe("non-twitter leaderboard creator ranking", () => {
     assert.equal(isLeaderboardCreatorPrizeFullyPaid(1000, 1000), true);
     assert.equal(isLeaderboardCreatorPrizeFullyPaid(1500, 1000), true);
     assert.equal(isLeaderboardCreatorPrizeFullyPaid(1000, 0), false);
+  });
+
+  it("leaderboardPrizeWalletExcessToRollback keeps shared credit when concurrent RPC landed earnings", () => {
+    // This request funded the wallet; concurrent request wrote submission earnings.
+    assert.equal(
+      leaderboardPrizeWalletExcessToRollback({
+        freshCreditedCents: 10000,
+        appliedEarningsCents: 0,
+        remainingCents: 0,
+      }),
+      0,
+    );
+  });
+
+  it("leaderboardPrizeWalletExcessToRollback refunds failed land and true over-credit", () => {
+    assert.equal(
+      leaderboardPrizeWalletExcessToRollback({
+        freshCreditedCents: 10000,
+        appliedEarningsCents: 0,
+        remainingCents: 10000,
+      }),
+      10000,
+    );
+    assert.equal(
+      leaderboardPrizeWalletExcessToRollback({
+        freshCreditedCents: 10000,
+        appliedEarningsCents: 4000,
+        remainingCents: 6000,
+      }),
+      6000,
+    );
+    assert.equal(
+      leaderboardPrizeWalletExcessToRollback({
+        freshCreditedCents: 10000,
+        appliedEarningsCents: 10000,
+        remainingCents: 0,
+      }),
+      0,
+    );
+    assert.equal(
+      leaderboardPrizeWalletExcessToRollback({
+        freshCreditedCents: 0,
+        appliedEarningsCents: 0,
+        remainingCents: 0,
+      }),
+      0,
+    );
   });
 
   it("applyNonTwitterLeaderboardCreatorPayout parses remaining and marked counts", async () => {
