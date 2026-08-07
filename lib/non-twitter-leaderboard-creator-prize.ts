@@ -106,6 +106,10 @@ export function applyCreatorMaxEarningsCapCents(params: {
 /**
  * Per-submission prize for non-Twitter leaderboard contests.
  * Ranks verified/approved/paid submissions by views (id asc tie-break), then maps to prize.
+ *
+ * Product rule: prizes are per submission (contest-wide views rank), not one prize
+ * per creator. A creator with two ranked submissions can receive two prizes
+ * (still subject to max_earnings_per_creator when callers apply the cap).
  */
 export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
   supabaseAdmin: SupabaseClient;

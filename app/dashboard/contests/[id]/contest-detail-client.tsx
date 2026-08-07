@@ -4911,25 +4911,27 @@ export default function ContestDetailClient({
 
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
+        // Rank from the full loaded contest list (not status-filtered groups) so
+        // Expected Reward matches bulk-payment / verify-submission contest-wide ranks.
         const eligibleSubs: Array<{
           id: string;
           views?: number | null;
           status?: string | null;
           paid?: boolean | null;
         }> = [];
-        for (const group of allCreators) {
-          for (const s of group.submissions || []) {
-            eligibleSubs.push({
-              id: String(s?.id || ""),
-              views: s?.views,
-              status: s?.status,
-              paid: s?.paid,
-            });
-          }
+        for (const s of leaderboardSubmissions || []) {
+          const id = String((s as any)?.id || "");
+          if (!id) continue;
+          eligibleSubs.push({
+            id,
+            views: (s as any)?.views,
+            status: (s as any)?.status,
+            paid: (s as any)?.paid,
+          });
         }
 
         const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionId(
-          eligibleSubs.filter((s) => s.id),
+          eligibleSubs,
           prizes,
         );
 
@@ -7286,6 +7288,16 @@ export default function ContestDetailClient({
             : undefined;
 
         let chunkHardFailed = false;
+        let chunkHadPartialFailures = false;
+        const chunkHasPartialFailures = (data: {
+          success?: boolean;
+          failed?: number;
+          errors?: unknown[];
+        }) =>
+          data?.success === false ||
+          (typeof data?.failed === "number" && data.failed > 0) ||
+          (Array.isArray(data?.errors) && data.errors.length > 0);
+
         for (
           let i = 0;
           i < normalIds.length;
@@ -7343,6 +7355,9 @@ export default function ContestDetailClient({
               });
             }
           }
+          if (chunkHasPartialFailures(data)) {
+            chunkHadPartialFailures = true;
+          }
           results.push(data);
           const hasMoreChunks =
             i + BULK_VERIFY_CLIENT_CHUNK_SIZE < normalIds.length;
@@ -7362,8 +7377,12 @@ export default function ContestDetailClient({
           }
         }
 
-        if (needsChunkedWalletPreflight && !chunkHardFailed) {
-          // All chunks accepted — drop saved token so a future selection starts clean.
+        if (
+          needsChunkedWalletPreflight &&
+          !chunkHardFailed &&
+          !chunkHadPartialFailures
+        ) {
+          // All chunks fully succeeded — drop saved token so a future selection starts clean.
           clearBulkVerifyWalletContinuation(continuationStorageParams);
         }
       }
@@ -7403,9 +7422,10 @@ export default function ContestDetailClient({
               success: false,
               error: data?.error || `Bulk moderate failed (HTTP ${res.status})`,
             });
-          } else {
-            results.push(data);
+            // Match normal-submission path: stop so remaining IDs are not skipped silently.
+            break;
           }
+          results.push(data);
         }
       }
 
@@ -8288,43 +8308,38 @@ export default function ContestDetailClient({
           return { kind: "skipped" as const };
         }
 
-        const submissionIds = payableSubs
-          .map((submission: any) => String(submission?.id || ""))
-          .filter(Boolean);
+        const payCreatorSubmissionIds = async (submissionIds: string[]) => {
+          const response = isTwitterCpmCreatorWise
+            ? await fetch(`/api/contests/${contestId}/bulk-pay-twitter-cpm`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  tweet_ids: submissionIds,
+                  payment_type: paymentType,
+                  creator_id: creatorId,
+                }),
+              })
+            : await fetch("/api/admin/bulk-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  submission_ids: submissionIds,
+                  payment_type: paymentType,
+                  contest_id: contestId,
+                  creator_id: creatorId,
+                }),
+              });
 
-        // Creator-wise selection is creator-scoped. Always pay that creator's
-        // payable submissions via bulk APIs (one wallet credit per creator).
-        // Do NOT use per-submission verify-submission here — it soft-fails and
-        // historically hit invalid enum filters.
-        const response = isTwitterCpmCreatorWise
-          ? await fetch(`/api/contests/${contestId}/bulk-pay-twitter-cpm`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                tweet_ids: submissionIds,
-                payment_type: paymentType,
-                creator_id: creatorId,
-              }),
-            })
-          : await fetch("/api/admin/bulk-payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                submission_ids: submissionIds,
-                payment_type: paymentType,
-                contest_id: contestId,
-                creator_id: creatorId,
-              }),
-            });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(result?.error || "Failed to process bulk payment");
+          }
+          return result;
+        };
 
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(result?.error || "Failed to process bulk payment");
-        }
-
-        const data = result?.data || {};
-        const creatorPaidNow = Number(data.total_amount) || 0;
-        if (creatorPaidNow > 0) {
+        const toPaidResult = (data: Record<string, unknown>) => {
+          const creatorPaidNow = Number(data.total_amount) || 0;
+          if (creatorPaidNow <= 0) return null;
           return {
             kind: "paid" as const,
             creatorPaidNow,
@@ -8342,6 +8357,81 @@ export default function ContestDetailClient({
             isDual: isDualRewardsContest,
             estimated: false,
           };
+        };
+
+        // Non-bulk: one wallet credit per submission (CreatorSubmissionsModal semantics).
+        // Still uses bulk pay APIs with a single ID — avoids verify-submission soft-fail /
+        // invalid enum issues called out for creator-wise multi-pay.
+        if (!isBulkTransaction) {
+          let creatorPaidNow = 0;
+          let creatorRewardCents = 0;
+          let creatorBonusCents = 0;
+          let totalCpmCents = 0;
+          let totalMilestoneCents = 0;
+          let paidAny = false;
+          const perSubErrors: string[] = [];
+
+          for (const submission of payableSubs) {
+            const submissionId = String(submission?.id || "");
+            if (!submissionId) continue;
+            try {
+              const result = await payCreatorSubmissionIds([submissionId]);
+              const data = (result?.data || {}) as Record<string, unknown>;
+              const paid = toPaidResult(data);
+              if (!paid) continue;
+              paidAny = true;
+              creatorPaidNow += paid.creatorPaidNow;
+              creatorRewardCents += paid.creatorRewardCents;
+              creatorBonusCents += paid.creatorBonusCents;
+              totalCpmCents += paid.totalCpmCents || 0;
+              totalMilestoneCents += paid.totalMilestoneCents || 0;
+            } catch (err) {
+              const message =
+                err instanceof Error ? err.message : String(err || "Payment failed");
+              perSubErrors.push(`${submissionId}: ${message}`);
+            }
+          }
+
+          if (perSubErrors.length > 0) {
+            creatorPayErrors.push(
+              `${group.creator?.username || creatorId}: ${perSubErrors.slice(0, 3).join("; ")}${
+                perSubErrors.length > 3
+                  ? ` (+${perSubErrors.length - 3} more)`
+                  : ""
+              }`,
+            );
+          }
+
+          if (paidAny && creatorPaidNow > 0) {
+            return {
+              kind: "paid" as const,
+              creatorPaidNow,
+              creatorRewardCents,
+              creatorBonusCents,
+              totalCpmCents,
+              totalMilestoneCents,
+              isDual: isDualRewardsContest,
+              estimated: false,
+            };
+          }
+          if (!paidAny && perSubErrors.length === 0) {
+            creatorPayErrors.push(
+              `${group.creator?.username || creatorId}: No payable amount for this creator (already paid, outside prize ranks, or cap reached)`,
+            );
+          }
+          return { kind: "skipped" as const };
+        }
+
+        // Bulk: one wallet credit for all payable submissions of this creator.
+        const submissionIds = payableSubs
+          .map((submission: any) => String(submission?.id || ""))
+          .filter(Boolean);
+
+        const result = await payCreatorSubmissionIds(submissionIds);
+        const data = (result?.data || {}) as Record<string, unknown>;
+        const paid = toPaidResult(data);
+        if (paid) {
+          return paid;
         }
         // API succeeded with $0 — treat as skipped (already paid / no prize rank)
         const skipReason =
