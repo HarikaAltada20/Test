@@ -1,4 +1,3 @@
-import { createHash } from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextResponse } from "next/server";
@@ -45,7 +44,7 @@ import {
 } from "@/lib/fetch-contest-submissions";
 import {
   applyNonTwitterLeaderboardCreatorPayout,
-  buildLeaderboardCreatorPrizeIdempotencyFields,
+  buildLeaderboardCreatorPrizeIdempotencyKey,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
   sumPaidEarningsCents,
@@ -71,7 +70,6 @@ import {
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 import {
-  buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
   loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
@@ -1615,39 +1613,28 @@ export async function POST(request: Request) {
                 )
               : 0;
 
-          const contestRewardIdempotencyKey =
-            contest.contest_type === "leaderboard" && !customAmount
-              ? `leaderboard_creator_prize:v1:${createHash("sha256")
-                  .update(
-                    JSON.stringify(
-                      buildContestPayoutIdempotencyPayload(
-                        buildLeaderboardCreatorPrizeIdempotencyFields({
-                          contestId: submissionFull.contest_id,
-                          creatorId: submissionFull.creator_id,
-                          paymentType: "standard",
-                        }),
-                        contestLedgerState,
-                      ),
-                    ),
-                  )
-                  .digest("hex")
-                  .slice(0, 40)}`
-              : contest.contest_type === "dual_rewards"
-                ? customAmount
-                  ? `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${dualCreditTotalCents}`
-                  : `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`
-                : customAmount
-                  ? `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${rewardAmount}`
-                  : `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`;
+          const isLeaderboardPrizePay =
+            contest.contest_type === "leaderboard" && !customAmount;
+
+          const contestRewardIdempotencyKey = isLeaderboardPrizePay
+            ? buildLeaderboardCreatorPrizeIdempotencyKey({
+                contestId: submissionFull.contest_id,
+                creatorId: submissionFull.creator_id,
+                ledger: contestLedgerState,
+              })
+            : contest.contest_type === "dual_rewards"
+              ? customAmount
+                ? `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${dualCreditTotalCents}`
+                : `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`
+              : customAmount
+                ? `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${rewardAmount}`
+                : `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`;
 
           let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
+          let leaderboardFreshPrizeCreditedCents = 0;
 
           // Leaderboard: re-check remaining prize immediately before credit.
-          if (
-            contest.contest_type === "leaderboard" &&
-            !customAmount &&
-            rewardAmount > 0
-          ) {
+          if (isLeaderboardPrizePay && rewardAmount > 0) {
             const freshPaid = await fetchCreatorLeaderboardPaidEarningsCents({
               supabaseAdmin,
               contestId: submissionFull.contest_id,
@@ -1668,14 +1655,14 @@ export async function POST(request: Request) {
             leaderboardAlreadyPaidAmount = freshPaid.paidCents;
           }
 
-          // Leaderboard: always attempt credit when remaining prize > 0 (idempotent).
-          // Other types keep the prior wallet-net shortfall gate (dual_rewards uses
-          // real net; CPM/milestone pass walletNetBeforePay=0 so this is reward>0).
+          // Leaderboard: credit when remaining prize > 0 using a single shared key
+          // (no shortfall key-bump — that double-pays when alreadyApplied).
+          // Other types keep the prior wallet-net shortfall gate.
           const needsWalletCredit =
             contest.contest_type === "dual_rewards"
               ? dualCreditTotalCents > 0 &&
                 submissionWalletNetBeforePay < dualCreditTotalCents
-              : contest.contest_type === "leaderboard" && !customAmount
+              : isLeaderboardPrizePay
                 ? rewardAmount > 0
                 : dualCreditTotalCents > 0 &&
                   submissionWalletNetBeforePay < dualCreditTotalCents;
@@ -1722,61 +1709,95 @@ export async function POST(request: Request) {
               }
             }
 
-            const creditRes = await creditWithWalletShortfallRetry({
-              payableCents:
-                contest.contest_type === "dual_rewards"
-                  ? dualCreditTotalCents
-                  : rewardAmount,
-              walletNetBeforePay:
-                contest.contest_type === "dual_rewards"
-                  ? submissionWalletNetBeforePay
-                  : 0,
-              baseIdempotencyKey: contestRewardIdempotencyKey,
-              ledger: contestLedgerState,
-              credit: (idempotencyKey) =>
-                contest.contest_type === "dual_rewards"
-                  ? creditDualRewardsSubmissionReward({
-                      creatorId: submissionFull.creator_id,
-                      submissionId,
-                      contestId: submissionFull.contest_id,
-                      contestTitle: (contest as any)?.title || "Contest",
-                      cpmCents: dualCreditCpmCents,
-                      milestoneCents: dualCreditMilestoneCents,
-                      payoutCycle: resolvedNextCycle,
-                      idempotencyKey,
-                      remarks:
-                        customRemarks ||
-                        (customAmount
-                          ? "Custom payout credited to creator wallet"
-                          : "Dual rewards payout credited to creator wallet"),
-                      payoutType: customAmount ? "custom" : "standard",
-                    })
-                  : creditCreatorWithdrawableBalance(
-                      submissionFull.creator_id,
-                      rewardAmount,
-                      customAmount
-                        ? `Custom contest payment credited - ${
-                            (contest as any)?.title || "Contest"
-                          }`
-                        : `Contest reward credited - ${
-                            (contest as any)?.title || "Contest"
-                          }`,
-                      {
+            let creditRes: {
+              success: boolean;
+              error?: string;
+              alreadyApplied?: boolean;
+              transactionId?: string | null;
+            };
+
+            if (isLeaderboardPrizePay) {
+              // Direct credit with canonical prize key shared with bulk-payment.
+              creditRes = await creditCreatorWithdrawableBalance(
+                submissionFull.creator_id,
+                rewardAmount,
+                `Leaderboard prize credited - ${
+                  (contest as any)?.title || "Contest"
+                }`,
+                {
+                  idempotencyKey: contestRewardIdempotencyKey,
+                  remarks:
+                    customRemarks ||
+                    "Leaderboard creator prize credited to creator wallet",
+                  metadata: {
+                    contest_id: submissionFull.contest_id,
+                    submission_id: submissionId,
+                    payout_type: "standard",
+                    leaderboard_creator_prize: true,
+                    payout_cycle: resolvedNextCycle,
+                  },
+                },
+              );
+              if (creditRes.success && !creditRes.alreadyApplied) {
+                leaderboardFreshPrizeCreditedCents = rewardAmount;
+              }
+            } else {
+              creditRes = await creditWithWalletShortfallRetry({
+                payableCents:
+                  contest.contest_type === "dual_rewards"
+                    ? dualCreditTotalCents
+                    : rewardAmount,
+                walletNetBeforePay:
+                  contest.contest_type === "dual_rewards"
+                    ? submissionWalletNetBeforePay
+                    : 0,
+                baseIdempotencyKey: contestRewardIdempotencyKey,
+                ledger: contestLedgerState,
+                credit: (idempotencyKey) =>
+                  contest.contest_type === "dual_rewards"
+                    ? creditDualRewardsSubmissionReward({
+                        creatorId: submissionFull.creator_id,
+                        submissionId,
+                        contestId: submissionFull.contest_id,
+                        contestTitle: (contest as any)?.title || "Contest",
+                        cpmCents: dualCreditCpmCents,
+                        milestoneCents: dualCreditMilestoneCents,
+                        payoutCycle: resolvedNextCycle,
                         idempotencyKey,
                         remarks:
                           customRemarks ||
                           (customAmount
                             ? "Custom payout credited to creator wallet"
-                            : "Standard payout credited to creator wallet"),
-                        metadata: {
-                          contest_id: submissionFull.contest_id,
-                          submission_id: submissionId,
-                          payout_type: customAmount ? "custom" : "standard",
-                          payout_cycle: resolvedNextCycle,
+                            : "Dual rewards payout credited to creator wallet"),
+                        payoutType: customAmount ? "custom" : "standard",
+                      })
+                    : creditCreatorWithdrawableBalance(
+                        submissionFull.creator_id,
+                        rewardAmount,
+                        customAmount
+                          ? `Custom contest payment credited - ${
+                              (contest as any)?.title || "Contest"
+                            }`
+                          : `Contest reward credited - ${
+                              (contest as any)?.title || "Contest"
+                            }`,
+                        {
+                          idempotencyKey,
+                          remarks:
+                            customRemarks ||
+                            (customAmount
+                              ? "Custom payout credited to creator wallet"
+                              : "Standard payout credited to creator wallet"),
+                          metadata: {
+                            contest_id: submissionFull.contest_id,
+                            submission_id: submissionId,
+                            payout_type: customAmount ? "custom" : "standard",
+                            payout_cycle: resolvedNextCycle,
+                          },
                         },
-                      },
-                    ),
-            });
+                      ),
+              });
+            }
 
             if (!creditRes.success) {
               await rollbackDualRewardsPoolCommitIfNeeded(
@@ -1854,6 +1875,43 @@ export async function POST(request: Request) {
                   applyResult.error ||
                   "Failed to apply leaderboard creator prize",
               };
+            } else if (
+              leaderboardFreshPrizeCreditedCents > 0 &&
+              rewardAmount > 0 &&
+              applyResult.appliedEarningsCents <= 0
+            ) {
+              // Concurrent pay already wrote prize earnings — roll back duplicate.
+              const dupRollback = await debitCreatorWithdrawableBalance(
+                submissionFull.creator_id,
+                leaderboardFreshPrizeCreditedCents,
+              );
+              if (dupRollback.success) {
+                await logTransactionAsAdmin(
+                  submissionFull.creator_id,
+                  "refund",
+                  leaderboardFreshPrizeCreditedCents,
+                  "success",
+                  `Rollback: duplicate leaderboard prize credit for ${
+                    (contest as any)?.title || "Contest"
+                  }`,
+                  {
+                    remarks: REVERSAL_TRANSACTION_REMARK,
+                    paymentMethod: "refund",
+                    metadata: {
+                      contest_id: submissionFull.contest_id,
+                      submission_id: submissionId,
+                      payout_type: "leaderboard_prize_duplicate_rollback",
+                      payout_operation_key: contestRewardIdempotencyKey,
+                    },
+                  },
+                );
+                leaderboardFreshPrizeCreditedCents = 0;
+              } else {
+                paidPersistError = {
+                  message:
+                    "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back duplicate wallet credit failed.",
+                };
+              }
             }
           } else if (shouldPersistEarnings) {
             const { error } = await supabaseAdmin
@@ -1885,10 +1943,44 @@ export async function POST(request: Request) {
               submissionId,
               dualRewardsPoolCommit,
             );
+            if (leaderboardFreshPrizeCreditedCents > 0) {
+              const rollback = await debitCreatorWithdrawableBalance(
+                submissionFull.creator_id,
+                leaderboardFreshPrizeCreditedCents,
+              );
+              if (rollback.success) {
+                await logTransactionAsAdmin(
+                  submissionFull.creator_id,
+                  "refund",
+                  leaderboardFreshPrizeCreditedCents,
+                  "success",
+                  `Rollback: leaderboard prize row update failed for ${
+                    (contest as any)?.title || "Contest"
+                  }`,
+                  {
+                    remarks: REVERSAL_TRANSACTION_REMARK,
+                    paymentMethod: "refund",
+                    metadata: {
+                      contest_id: submissionFull.contest_id,
+                      submission_id: submissionId,
+                      payout_type: "leaderboard_prize_rollback",
+                      payout_operation_key: contestRewardIdempotencyKey,
+                    },
+                  },
+                );
+              } else {
+                console.error(
+                  "[verify-submission] CRITICAL: leaderboard prize wallet rollback failed:",
+                  rollback.error,
+                );
+              }
+            }
             return NextResponse.json(
               {
                 error:
-                  "Reward was credited (or skipped as duplicate) but failed to mark submission paid — retry the same operation; duplicate wallet credits are suppressed by idempotency.",
+                  leaderboardFreshPrizeCreditedCents > 0
+                    ? "Failed to mark submission paid after wallet credit. Fresh prize credit was rolled back where possible; retry the same operation."
+                    : "Reward was credited (or skipped as duplicate) but failed to mark submission paid — retry the same operation; duplicate wallet credits are suppressed by idempotency.",
                 details: paidPersistError.message,
               },
               { status: 500 },

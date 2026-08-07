@@ -1,7 +1,16 @@
+import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  buildContestPayoutIdempotencyPayload,
+  type ContestPayoutLedgerState,
+} from "@/lib/contest-payout-idempotency";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 
 export type LeaderboardPrize = { position?: number; amount?: number };
+
+/** Shared wallet idempotency prefix for verify-submission + bulk-payment. */
+export const LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX =
+  "leaderboard_creator_prize:v1:";
 
 export type LeaderboardEligibleSubmissionRow = {
   creator_id?: string | null;
@@ -80,20 +89,43 @@ export function sumPaidEarningsCents(
 
 /**
  * Idempotency fields for creator-level leaderboard prizes.
- * Intentionally omits submission IDs so concurrent pays for the same creator
- * share one wallet credit key for the current ledger generation.
+ * Intentionally omits submission IDs, payment_type (standard vs both), and
+ * payout-adjustment fields so verify-submission and bulk-payment (and concurrent
+ * standard/both) share one wallet credit key for the current ledger generation.
  */
 export function buildLeaderboardCreatorPrizeIdempotencyFields(params: {
   contestId: string;
   creatorId: string;
-  paymentType: string;
 }): Record<string, unknown> {
   return {
     contest_id: params.contestId,
     creator_id: params.creatorId,
-    payment_type: params.paymentType,
     leaderboard_creator_prize: true,
   };
+}
+
+/**
+ * Canonical wallet idempotency key for the creator prize (not bonus).
+ * Must be identical in verify-submission and bulk-payment.
+ */
+export function buildLeaderboardCreatorPrizeIdempotencyKey(params: {
+  contestId: string;
+  creatorId: string;
+  ledger: ContestPayoutLedgerState;
+}): string {
+  const seed = JSON.stringify(
+    buildContestPayoutIdempotencyPayload(
+      buildLeaderboardCreatorPrizeIdempotencyFields({
+        contestId: params.contestId,
+        creatorId: params.creatorId,
+      }),
+      params.ledger,
+    ),
+  );
+  return `${LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX}${createHash("sha256")
+    .update(seed)
+    .digest("hex")
+    .slice(0, 40)}`;
 }
 
 export async function fetchCreatorLeaderboardPaidEarningsCents(params: {

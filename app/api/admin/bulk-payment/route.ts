@@ -26,7 +26,7 @@ import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 import {
   applyNonTwitterLeaderboardCreatorPayout,
-  buildLeaderboardCreatorPrizeIdempotencyFields,
+  buildLeaderboardCreatorPrizeIdempotencyKey,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
   sumPaidEarningsCents,
@@ -828,39 +828,43 @@ export async function POST(request: NextRequest) {
 
     // Build idempotency from immutable request intent rather than computed payout breakdown.
     // This keeps retries stable even if a prior attempt partially updated submission rows.
-    // Leaderboard prizes are creator-scoped (not submission-id scoped) so concurrent
-    // pays for the same creator share one wallet credit key for this ledger generation.
+    // Leaderboard prizes use a shared creator-scoped key (same as verify-submission) so
+    // concurrent standard/both and single-vs-bulk pays cannot double-credit the prize.
     const requestedSubmissionIds = Array.from(
       new Set(
         submission_ids.map((value: unknown) => String(value)).filter(Boolean),
       ),
     ).sort((a, b) => a.localeCompare(b));
-    const idempotencyBase =
+
+    const leaderboardPrizeIdempotencyKey =
       isLeaderboardContest && payment_type !== "bonus"
-        ? {
-            ...buildLeaderboardCreatorPrizeIdempotencyFields({
-              contestId: contest_id,
-              creatorId: creator_id,
-              paymentType: payment_type,
-            }),
-            payout_adjustment_percentage: payoutAdjustment.percentage,
-            payout_adjustment_mode: payoutAdjustment.mode ?? null,
-          }
-        : {
-            contest_id,
-            creator_id,
-            payment_type,
-            requested_submission_ids: requestedSubmissionIds,
-            payout_adjustment_percentage: payoutAdjustment.percentage,
-            payout_adjustment_mode: payoutAdjustment.mode ?? null,
-          };
-    const operationSeed = JSON.stringify(
-      buildContestPayoutIdempotencyPayload(idempotencyBase, payoutLedgerState),
-    );
-    const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
-      .update(operationSeed)
-      .digest("hex")
-      .slice(0, 48)}`;
+        ? buildLeaderboardCreatorPrizeIdempotencyKey({
+            contestId: contest_id,
+            creatorId: creator_id,
+            ledger: payoutLedgerState,
+          })
+        : null;
+
+    const bulkPayIdempotencyKey = leaderboardPrizeIdempotencyKey
+      ? leaderboardPrizeIdempotencyKey
+      : `bulk_pay_v2:${createHash("sha256")
+          .update(
+            JSON.stringify(
+              buildContestPayoutIdempotencyPayload(
+                {
+                  contest_id,
+                  creator_id,
+                  payment_type,
+                  requested_submission_ids: requestedSubmissionIds,
+                  payout_adjustment_percentage: payoutAdjustment.percentage,
+                  payout_adjustment_mode: payoutAdjustment.mode ?? null,
+                },
+                payoutLedgerState,
+              ),
+            ),
+          )
+          .digest("hex")
+          .slice(0, 48)}`;
 
     let creditResult: {
       success: boolean;
@@ -914,7 +918,122 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (payableTotalAmount > 0) {
+    /** Fresh wallet cents credited in this request (for targeted rollback). */
+    let freshPrizeCreditedCents = 0;
+    let freshBonusCreditedCents = 0;
+
+    if (isLeaderboardContest && payment_type !== "bonus") {
+      // Prize and bonus are separate credits: prize key is shared with verify-submission
+      // and ignores standard vs both; never use shortfall key-bumping (that double-pays).
+      if (payableTotalMainPaid > 0 && leaderboardPrizeIdempotencyKey) {
+        const prizeCredit = await creditCreatorWithdrawableBalance(
+          creator_id,
+          payableTotalMainPaid,
+          `Leaderboard prize for contest: ${contest.title || "Contest"}`,
+          {
+            idempotencyKey: leaderboardPrizeIdempotencyKey,
+            remarks: "Bulk payment: leaderboard creator prize",
+            metadata: {
+              contest_id: contest_id,
+              payment_type: payment_type,
+              submission_count: paidCount,
+              breakdown: breakdown,
+              total_cpm: payableTotalMainPaid,
+              leaderboard_creator_prize: true,
+            },
+          },
+        );
+        if (!prizeCredit.success) {
+          return NextResponse.json(
+            { error: `Failed to credit wallet: ${prizeCredit.error}` },
+            { status: 500 },
+          );
+        }
+        if (!prizeCredit.alreadyApplied) {
+          freshPrizeCreditedCents = payableTotalMainPaid;
+        }
+        creditResult = {
+          success: true,
+          transactionId: prizeCredit.transactionId ?? null,
+          alreadyApplied: Boolean(prizeCredit.alreadyApplied),
+        };
+      }
+
+      if (totalBonusPaid > 0) {
+        const bonusOperationSeed = JSON.stringify(
+          buildContestPayoutIdempotencyPayload(
+            {
+              contest_id,
+              creator_id,
+              payment_type: "bonus",
+              leaderboard_bonus: true,
+              requested_submission_ids: requestedSubmissionIds,
+              payout_adjustment_percentage: payoutAdjustment.percentage,
+              payout_adjustment_mode: payoutAdjustment.mode ?? null,
+            },
+            payoutLedgerState,
+          ),
+        );
+        const bonusIdempotencyKey = `bulk_pay_v2:leaderboard_bonus:${createHash(
+          "sha256",
+        )
+          .update(bonusOperationSeed)
+          .digest("hex")
+          .slice(0, 48)}`;
+
+        const bonusCredit = await creditWithWalletShortfallRetry({
+          payableCents: totalBonusPaid,
+          walletNetBeforePay: 0,
+          baseIdempotencyKey: bonusIdempotencyKey,
+          ledger: payoutLedgerState,
+          credit: (idempotencyKey) =>
+            creditCreatorWithdrawableBalance(
+              creator_id,
+              totalBonusPaid,
+              `Bulk bonus payment for ${paidCount} submissions in contest: ${
+                contest.title || "Contest"
+              }`,
+              {
+                idempotencyKey,
+                remarks: `Bulk payment: bonus`,
+                metadata: {
+                  contest_id: contest_id,
+                  payment_type: "bonus",
+                  submission_count: paidCount,
+                  breakdown: breakdown,
+                  total_bonus: totalBonusPaid,
+                  leaderboard_creator_prize: false,
+                },
+              },
+            ),
+        });
+
+        if (!bonusCredit.success) {
+          if (freshPrizeCreditedCents > 0) {
+            await debitCreatorWithdrawableBalance(
+              creator_id,
+              freshPrizeCreditedCents,
+            );
+          }
+          return NextResponse.json(
+            { error: `Failed to credit bonus wallet: ${bonusCredit.error}` },
+            { status: 500 },
+          );
+        }
+        if (!bonusCredit.alreadyApplied) {
+          freshBonusCreditedCents = totalBonusPaid;
+        }
+        creditResult = {
+          success: true,
+          transactionId:
+            bonusCredit.transactionId ?? creditResult.transactionId ?? null,
+          alreadyApplied:
+            freshPrizeCreditedCents === 0 && freshBonusCreditedCents === 0,
+        };
+      }
+
+      payableTotalAmount = payableTotalMainPaid + totalBonusPaid;
+    } else if (payableTotalAmount > 0) {
       creditResult = await creditWithWalletShortfallRetry({
         payableCents: payableTotalAmount,
         walletNetBeforePay: contestWalletNetBeforePay,
@@ -946,9 +1065,6 @@ export async function POST(request: NextRequest) {
                     }),
                 cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
                 bonus_reason_counts: bonusReasonCounts,
-                ...(isLeaderboardContest
-                  ? { leaderboard_creator_prize: true }
-                  : {}),
               },
             },
           ),
@@ -959,6 +1075,9 @@ export async function POST(request: NextRequest) {
           { error: `Failed to credit wallet: ${creditResult.error}` },
           { status: 500 },
         );
+      }
+      if (!creditResult.alreadyApplied) {
+        freshPrizeCreditedCents = payableTotalAmount;
       }
     }
 
@@ -1000,6 +1119,47 @@ export async function POST(request: NextRequest) {
             applyResult.error ||
             "Failed to apply leaderboard creator prize / mark siblings paid",
         });
+      } else if (
+        freshPrizeCreditedCents > 0 &&
+        (prizeRow?.cpm_amount ?? 0) > 0 &&
+        applyResult.appliedEarningsCents <= 0
+      ) {
+        // Concurrent pay already wrote prize earnings. Roll back our duplicate
+        // credit but keep sibling mark-paid from the RPC.
+        const dupRollback = await debitCreatorWithdrawableBalance(
+          creator_id,
+          freshPrizeCreditedCents,
+        );
+        if (dupRollback.success) {
+          await logTransactionAsAdmin(
+            creator_id,
+            "refund",
+            freshPrizeCreditedCents,
+            "success",
+            `Rollback: duplicate leaderboard prize credit for ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id,
+                payout_type: "leaderboard_prize_duplicate_rollback",
+                payout_operation_key: bulkPayIdempotencyKey,
+              },
+            },
+          );
+          freshPrizeCreditedCents = 0;
+        } else {
+          updateFailures.push({
+            submission_id: String(prizeRow?.id || creator_id),
+            message:
+              "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back duplicate wallet credit failed.",
+          });
+        }
+        if (dupRollback.success) {
+          appliedUpdates.push(...submissionUpdates);
+        }
       } else {
         // Treat all breakdown rows as applied for metrics/response accounting.
         appliedUpdates.push(...submissionUpdates);
@@ -1089,16 +1249,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (updateFailures.length > 0) {
-      if (!creditResult.alreadyApplied && payableTotalAmount > 0) {
+      const rollbackCents =
+        freshPrizeCreditedCents + freshBonusCreditedCents > 0
+          ? freshPrizeCreditedCents + freshBonusCreditedCents
+          : !creditResult.alreadyApplied && payableTotalAmount > 0
+            ? payableTotalAmount
+            : 0;
+      if (rollbackCents > 0) {
         const rollback = await debitCreatorWithdrawableBalance(
           creator_id,
-          payableTotalAmount,
+          rollbackCents,
         );
         if (rollback.success) {
           await logTransactionAsAdmin(
             creator_id,
             "refund",
-            payableTotalAmount,
+            rollbackCents,
             "success",
             `Rollback: bulk payment row update failed for ${
               contest.title || "Contest"
@@ -1111,6 +1277,8 @@ export async function POST(request: NextRequest) {
                 payout_type: "bulk_payment_rollback",
                 original_reward_transaction_id: creditResult.transactionId,
                 payout_operation_key: bulkPayIdempotencyKey,
+                fresh_prize_credited_cents: freshPrizeCreditedCents,
+                fresh_bonus_credited_cents: freshBonusCreditedCents,
                 update_failures: updateFailures,
               },
             },

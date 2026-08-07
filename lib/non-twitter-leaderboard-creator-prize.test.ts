@@ -4,6 +4,8 @@ import {
   accumulateLeaderboardViewsByCreator,
   applyNonTwitterLeaderboardCreatorPayout,
   buildLeaderboardCreatorPrizeIdempotencyFields,
+  buildLeaderboardCreatorPrizeIdempotencyKey,
+  LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX,
   prizeCentsForLeaderboardRank,
   rankCreatorsByTotalViews,
   rankOfCreator,
@@ -65,23 +67,81 @@ describe("non-twitter leaderboard creator ranking", () => {
     );
   });
 
-  it("builds creator-scoped idempotency fields without submission ids", () => {
+  it("builds creator-scoped idempotency fields without submission ids or payment_type", () => {
     const fields = buildLeaderboardCreatorPrizeIdempotencyFields({
       contestId: "contest-1",
       creatorId: "creator-1",
-      paymentType: "standard",
     });
     assert.equal(fields.leaderboard_creator_prize, true);
     assert.equal(fields.contest_id, "contest-1");
     assert.equal(fields.creator_id, "creator-1");
     assert.equal("requested_submission_ids" in fields, false);
+    assert.equal("payment_type" in fields, false);
+    assert.equal("payout_adjustment_percentage" in fields, false);
+  });
+
+  it("builds the same prize key for verify and bulk regardless of payment intent", () => {
+    const ledger = {
+      generation: 2,
+      fingerprint: "abc",
+      rewardCount: 1,
+      refundCount: 0,
+    };
+    const keyA = buildLeaderboardCreatorPrizeIdempotencyKey({
+      contestId: "contest-1",
+      creatorId: "creator-1",
+      ledger,
+    });
+    const keyB = buildLeaderboardCreatorPrizeIdempotencyKey({
+      contestId: "contest-1",
+      creatorId: "creator-1",
+      ledger,
+    });
+    assert.equal(keyA, keyB);
+    assert.ok(keyA.startsWith(LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX));
+    assert.notEqual(
+      keyA,
+      buildLeaderboardCreatorPrizeIdempotencyKey({
+        contestId: "contest-1",
+        creatorId: "creator-2",
+        ledger,
+      }),
+    );
+  });
+
+  it("changes prize key after ledger generation advances (pay→refund→repay)", () => {
+    const before = buildLeaderboardCreatorPrizeIdempotencyKey({
+      contestId: "c1",
+      creatorId: "u1",
+      ledger: {
+        generation: 1,
+        fingerprint: "f1",
+        rewardCount: 1,
+        refundCount: 0,
+      },
+    });
+    const afterRefund = buildLeaderboardCreatorPrizeIdempotencyKey({
+      contestId: "c1",
+      creatorId: "u1",
+      ledger: {
+        generation: 2,
+        fingerprint: "f2",
+        rewardCount: 1,
+        refundCount: 1,
+      },
+    });
+    assert.notEqual(before, afterRefund);
   });
 
   it("applyNonTwitterLeaderboardCreatorPayout fails closed when RPC is missing", async () => {
     const supabaseAdmin = {
       rpc: async () => ({
         data: null,
-        error: { message: "function apply_non_twitter_leaderboard_creator_payout does not exist", code: "42883" },
+        error: {
+          message:
+            "function apply_non_twitter_leaderboard_creator_payout does not exist",
+          code: "42883",
+        },
       }),
     };
     const result = await applyNonTwitterLeaderboardCreatorPayout({
