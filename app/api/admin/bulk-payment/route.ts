@@ -29,6 +29,7 @@ import {
   buildLeaderboardCreatorPrizeIdempotencyKey,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
+  isTwitterTextImageLeaderboardContest,
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 
@@ -139,6 +140,16 @@ export async function POST(request: NextRequest) {
 
     if (contestError || !contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    if (isTwitterTextImageLeaderboardContest(contest)) {
+      return NextResponse.json(
+        {
+          error:
+            "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not bulk-payment.",
+        },
+        { status: 400 },
+      );
     }
 
     // Only allow payments when contest status is verification_complete
@@ -1009,11 +1020,48 @@ export async function POST(request: NextRequest) {
         });
 
         if (!bonusCredit.success) {
+          // Prize used a ledger-scoped idempotency key (no shortfall bump). Debit
+          // alone is not enough — log a contest refund so retries get a new key.
           if (freshPrizeCreditedCents > 0) {
-            await debitCreatorWithdrawableBalance(
+            const prizeRollback = await debitCreatorWithdrawableBalance(
               creator_id,
               freshPrizeCreditedCents,
             );
+            if (prizeRollback.success) {
+              await logTransactionAsAdmin(
+                creator_id,
+                "refund",
+                freshPrizeCreditedCents,
+                "success",
+                `Rollback: leaderboard prize after bonus credit failed for ${
+                  contest.title || "Contest"
+                }`,
+                {
+                  remarks: REVERSAL_TRANSACTION_REMARK,
+                  paymentMethod: "refund",
+                  metadata: {
+                    contest_id,
+                    payout_type: "leaderboard_prize_bonus_failure_rollback",
+                    payout_operation_key: bulkPayIdempotencyKey,
+                    bonus_error: bonusCredit.error,
+                  },
+                },
+              );
+              freshPrizeCreditedCents = 0;
+            } else {
+              console.error(
+                "[bulk-payment] CRITICAL: leaderboard prize rollback failed after bonus credit failure:",
+                prizeRollback.error,
+              );
+              return NextResponse.json(
+                {
+                  error: `Failed to credit bonus wallet: ${bonusCredit.error}. Prize was credited and could not be rolled back — contact support before retrying.`,
+                  prize_rollback_failed: true,
+                  prize_credited_cents: freshPrizeCreditedCents,
+                },
+                { status: 500 },
+              );
+            }
           }
           return NextResponse.json(
             { error: `Failed to credit bonus wallet: ${bonusCredit.error}` },
@@ -1121,22 +1169,23 @@ export async function POST(request: NextRequest) {
         });
       } else if (
         freshPrizeCreditedCents > 0 &&
-        (prizeRow?.cpm_amount ?? 0) > 0 &&
-        applyResult.appliedEarningsCents <= 0
+        applyResult.appliedEarningsCents < freshPrizeCreditedCents
       ) {
-        // Concurrent pay already wrote prize earnings. Roll back our duplicate
-        // credit but keep sibling mark-paid from the RPC.
+        // Concurrent pay wrote some/all prize earnings — roll back excess wallet
+        // credit (full or partial) but keep sibling mark-paid from the RPC.
+        const excessCents =
+          freshPrizeCreditedCents - applyResult.appliedEarningsCents;
         const dupRollback = await debitCreatorWithdrawableBalance(
           creator_id,
-          freshPrizeCreditedCents,
+          excessCents,
         );
         if (dupRollback.success) {
           await logTransactionAsAdmin(
             creator_id,
             "refund",
-            freshPrizeCreditedCents,
+            excessCents,
             "success",
-            `Rollback: duplicate leaderboard prize credit for ${
+            `Rollback: excess leaderboard prize credit for ${
               contest.title || "Contest"
             }`,
             {
@@ -1146,19 +1195,40 @@ export async function POST(request: NextRequest) {
                 contest_id,
                 payout_type: "leaderboard_prize_duplicate_rollback",
                 payout_operation_key: bulkPayIdempotencyKey,
+                credited_cents: freshPrizeCreditedCents,
+                applied_earnings_cents: applyResult.appliedEarningsCents,
+                excess_cents: excessCents,
               },
             },
           );
+          // Wallet now matches applied earnings; prize persist already succeeded.
+          payableTotalMainPaid = applyResult.appliedEarningsCents;
+          payableTotalAmount = payableTotalMainPaid + totalBonusPaid;
+          if (prizeRow) {
+            prizeRow.cpm_amount = applyResult.appliedEarningsCents;
+          }
+          for (const item of breakdown) {
+            if ("cpm_amount" in item) {
+              if (
+                prizeRow &&
+                String(item.submission_id) === String(prizeRow.id)
+              ) {
+                item.cpm_amount = applyResult.appliedEarningsCents;
+                item.original_cpm_amount = applyResult.appliedEarningsCents;
+              } else if (applyResult.appliedEarningsCents <= 0) {
+                item.cpm_amount = 0;
+                item.original_cpm_amount = 0;
+              }
+            }
+          }
           freshPrizeCreditedCents = 0;
+          appliedUpdates.push(...submissionUpdates);
         } else {
           updateFailures.push({
             submission_id: String(prizeRow?.id || creator_id),
             message:
-              "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back duplicate wallet credit failed.",
+              "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back excess wallet credit failed.",
           });
-        }
-        if (dupRollback.success) {
-          appliedUpdates.push(...submissionUpdates);
         }
       } else {
         // Treat all breakdown rows as applied for metrics/response accounting.

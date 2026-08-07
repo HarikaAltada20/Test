@@ -5,6 +5,7 @@ import {
   applyNonTwitterLeaderboardCreatorPayout,
   buildLeaderboardCreatorPrizeIdempotencyFields,
   buildLeaderboardCreatorPrizeIdempotencyKey,
+  isTwitterTextImageLeaderboardContest,
   LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX,
   prizeCentsForLeaderboardRank,
   rankCreatorsByTotalViews,
@@ -53,6 +54,41 @@ describe("non-twitter leaderboard creator ranking", () => {
     assert.equal(prizeCentsForLeaderboardRank(prizes, 2), 5000);
     assert.equal(prizeCentsForLeaderboardRank(prizes, 3), 0);
     assert.equal(prizeCentsForLeaderboardRank(prizes, null), 0);
+  });
+
+  it("detects Twitter text/image leaderboard contests", () => {
+    assert.equal(
+      isTwitterTextImageLeaderboardContest({
+        contest_type: "leaderboard",
+        platform: "twitter",
+        contest_format: "text_image",
+      }),
+      true,
+    );
+    assert.equal(
+      isTwitterTextImageLeaderboardContest({
+        contest_type: "leaderboard",
+        platform: "x",
+        contest_format: "text_image",
+      }),
+      true,
+    );
+    assert.equal(
+      isTwitterTextImageLeaderboardContest({
+        contest_type: "leaderboard",
+        platform: "instagram",
+        contest_format: "video",
+      }),
+      false,
+    );
+    assert.equal(
+      isTwitterTextImageLeaderboardContest({
+        contest_type: "cpm",
+        platform: "twitter",
+        contest_format: "text_image",
+      }),
+      false,
+    );
   });
 
   it("sums paid earnings only and clamps negatives", () => {

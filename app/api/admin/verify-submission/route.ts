@@ -47,6 +47,7 @@ import {
   buildLeaderboardCreatorPrizeIdempotencyKey,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
+  isTwitterTextImageLeaderboardContest,
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -214,7 +215,7 @@ export async function POST(request: Request) {
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "title, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
+        "title, contest_type, contest_format, platform, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
       )
       .eq("id", submission.contest_id)
       .single();
@@ -252,6 +253,19 @@ export async function POST(request: Request) {
       action === SUBMISSION_STATUS.paid ||
       action === "mark_bonus_paid" ||
       action === "mark_both_paid";
+
+    if (
+      isPaymentAction &&
+      isTwitterTextImageLeaderboardContest(contest)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not verify-submission payment actions.",
+        },
+        { status: 400 },
+      );
+    }
 
     if (isPaymentAction && !isAdmin) {
       return NextResponse.json(
@@ -1877,21 +1891,24 @@ export async function POST(request: Request) {
               };
             } else if (
               leaderboardFreshPrizeCreditedCents > 0 &&
-              rewardAmount > 0 &&
-              applyResult.appliedEarningsCents <= 0
+              applyResult.appliedEarningsCents <
+                leaderboardFreshPrizeCreditedCents
             ) {
-              // Concurrent pay already wrote prize earnings — roll back duplicate.
+              // Concurrent pay wrote some/all prize earnings — roll back excess.
+              const excessCents =
+                leaderboardFreshPrizeCreditedCents -
+                applyResult.appliedEarningsCents;
               const dupRollback = await debitCreatorWithdrawableBalance(
                 submissionFull.creator_id,
-                leaderboardFreshPrizeCreditedCents,
+                excessCents,
               );
               if (dupRollback.success) {
                 await logTransactionAsAdmin(
                   submissionFull.creator_id,
                   "refund",
-                  leaderboardFreshPrizeCreditedCents,
+                  excessCents,
                   "success",
-                  `Rollback: duplicate leaderboard prize credit for ${
+                  `Rollback: excess leaderboard prize credit for ${
                     (contest as any)?.title || "Contest"
                   }`,
                   {
@@ -1902,14 +1919,19 @@ export async function POST(request: Request) {
                       submission_id: submissionId,
                       payout_type: "leaderboard_prize_duplicate_rollback",
                       payout_operation_key: contestRewardIdempotencyKey,
+                      credited_cents: leaderboardFreshPrizeCreditedCents,
+                      applied_earnings_cents: applyResult.appliedEarningsCents,
+                      excess_cents: excessCents,
                     },
                   },
                 );
+                // Wallet matches applied earnings; prize persist already succeeded.
+                rewardAmount = applyResult.appliedEarningsCents;
                 leaderboardFreshPrizeCreditedCents = 0;
               } else {
                 paidPersistError = {
                   message:
-                    "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back duplicate wallet credit failed.",
+                    "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back excess wallet credit failed.",
                 };
               }
             }

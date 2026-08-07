@@ -12,6 +12,23 @@ export type LeaderboardPrize = { position?: number; amount?: number };
 export const LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX =
   "leaderboard_creator_prize:v1:";
 
+/**
+ * Twitter text/image leaderboard contests pay via pay-twitter-creator, not this
+ * submissions-table creator-prize path.
+ */
+export function isTwitterTextImageLeaderboardContest(contest: {
+  contest_type?: string | null;
+  platform?: string | null;
+  contest_format?: string | null;
+}): boolean {
+  if (contest.contest_type !== "leaderboard") return false;
+  const platform = String(contest.platform || "").toLowerCase();
+  return (
+    (platform === "twitter" || platform === "x") &&
+    contest.contest_format === "text_image"
+  );
+}
+
 export type LeaderboardEligibleSubmissionRow = {
   creator_id?: string | null;
   views?: number | null;
