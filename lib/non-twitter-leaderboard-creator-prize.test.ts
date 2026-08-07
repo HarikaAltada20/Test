@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyCreatorMaxEarningsCapCents,
   buildLeaderboardPrizeCentsBySubmissionId,
   isLeaderboardRankingEligibleStatus,
   isTwitterTextImageLeaderboardContest,
@@ -108,6 +109,41 @@ describe("non-twitter leaderboard submission ranking", () => {
         { paid: true, earnings: -100 },
       ]),
       1250,
+    );
+  });
+
+  it("applies creator max-earnings remaining cap", () => {
+    assert.equal(
+      applyCreatorMaxEarningsCapCents({
+        amountCents: 5000,
+        alreadyPaidCents: 2000,
+        maxEarningsCents: 4000,
+      }),
+      2000,
+    );
+    assert.equal(
+      applyCreatorMaxEarningsCapCents({
+        amountCents: 500,
+        alreadyPaidCents: 2000,
+        maxEarningsCents: 4000,
+      }),
+      500,
+    );
+    assert.equal(
+      applyCreatorMaxEarningsCapCents({
+        amountCents: 5000,
+        alreadyPaidCents: 4000,
+        maxEarningsCents: 4000,
+      }),
+      0,
+    );
+    assert.equal(
+      applyCreatorMaxEarningsCapCents({
+        amountCents: 5000,
+        alreadyPaidCents: 0,
+        maxEarningsCents: null,
+      }),
+      5000,
     );
   });
 });

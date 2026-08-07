@@ -87,6 +87,23 @@ export function sumPaidEarningsCents(
 }
 
 /**
+ * Clamp a prize/reward to the remaining creator max-earnings budget.
+ * Matches creator-wise Expected Reward capping (UI) so pay cannot exceed what admins see.
+ */
+export function applyCreatorMaxEarningsCapCents(params: {
+  amountCents: number;
+  alreadyPaidCents: number;
+  maxEarningsCents: number | null | undefined;
+}): number {
+  const amount = Math.max(0, Math.round(Number(params.amountCents) || 0));
+  const max = Number(params.maxEarningsCents);
+  if (!Number.isFinite(max) || max <= 0) return amount;
+  const already = Math.max(0, Math.round(Number(params.alreadyPaidCents) || 0));
+  const remaining = Math.max(0, Math.round(max) - already);
+  return Math.min(amount, remaining);
+}
+
+/**
  * Per-submission prize for non-Twitter leaderboard contests.
  * Ranks verified/approved/paid submissions by views (id asc tie-break), then maps to prize.
  */

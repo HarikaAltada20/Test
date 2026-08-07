@@ -597,22 +597,20 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Cap applies to CPM (and stored-earnings) paths; leaderboard uses fixed rank prizes.
-        if (!isLeaderboardContest) {
-          // Check if adding this submission would exceed the cap
-          if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
-            // Partial payment to reach cap exactly
-            const remainingCap = maxEarnings - runningTotal;
-            if (remainingCap > 0) {
-              submissionEarnings = remainingCap;
-              runningTotal = maxEarnings;
-            } else {
-              // Cap reached, skip this submission for CPM payment
-              submissionEarnings = 0;
-            }
+        // Cap applies to CPM, stored-earnings, and leaderboard rank prizes so pay
+        // cannot exceed creator-wise Expected Reward (max_earnings_per_creator).
+        if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
+          // Partial payment to reach cap exactly
+          const remainingCap = maxEarnings - runningTotal;
+          if (remainingCap > 0) {
+            submissionEarnings = remainingCap;
+            runningTotal = maxEarnings;
           } else {
-            runningTotal += submissionEarnings;
+            // Cap reached, skip this submission for reward payment
+            submissionEarnings = 0;
           }
+        } else {
+          runningTotal += submissionEarnings;
         }
 
         // Leaderboard prizes are fixed rank amounts — do not apply % payout adjustment.

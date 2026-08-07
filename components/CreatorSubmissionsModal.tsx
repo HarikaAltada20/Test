@@ -1642,9 +1642,9 @@ export function CreatorSubmissionsModal({
     [contest, bonusCapSubmissions, submissions],
   );
 
-  // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
-  const isLeaderboard = contest?.contest_type === "leaderboard";
-  if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
+  // Apply creator max-earnings cap for all contest types (including leaderboard)
+  // so Expected Reward matches bulk-payment / verify-submission pay amounts.
+  if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
     // Sort by created_at to apply creator cap in submission order
     const submissionsByTime = [...submissions].sort((a, b) => {
       return (
@@ -1677,7 +1677,7 @@ export function CreatorSubmissionsModal({
       runningTotal += amountApplied;
     });
   } else {
-    // No cap (or leaderboard): use formula-only expected per submission
+    // No max_earnings_per_creator configured: use formula-only expected per submission
     submissions.forEach((sub) => {
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(
         sub,

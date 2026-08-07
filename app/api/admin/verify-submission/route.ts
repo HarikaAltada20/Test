@@ -43,8 +43,10 @@ import {
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
 import {
+  applyCreatorMaxEarningsCapCents,
   computeNonTwitterLeaderboardSubmissionPrizeCents,
   isTwitterTextImageLeaderboardContest,
+  sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
@@ -1215,6 +1217,43 @@ export async function POST(request: Request) {
             );
           }
           rewardAmount = prizeResult.prizeCents;
+          // Match bulk-payment + creator-wise Expected Reward: respect max_earnings_per_creator.
+          if (
+            rewardAmount > 0 &&
+            maxEarningsPerCreator &&
+            Number(maxEarningsPerCreator) > 0
+          ) {
+            const { data: paidRowsForCap, error: paidRowsForCapErr } =
+              await fetchContestSubmissionsAllPages(
+                supabaseAdmin,
+                submissionFull.contest_id,
+                "earnings, paid",
+                {
+                  creatorId: submissionFull.creator_id,
+                  paid: true,
+                  order: { column: "created_at", ascending: true },
+                },
+              );
+            if (paidRowsForCapErr) {
+              return NextResponse.json(
+                {
+                  error: `Failed to load creator paid earnings for cap: ${formatSubmissionFetchError(paidRowsForCapErr)}`,
+                },
+                { status: 500 },
+              );
+            }
+            const alreadyPaidCents = sumPaidEarningsCents(
+              (paidRowsForCap || []) as Array<{
+                earnings?: number | null;
+                paid?: boolean | null;
+              }>,
+            );
+            rewardAmount = applyCreatorMaxEarningsCapCents({
+              amountCents: rewardAmount,
+              alreadyPaidCents,
+              maxEarningsCents: Number(maxEarningsPerCreator),
+            });
+          }
         } else {
           rewardAmount = Number(submissionFull.earnings) || 0;
 

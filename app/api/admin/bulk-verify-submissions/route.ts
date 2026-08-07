@@ -296,9 +296,14 @@ export async function POST(request: Request) {
           ? walletIdsForOwnership
           : submissionIds.map(String);
 
+      // Chunked paid reversals must pass walletReversalSubmissionIds so we can
+      // debit once and issue a continuation token. Unpaid moderation still runs
+      // wallet preflight on the chunk only (no-op when nothing is paid).
+      const isChunkedWalletPreflight = walletIdsForOwnership.length > 0;
+
       // Ensure we can sign continuation BEFORE debiting wallets (avoids
       // "money moved, token failed" when signing secret is missing).
-      if (walletIdsForOwnership.length > 0) {
+      if (isChunkedWalletPreflight) {
         try {
           assertBulkVerifyWalletContinuationSigningReady();
         } catch (secretErr) {
@@ -347,7 +352,7 @@ export async function POST(request: Request) {
       });
 
       // Later client chunks must present this signed token to skip re-debit.
-      if (walletIdsForOwnership.length > 0) {
+      if (isChunkedWalletPreflight) {
         try {
           walletReversalContinuationOut = issueBulkVerifyWalletContinuation({
             actorId,
