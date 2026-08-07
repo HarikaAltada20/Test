@@ -367,7 +367,7 @@ export async function POST(request: Request) {
           return NextResponse.json(
             {
               error:
-                "Wallet reversal succeeded but continuation token could not be issued. Retry as a single request or contact support.",
+                "Wallet reversal succeeded but continuation token could not be issued. Do not retry blindly — funds may already be reversed. Retry the same selection once (server will net against existing refunds) or contact support.",
             },
             { status: 500 },
           );

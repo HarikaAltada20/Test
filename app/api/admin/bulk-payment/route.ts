@@ -936,20 +936,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update all submissions with earnings and payment status
-    const submissionUpdates = breakdown.map((item) => ({
-      id: item.submission_id,
-      cpm_amount: breakdownMainAmount(item),
-      bonus_amount: breakdownBonusAmount(item),
-      paid: payment_type !== "bonus" ? true : undefined,
-      paid_at: payment_type !== "bonus" ? new Date().toISOString() : undefined,
-      bonus_paid:
-        payment_type !== "standard" && item.bonus_amount > 0 ? true : undefined,
-      bonus_paid_at:
-        payment_type !== "standard" && item.bonus_amount > 0
-          ? new Date().toISOString()
-          : undefined,
-    }));
+    // Update all submissions with earnings and payment status.
+    // For payment_type "both", only mark prize paid when main amount > 0 so a
+    // bonus-only row (e.g. leaderboard outside prize ranks) is not locked as paid.
+    const submissionUpdates = breakdown.map((item) => {
+      const mainCents = breakdownMainAmount(item);
+      const bonusCents = breakdownBonusAmount(item);
+      const markPrizePaid =
+        payment_type === "standard" ||
+        (payment_type === "both" && mainCents > 0);
+      return {
+        id: item.submission_id,
+        cpm_amount: mainCents,
+        bonus_amount: bonusCents,
+        paid: markPrizePaid ? true : undefined,
+        paid_at: markPrizePaid ? new Date().toISOString() : undefined,
+        bonus_paid:
+          payment_type !== "standard" && bonusCents > 0 ? true : undefined,
+        bonus_paid_at:
+          payment_type !== "standard" && bonusCents > 0
+            ? new Date().toISOString()
+            : undefined,
+      };
+    });
 
     const updateFailures: { submission_id: string; message: string }[] = [];
     const appliedUpdates: typeof submissionUpdates = [];
@@ -958,14 +967,14 @@ export async function POST(request: NextRequest) {
     for (const update of submissionUpdates) {
       const updatePayload: Record<string, unknown> = {};
 
-      // Always update payment status if paying standard or both.
-      if (payment_type !== "bonus") {
+      // Mark prize paid only when this update actually includes a prize credit.
+      if (update.paid === true) {
         if (update.cpm_amount > 0) {
           updatePayload.earnings = update.cpm_amount;
         }
-        updatePayload.paid = update.paid;
+        updatePayload.paid = true;
         updatePayload.paid_at = update.paid_at;
-        updatePayload.status = "paid"; // Update status to 'paid'
+        updatePayload.status = "paid";
       }
 
       // Update bonus payment status and amount
@@ -980,7 +989,7 @@ export async function POST(request: NextRequest) {
         .update(updatePayload)
         .eq("id", update.id);
 
-      if (payment_type !== "bonus") {
+      if (update.paid === true) {
         updateQuery = updateQuery.neq("paid", true);
       }
       if (update.bonus_paid !== undefined) {
@@ -1061,7 +1070,8 @@ export async function POST(request: NextRequest) {
             rollbackCents,
             hadBonusPaidUpdate: applied.bonus_paid !== undefined,
           });
-          if (revertPrize) {
+          // Only clear prize flags on rows we actually marked paid this request.
+          if (revertPrize && applied.paid === true) {
             revertPayload.earnings = null;
             revertPayload.paid = false;
             revertPayload.paid_at = null;

@@ -117,6 +117,15 @@ import {
   formatRefundReversalToastLine,
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
+import {
+  buildLeaderboardPrizeCentsBySubmissionId,
+  isTwitterTextImageLeaderboardContest,
+} from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  clearBulkVerifyWalletContinuation,
+  loadBulkVerifyWalletContinuation,
+  saveBulkVerifyWalletContinuation,
+} from "@/lib/bulk-verify-wallet-continuation-storage";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
   parseSubmissionMetadata,
@@ -4889,14 +4898,11 @@ export default function ContestDetailClient({
     }
 
     // For non-Twitter leaderboard campaigns (e.g. Instagram / YouTube),
-    // Expected Reward = sum of each eligible submission's contest-wide rank prize.
+    // Expected Reward = sum of each eligible submission's contest-wide rank prize
+    // (same helper as bulk-payment / verify-submission — avoid UI/pay drift).
     const isNonTwitterLeaderboard =
       currentContest?.contest_type === "leaderboard" &&
-      !(
-        (currentContest?.platform?.toLowerCase() === "twitter" ||
-          currentContest?.platform?.toLowerCase() === "x") &&
-        currentContest?.contest_format === "text_image"
-      );
+      !isTwitterTextImageLeaderboardContest(currentContest);
 
     if (isNonTwitterLeaderboard) {
       const leaderboardDetails =
@@ -4905,39 +4911,27 @@ export default function ContestDetailClient({
 
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
-        const isEligibleSubmission = (s: any): boolean => {
-          const st = String(s?.status || "").toLowerCase();
-          return (
-            st === "verified" ||
-            st === "approved" ||
-            st === "paid" ||
-            s?.paid === true
-          );
-        };
-
-        const eligibleSubs: any[] = [];
+        const eligibleSubs: Array<{
+          id: string;
+          views?: number | null;
+          status?: string | null;
+          paid?: boolean | null;
+        }> = [];
         for (const group of allCreators) {
           for (const s of group.submissions || []) {
-            if (isEligibleSubmission(s)) eligibleSubs.push(s);
+            eligibleSubs.push({
+              id: String(s?.id || ""),
+              views: s?.views,
+              status: s?.status,
+              paid: s?.paid,
+            });
           }
         }
 
-        eligibleSubs.sort(
-          (a: any, b: any) =>
-            Math.max(0, Number(b?.views) || 0) -
-              Math.max(0, Number(a?.views) || 0) ||
-            String(a?.id || "").localeCompare(String(b?.id || "")),
+        const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionId(
+          eligibleSubs.filter((s) => s.id),
+          prizes,
         );
-
-        const prizeBySubmissionId = new Map<string, number>();
-        eligibleSubs.forEach((s: any, index: number) => {
-          const rank = index + 1;
-          const prizeForRank = prizes.find((p: any) => p.position === rank);
-          prizeBySubmissionId.set(
-            String(s.id),
-            Math.max(0, Number(prizeForRank?.amount) || 0),
-          );
-        });
 
         allCreators.forEach((group: any) => {
           group.earnings.expected = (group.submissions || []).reduce(
@@ -7263,7 +7257,6 @@ export default function ContestDetailClient({
       const results: any[] = [];
       /** Keep each bulk-verify request small enough for Supabase filters + serverless time. */
       const BULK_VERIFY_CLIENT_CHUNK_SIZE = 50;
-      let walletReversalContinuation: string | undefined;
       // Only run one-shot full-set wallet preflight when paid rows may be reversed.
       // Unpaid verify/reject does not need signing secrets or continuation tokens.
       const needsChunkedWalletPreflight =
@@ -7278,6 +7271,21 @@ export default function ContestDetailClient({
             : action === "reject"
               ? "rejected"
               : action;
+
+        const continuationStorageParams = {
+          contestId: String(contestId || ""),
+          action: String(normalAction),
+          reversalSubmissionIds: normalIds,
+        };
+
+        // Resume after mid-run failure / reload: reuse signed token so wallets
+        // are not reverse-debited twice for the same paid selection.
+        let walletReversalContinuation: string | undefined =
+          needsChunkedWalletPreflight
+            ? loadBulkVerifyWalletContinuation(continuationStorageParams)
+            : undefined;
+
+        let chunkHardFailed = false;
         for (
           let i = 0;
           i < normalIds.length;
@@ -7309,37 +7317,54 @@ export default function ContestDetailClient({
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok && !data?.results) {
+            const baseError =
+              data?.error || `Bulk verify failed (HTTP ${res.status})`;
+            const retryHint =
+              needsChunkedWalletPreflight && walletReversalContinuation
+                ? " Wallet funds were already reversed for this selection — re-run the same bulk action to finish remaining rows (continuation is saved in this browser session)."
+                : needsChunkedWalletPreflight && isFirstChunk
+                  ? " If wallets were reversed, re-run the same selection once continuation is available, or contact support."
+                  : "";
             results.push({
               success: false,
-              error: data?.error || `Bulk verify failed (HTTP ${res.status})`,
+              error: `${baseError}${retryHint}`,
             });
-            // Don't continue without a valid continuation if the full wallet
-            // preflight never completed on the first chunk.
-            if (isFirstChunk) break;
-          } else {
-            if (
-              isFirstChunk &&
-              typeof data?.wallet_reversal_continuation === "string"
-            ) {
-              walletReversalContinuation = data.wallet_reversal_continuation;
-            }
-            results.push(data);
-            const hasMoreChunks =
-              i + BULK_VERIFY_CLIENT_CHUNK_SIZE < normalIds.length;
-            if (
-              isFirstChunk &&
-              hasMoreChunks &&
-              needsChunkedWalletPreflight &&
-              !walletReversalContinuation
-            ) {
-              results.push({
-                success: false,
-                error:
-                  "Missing wallet reversal continuation for remaining verify chunks",
+            // Always stop on hard failure — continuing would skip failed IDs.
+            chunkHardFailed = true;
+            break;
+          }
+
+          if (typeof data?.wallet_reversal_continuation === "string") {
+            walletReversalContinuation = data.wallet_reversal_continuation;
+            if (needsChunkedWalletPreflight) {
+              saveBulkVerifyWalletContinuation({
+                ...continuationStorageParams,
+                token: walletReversalContinuation,
               });
-              break;
             }
           }
+          results.push(data);
+          const hasMoreChunks =
+            i + BULK_VERIFY_CLIENT_CHUNK_SIZE < normalIds.length;
+          if (
+            isFirstChunk &&
+            hasMoreChunks &&
+            needsChunkedWalletPreflight &&
+            !walletReversalContinuation
+          ) {
+            results.push({
+              success: false,
+              error:
+                "Missing wallet reversal continuation for remaining verify chunks. Re-run the same bulk action after fixing server signing secrets (BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET).",
+            });
+            chunkHardFailed = true;
+            break;
+          }
+        }
+
+        if (needsChunkedWalletPreflight && !chunkHardFailed) {
+          // All chunks accepted — drop saved token so a future selection starts clean.
+          clearBulkVerifyWalletContinuation(continuationStorageParams);
         }
       }
 
@@ -8104,10 +8129,7 @@ export default function ContestDetailClient({
     }
 
     const isTwitterLeaderboardCreatorWise =
-      (currentContest?.platform?.toLowerCase() === "twitter" ||
-        currentContest?.platform?.toLowerCase() === "x") &&
-      currentContest?.contest_format === "text_image" &&
-      currentContest?.contest_type === "leaderboard";
+      isTwitterTextImageLeaderboardContest(currentContest);
     const isTwitterCpmCreatorWise =
       (currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
@@ -8174,7 +8196,8 @@ export default function ContestDetailClient({
       let totalMilestoneCents = 0;
       let usedEstimatedAmounts = false;
       const creatorPayErrors: string[] = [];
-      const CREATOR_WISE_PAY_CONCURRENCY = 3;
+      // Serial creator pays: safer for wallet shortfall retries and leaderboard caps.
+      const CREATOR_WISE_PAY_CONCURRENCY = 1;
 
       const payOneCreator = async (group: any) => {
         const creatorId = String(group.creator?.id || "");
