@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   accumulateLeaderboardViewsByCreator,
+  applyNonTwitterLeaderboardCreatorPayout,
   buildLeaderboardCreatorPrizeIdempotencyFields,
   prizeCentsForLeaderboardRank,
   rankCreatorsByTotalViews,
@@ -52,12 +53,13 @@ describe("non-twitter leaderboard creator ranking", () => {
     assert.equal(prizeCentsForLeaderboardRank(prizes, null), 0);
   });
 
-  it("sums paid earnings only", () => {
+  it("sums paid earnings only and clamps negatives", () => {
     assert.equal(
       sumPaidEarningsCents([
         { paid: true, earnings: 1000 },
         { paid: false, earnings: 500 },
         { paid: true, earnings: 250 },
+        { paid: true, earnings: -100 },
       ]),
       1250,
     );
@@ -73,5 +75,38 @@ describe("non-twitter leaderboard creator ranking", () => {
     assert.equal(fields.contest_id, "contest-1");
     assert.equal(fields.creator_id, "creator-1");
     assert.equal("requested_submission_ids" in fields, false);
+  });
+
+  it("applyNonTwitterLeaderboardCreatorPayout fails closed when RPC is missing", async () => {
+    const supabaseAdmin = {
+      rpc: async () => ({
+        data: null,
+        error: { message: "function apply_non_twitter_leaderboard_creator_payout does not exist", code: "42883" },
+      }),
+    };
+    const result = await applyNonTwitterLeaderboardCreatorPayout({
+      supabaseAdmin: supabaseAdmin as any,
+      contestId: "c1",
+      creatorId: "u1",
+      prizeCents: 1000,
+      earningsSubmissionId: "s1",
+      earningsCents: 1000,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error || "", /not deployed|migration/i);
+  });
+
+  it("applyNonTwitterLeaderboardCreatorPayout fails closed on unexpected RPC payload", async () => {
+    const supabaseAdmin = {
+      rpc: async () => ({ data: { ok: false }, error: null }),
+    };
+    const result = await applyNonTwitterLeaderboardCreatorPayout({
+      supabaseAdmin: supabaseAdmin as any,
+      contestId: "c1",
+      creatorId: "u1",
+      prizeCents: 1000,
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.error || "", /unexpected result/i);
   });
 });

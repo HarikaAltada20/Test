@@ -1,6 +1,7 @@
 -- Atomically apply non-Twitter leaderboard creator prize earnings + sibling mark-paid.
 -- Serializes concurrent pays for the same (contest, creator) via advisory xact lock so
 -- only one request can write prize earnings even when wallet idempotency already deduped.
+-- REQUIRED in production: app code fails closed if this function is missing (no fallback).
 
 CREATE OR REPLACE FUNCTION public.apply_non_twitter_leaderboard_creator_payout(
   p_contest_id uuid,

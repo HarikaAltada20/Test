@@ -48,6 +48,7 @@ import {
   buildLeaderboardCreatorPrizeIdempotencyFields,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
+  sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
@@ -1108,6 +1109,7 @@ export async function POST(request: Request) {
         } | null = null;
         /** Set for non-Twitter leaderboard pays — used for mark-paid-only / sibling cleanup. */
         let leaderboardAlreadyPaidAmount = 0;
+        let leaderboardPrizeCents = 0;
 
         if (customAmount && customAmount > 0) {
           rewardAmount = customAmount;
@@ -1208,9 +1210,11 @@ export async function POST(request: Request) {
               { status: 500 },
             );
           }
-          const alreadyPaidAmount = (previousPaidSubs || []).reduce(
-            (sum, s) => sum + (Number((s as { earnings?: number }).earnings) || 0),
-            0,
+          const alreadyPaidAmount = sumPaidEarningsCents(
+            (previousPaidSubs || []) as Array<{
+              earnings?: number | null;
+              paid?: boolean | null;
+            }>,
           );
           const prizeResult = await computeNonTwitterLeaderboardCreatorPrizeCents({
             supabaseAdmin,
@@ -1226,6 +1230,7 @@ export async function POST(request: Request) {
               { status: 500 },
             );
           }
+          leaderboardPrizeCents = prizeResult.prizeCents;
           leaderboardAlreadyPaidAmount = alreadyPaidAmount;
           rewardAmount = Math.max(
             0,
@@ -1656,17 +1661,24 @@ export async function POST(request: Request) {
                 { status: 500 },
               );
             }
-            const prizeCents =
-              rewardAmount + leaderboardAlreadyPaidAmount;
-            rewardAmount = Math.max(0, prizeCents - freshPaid.paidCents);
+            rewardAmount = Math.max(
+              0,
+              leaderboardPrizeCents - freshPaid.paidCents,
+            );
             leaderboardAlreadyPaidAmount = freshPaid.paidCents;
           }
 
+          // Leaderboard: always attempt credit when remaining prize > 0 (idempotent).
+          // Other types keep the prior wallet-net shortfall gate (dual_rewards uses
+          // real net; CPM/milestone pass walletNetBeforePay=0 so this is reward>0).
           const needsWalletCredit =
             contest.contest_type === "dual_rewards"
               ? dualCreditTotalCents > 0 &&
                 submissionWalletNetBeforePay < dualCreditTotalCents
-              : rewardAmount > 0;
+              : contest.contest_type === "leaderboard" && !customAmount
+                ? rewardAmount > 0
+                : dualCreditTotalCents > 0 &&
+                  submissionWalletNetBeforePay < dualCreditTotalCents;
 
           if (needsWalletCredit) {
             if (contest.contest_type === "dual_rewards") {
@@ -1827,12 +1839,11 @@ export async function POST(request: Request) {
             contest.contest_type === "leaderboard" &&
             !customAmount
           ) {
-            const prizeCents = rewardAmount + leaderboardAlreadyPaidAmount;
             const applyResult = await applyNonTwitterLeaderboardCreatorPayout({
               supabaseAdmin,
               contestId: submissionFull.contest_id,
               creatorId: submissionFull.creator_id,
-              prizeCents,
+              prizeCents: leaderboardPrizeCents,
               earningsSubmissionId:
                 rewardAmount > 0 ? submissionId : null,
               earningsCents: rewardAmount,
@@ -1901,11 +1912,15 @@ export async function POST(request: Request) {
           leaderboardAlreadyPaidAmount > 0
         ) {
           // Prize already on this creator — mark this row + siblings paid with no new credit.
+          // Pass the real prize ceiling (not already-paid) so remaining stays correct.
           const applyResult = await applyNonTwitterLeaderboardCreatorPayout({
             supabaseAdmin,
             contestId: submissionFull.contest_id,
             creatorId: submissionFull.creator_id,
-            prizeCents: leaderboardAlreadyPaidAmount,
+            prizeCents:
+              leaderboardPrizeCents > 0
+                ? leaderboardPrizeCents
+                : leaderboardAlreadyPaidAmount,
             earningsSubmissionId: null,
             earningsCents: 0,
           });

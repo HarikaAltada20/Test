@@ -7286,12 +7286,11 @@ export default function ContestDetailClient({
               qualityScore: options?.qualityScore,
               // One wallet reversal for the full selection → one money_transactions
               // row per creator (not one per 50-ID verify chunk). Later chunks must
-              // present the signed continuation from the first response.
-              ...(isFirstChunk
-                ? { walletReversalSubmissionIds: normalIds }
-                : walletReversalContinuation
-                  ? { walletReversalContinuation }
-                  : {}),
+              // present the signed continuation + the same full ID set (hashed in token).
+              walletReversalSubmissionIds: normalIds,
+              ...(walletReversalContinuation
+                ? { walletReversalContinuation }
+                : {}),
             }),
           });
           const data = await res.json().catch(() => ({}));

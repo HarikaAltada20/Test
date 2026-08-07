@@ -1,24 +1,30 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 
 const TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const TOKEN_VERSION = 1 as const;
+const TOKEN_VERSION = 2 as const;
 
+/**
+ * Compact continuation payload: stores a hash of the preflight ID set instead of
+ * embedding thousands of UUIDs (keeps later chunk request bodies small).
+ */
 export type BulkVerifyWalletContinuationPayload = {
   v: typeof TOKEN_VERSION;
   actorId: string;
   action: string;
-  /** Sorted unique IDs covered by the wallet preflight. */
-  reversalIds: string[];
-  /** IDs that already had wallet debit applied in preflight. */
-  skipWalletDebitIds: string[];
+  /** SHA-256 hex of sorted unique reversal IDs joined by comma. */
+  reversalIdsHash: string;
   exp: number;
 };
 
 function getSigningSecret(): string {
-  const secret = (process.env.CRON_SECRET || "").trim();
+  const secret = (
+    process.env.BULK_VERIFY_WALLET_CONTINUATION_SECRET ||
+    process.env.CRON_SECRET ||
+    ""
+  ).trim();
   if (!secret) {
     throw new Error(
-      "CRON_SECRET is required to sign wallet continuation tokens",
+      "BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET is required to sign wallet continuation tokens",
     );
   }
   return secret;
@@ -29,10 +35,17 @@ export function assertBulkVerifyWalletContinuationSigningReady(): void {
   getSigningSecret();
 }
 
-function sortUniqueIds(ids: readonly string[]): string[] {
+export function sortUniqueIds(ids: readonly string[]): string[] {
   return Array.from(
     new Set(ids.map((id) => String(id || "").trim()).filter(Boolean)),
   ).sort((a, b) => a.localeCompare(b));
+}
+
+/** Stable hash of the full wallet-preflight ID set. */
+export function hashReversalIds(ids: readonly string[]): string {
+  return createHash("sha256")
+    .update(sortUniqueIds(ids).join(","))
+    .digest("hex");
 }
 
 function encodePayload(payload: BulkVerifyWalletContinuationPayload): string {
@@ -60,15 +73,15 @@ export function issueBulkVerifyWalletContinuation(params: {
   actorId: string;
   action: string;
   reversalIds: readonly string[];
-  skipWalletDebitIds: readonly string[];
+  /** @deprecated Ignored — later chunks force-skip wallet debit for the whole set. */
+  skipWalletDebitIds?: readonly string[];
   ttlMs?: number;
 }): string {
   const payload: BulkVerifyWalletContinuationPayload = {
     v: TOKEN_VERSION,
     actorId: String(params.actorId),
     action: String(params.action),
-    reversalIds: sortUniqueIds(params.reversalIds),
-    skipWalletDebitIds: sortUniqueIds(params.skipWalletDebitIds),
+    reversalIdsHash: hashReversalIds(params.reversalIds),
     exp: Date.now() + (params.ttlMs ?? TOKEN_TTL_MS),
   };
   const encoded = encodePayload(payload);
@@ -79,26 +92,31 @@ export type VerifyWalletContinuationResult =
   | {
       ok: true;
       payload: BulkVerifyWalletContinuationPayload;
-      skipWalletDebitIds: Set<string>;
+      /** Full preflight set (from client); used for membership checks. */
+      reversalIds: string[];
     }
   | { ok: false; error: string };
 
 /**
  * Validates a continuation token for a later chunk. Rejects forged / expired /
- * mismatched actor-action tokens and chunks that include IDs outside the
- * original preflight set.
+ * mismatched actor-action tokens. Caller must resend the full preflight ID set
+ * so the server can verify the hash and that the chunk is a subset.
  */
 export function verifyBulkVerifyWalletContinuation(params: {
   token: unknown;
   actorId: string;
   action: string;
   chunkSubmissionIds: readonly string[];
+  /** Full ID set from the original wallet preflight (required for v2). */
+  reversalSubmissionIds: readonly string[];
 }): VerifyWalletContinuationResult {
   if (typeof params.token !== "string" || !params.token.includes(".")) {
     return { ok: false, error: "Invalid wallet reversal continuation token" };
   }
 
-  const [encoded, signature] = params.token.split(".");
+  const dot = params.token.indexOf(".");
+  const encoded = params.token.slice(0, dot);
+  const signature = params.token.slice(dot + 1);
   if (!encoded || !signature) {
     return { ok: false, error: "Invalid wallet reversal continuation token" };
   }
@@ -132,7 +150,12 @@ export function verifyBulkVerifyWalletContinuation(params: {
   if (payload?.v !== TOKEN_VERSION) {
     return { ok: false, error: "Unsupported wallet reversal continuation version" };
   }
-  if (!payload.actorId || !payload.action || !Array.isArray(payload.reversalIds)) {
+  if (
+    !payload.actorId ||
+    !payload.action ||
+    typeof payload.reversalIdsHash !== "string" ||
+    !payload.reversalIdsHash
+  ) {
     return { ok: false, error: "Wallet reversal continuation payload is incomplete" };
   }
   if (typeof payload.exp !== "number" || Date.now() > payload.exp) {
@@ -145,7 +168,24 @@ export function verifyBulkVerifyWalletContinuation(params: {
     return { ok: false, error: "Wallet reversal continuation action mismatch" };
   }
 
-  const allowed = new Set(payload.reversalIds.map(String));
+  const reversalIds = sortUniqueIds(params.reversalSubmissionIds);
+  if (reversalIds.length === 0) {
+    return {
+      ok: false,
+      error:
+        "walletReversalSubmissionIds is required with walletReversalContinuation",
+    };
+  }
+
+  const actualHash = hashReversalIds(reversalIds);
+  if (!safeEqualString(actualHash, payload.reversalIdsHash)) {
+    return {
+      ok: false,
+      error: "Wallet reversal continuation ID set does not match preflight",
+    };
+  }
+
+  const allowed = new Set(reversalIds);
   const chunkIds = sortUniqueIds(params.chunkSubmissionIds);
   const outside = chunkIds.filter((id) => !allowed.has(id));
   if (outside.length > 0) {
@@ -159,8 +199,6 @@ export function verifyBulkVerifyWalletContinuation(params: {
   return {
     ok: true,
     payload,
-    skipWalletDebitIds: new Set(
-      (payload.skipWalletDebitIds || []).map(String).filter(Boolean),
-    ),
+    reversalIds,
   };
 }

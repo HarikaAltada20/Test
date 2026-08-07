@@ -149,9 +149,21 @@ function parseApplyRpcResult(raw: unknown): ApplyLeaderboardCreatorPayoutResult 
   };
 }
 
+function isRpcMissingError(error: {
+  message?: string;
+  code?: string;
+} | null): boolean {
+  if (!error) return false;
+  return (
+    /function.*does not exist|could not find/i.test(error.message || "") ||
+    error.code === "42883"
+  );
+}
+
 /**
  * Persist creator prize earnings (at most once) and mark verified siblings paid.
- * Prefers the transactional RPC; falls back to re-check + updates if undeployed.
+ * Requires the transactional RPC (advisory lock). No non-atomic fallback —
+ * concurrent pays could otherwise write prize earnings onto multiple rows.
  */
 export async function applyNonTwitterLeaderboardCreatorPayout(params: {
   supabaseAdmin: SupabaseClient;
@@ -182,110 +194,25 @@ export async function applyNonTwitterLeaderboardCreatorPayout(params: {
   if (!rpcError) {
     const parsed = parseApplyRpcResult(rpcData);
     if (parsed) return parsed;
-  }
-
-  const rpcMissing =
-    rpcError &&
-    (/function.*does not exist|could not find/i.test(rpcError.message || "") ||
-      (rpcError as { code?: string }).code === "42883");
-
-  if (rpcError && !rpcMissing) {
     return {
       ok: false,
       alreadyPaidCents: 0,
       remainingCents: 0,
       appliedEarningsCents: 0,
       markedPaidCount: 0,
-      error: rpcError.message || "Failed to apply leaderboard creator payout",
-    };
-  }
-
-  // Fallback when migration is not deployed yet: re-read then update.
-  const paidBefore = await fetchCreatorLeaderboardPaidEarningsCents({
-    supabaseAdmin: params.supabaseAdmin,
-    contestId: params.contestId,
-    creatorId: params.creatorId,
-  });
-  if (paidBefore.error) {
-    return {
-      ok: false,
-      alreadyPaidCents: 0,
-      remainingCents: 0,
-      appliedEarningsCents: 0,
-      markedPaidCount: 0,
-      error: paidBefore.error,
-    };
-  }
-
-  let alreadyPaidCents = paidBefore.paidCents;
-  let remainingCents = Math.max(0, prizeCents - alreadyPaidCents);
-  let appliedEarningsCents = 0;
-
-  if (earningsSubmissionId && earningsCents > 0 && remainingCents > 0) {
-    const applyCents = Math.min(remainingCents, earningsCents);
-    const { data: updated, error: earnErr } = await params.supabaseAdmin
-      .from("submissions")
-      .update({
-        earnings: applyCents,
-        paid: true,
-        status: "paid",
-        paid_at: new Date().toISOString(),
-      })
-      .eq("id", earningsSubmissionId)
-      .eq("contest_id", params.contestId)
-      .eq("creator_id", params.creatorId)
-      .neq("paid", true)
-      .select("id")
-      .maybeSingle();
-
-    if (earnErr) {
-      return {
-        ok: false,
-        alreadyPaidCents,
-        remainingCents,
-        appliedEarningsCents: 0,
-        markedPaidCount: 0,
-        error: earnErr.message,
-      };
-    }
-    if (updated) {
-      appliedEarningsCents = applyCents;
-      alreadyPaidCents += applyCents;
-      remainingCents = Math.max(0, prizeCents - alreadyPaidCents);
-    }
-  }
-
-  const { data: markedRows, error: siblingErr } = await params.supabaseAdmin
-    .from("submissions")
-    .update({
-      paid: true,
-      status: "paid",
-      paid_at: new Date().toISOString(),
-    })
-    .eq("contest_id", params.contestId)
-    .eq("creator_id", params.creatorId)
-    .eq("status", "verified")
-    .neq("paid", true)
-    .select("id");
-
-  if (siblingErr) {
-    return {
-      ok: false,
-      alreadyPaidCents,
-      remainingCents,
-      appliedEarningsCents,
-      markedPaidCount: 0,
-      error: siblingErr.message,
+      error: "Leaderboard payout RPC returned an unexpected result",
     };
   }
 
   return {
-    ok: true,
-    alreadyPaidCents,
-    remainingCents,
-    appliedEarningsCents,
-    markedPaidCount: (markedRows || []).length,
-    usedRpc: false,
+    ok: false,
+    alreadyPaidCents: 0,
+    remainingCents: 0,
+    appliedEarningsCents: 0,
+    markedPaidCount: 0,
+    error: isRpcMissingError(rpcError)
+      ? "Leaderboard payout RPC is not deployed. Apply migration 20260807120000_leaderboard_creator_payout_apply.sql before paying."
+      : rpcError.message || "Failed to apply leaderboard creator payout",
   };
 }
 

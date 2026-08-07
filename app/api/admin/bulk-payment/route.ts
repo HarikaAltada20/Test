@@ -29,6 +29,7 @@ import {
   buildLeaderboardCreatorPrizeIdempotencyFields,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
+  sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 
 export async function POST(request: NextRequest) {
@@ -474,11 +475,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const alreadyPaidAmount =
-      previousSubmissions?.reduce(
-        (sum, s) => sum + (Number(s.earnings) || 0),
-        0,
-      ) || 0;
+    const alreadyPaidAmount = sumPaidEarningsCents(
+      (previousSubmissions || []) as Array<{
+        earnings?: number | null;
+        paid?: boolean | null;
+      }>,
+    );
     runningTotal = alreadyPaidAmount;
 
     // Non-Twitter leaderboard: one creator-level prize (by total views rank), not per-row CPM.

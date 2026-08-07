@@ -282,14 +282,13 @@ export async function POST(request: Request) {
         actorId,
         action: String(action),
         chunkSubmissionIds: submissionIds.map(String),
+        reversalSubmissionIds: walletIdsForOwnership,
       });
       if (!verified.ok) {
         return NextResponse.json({ error: verified.error }, { status: 403 });
       }
+      // Full preflight already debited; skip wallet debit for every ID in later chunks.
       forceSkipWalletDebit = true;
-      for (const id of verified.skipWalletDebitIds) {
-        skipWalletDebitIds.add(id);
-      }
     } else if (isPaidReversalBulkAction(action)) {
       const supabaseAdmin = createAdminClient();
       const reversalIds =
@@ -298,7 +297,7 @@ export async function POST(request: Request) {
           : submissionIds.map(String);
 
       // Ensure we can sign continuation BEFORE debiting wallets (avoids
-      // "money moved, token failed" when CRON_SECRET is missing).
+      // "money moved, token failed" when signing secret is missing).
       if (walletIdsForOwnership.length > 0) {
         try {
           assertBulkVerifyWalletContinuationSigningReady();
@@ -310,7 +309,7 @@ export async function POST(request: Request) {
           return NextResponse.json(
             {
               error:
-                "Cannot start chunked wallet reversal: server signing secret is not configured (CRON_SECRET).",
+                "Cannot start chunked wallet reversal: server signing secret is not configured (BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET).",
             },
             { status: 500 },
           );
@@ -354,7 +353,6 @@ export async function POST(request: Request) {
             actorId,
             action: String(action),
             reversalIds,
-            skipWalletDebitIds: Array.from(skipWalletDebitIds),
           });
         } catch (tokenErr) {
           console.error(
