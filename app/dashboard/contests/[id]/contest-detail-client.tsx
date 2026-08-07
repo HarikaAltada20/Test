@@ -97,7 +97,12 @@ import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { formatLocalDateTime, formatTimeAgo, cn, sanitizeFilename } from "@/lib/utils";
+import {
+  formatLocalDateTime,
+  formatTimeAgo,
+  cn,
+  sanitizeFilename,
+} from "@/lib/utils";
 import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
@@ -207,7 +212,10 @@ import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
-import { formatReelsSkipRate, formatAvgWatchPercent } from "@/lib/instagram-clip-metrics";
+import {
+  formatReelsSkipRate,
+  formatAvgWatchPercent,
+} from "@/lib/instagram-clip-metrics";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
@@ -1129,9 +1137,11 @@ function metricsRunProgressPercent(run: {
   const batchIndex = run.current_batch_index ?? 0;
   const byReviewed =
     totalSubs > 0 && reviewed > 0 ? (reviewed / totalSubs) * 100 : 0;
-  const byBatches =
-    totalBatches > 0 ? (batchIndex / totalBatches) * 100 : 0;
-  return Math.min(100, Math.max(0, Math.round(Math.max(byReviewed, byBatches))));
+  const byBatches = totalBatches > 0 ? (batchIndex / totalBatches) * 100 : 0;
+  return Math.min(
+    100,
+    Math.max(0, Math.round(Math.max(byReviewed, byBatches))),
+  );
 }
 
 function InstagramRefreshProgressCard({
@@ -1151,7 +1161,9 @@ function InstagramRefreshProgressCard({
     <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-          {completed ? "Insights refresh summary" : "Insights refresh in progress"}
+          {completed
+            ? "Insights refresh summary"
+            : "Insights refresh in progress"}
         </span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400">
           {isAdminView
@@ -1174,7 +1186,9 @@ function InstagramRefreshProgressCard({
           Processed <strong>{run.processed_submissions ?? 0}</strong> /{" "}
           {run.total_submissions}
         </span>
-        <span className="uppercase tracking-wide text-[10px]">{run.status}</span>
+        <span className="uppercase tracking-wide text-[10px]">
+          {run.status}
+        </span>
       </div>
       {isAdminView && (
         <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
@@ -1258,7 +1272,9 @@ function YoutubeRefreshProgressCard({
           Processed <b>{run.processed_submissions ?? 0}</b> /{" "}
           {run.total_submissions}
         </span>
-        <span className="uppercase tracking-wide text-[10px]">{run.status}</span>
+        <span className="uppercase tracking-wide text-[10px]">
+          {run.status}
+        </span>
       </div>
       {isAdminView && (
         <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
@@ -2070,9 +2086,8 @@ export default function ContestDetailClient({
     useState(false);
   // PC Submissions overlay is for ended video contests once review is underway
   // (hidden while still in pending_review or before post-contest status is set).
-  const showPostCampaignToggle = shouldShowPostCampaignSubmissionsToggle(
-    currentContest,
-  );
+  const showPostCampaignToggle =
+    shouldShowPostCampaignSubmissionsToggle(currentContest);
   const isPostCampaignLeaderboard =
     showPostCampaignToggle && submissionsLeaderboardMode === "post_campaign";
 
@@ -2206,8 +2221,10 @@ export default function ContestDetailClient({
           if (data.post_campaign_youtube_metrics_last_updated) {
             setCurrentContest((prev) => {
               const details =
-                (prev.contest_based_details as Record<string, unknown> | null) ||
-                {};
+                (prev.contest_based_details as Record<
+                  string,
+                  unknown
+                > | null) || {};
               return {
                 ...prev,
                 post_campaign_last_metrics_updated:
@@ -2505,13 +2522,13 @@ export default function ContestDetailClient({
     useState(false);
   const [normalViewSelectedSubmissions, setNormalViewSelectedSubmissions] =
     useState<Set<string>>(new Set());
-  const [normalViewBulkDownloading, setNormalViewBulkDownloading] = useState(false);
+  const [normalViewBulkDownloading, setNormalViewBulkDownloading] =
+    useState(false);
   const [normalViewBulkActiveAction, setNormalViewBulkActiveAction] = useState<
     "verify" | "reject" | "pending" | null
   >(null);
-  const [creatorWiseSelectedCreators, setCreatorWiseSelectedCreators] = useState<
-    Set<string>
-  >(new Set());
+  const [creatorWiseSelectedCreators, setCreatorWiseSelectedCreators] =
+    useState<Set<string>>(new Set());
   type CreatorWiseBulkPaymentActiveKey =
     | "standard:0"
     | "standard:1"
@@ -2529,11 +2546,14 @@ export default function ContestDetailClient({
   const isCreatorWiseBulkPayBtnLoading = (
     payType: "standard" | "bonus" | "both",
     isBulk: boolean,
-  ) => creatorWiseBulkPaymentActiveKey === creatorWiseBulkPayKey(payType, isBulk);
+  ) =>
+    creatorWiseBulkPaymentActiveKey === creatorWiseBulkPayKey(payType, isBulk);
   const isAnyCreatorWiseBulkPaymentBusy =
     creatorWiseBulkPaymentActiveKey !== null;
-  const [creatorWiseBulkModerationActiveAction, setCreatorWiseBulkModerationActiveAction] =
-    useState<"verify" | "reject" | "pending" | null>(null);
+  const [
+    creatorWiseBulkModerationActiveAction,
+    setCreatorWiseBulkModerationActiveAction,
+  ] = useState<"verify" | "reject" | "pending" | null>(null);
   const creatorWiseBulkStatusActionsBusy =
     creatorWiseBulkModerationActiveAction !== null ||
     isAnyCreatorWiseBulkPaymentBusy ||
@@ -3410,7 +3430,8 @@ export default function ContestDetailClient({
       console.error("Bulk download failed:", error);
       toast({
         title: "Bulk Download Failed",
-        description: error.message || "An error occurred while compiling the ZIP folder.",
+        description:
+          error.message || "An error occurred while compiling the ZIP folder.",
         variant: "destructive",
       });
     } finally {
@@ -5751,8 +5772,8 @@ export default function ContestDetailClient({
     creatorWisePageCreatorIds.every((creatorId) =>
       creatorWiseSelectedCreators.has(creatorId),
     );
-  const creatorWiseSomePageSelected = creatorWisePageCreatorIds.some((creatorId) =>
-    creatorWiseSelectedCreators.has(creatorId),
+  const creatorWiseSomePageSelected = creatorWisePageCreatorIds.some(
+    (creatorId) => creatorWiseSelectedCreators.has(creatorId),
   );
   const creatorWiseHasFlatFeeBonus =
     getFlatFeeBonusCentsFromContest(currentContest) > 0;
@@ -5771,7 +5792,9 @@ export default function ContestDetailClient({
 
   useEffect(() => {
     const visibleCreatorIds = new Set(
-      filteredCreatorGroups.map((group: any) => String(group.creator?.id || "")),
+      filteredCreatorGroups.map((group: any) =>
+        String(group.creator?.id || ""),
+      ),
     );
     setCreatorWiseSelectedCreators((prev) => {
       const next = new Set<string>();
@@ -7241,6 +7264,11 @@ export default function ContestDetailClient({
       /** Keep each bulk-verify request small enough for Supabase filters + serverless time. */
       const BULK_VERIFY_CLIENT_CHUNK_SIZE = 50;
       let walletReversalContinuation: string | undefined;
+      // Only run one-shot full-set wallet preflight when paid rows may be reversed.
+      // Unpaid verify/reject does not need signing secrets or continuation tokens.
+      const needsChunkedWalletPreflight =
+        isModerationBulkAction &&
+        selectionIncludesPaidRow(currentSubmissions, normalIds);
 
       if (normalIds.length > 0) {
         // Map action for normal submissions
@@ -7268,10 +7296,12 @@ export default function ContestDetailClient({
               action: normalAction,
               reason,
               qualityScore: options?.qualityScore,
-              // One wallet reversal for the full selection → one money_transactions
+              // One wallet reversal for the full paid selection → one money_transactions
               // row per creator (not one per 50-ID verify chunk). Later chunks must
               // present the signed continuation + the same full ID set (hashed in token).
-              walletReversalSubmissionIds: normalIds,
+              ...(needsChunkedWalletPreflight
+                ? { walletReversalSubmissionIds: normalIds }
+                : {}),
               ...(walletReversalContinuation
                 ? { walletReversalContinuation }
                 : {}),
@@ -7281,8 +7311,7 @@ export default function ContestDetailClient({
           if (!res.ok && !data?.results) {
             results.push({
               success: false,
-              error:
-                data?.error || `Bulk verify failed (HTTP ${res.status})`,
+              error: data?.error || `Bulk verify failed (HTTP ${res.status})`,
             });
             // Don't continue without a valid continuation if the full wallet
             // preflight never completed on the first chunk.
@@ -7297,7 +7326,12 @@ export default function ContestDetailClient({
             results.push(data);
             const hasMoreChunks =
               i + BULK_VERIFY_CLIENT_CHUNK_SIZE < normalIds.length;
-            if (isFirstChunk && hasMoreChunks && !walletReversalContinuation) {
+            if (
+              isFirstChunk &&
+              hasMoreChunks &&
+              needsChunkedWalletPreflight &&
+              !walletReversalContinuation
+            ) {
               results.push({
                 success: false,
                 error:
@@ -7342,9 +7376,7 @@ export default function ContestDetailClient({
           if (!res.ok && !data?.results) {
             results.push({
               success: false,
-              error:
-                data?.error ||
-                `Bulk moderate failed (HTTP ${res.status})`,
+              error: data?.error || `Bulk moderate failed (HTTP ${res.status})`,
             });
           } else {
             results.push(data);
@@ -8045,8 +8077,11 @@ export default function ContestDetailClient({
         );
       });
     }
+    // standard / both: unpaid verified only (legacy UI may still show "approved")
     return submissions.filter((submission) => {
+      if (submission?.paid === true) return false;
       const st = getCreatorWiseSubmissionPayStatus(submission);
+      if (st === "paid") return false;
       return st === "verified" || st === "approved";
     });
   };
@@ -8138,207 +8173,210 @@ export default function ContestDetailClient({
       let totalCpmCents = 0;
       let totalMilestoneCents = 0;
       let usedEstimatedAmounts = false;
+      const creatorPayErrors: string[] = [];
+      const CREATOR_WISE_PAY_CONCURRENCY = 3;
 
-      for (const group of selectedGroups) {
+      const payOneCreator = async (group: any) => {
         const creatorId = String(group.creator?.id || "");
         if (!creatorId) {
-          skippedCreators++;
-          continue;
+          return { kind: "skipped" as const };
         }
 
-        try {
-          if (isTwitterLeaderboardCreatorWise) {
-            let creatorRewardCents = 0;
-            let creatorBonusCents = 0;
+        if (isTwitterLeaderboardCreatorWise) {
+          let creatorRewardCents = 0;
+          let creatorBonusCents = 0;
 
-            if (
-              paymentType !== "bonus" &&
-              !group.paid &&
-              group.creator_moderation_status !== "rejected"
-            ) {
-              const rewardResponse = await fetch(
-                `/api/contests/${contestId}/pay-twitter-creator`,
+          if (
+            paymentType !== "bonus" &&
+            !group.paid &&
+            group.creator_moderation_status !== "rejected"
+          ) {
+            const rewardResponse = await fetch(
+              `/api/contests/${contestId}/pay-twitter-creator`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ creatorId }),
+              },
+            );
+            const rewardResult = await rewardResponse.json();
+            if (!rewardResponse.ok) {
+              throw new Error(
+                rewardResult?.error || "Failed to process creator payment",
+              );
+            }
+            creatorRewardCents += Number(rewardResult?.amount) || 0;
+          }
+
+          if (paymentType !== "standard" && hasFlatFeeBonus) {
+            const bonusEligibleTweets = (group.submissions || []).filter(
+              (submission: any) =>
+                submission?.is_twitter_tweet === true &&
+                !submission?.bonus_paid &&
+                ["verified", "approved", "paid"].includes(
+                  getCreatorWiseSubmissionPayStatus(submission),
+                ),
+            );
+
+            for (const tweet of bonusEligibleTweets) {
+              const bonusResponse = await fetch(
+                `/api/contests/${contestId}/pay-twitter-bonus`,
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ creatorId }),
+                  body: JSON.stringify({ tweetId: tweet.id }),
                 },
               );
-              const rewardResult = await rewardResponse.json();
-              if (!rewardResponse.ok) {
+              const bonusResult = await bonusResponse.json();
+              if (!bonusResponse.ok) {
                 throw new Error(
-                  rewardResult?.error || "Failed to process creator payment",
+                  bonusResult?.error || "Failed to process creator bonus",
                 );
               }
-              creatorRewardCents += Number(rewardResult?.amount) || 0;
+              creatorBonusCents += Number(bonusResult?.amount) || 0;
             }
-
-            if (paymentType !== "standard" && hasFlatFeeBonus) {
-              const bonusEligibleTweets = (group.submissions || []).filter(
-                (submission: any) =>
-                  submission?.is_twitter_tweet === true &&
-                  !submission?.bonus_paid &&
-                  ["verified", "approved", "paid"].includes(
-                    getCreatorWiseSubmissionPayStatus(submission),
-                  ),
-              );
-
-              for (const tweet of bonusEligibleTweets) {
-                const bonusResponse = await fetch(
-                  `/api/contests/${contestId}/pay-twitter-bonus`,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ tweetId: tweet.id }),
-                  },
-                );
-                const bonusResult = await bonusResponse.json();
-                if (!bonusResponse.ok) {
-                  throw new Error(
-                    bonusResult?.error || "Failed to process creator bonus",
-                  );
-                }
-                creatorBonusCents += Number(bonusResult?.amount) || 0;
-              }
-            }
-
-            const creatorPaidNow = creatorRewardCents + creatorBonusCents;
-            if (creatorPaidNow > 0) {
-              paidCreators++;
-              totalPaidCents += creatorPaidNow;
-              totalRewardCents += creatorRewardCents;
-              totalBonusCents += creatorBonusCents;
-            } else {
-              skippedCreators++;
-            }
-            continue;
           }
 
-          const payableSubs = filterCreatorWisePayableSubmissions(
-            group.submissions || [],
-            paymentType,
-            isTwitterCpmCreatorWise,
-          ).sort(
-            (a: any, b: any) =>
-              new Date(a.created_at || 0).getTime() -
-              new Date(b.created_at || 0).getTime(),
-          );
-
-          if (payableSubs.length === 0) {
-            skippedCreators++;
-            continue;
-          }
-
-          const submissionIds = payableSubs
-            .map((submission: any) => String(submission?.id || ""))
-            .filter(Boolean);
-
-          // Non-bulk individual pays use per-submission verify; bulk aggregates
-          // one wallet credit per creator via /api/admin/bulk-payment.
-          if (!isBulkTransaction) {
-            let creatorPaidAny = false;
-            for (const submission of payableSubs) {
-              try {
-                if (isDualRewardsContest) {
-                  const component =
-                    paymentType === "standard"
-                      ? "cpm"
-                      : paymentType === "bonus"
-                        ? "milestone"
-                        : "both";
-                  await handleDualRewardsFromDetailPayment(
-                    String(submission.id),
-                    component,
-                    { skipReload: true },
-                  );
-                } else {
-                  const action =
-                    paymentType === "bonus"
-                      ? "mark_bonus_paid"
-                      : paymentType === "both"
-                        ? "mark_both_paid"
-                        : "paid";
-                  await handleUpdateSubmissionStatus(
-                    String(submission.id),
-                    action,
-                    undefined,
-                    undefined,
-                    { skipReload: true },
-                  );
-                }
-                creatorPaidAny = true;
-              } catch (error) {
-                console.error(
-                  `[creator-wise-payment] Individual pay failed for ${submission.id}:`,
-                  error,
-                );
-              }
-            }
-            if (creatorPaidAny) {
-              paidCreators++;
-              // Individual verify responses do not reliably return credited cents —
-              // avoid overstating toast totals from Expected Reward.
-              usedEstimatedAmounts = true;
-            } else {
-              skippedCreators++;
-            }
-            continue;
-          }
-
-          const response = isTwitterCpmCreatorWise
-            ? await fetch(`/api/contests/${contestId}/bulk-pay-twitter-cpm`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  tweet_ids: submissionIds,
-                  payment_type: paymentType,
-                  creator_id: creatorId,
-                }),
-              })
-            : await fetch("/api/admin/bulk-payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  submission_ids: submissionIds,
-                  payment_type: paymentType,
-                  contest_id: contestId,
-                  creator_id: creatorId,
-                }),
-              });
-
-          const result = await response.json();
-          if (!response.ok) {
-            throw new Error(result?.error || "Failed to process bulk payment");
-          }
-
-          const data = result?.data || {};
-          const creatorPaidNow = Number(data.total_amount) || 0;
+          const creatorPaidNow = creatorRewardCents + creatorBonusCents;
           if (creatorPaidNow > 0) {
-            paidCreators++;
-            totalPaidCents += creatorPaidNow;
-            if (isDualRewardsContest) {
-              totalCpmCents += Number(data.total_cpm) || 0;
-              totalMilestoneCents += Number(data.total_milestone) || 0;
-            } else {
-              totalRewardCents +=
-                Number(
+            return {
+              kind: "paid" as const,
+              creatorPaidNow,
+              creatorRewardCents,
+              creatorBonusCents,
+              isDual: false,
+              estimated: false,
+            };
+          }
+          return { kind: "skipped" as const };
+        }
+
+        const payableSubs = filterCreatorWisePayableSubmissions(
+          group.submissions || [],
+          paymentType,
+          isTwitterCpmCreatorWise,
+        ).sort(
+          (a: any, b: any) =>
+            new Date(a.created_at || 0).getTime() -
+            new Date(b.created_at || 0).getTime(),
+        );
+
+        if (payableSubs.length === 0) {
+          return { kind: "skipped" as const };
+        }
+
+        const submissionIds = payableSubs
+          .map((submission: any) => String(submission?.id || ""))
+          .filter(Boolean);
+
+        // Creator-wise selection is creator-scoped. Always pay that creator's
+        // payable submissions via bulk APIs (one wallet credit per creator).
+        // Do NOT use per-submission verify-submission here — it soft-fails and
+        // historically hit invalid enum filters.
+        const response = isTwitterCpmCreatorWise
+          ? await fetch(`/api/contests/${contestId}/bulk-pay-twitter-cpm`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tweet_ids: submissionIds,
+                payment_type: paymentType,
+                creator_id: creatorId,
+              }),
+            })
+          : await fetch("/api/admin/bulk-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                submission_ids: submissionIds,
+                payment_type: paymentType,
+                contest_id: contestId,
+                creator_id: creatorId,
+              }),
+            });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error || "Failed to process bulk payment");
+        }
+
+        const data = result?.data || {};
+        const creatorPaidNow = Number(data.total_amount) || 0;
+        if (creatorPaidNow > 0) {
+          return {
+            kind: "paid" as const,
+            creatorPaidNow,
+            creatorRewardCents: isDualRewardsContest
+              ? 0
+              : Number(
                   data.total_cpm ??
                     data.total_reward ??
                     data.total_standard ??
                     data.total_amount,
-                ) || 0;
-              totalBonusCents += Number(data.total_bonus) || 0;
-            }
-          } else {
-            skippedCreators++;
-          }
-        } catch (error) {
-          console.error(
-            `[creator-wise-bulk-payment] Failed for creator ${creatorId}:`,
-            error,
-          );
-          skippedCreators++;
+                ) || 0,
+            creatorBonusCents: Number(data.total_bonus) || 0,
+            totalCpmCents: Number(data.total_cpm) || 0,
+            totalMilestoneCents: Number(data.total_milestone) || 0,
+            isDual: isDualRewardsContest,
+            estimated: false,
+          };
         }
+        // API succeeded with $0 — treat as skipped (already paid / no prize rank)
+        const skipReason =
+          typeof result?.error === "string"
+            ? result.error
+            : "No payable amount for this creator (already paid, outside prize ranks, or cap reached)";
+        creatorPayErrors.push(
+          `${group.creator?.username || creatorId}: ${skipReason}`,
+        );
+        return { kind: "skipped" as const };
+      };
+
+      for (
+        let i = 0;
+        i < selectedGroups.length;
+        i += CREATOR_WISE_PAY_CONCURRENCY
+      ) {
+        const batch = selectedGroups.slice(i, i + CREATOR_WISE_PAY_CONCURRENCY);
+        const settled = await Promise.allSettled(
+          batch.map((group) => payOneCreator(group)),
+        );
+        settled.forEach((outcome, idx) => {
+          const group = batch[idx];
+          const creatorId = String(group?.creator?.id || "");
+          if (outcome.status === "rejected") {
+            const message =
+              outcome.reason instanceof Error
+                ? outcome.reason.message
+                : String(outcome.reason || "Payment failed");
+            console.error(
+              `[creator-wise-bulk-payment] Failed for creator ${creatorId}:`,
+              outcome.reason,
+            );
+            creatorPayErrors.push(
+              `${group?.creator?.username || creatorId}: ${message}`,
+            );
+            skippedCreators++;
+            return;
+          }
+          const result = outcome.value;
+          if (result.kind === "skipped") {
+            skippedCreators++;
+            return;
+          }
+          paidCreators++;
+          if (result.estimated) {
+            usedEstimatedAmounts = true;
+            return;
+          }
+          totalPaidCents += result.creatorPaidNow;
+          if (result.isDual) {
+            totalCpmCents += result.totalCpmCents || 0;
+            totalMilestoneCents += result.totalMilestoneCents || 0;
+          } else {
+            totalRewardCents += result.creatorRewardCents;
+            totalBonusCents += result.creatorBonusCents;
+          }
+        });
       }
 
       const toastMeta = getBulkPaymentToastMeta(paidCreators, skippedCreators);
@@ -8348,6 +8386,16 @@ export default function ContestDetailClient({
             `Skipped: ${skippedCreators}`,
             ``,
             `Reload the page to confirm credited wallet amounts.`,
+            ...(creatorPayErrors.length > 0
+              ? [
+                  ``,
+                  `Errors:`,
+                  ...creatorPayErrors.slice(0, 5),
+                  ...(creatorPayErrors.length > 5
+                    ? [`…and ${creatorPayErrors.length - 5} more`]
+                    : []),
+                ]
+              : []),
           ]
         : isDualRewardsContest
           ? [
@@ -8357,6 +8405,16 @@ export default function ContestDetailClient({
               `CPM: ${formatMoney(totalCpmCents)}`,
               `Milestone: ${formatMoney(totalMilestoneCents)}`,
               `Total paid: ${formatMoney(totalPaidCents)}`,
+              ...(creatorPayErrors.length > 0
+                ? [
+                    ``,
+                    `Errors:`,
+                    ...creatorPayErrors.slice(0, 5),
+                    ...(creatorPayErrors.length > 5
+                      ? [`…and ${creatorPayErrors.length - 5} more`]
+                      : []),
+                  ]
+                : []),
             ]
           : [
               `Paid creators: ${paidCreators}`,
@@ -8370,6 +8428,16 @@ export default function ContestDetailClient({
                 ? [`Bonus paid: ${formatMoney(totalBonusCents)}`]
                 : []),
               `Total paid: ${formatMoney(totalPaidCents)}`,
+              ...(creatorPayErrors.length > 0
+                ? [
+                    ``,
+                    `Errors:`,
+                    ...creatorPayErrors.slice(0, 5),
+                    ...(creatorPayErrors.length > 5
+                      ? [`…and ${creatorPayErrors.length - 5} more`]
+                      : []),
+                  ]
+                : []),
             ];
 
       toast({
@@ -9539,9 +9607,8 @@ export default function ContestDetailClient({
                   const sres2 = await fetch(statusUrl);
                   if (sres2.ok) {
                     const sj2 = await sres2.json();
-                    const run2 = sj2?.run as
-                      | YouTubeMetricsRefreshRunSummary
-                      | null;
+                    const run2 =
+                      sj2?.run as YouTubeMetricsRefreshRunSummary | null;
                     if (
                       run2 &&
                       isTrackedPostCampaignRun(run2, {
@@ -10265,8 +10332,7 @@ export default function ContestDetailClient({
       ""
     ).toLowerCase();
     const link = submission.content_link || "";
-    const isYouTube =
-      platform.includes("youtube") || /youtu\.?be/i.test(link);
+    const isYouTube = platform.includes("youtube") || /youtu\.?be/i.test(link);
     if (isYouTube) {
       const ytStats =
         (submission.other_stats as any)?.youtube ||
@@ -17112,18 +17178,18 @@ export default function ContestDetailClient({
                       : "Click Refresh to copy all submissions from this contest into Post Campaign Submission."}
                   </p>
                   {!isLoadingPostCampaignMetrics && (
-                      <button
-                        type="button"
-                        onClick={() => void syncPostCampaignSubmissions()}
-                        className={cn(
-                          "flex items-center gap-2 py-2.5 px-5 rounded-2xl transition-all",
-                          "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
-                        )}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                        Refresh
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => void syncPostCampaignSubmissions()}
+                      className={cn(
+                        "flex items-center gap-2 py-2.5 px-5 rounded-2xl transition-all",
+                        "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+                      )}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Refresh
+                    </button>
+                  )}
                   {isLoadingPostCampaignMetrics && (
                     <Loader2
                       className={cn(
@@ -19538,95 +19604,95 @@ export default function ContestDetailClient({
                               </div>
                               {showNormalViewBulkModeration && (
                                 <>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleNormalViewBulkAction("verify")
-                                }
-                                loading={
-                                  normalViewBulkActiveAction === "verify"
-                                }
-                                loadingText={normalViewBulkLoadingText(
-                                  "verify",
-                                )}
-                                disabled={normalViewBulkStatusActionsBusy}
-                                className={cn(
-                                  "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                  isDark
-                                    ? "border bg-green-900/30 text-green-400 border-green-500"
-                                    : "bg-green-600 text-white hover:bg-green-700",
-                                )}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Mark as Verified
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleNormalViewBulkAction("reject")
-                                }
-                                loading={
-                                  normalViewBulkActiveAction === "reject"
-                                }
-                                loadingText={normalViewBulkLoadingText(
-                                  "reject",
-                                )}
-                                disabled={normalViewBulkStatusActionsBusy}
-                                className={cn(
-                                  "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                  isDark
-                                    ? "border bg-red-900/30 text-red-400 border-red-500"
-                                    : "bg-red-600 text-white hover:bg-red-700",
-                                )}
-                              >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                Mark as Rejected
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleNormalViewBulkAction("pending")
-                                }
-                                loading={
-                                  normalViewBulkActiveAction === "pending"
-                                }
-                                loadingText={normalViewBulkLoadingText(
-                                  "pending",
-                                )}
-                                disabled={normalViewBulkStatusActionsBusy}
-                                className={cn(
-                                  "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                  isDark
-                                    ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
-                                    : "bg-yellow-600 text-white hover:bg-yellow-700",
-                                )}
-                              >
-                                <Clock className="h-4 w-4 mr-1" />
-                                Mark as Pending
-                              </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleNormalViewBulkAction("verify")
+                                    }
+                                    loading={
+                                      normalViewBulkActiveAction === "verify"
+                                    }
+                                    loadingText={normalViewBulkLoadingText(
+                                      "verify",
+                                    )}
+                                    disabled={normalViewBulkStatusActionsBusy}
+                                    className={cn(
+                                      "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                      isDark
+                                        ? "border bg-green-900/30 text-green-400 border-green-500"
+                                        : "bg-green-600 text-white hover:bg-green-700",
+                                    )}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Mark as Verified
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleNormalViewBulkAction("reject")
+                                    }
+                                    loading={
+                                      normalViewBulkActiveAction === "reject"
+                                    }
+                                    loadingText={normalViewBulkLoadingText(
+                                      "reject",
+                                    )}
+                                    disabled={normalViewBulkStatusActionsBusy}
+                                    className={cn(
+                                      "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                      isDark
+                                        ? "border bg-red-900/30 text-red-400 border-red-500"
+                                        : "bg-red-600 text-white hover:bg-red-700",
+                                    )}
+                                  >
+                                    <XCircle className="h-4 w-4 mr-1" />
+                                    Mark as Rejected
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleNormalViewBulkAction("pending")
+                                    }
+                                    loading={
+                                      normalViewBulkActiveAction === "pending"
+                                    }
+                                    loadingText={normalViewBulkLoadingText(
+                                      "pending",
+                                    )}
+                                    disabled={normalViewBulkStatusActionsBusy}
+                                    className={cn(
+                                      "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                      isDark
+                                        ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
+                                        : "bg-yellow-600 text-white hover:bg-yellow-700",
+                                    )}
+                                  >
+                                    <Clock className="h-4 w-4 mr-1" />
+                                    Mark as Pending
+                                  </Button>
                                 </>
                               )}
-              {canNormalViewBulkDownload && (
-                <Button
-                                 size="sm"
-                                 onClick={handleNormalViewBulkDownload}
-                                 disabled={
-                                   normalViewBulkDownloading ||
-                                   normalViewBulkStatusActionsBusy
-                                 }
-                                 loading={normalViewBulkDownloading}
-                                 loadingText="Downloading batches..."
-                                 className={cn(
-                                   "h-8 shrink-0 whitespace-nowrap rounded-md",
-                                   isDark
-                                     ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
-                                     : "bg-purple-600 text-white hover:bg-purple-700",
-                                 )}
-                               >
-                                 <Download className="h-4 w-4 mr-1" />
-                                 Download Videos (ZIP)
-                               </Button>
-              )}
+                              {canNormalViewBulkDownload && (
+                                <Button
+                                  size="sm"
+                                  onClick={handleNormalViewBulkDownload}
+                                  disabled={
+                                    normalViewBulkDownloading ||
+                                    normalViewBulkStatusActionsBusy
+                                  }
+                                  loading={normalViewBulkDownloading}
+                                  loadingText="Downloading batches..."
+                                  className={cn(
+                                    "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                    isDark
+                                      ? "border bg-purple-900/30 text-purple-400 border-purple-500 hover:bg-purple-900/50"
+                                      : "bg-purple-600 text-white hover:bg-purple-700",
+                                  )}
+                                >
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Download Videos (ZIP)
+                                </Button>
+                              )}
                             </div>
                           </div>
                         )}
@@ -21000,8 +21066,10 @@ export default function ContestDetailClient({
                                             </a>
                                             {canDownloadSubmissionVideo({
                                               platform: submission.platform,
-                                              contestPlatform: contest?.platform,
-                                              contentLink: submission.content_link,
+                                              contestPlatform:
+                                                contest?.platform,
+                                              contentLink:
+                                                submission.content_link,
                                             }) && (
                                               <button
                                                 onClick={() =>
@@ -21771,10 +21839,9 @@ export default function ContestDetailClient({
                                         {(() => {
                                           const skip = (metrics as any)
                                             .reels_skip_rate;
-                                          const label =
-                                            formatReelsSkipRate(
-                                              skip == null ? null : Number(skip),
-                                            );
+                                          const label = formatReelsSkipRate(
+                                            skip == null ? null : Number(skip),
+                                          );
                                           return label !== "—" ? (
                                             <span className="font-bold">
                                               {label}
@@ -21988,8 +22055,7 @@ export default function ContestDetailClient({
                                         <TableCell className="text-center font-mono text-sm">
                                           {(() => {
                                             const clipSec = Number(
-                                              (metrics as any)
-                                                .duration_seconds,
+                                              (metrics as any).duration_seconds,
                                             );
                                             const label =
                                               formatClipDurationSeconds(
@@ -23769,7 +23835,9 @@ export default function ContestDetailClient({
                                           new Set(),
                                         )
                                       }
-                                      disabled={creatorWiseBulkStatusActionsBusy}
+                                      disabled={
+                                        creatorWiseBulkStatusActionsBusy
+                                      }
                                     >
                                       Clear
                                     </Button>
@@ -23860,51 +23928,21 @@ export default function ContestDetailClient({
                                     )}
                                     {showCreatorWiseBulkPaymentActions && (
                                       <>
-                                    <Button
-                                      size="sm"
-                                      onClick={() =>
-                                        handleCreatorWiseBulkPayment(
-                                          "standard",
-                                          false,
-                                        )
-                                      }
-                                      disabled={creatorWiseBulkStatusActionsBusy}
-                                      className="h-8 bg-blue-600 text-white hover:bg-blue-700"
-                                    >
-                                      {isCreatorWiseBulkPayBtnLoading(
-                                        "standard",
-                                        false,
-                                      ) ? (
-                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                      ) : (
-                                        <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                      )}
-                                      {isDualRewardsContestType(
-                                        currentContest.contest_type,
-                                      )
-                                        ? "Mark as Paid (CPM)"
-                                        : "Mark as Paid"}
-                                    </Button>
-                                    {(creatorWiseHasFlatFeeBonus ||
-                                      isDualRewardsContestType(
-                                        currentContest.contest_type,
-                                      )) && (
-                                      <>
                                         <Button
                                           size="sm"
                                           onClick={() =>
                                             handleCreatorWiseBulkPayment(
-                                              "bonus",
+                                              "standard",
                                               false,
                                             )
                                           }
                                           disabled={
                                             creatorWiseBulkStatusActionsBusy
                                           }
-                                          className="h-8 bg-green-600 text-white hover:bg-green-700"
+                                          className="h-8 bg-blue-600 text-white hover:bg-blue-700"
                                         >
                                           {isCreatorWiseBulkPayBtnLoading(
-                                            "bonus",
+                                            "standard",
                                             false,
                                           ) ? (
                                             <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
@@ -23914,90 +23952,94 @@ export default function ContestDetailClient({
                                           {isDualRewardsContestType(
                                             currentContest.contest_type,
                                           )
-                                            ? "Mark as Paid (Milestone)"
-                                            : "Mark Bonus as Paid"}
+                                            ? "Mark as Paid (CPM)"
+                                            : "Mark as Paid"}
                                         </Button>
-                                        <Button
-                                          size="sm"
-                                          onClick={() =>
-                                            handleCreatorWiseBulkPayment(
-                                              "both",
-                                              false,
-                                            )
-                                          }
-                                          disabled={
-                                            creatorWiseBulkStatusActionsBusy
-                                          }
-                                          className="h-8 bg-purple-600 text-white hover:bg-purple-700"
-                                        >
-                                          {isCreatorWiseBulkPayBtnLoading(
-                                            "both",
-                                            false,
-                                          ) ? (
-                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                          ) : (
-                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                          )}
-                                          {isDualRewardsContestType(
+                                        {(creatorWiseHasFlatFeeBonus ||
+                                          isDualRewardsContestType(
                                             currentContest.contest_type,
-                                          )
-                                            ? "Mark Both as Paid (CPM+Milestone)"
-                                            : "Mark Both as Paid"}
-                                        </Button>
-                                      </>
-                                    )}
-                                    <span
-                                      className={cn(
-                                        "hidden h-6 w-px shrink-0 self-center sm:block",
-                                        isDark ? "bg-white/15" : "bg-border",
-                                      )}
-                                      aria-hidden
-                                    />
-                                    <Button
-                                      size="sm"
-                                      onClick={() =>
-                                        handleCreatorWiseBulkPayment(
-                                          "standard",
-                                          true,
-                                        )
-                                      }
-                                      disabled={creatorWiseBulkStatusActionsBusy}
-                                      className="h-8 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
-                                    >
-                                      {isCreatorWiseBulkPayBtnLoading(
-                                        "standard",
-                                        true,
-                                      ) ? (
-                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                      ) : (
-                                        <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                      )}
-                                      {isDualRewardsContestType(
-                                        currentContest.contest_type,
-                                      )
-                                        ? "Mark as Paid Bulk (CPM)"
-                                        : "Mark as Paid (Bulk)"}
-                                    </Button>
-                                    {(creatorWiseHasFlatFeeBonus ||
-                                      isDualRewardsContestType(
-                                        currentContest.contest_type,
-                                      )) && (
-                                      <>
+                                          )) && (
+                                          <>
+                                            <Button
+                                              size="sm"
+                                              onClick={() =>
+                                                handleCreatorWiseBulkPayment(
+                                                  "bonus",
+                                                  false,
+                                                )
+                                              }
+                                              disabled={
+                                                creatorWiseBulkStatusActionsBusy
+                                              }
+                                              className="h-8 bg-green-600 text-white hover:bg-green-700"
+                                            >
+                                              {isCreatorWiseBulkPayBtnLoading(
+                                                "bonus",
+                                                false,
+                                              ) ? (
+                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                              ) : (
+                                                <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                              )}
+                                              {isDualRewardsContestType(
+                                                currentContest.contest_type,
+                                              )
+                                                ? "Mark as Paid (Milestone)"
+                                                : "Mark Bonus as Paid"}
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              onClick={() =>
+                                                handleCreatorWiseBulkPayment(
+                                                  "both",
+                                                  false,
+                                                )
+                                              }
+                                              disabled={
+                                                creatorWiseBulkStatusActionsBusy
+                                              }
+                                              className="h-8 bg-purple-600 text-white hover:bg-purple-700"
+                                            >
+                                              {isCreatorWiseBulkPayBtnLoading(
+                                                "both",
+                                                false,
+                                              ) ? (
+                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                              ) : (
+                                                <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                              )}
+                                              {isDualRewardsContestType(
+                                                currentContest.contest_type,
+                                              )
+                                                ? "Mark Both as Paid (CPM+Milestone)"
+                                                : "Mark Both as Paid"}
+                                            </Button>
+                                          </>
+                                        )}
+                                        <span
+                                          className={cn(
+                                            "hidden h-6 w-px shrink-0 self-center sm:block",
+                                            isDark
+                                              ? "bg-white/15"
+                                              : "bg-border",
+                                          )}
+                                          aria-hidden
+                                        />
                                         <Button
                                           size="sm"
                                           onClick={() =>
                                             handleCreatorWiseBulkPayment(
-                                              "bonus",
+                                              "standard",
                                               true,
                                             )
                                           }
                                           disabled={
                                             creatorWiseBulkStatusActionsBusy
                                           }
-                                          className="h-8 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                          className="h-8 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
                                         >
                                           {isCreatorWiseBulkPayBtnLoading(
-                                            "bonus",
+                                            "standard",
                                             true,
                                           ) ? (
                                             <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
@@ -24007,38 +24049,70 @@ export default function ContestDetailClient({
                                           {isDualRewardsContestType(
                                             currentContest.contest_type,
                                           )
-                                            ? "Mark as Paid Bulk (Milestone)"
-                                            : "Mark Bonus as Paid (Bulk)"}
+                                            ? "Mark as Paid Bulk (CPM)"
+                                            : "Mark as Paid (Bulk)"}
                                         </Button>
-                                        <Button
-                                          size="sm"
-                                          onClick={() =>
-                                            handleCreatorWiseBulkPayment(
-                                              "both",
-                                              true,
-                                            )
-                                          }
-                                          disabled={
-                                            creatorWiseBulkStatusActionsBusy
-                                          }
-                                          className="h-8 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
-                                        >
-                                          {isCreatorWiseBulkPayBtnLoading(
-                                            "both",
-                                            true,
-                                          ) ? (
-                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                          ) : (
-                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                          )}
-                                          {isDualRewardsContestType(
+                                        {(creatorWiseHasFlatFeeBonus ||
+                                          isDualRewardsContestType(
                                             currentContest.contest_type,
-                                          )
-                                            ? "Mark Both as Paid Bulk (CPM+Milestone)"
-                                            : "Mark Both as Paid (Bulk)"}
-                                        </Button>
-                                      </>
-                                    )}
+                                          )) && (
+                                          <>
+                                            <Button
+                                              size="sm"
+                                              onClick={() =>
+                                                handleCreatorWiseBulkPayment(
+                                                  "bonus",
+                                                  true,
+                                                )
+                                              }
+                                              disabled={
+                                                creatorWiseBulkStatusActionsBusy
+                                              }
+                                              className="h-8 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                            >
+                                              {isCreatorWiseBulkPayBtnLoading(
+                                                "bonus",
+                                                true,
+                                              ) ? (
+                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                              ) : (
+                                                <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                              )}
+                                              {isDualRewardsContestType(
+                                                currentContest.contest_type,
+                                              )
+                                                ? "Mark as Paid Bulk (Milestone)"
+                                                : "Mark Bonus as Paid (Bulk)"}
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              onClick={() =>
+                                                handleCreatorWiseBulkPayment(
+                                                  "both",
+                                                  true,
+                                                )
+                                              }
+                                              disabled={
+                                                creatorWiseBulkStatusActionsBusy
+                                              }
+                                              className="h-8 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+                                            >
+                                              {isCreatorWiseBulkPayBtnLoading(
+                                                "both",
+                                                true,
+                                              ) ? (
+                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                                              ) : (
+                                                <DollarSign className="mr-1 h-3.5 w-3.5" />
+                                              )}
+                                              {isDualRewardsContestType(
+                                                currentContest.contest_type,
+                                              )
+                                                ? "Mark Both as Paid Bulk (CPM+Milestone)"
+                                                : "Mark Both as Paid (Bulk)"}
+                                            </Button>
+                                          </>
+                                        )}
                                       </>
                                     )}
                                   </div>

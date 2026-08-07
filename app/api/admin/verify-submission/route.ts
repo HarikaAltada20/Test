@@ -1606,11 +1606,8 @@ export async function POST(request: Request) {
           let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
 
           const needsWalletCredit =
-            contest.contest_type === "dual_rewards"
-              ? dualCreditTotalCents > 0 &&
-                submissionWalletNetBeforePay < dualCreditTotalCents
-              : dualCreditTotalCents > 0 &&
-                submissionWalletNetBeforePay < dualCreditTotalCents;
+            dualCreditTotalCents > 0 &&
+            submissionWalletNetBeforePay < dualCreditTotalCents;
 
           if (needsWalletCredit) {
             if (contest.contest_type === "dual_rewards") {

@@ -30,6 +30,10 @@ import {
   sumPaidEarningsCents,
   type LeaderboardRankableSubmission,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  bulkPaymentRollbackRevertFlags,
+  splitFreshBulkCreditCents,
+} from "@/lib/bulk-payment-rollback";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -508,7 +512,9 @@ export async function POST(request: NextRequest) {
         contest_id,
         "id, views, status, paid",
         {
-          statusIn: ["verified", "approved", "paid"],
+          // Keep in sync with computeNonTwitterLeaderboardSubmissionPrizeCents.
+          // submission_status_enum has no "approved" — do not include it in .in().
+          statusIn: ["verified", "paid"],
           order: { column: "views", ascending: false },
         },
       );
@@ -918,8 +924,17 @@ export async function POST(request: NextRequest) {
           { status: 500 },
         );
       }
+      // Split fresh credit by component so row rollback can clear paid vs bonus_paid.
       if (!creditResult.alreadyApplied) {
-        freshPrizeCreditedCents = payableTotalAmount;
+        const split = splitFreshBulkCreditCents({
+          paymentType: payment_type as "standard" | "bonus" | "both",
+          payableTotalAmount,
+          payableTotalMainPaid,
+          totalBonusPaid,
+          alreadyApplied: false,
+        });
+        freshPrizeCreditedCents = split.freshPrizeCreditedCents;
+        freshBonusCreditedCents = split.freshBonusCreditedCents;
       }
     }
 
@@ -1041,13 +1056,20 @@ export async function POST(request: NextRequest) {
 
         for (const applied of appliedUpdates) {
           const revertPayload: Record<string, unknown> = {};
-          if (payment_type !== "bonus" && prizeRollbackCents > 0) {
+          const { revertPrize, revertBonus } = bulkPaymentRollbackRevertFlags({
+            paymentType: payment_type as "standard" | "bonus" | "both",
+            prizeRollbackCents,
+            bonusRollbackCents,
+            rollbackCents,
+            hadBonusPaidUpdate: applied.bonus_paid !== undefined,
+          });
+          if (revertPrize) {
             revertPayload.earnings = null;
             revertPayload.paid = false;
             revertPayload.paid_at = null;
             revertPayload.status = "verified";
           }
-          if (applied.bonus_paid !== undefined && bonusRollbackCents > 0) {
+          if (revertBonus) {
             revertPayload.bonus_paid = false;
             revertPayload.bonus_paid_at = null;
             revertPayload.bonus_amount = null;

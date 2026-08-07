@@ -103,7 +103,8 @@ export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
   }
 
   const submissionId = String(params.submissionId);
-  // submission_status_enum has no "approved" — UI may map approved→verified.
+  // submission_status_enum only has verified/paid (not "approved"). Never send
+  // "approved" to PostgREST — it errors: invalid input value for enum.
   const { data: rows, error, truncated } = await fetchContestSubmissionsAllPages(
     params.supabaseAdmin,
     params.contestId,
