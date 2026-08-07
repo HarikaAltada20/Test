@@ -42,6 +42,7 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
+import { computeNonTwitterLeaderboardCreatorPrizeCents } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -1098,6 +1099,8 @@ export async function POST(request: Request) {
           cpm_cents: number;
           milestone_cents: number;
         } | null = null;
+        /** Set for non-Twitter leaderboard pays — used for mark-paid-only / sibling cleanup. */
+        let leaderboardAlreadyPaidAmount = 0;
 
         if (customAmount && customAmount > 0) {
           rewardAmount = customAmount;
@@ -1176,6 +1179,51 @@ export async function POST(request: Request) {
               rewardAmount = cappedBase;
             }
           }
+        } else if (contest.contest_type === "leaderboard" && !customAmount) {
+          // Creator-level prize by total views rank (not per-submission view rank).
+          const prizes =
+            (contest as any)?.contest_based_details?.leaderboard_contest
+              ?.prizes || [];
+          const { data: previousPaidSubs, error: previousPaidErr } =
+            await fetchContestSubmissionsAllPages(
+              supabaseAdmin,
+              submissionFull.contest_id,
+              "earnings, paid",
+              {
+                creatorId: submissionFull.creator_id,
+                paid: true,
+                order: { column: "created_at", ascending: true },
+              },
+            );
+          if (previousPaidErr) {
+            return NextResponse.json(
+              { error: formatSubmissionFetchError(previousPaidErr) },
+              { status: 500 },
+            );
+          }
+          const alreadyPaidAmount = (previousPaidSubs || []).reduce(
+            (sum, s) => sum + (Number((s as { earnings?: number }).earnings) || 0),
+            0,
+          );
+          const prizeResult = await computeNonTwitterLeaderboardCreatorPrizeCents({
+            supabaseAdmin,
+            contestId: submissionFull.contest_id,
+            creatorId: submissionFull.creator_id,
+            prizes,
+          });
+          if (prizeResult.error) {
+            return NextResponse.json(
+              {
+                error: `Failed to compute leaderboard prize: ${prizeResult.error}`,
+              },
+              { status: 500 },
+            );
+          }
+          leaderboardAlreadyPaidAmount = alreadyPaidAmount;
+          rewardAmount = Math.max(
+            0,
+            prizeResult.prizeCents - alreadyPaidAmount,
+          );
         } else {
           rewardAmount = Number(submissionFull.earnings) || 0;
 
@@ -1268,20 +1316,6 @@ export async function POST(request: Request) {
               }
               
               rewardAmount = finalCpmCappedAmount;
-            } else if (contest.contest_type === "leaderboard") {
-              // Compute prize by rank among verified (and already paid) submissions only
-              const { count: higherViewsCount } = await supabase
-                .from("submissions")
-                .select("id", { count: "exact", head: true })
-                .eq("contest_id", submissionFull.contest_id)
-                .in("status", ["verified", "paid"])
-                .gt("views", submissionFull.views || 0);
-              const rank = (higherViewsCount || 0) + 1;
-              const prizes =
-                (contest as any)?.contest_based_details?.leaderboard_contest
-                  ?.prizes || [];
-              const prizeForRank = prizes.find((p: any) => p.position === rank);
-              rewardAmount = prizeForRank?.amount || 0; // already in cents
             }
           }
 
@@ -1458,7 +1492,11 @@ export async function POST(request: Request) {
           rewardAmount <= 0;
 
         if (rewardAmount > 0 || shouldCreditDualRewardsPaid) {
-          if (rewardAmount > 0 && !customAmount) {
+          if (
+            rewardAmount > 0 &&
+            !customAmount &&
+            contest.contest_type !== "leaderboard"
+          ) {
             rewardAmount = adjustRewardCents(rewardAmount, {
               shouldAdjustReward,
               percentage: payoutAdjustment.percentage,
@@ -1695,6 +1733,7 @@ export async function POST(request: Request) {
           const shouldPersistEarnings =
             !!customAmount ||
             contest.contest_type === "milestone" ||
+            contest.contest_type === "leaderboard" ||
             !submissionFull.earnings ||
             submissionFull.earnings <= 0;
 
@@ -1782,6 +1821,77 @@ export async function POST(request: Request) {
             );
           } catch (e: unknown) {
             console.error("Metrics update (paid) failed:", e);
+          }
+
+          // After awarding the creator prize on this row, mark the creator's other
+          // verified unpaid submissions paid (no extra wallet credit) — same as bulk.
+          if (
+            contest.contest_type === "leaderboard" &&
+            action === SUBMISSION_STATUS.paid &&
+            !customAmount
+          ) {
+            const { error: siblingErr } = await supabaseAdmin
+              .from("submissions")
+              .update({
+                paid: true,
+                status: SUBMISSION_STATUS.paid,
+                paid_at: new Date().toISOString(),
+              })
+              .eq("contest_id", submissionFull.contest_id)
+              .eq("creator_id", submissionFull.creator_id)
+              .eq("status", "verified")
+              .neq("paid", true)
+              .neq("id", submissionId);
+            if (siblingErr) {
+              console.error(
+                "[verify-submission] Failed to mark sibling leaderboard rows paid:",
+                siblingErr,
+              );
+            }
+          }
+        } else if (
+          contest.contest_type === "leaderboard" &&
+          action === SUBMISSION_STATUS.paid &&
+          !customAmount &&
+          rewardAmount <= 0 &&
+          leaderboardAlreadyPaidAmount > 0
+        ) {
+          // Prize already on this creator — mark this row paid with no new credit.
+          const { error: markPaidOnlyErr } = await supabaseAdmin
+            .from("submissions")
+            .update({
+              paid: true,
+              status: SUBMISSION_STATUS.paid,
+              paid_at: new Date().toISOString(),
+            })
+            .eq("id", submissionId)
+            .neq("paid", true);
+          if (markPaidOnlyErr) {
+            return NextResponse.json(
+              {
+                error: "Failed to mark submission paid",
+                details: markPaidOnlyErr.message,
+              },
+              { status: 500 },
+            );
+          }
+          const { error: siblingErr } = await supabaseAdmin
+            .from("submissions")
+            .update({
+              paid: true,
+              status: SUBMISSION_STATUS.paid,
+              paid_at: new Date().toISOString(),
+            })
+            .eq("contest_id", submissionFull.contest_id)
+            .eq("creator_id", submissionFull.creator_id)
+            .eq("status", "verified")
+            .neq("paid", true)
+            .neq("id", submissionId);
+          if (siblingErr) {
+            console.error(
+              "[verify-submission] Failed to mark sibling leaderboard rows paid:",
+              siblingErr,
+            );
           }
         }
       }

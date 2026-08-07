@@ -479,6 +479,7 @@ export async function POST(request: NextRequest) {
     // Non-Twitter leaderboard: one creator-level prize (by total views rank), not per-row CPM.
     let leaderboardRemainingPrizeCents = 0;
     let leaderboardPrizeAssigned = false;
+    let leaderboardPrizeCents = 0;
     const isLeaderboardContest = contest.contest_type === "leaderboard";
     if (isLeaderboardContest && payment_type !== "bonus") {
       const prizes =
@@ -498,6 +499,7 @@ export async function POST(request: NextRequest) {
           { status: 500 },
         );
       }
+      leaderboardPrizeCents = prizeResult.prizeCents;
       leaderboardRemainingPrizeCents = Math.max(
         0,
         prizeResult.prizeCents - alreadyPaidAmount,
@@ -586,14 +588,13 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Apply contest-level adjustment to CPM (reward) if configured
-        const adjustedSubmissionEarnings = adjustRewardCents(
-          submissionEarnings,
-          {
-            shouldAdjustReward,
-            percentage: payoutAdjustment.percentage,
-          },
-        );
+        // Leaderboard prizes are fixed rank amounts — do not apply % payout adjustment.
+        const adjustedSubmissionEarnings = isLeaderboardContest
+          ? submissionEarnings
+          : adjustRewardCents(submissionEarnings, {
+              shouldAdjustReward,
+              percentage: payoutAdjustment.percentage,
+            });
 
         totalCPM += adjustedSubmissionEarnings;
       }
@@ -639,10 +640,12 @@ export async function POST(request: NextRequest) {
       // Add to breakdown
       const finalCpmAmount =
         payment_type !== "bonus"
-          ? adjustRewardCents(submissionEarnings, {
-              shouldAdjustReward,
-              percentage: payoutAdjustment.percentage,
-            })
+          ? isLeaderboardContest
+            ? submissionEarnings
+            : adjustRewardCents(submissionEarnings, {
+                shouldAdjustReward,
+                percentage: payoutAdjustment.percentage,
+              })
           : 0;
 
       const finalBonusAmount =
@@ -661,6 +664,7 @@ export async function POST(request: NextRequest) {
         (isLeaderboardContest &&
           payment_type !== "bonus" &&
           !(sub.paid === true) &&
+          leaderboardPrizeCents > 0 &&
           (leaderboardPrizeAssigned || alreadyPaidAmount > 0))
       ) {
         if (isMilestoneContest) {
@@ -920,9 +924,13 @@ export async function POST(request: NextRequest) {
     for (const update of submissionUpdates) {
       const updatePayload: Record<string, unknown> = {};
 
-      // Always update earnings (CPM amount) and status if paying standard or both
+      // Always update payment status if paying standard or both.
+      // Only write earnings when this row actually receives money — mark-paid-only
+      // leaderboard rows (prize already on another submission) must not wipe earnings to 0.
       if (payment_type !== "bonus") {
-        updatePayload.earnings = update.cpm_amount;
+        if (update.cpm_amount > 0) {
+          updatePayload.earnings = update.cpm_amount;
+        }
         updatePayload.paid = update.paid;
         updatePayload.paid_at = update.paid_at;
         updatePayload.status = "paid"; // Update status to 'paid'

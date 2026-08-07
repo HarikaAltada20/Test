@@ -4907,14 +4907,27 @@ export default function ContestDetailClient({
           );
         });
 
-        // Rank ONLY eligible creators by total views (primary metric for non-Twitter leaderboards)
-        eligibleCreators.sort(
-          (a: any, b: any) =>
-            (b.metrics?.views || 0) - (a.metrics?.views || 0) ||
+        // Rank ONLY eligible creators by total verified/paid views (same as payout server).
+        eligibleCreators.sort((a: any, b: any) => {
+          const viewsA = (a.submissions || []).reduce((sum: number, s: any) => {
+            const st = String(s?.status || "").toLowerCase();
+            const paid = s?.paid === true || st === "paid";
+            if (st !== "verified" && !paid) return sum;
+            return sum + Math.max(0, Number(s?.views) || 0);
+          }, 0);
+          const viewsB = (b.submissions || []).reduce((sum: number, s: any) => {
+            const st = String(s?.status || "").toLowerCase();
+            const paid = s?.paid === true || st === "paid";
+            if (st !== "verified" && !paid) return sum;
+            return sum + Math.max(0, Number(s?.views) || 0);
+          }, 0);
+          return (
+            viewsB - viewsA ||
             String(a.creator?.id || "").localeCompare(
               String(b.creator?.id || ""),
-            ),
-        );
+            )
+          );
+        });
 
         eligibleCreators.forEach((group: any, index: number) => {
           const rank = index + 1;
@@ -7252,6 +7265,7 @@ export default function ContestDetailClient({
       const results: any[] = [];
       /** Keep each bulk-verify request small enough for Supabase filters + serverless time. */
       const BULK_VERIFY_CLIENT_CHUNK_SIZE = 50;
+      let walletReversalContinuation: string | undefined;
 
       if (normalIds.length > 0) {
         // Map action for normal submissions
@@ -7280,10 +7294,13 @@ export default function ContestDetailClient({
               reason,
               qualityScore: options?.qualityScore,
               // One wallet reversal for the full selection → one money_transactions
-              // row per creator (not one per 50-ID verify chunk).
+              // row per creator (not one per 50-ID verify chunk). Later chunks must
+              // present the signed continuation from the first response.
               ...(isFirstChunk
                 ? { walletReversalSubmissionIds: normalIds }
-                : { skipWalletReversal: true }),
+                : walletReversalContinuation
+                  ? { walletReversalContinuation }
+                  : {}),
             }),
           });
           const data = await res.json().catch(() => ({}));
@@ -7293,11 +7310,27 @@ export default function ContestDetailClient({
               error:
                 data?.error || `Bulk verify failed (HTTP ${res.status})`,
             });
-            // Don't continue with skipWalletReversal if the full wallet preflight
-            // never completed on the first chunk.
+            // Don't continue without a valid continuation if the full wallet
+            // preflight never completed on the first chunk.
             if (isFirstChunk) break;
           } else {
+            if (
+              isFirstChunk &&
+              typeof data?.wallet_reversal_continuation === "string"
+            ) {
+              walletReversalContinuation = data.wallet_reversal_continuation;
+            }
             results.push(data);
+            const hasMoreChunks =
+              i + BULK_VERIFY_CLIENT_CHUNK_SIZE < normalIds.length;
+            if (isFirstChunk && hasMoreChunks && !walletReversalContinuation) {
+              results.push({
+                success: false,
+                error:
+                  "Missing wallet reversal continuation for remaining verify chunks",
+              });
+              break;
+            }
           }
         }
       }
@@ -8225,8 +8258,13 @@ export default function ContestDetailClient({
             .map((submission: any) => String(submission?.id || ""))
             .filter(Boolean);
 
-          // Non-bulk: pay each payable submission individually (same as modal left buttons).
-          if (!isBulkTransaction) {
+          const isNonTwitterLeaderboardCreatorWise =
+            currentContest?.contest_type === "leaderboard" &&
+            !isTwitterLeaderboardCreatorWise;
+
+          // Non-bulk individual pays — except non-Twitter leaderboard, which must use
+          // the creator-prize bulk API (per-row verify-submission overpays/wrong-ranks).
+          if (!isBulkTransaction && !isNonTwitterLeaderboardCreatorWise) {
             let creatorPaidAny = false;
             for (const submission of payableSubs) {
               try {
@@ -8333,7 +8371,13 @@ export default function ContestDetailClient({
 
           const data = result?.data || {};
           const creatorPaidNow = Number(data.total_amount) || 0;
-          if (creatorPaidNow > 0) {
+          // Leaderboard mark-paid-only (prize already granted) still counts as paid work.
+          const leaderboardMarkedPaidOnly =
+            isNonTwitterLeaderboardCreatorWise &&
+            paymentType !== "bonus" &&
+            creatorPaidNow === 0 &&
+            Number(data.paid_count ?? data.submission_count ?? 0) > 0;
+          if (creatorPaidNow > 0 || leaderboardMarkedPaidOnly) {
             paidCreators++;
             totalPaidCents += creatorPaidNow;
             if (isDualRewardsContest) {

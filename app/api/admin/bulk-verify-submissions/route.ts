@@ -4,6 +4,10 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+import {
+  issueBulkVerifyWalletContinuation,
+  verifyBulkVerifyWalletContinuation,
+} from "@/lib/bulk-verify-wallet-continuation";
 
 const PAYMENT_BULK_ACTIONS = new Set([
   "paid",
@@ -150,13 +154,28 @@ export async function POST(request: Request) {
       qualityScore,
       /** When set, wallet reversal runs once for this full set (not just this verify chunk). */
       walletReversalSubmissionIds,
-      /** Later verify chunks after a full wallet preflight — do not reverse again. */
+      /**
+       * Signed continuation from a prior chunk that already ran wallet preflight.
+       * Do not accept a client boolean — that would allow skipping wallet debit.
+       */
+      walletReversalContinuation,
+      /** @deprecated Rejected — use walletReversalContinuation instead. */
       skipWalletReversal,
     } = await request.json();
 
     if (!Array.isArray(submissionIds)) {
       return NextResponse.json(
         { error: "submissionIds must be an array" },
+        { status: 400 },
+      );
+    }
+
+    if (skipWalletReversal === true && !walletReversalContinuation) {
+      return NextResponse.json(
+        {
+          error:
+            "skipWalletReversal is not allowed. Pass walletReversalContinuation from the first chunk response.",
+        },
         { status: 400 },
       );
     }
@@ -181,7 +200,10 @@ export async function POST(request: Request) {
       resolvedBulkQualityScore = parsed;
     }
 
-    const { isAdmin, error: adminError } = await verifyAdminAccess();
+    const { isAdmin, error: adminError, user: adminUser } =
+      await verifyAdminAccess();
+
+    let actorId: string | null = adminUser?.id ?? null;
 
     if (!isAdmin) {
       const supabase = await createClient();
@@ -217,6 +239,8 @@ export async function POST(request: Request) {
         );
       }
 
+      actorId = authUser.id;
+
       const ownershipIds = Array.from(
         new Set([...submissionIds.map(String), ...walletIdsForOwnership]),
       );
@@ -227,6 +251,13 @@ export async function POST(request: Request) {
       if (ownershipError) {
         return ownershipError;
       }
+    }
+
+    if (!actorId) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 },
+      );
     }
 
     const skipWalletDebitIds = new Set<string>();
@@ -241,9 +272,24 @@ export async function POST(request: Request) {
       }
     >();
 
-    const forceSkipWalletDebit = skipWalletReversal === true;
+    let forceSkipWalletDebit = false;
+    let walletReversalContinuationOut: string | undefined;
 
-    if (isPaidReversalBulkAction(action) && !forceSkipWalletDebit) {
+    if (walletReversalContinuation) {
+      const verified = verifyBulkVerifyWalletContinuation({
+        token: walletReversalContinuation,
+        actorId,
+        action: String(action),
+        chunkSubmissionIds: submissionIds.map(String),
+      });
+      if (!verified.ok) {
+        return NextResponse.json({ error: verified.error }, { status: 403 });
+      }
+      forceSkipWalletDebit = true;
+      for (const id of verified.skipWalletDebitIds) {
+        skipWalletDebitIds.add(id);
+      }
+    } else if (isPaidReversalBulkAction(action)) {
       const supabaseAdmin = createAdminClient();
       const reversalIds =
         walletIdsForOwnership.length > 0
@@ -278,6 +324,30 @@ export async function POST(request: Request) {
       walletResult.refundSummaryBySubmissionId.forEach((summary, id) => {
         bulkRefundSummaryById.set(id, summary);
       });
+
+      // Later client chunks must present this signed token to skip re-debit.
+      if (walletIdsForOwnership.length > 0) {
+        try {
+          walletReversalContinuationOut = issueBulkVerifyWalletContinuation({
+            actorId,
+            action: String(action),
+            reversalIds,
+            skipWalletDebitIds: Array.from(skipWalletDebitIds),
+          });
+        } catch (tokenErr) {
+          console.error(
+            "[bulk-verify-submissions] Failed to issue wallet continuation token:",
+            tokenErr,
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Wallet reversal succeeded but continuation token could not be issued. Retry as a single request or contact support.",
+            },
+            { status: 500 },
+          );
+        }
+      }
     }
 
     const results: { id: string; data: unknown }[] = [];
@@ -362,6 +432,9 @@ export async function POST(request: Request) {
       errors,
       ...(walletRefundSummaries
         ? { wallet_refund_summaries: walletRefundSummaries }
+        : {}),
+      ...(walletReversalContinuationOut
+        ? { wallet_reversal_continuation: walletReversalContinuationOut }
         : {}),
     });
   } catch (error: unknown) {
