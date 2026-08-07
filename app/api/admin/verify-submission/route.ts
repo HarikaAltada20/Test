@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextResponse } from "next/server";
@@ -42,7 +43,12 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
-import { computeNonTwitterLeaderboardCreatorPrizeCents } from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  applyNonTwitterLeaderboardCreatorPayout,
+  buildLeaderboardCreatorPrizeIdempotencyFields,
+  computeNonTwitterLeaderboardCreatorPrizeCents,
+  fetchCreatorLeaderboardPaidEarningsCents,
+} from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -64,6 +70,7 @@ import {
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 import {
+  buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
   loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
@@ -1604,19 +1611,62 @@ export async function POST(request: Request) {
               : 0;
 
           const contestRewardIdempotencyKey =
-            contest.contest_type === "dual_rewards"
-              ? customAmount
-                ? `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${dualCreditTotalCents}`
-                : `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`
-              : customAmount
-                ? `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${rewardAmount}`
-                : `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`;
+            contest.contest_type === "leaderboard" && !customAmount
+              ? `leaderboard_creator_prize:v1:${createHash("sha256")
+                  .update(
+                    JSON.stringify(
+                      buildContestPayoutIdempotencyPayload(
+                        buildLeaderboardCreatorPrizeIdempotencyFields({
+                          contestId: submissionFull.contest_id,
+                          creatorId: submissionFull.creator_id,
+                          paymentType: "standard",
+                        }),
+                        contestLedgerState,
+                      ),
+                    ),
+                  )
+                  .digest("hex")
+                  .slice(0, 40)}`
+              : contest.contest_type === "dual_rewards"
+                ? customAmount
+                  ? `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${dualCreditTotalCents}`
+                  : `dual_rewards_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`
+                : customAmount
+                  ? `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${rewardAmount}`
+                  : `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`;
 
           let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
 
+          // Leaderboard: re-check remaining prize immediately before credit.
+          if (
+            contest.contest_type === "leaderboard" &&
+            !customAmount &&
+            rewardAmount > 0
+          ) {
+            const freshPaid = await fetchCreatorLeaderboardPaidEarningsCents({
+              supabaseAdmin,
+              contestId: submissionFull.contest_id,
+              creatorId: submissionFull.creator_id,
+            });
+            if (freshPaid.error) {
+              return NextResponse.json(
+                {
+                  error: `Failed to re-check leaderboard paid earnings: ${freshPaid.error}`,
+                },
+                { status: 500 },
+              );
+            }
+            const prizeCents =
+              rewardAmount + leaderboardAlreadyPaidAmount;
+            rewardAmount = Math.max(0, prizeCents - freshPaid.paidCents);
+            leaderboardAlreadyPaidAmount = freshPaid.paidCents;
+          }
+
           const needsWalletCredit =
-            dualCreditTotalCents > 0 &&
-            submissionWalletNetBeforePay < dualCreditTotalCents;
+            contest.contest_type === "dual_rewards"
+              ? dualCreditTotalCents > 0 &&
+                submissionWalletNetBeforePay < dualCreditTotalCents
+              : rewardAmount > 0;
 
           if (needsWalletCredit) {
             if (contest.contest_type === "dual_rewards") {
@@ -1773,6 +1823,27 @@ export async function POST(request: Request) {
                 .eq("id", submissionId);
               paidPersistError = error ?? undefined;
             }
+          } else if (
+            contest.contest_type === "leaderboard" &&
+            !customAmount
+          ) {
+            const prizeCents = rewardAmount + leaderboardAlreadyPaidAmount;
+            const applyResult = await applyNonTwitterLeaderboardCreatorPayout({
+              supabaseAdmin,
+              contestId: submissionFull.contest_id,
+              creatorId: submissionFull.creator_id,
+              prizeCents,
+              earningsSubmissionId:
+                rewardAmount > 0 ? submissionId : null,
+              earningsCents: rewardAmount,
+            });
+            if (!applyResult.ok) {
+              paidPersistError = {
+                message:
+                  applyResult.error ||
+                  "Failed to apply leaderboard creator prize",
+              };
+            }
           } else if (shouldPersistEarnings) {
             const { error } = await supabaseAdmin
               .from("submissions")
@@ -1822,33 +1893,6 @@ export async function POST(request: Request) {
           } catch (e: unknown) {
             console.error("Metrics update (paid) failed:", e);
           }
-
-          // After awarding the creator prize on this row, mark the creator's other
-          // verified unpaid submissions paid (no extra wallet credit) — same as bulk.
-          if (
-            contest.contest_type === "leaderboard" &&
-            action === SUBMISSION_STATUS.paid &&
-            !customAmount
-          ) {
-            const { error: siblingErr } = await supabaseAdmin
-              .from("submissions")
-              .update({
-                paid: true,
-                status: SUBMISSION_STATUS.paid,
-                paid_at: new Date().toISOString(),
-              })
-              .eq("contest_id", submissionFull.contest_id)
-              .eq("creator_id", submissionFull.creator_id)
-              .eq("status", "verified")
-              .neq("paid", true)
-              .neq("id", submissionId);
-            if (siblingErr) {
-              console.error(
-                "[verify-submission] Failed to mark sibling leaderboard rows paid:",
-                siblingErr,
-              );
-            }
-          }
         } else if (
           contest.contest_type === "leaderboard" &&
           action === SUBMISSION_STATUS.paid &&
@@ -1856,41 +1900,22 @@ export async function POST(request: Request) {
           rewardAmount <= 0 &&
           leaderboardAlreadyPaidAmount > 0
         ) {
-          // Prize already on this creator — mark this row paid with no new credit.
-          const { error: markPaidOnlyErr } = await supabaseAdmin
-            .from("submissions")
-            .update({
-              paid: true,
-              status: SUBMISSION_STATUS.paid,
-              paid_at: new Date().toISOString(),
-            })
-            .eq("id", submissionId)
-            .neq("paid", true);
-          if (markPaidOnlyErr) {
+          // Prize already on this creator — mark this row + siblings paid with no new credit.
+          const applyResult = await applyNonTwitterLeaderboardCreatorPayout({
+            supabaseAdmin,
+            contestId: submissionFull.contest_id,
+            creatorId: submissionFull.creator_id,
+            prizeCents: leaderboardAlreadyPaidAmount,
+            earningsSubmissionId: null,
+            earningsCents: 0,
+          });
+          if (!applyResult.ok) {
             return NextResponse.json(
               {
                 error: "Failed to mark submission paid",
-                details: markPaidOnlyErr.message,
+                details: applyResult.error,
               },
               { status: 500 },
-            );
-          }
-          const { error: siblingErr } = await supabaseAdmin
-            .from("submissions")
-            .update({
-              paid: true,
-              status: SUBMISSION_STATUS.paid,
-              paid_at: new Date().toISOString(),
-            })
-            .eq("contest_id", submissionFull.contest_id)
-            .eq("creator_id", submissionFull.creator_id)
-            .eq("status", "verified")
-            .neq("paid", true)
-            .neq("id", submissionId);
-          if (siblingErr) {
-            console.error(
-              "[verify-submission] Failed to mark sibling leaderboard rows paid:",
-              siblingErr,
             );
           }
         }

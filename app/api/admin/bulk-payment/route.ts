@@ -24,7 +24,12 @@ import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
-import { computeNonTwitterLeaderboardCreatorPrizeCents } from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  applyNonTwitterLeaderboardCreatorPayout,
+  buildLeaderboardCreatorPrizeIdempotencyFields,
+  computeNonTwitterLeaderboardCreatorPrizeCents,
+  fetchCreatorLeaderboardPaidEarningsCents,
+} from "@/lib/non-twitter-leaderboard-creator-prize";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -821,23 +826,34 @@ export async function POST(request: NextRequest) {
 
     // Build idempotency from immutable request intent rather than computed payout breakdown.
     // This keeps retries stable even if a prior attempt partially updated submission rows.
+    // Leaderboard prizes are creator-scoped (not submission-id scoped) so concurrent
+    // pays for the same creator share one wallet credit key for this ledger generation.
     const requestedSubmissionIds = Array.from(
       new Set(
         submission_ids.map((value: unknown) => String(value)).filter(Boolean),
       ),
     ).sort((a, b) => a.localeCompare(b));
+    const idempotencyBase =
+      isLeaderboardContest && payment_type !== "bonus"
+        ? {
+            ...buildLeaderboardCreatorPrizeIdempotencyFields({
+              contestId: contest_id,
+              creatorId: creator_id,
+              paymentType: payment_type,
+            }),
+            payout_adjustment_percentage: payoutAdjustment.percentage,
+            payout_adjustment_mode: payoutAdjustment.mode ?? null,
+          }
+        : {
+            contest_id,
+            creator_id,
+            payment_type,
+            requested_submission_ids: requestedSubmissionIds,
+            payout_adjustment_percentage: payoutAdjustment.percentage,
+            payout_adjustment_mode: payoutAdjustment.mode ?? null,
+          };
     const operationSeed = JSON.stringify(
-      buildContestPayoutIdempotencyPayload(
-        {
-          contest_id,
-          creator_id,
-          payment_type,
-          requested_submission_ids: requestedSubmissionIds,
-          payout_adjustment_percentage: payoutAdjustment.percentage,
-          payout_adjustment_mode: payoutAdjustment.mode ?? null,
-        },
-        payoutLedgerState,
-      ),
+      buildContestPayoutIdempotencyPayload(idempotencyBase, payoutLedgerState),
     );
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
       .update(operationSeed)
@@ -855,16 +871,57 @@ export async function POST(request: NextRequest) {
       alreadyApplied: false,
     };
 
-    if (totalAmount > 0) {
+    // Shrink leaderboard credit to fresh remaining right before wallet write.
+    let payableTotalAmount = totalAmount;
+    let payableTotalMainPaid = totalMainPaid;
+    if (isLeaderboardContest && payment_type !== "bonus" && totalMainPaid > 0) {
+      const freshPaid = await fetchCreatorLeaderboardPaidEarningsCents({
+        supabaseAdmin,
+        contestId: contest_id,
+        creatorId: creator_id,
+      });
+      if (freshPaid.error) {
+        return NextResponse.json(
+          {
+            error: `Failed to re-check leaderboard paid earnings: ${freshPaid.error}`,
+          },
+          { status: 500 },
+        );
+      }
+      const freshRemaining = Math.max(
+        0,
+        leaderboardPrizeCents - freshPaid.paidCents,
+      );
+      if (freshRemaining < payableTotalMainPaid) {
+        payableTotalMainPaid = freshRemaining;
+        // Keep prize on at most one breakdown row; zero the rest (bonus untouched).
+        let assigned = false;
+        for (const item of breakdown) {
+          if ("cpm_amount" in item) {
+            if (!assigned && freshRemaining > 0) {
+              item.cpm_amount = freshRemaining;
+              item.original_cpm_amount = freshRemaining;
+              assigned = true;
+            } else {
+              item.cpm_amount = 0;
+              item.original_cpm_amount = 0;
+            }
+          }
+        }
+        payableTotalAmount = payableTotalMainPaid + totalBonusPaid;
+      }
+    }
+
+    if (payableTotalAmount > 0) {
       creditResult = await creditWithWalletShortfallRetry({
-        payableCents: totalAmount,
+        payableCents: payableTotalAmount,
         walletNetBeforePay: contestWalletNetBeforePay,
         baseIdempotencyKey: bulkPayIdempotencyKey,
         ledger: payoutLedgerState,
         credit: (idempotencyKey) =>
           creditCreatorWithdrawableBalance(
             creator_id,
-            totalAmount,
+            payableTotalAmount,
             `Bulk payment for ${paidCount} submissions in contest: ${
               contest.title || "Contest"
             }`,
@@ -878,11 +935,11 @@ export async function POST(request: NextRequest) {
                 breakdown: breakdown,
                 ...(isMilestoneContest
                   ? {
-                      total_milestone: totalMainPaid,
+                      total_milestone: payableTotalMainPaid,
                       total_bonus: totalBonusPaid,
                     }
                   : {
-                      total_cpm: totalMainPaid,
+                      total_cpm: payableTotalMainPaid,
                       total_bonus: totalBonusPaid,
                     }),
                 cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
@@ -920,73 +977,126 @@ export async function POST(request: NextRequest) {
 
     const updateFailures: { submission_id: string; message: string }[] = [];
     const appliedUpdates: typeof submissionUpdates = [];
-    // Update each submission
-    for (const update of submissionUpdates) {
-      const updatePayload: Record<string, unknown> = {};
 
-      // Always update payment status if paying standard or both.
-      // Only write earnings when this row actually receives money — mark-paid-only
-      // leaderboard rows (prize already on another submission) must not wipe earnings to 0.
-      if (payment_type !== "bonus") {
-        if (update.cpm_amount > 0) {
-          updatePayload.earnings = update.cpm_amount;
-        }
-        updatePayload.paid = update.paid;
-        updatePayload.paid_at = update.paid_at;
-        updatePayload.status = "paid"; // Update status to 'paid'
-      }
+    const useLeaderboardAtomicApply =
+      isLeaderboardContest && payment_type !== "bonus";
 
-      // Update bonus payment status and amount
-      if (update.bonus_paid !== undefined) {
-        updatePayload.bonus_paid = update.bonus_paid;
-        updatePayload.bonus_paid_at = update.bonus_paid_at;
-        updatePayload.bonus_amount = update.bonus_amount; // Store actual bonus amount paid
-      }
-
-      let updateQuery = supabaseAdmin
-        .from("submissions")
-        .update(updatePayload)
-        .eq("id", update.id);
-
-      if (payment_type !== "bonus") {
-        updateQuery = updateQuery.neq("paid", true);
-      }
-      if (update.bonus_paid !== undefined) {
-        updateQuery = updateQuery.neq("bonus_paid", true);
-      }
-
-      const { data: updatedRows, error: updateError } = await updateQuery
-        .select("id")
-        .maybeSingle();
-
-      if (updateError) {
-        console.error(`Failed to update submission ${update.id}:`, updateError);
+    if (useLeaderboardAtomicApply) {
+      const prizeRow = submissionUpdates.find((u) => u.cpm_amount > 0);
+      const applyResult = await applyNonTwitterLeaderboardCreatorPayout({
+        supabaseAdmin,
+        contestId: contest_id,
+        creatorId: creator_id,
+        prizeCents: leaderboardPrizeCents,
+        earningsSubmissionId: prizeRow?.id ?? null,
+        earningsCents: prizeRow?.cpm_amount ?? 0,
+      });
+      if (!applyResult.ok) {
         updateFailures.push({
-          submission_id: update.id as string,
-          message: updateError.message,
-        });
-      } else if (!updatedRows) {
-        updateFailures.push({
-          submission_id: update.id as string,
+          submission_id: String(prizeRow?.id || creator_id),
           message:
-            "Submission was already claimed by another payout request. Wallet credit will be rolled back if this request applied fresh funds.",
+            applyResult.error ||
+            "Failed to apply leaderboard creator prize / mark siblings paid",
         });
       } else {
-        appliedUpdates.push(update);
+        // Treat all breakdown rows as applied for metrics/response accounting.
+        appliedUpdates.push(...submissionUpdates);
+      }
+
+      // Bonus portion (if payment_type === both) still needs per-row bonus flags.
+      if (payment_type === "both") {
+        for (const update of submissionUpdates) {
+          if (update.bonus_paid === undefined) continue;
+          const { data: updatedRows, error: updateError } = await supabaseAdmin
+            .from("submissions")
+            .update({
+              bonus_paid: update.bonus_paid,
+              bonus_paid_at: update.bonus_paid_at,
+              bonus_amount: update.bonus_amount,
+            })
+            .eq("id", update.id)
+            .neq("bonus_paid", true)
+            .select("id")
+            .maybeSingle();
+          if (updateError) {
+            updateFailures.push({
+              submission_id: update.id as string,
+              message: updateError.message,
+            });
+          } else if (!updatedRows) {
+            // Already bonus-paid is fine for idempotent retries.
+          }
+        }
+      }
+    } else {
+      // Update each submission
+      for (const update of submissionUpdates) {
+        const updatePayload: Record<string, unknown> = {};
+
+        // Always update payment status if paying standard or both.
+        // Only write earnings when this row actually receives money — mark-paid-only
+        // leaderboard rows (prize already on another submission) must not wipe earnings to 0.
+        if (payment_type !== "bonus") {
+          if (update.cpm_amount > 0) {
+            updatePayload.earnings = update.cpm_amount;
+          }
+          updatePayload.paid = update.paid;
+          updatePayload.paid_at = update.paid_at;
+          updatePayload.status = "paid"; // Update status to 'paid'
+        }
+
+        // Update bonus payment status and amount
+        if (update.bonus_paid !== undefined) {
+          updatePayload.bonus_paid = update.bonus_paid;
+          updatePayload.bonus_paid_at = update.bonus_paid_at;
+          updatePayload.bonus_amount = update.bonus_amount; // Store actual bonus amount paid
+        }
+
+        let updateQuery = supabaseAdmin
+          .from("submissions")
+          .update(updatePayload)
+          .eq("id", update.id);
+
+        if (payment_type !== "bonus") {
+          updateQuery = updateQuery.neq("paid", true);
+        }
+        if (update.bonus_paid !== undefined) {
+          updateQuery = updateQuery.neq("bonus_paid", true);
+        }
+
+        const { data: updatedRows, error: updateError } = await updateQuery
+          .select("id")
+          .maybeSingle();
+
+        if (updateError) {
+          console.error(`Failed to update submission ${update.id}:`, updateError);
+          updateFailures.push({
+            submission_id: update.id as string,
+            message: updateError.message,
+          });
+        } else if (!updatedRows) {
+          updateFailures.push({
+            submission_id: update.id as string,
+            message:
+              "Submission was already claimed by another payout request. Wallet credit will be rolled back if this request applied fresh funds.",
+          });
+        } else {
+          appliedUpdates.push(update);
+        }
       }
     }
 
     if (updateFailures.length > 0) {
-      if (!creditResult.alreadyApplied) {
+      if (!creditResult.alreadyApplied && payableTotalAmount > 0) {
         const rollback = await debitCreatorWithdrawableBalance(
           creator_id,
-          totalAmount,
+          payableTotalAmount,
         );
         if (rollback.success) {
           await logTransactionAsAdmin(
             creator_id,
             "refund",
-            totalAmount,
+            payableTotalAmount,
             "success",
             `Rollback: bulk payment row update failed for ${
               contest.title || "Contest"
@@ -1077,10 +1187,12 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Successfully paid ${paidCount} submissions`,
       data: {
-        total_amount: totalAmount,
+        total_amount:
+          (payment_type === "bonus" ? 0 : payableTotalMainPaid) +
+          (payment_type === "standard" ? 0 : totalBonusPaid),
         ...(isMilestoneContest
-          ? { total_milestone: totalMainPaid }
-          : { total_cpm: totalMainPaid }),
+          ? { total_milestone: payableTotalMainPaid }
+          : { total_cpm: payableTotalMainPaid }),
         total_bonus: totalBonusPaid,
         paid_count: paidCount,
         skipped_count: skippedCount,

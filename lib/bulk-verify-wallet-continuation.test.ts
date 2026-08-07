@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  assertBulkVerifyWalletContinuationSigningReady,
   issueBulkVerifyWalletContinuation,
   verifyBulkVerifyWalletContinuation,
 } from "./bulk-verify-wallet-continuation";
@@ -103,5 +104,20 @@ describe("bulk verify wallet continuation token", () => {
         false,
       );
     });
+  });
+
+  it("assertSigningReady fails without CRON_SECRET and passes with it", () => {
+    const prev = process.env.CRON_SECRET;
+    try {
+      delete process.env.CRON_SECRET;
+      assert.throws(() => assertBulkVerifyWalletContinuationSigningReady());
+      process.env.CRON_SECRET = "ready-secret";
+      assert.doesNotThrow(() =>
+        assertBulkVerifyWalletContinuationSigningReady(),
+      );
+    } finally {
+      if (prev === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prev;
+    }
   });
 });

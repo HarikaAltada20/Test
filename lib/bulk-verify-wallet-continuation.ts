@@ -24,6 +24,11 @@ function getSigningSecret(): string {
   return secret;
 }
 
+/** Fail before wallet debit if continuation tokens cannot be signed. */
+export function assertBulkVerifyWalletContinuationSigningReady(): void {
+  getSigningSecret();
+}
+
 function sortUniqueIds(ids: readonly string[]): string[] {
   return Array.from(
     new Set(ids.map((id) => String(id || "").trim()).filter(Boolean)),

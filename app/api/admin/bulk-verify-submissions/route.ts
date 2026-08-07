@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
 import {
+  assertBulkVerifyWalletContinuationSigningReady,
   issueBulkVerifyWalletContinuation,
   verifyBulkVerifyWalletContinuation,
 } from "@/lib/bulk-verify-wallet-continuation";
@@ -295,6 +296,27 @@ export async function POST(request: Request) {
         walletIdsForOwnership.length > 0
           ? walletIdsForOwnership
           : submissionIds.map(String);
+
+      // Ensure we can sign continuation BEFORE debiting wallets (avoids
+      // "money moved, token failed" when CRON_SECRET is missing).
+      if (walletIdsForOwnership.length > 0) {
+        try {
+          assertBulkVerifyWalletContinuationSigningReady();
+        } catch (secretErr) {
+          console.error(
+            "[bulk-verify-submissions] Wallet continuation signing not ready:",
+            secretErr,
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Cannot start chunked wallet reversal: server signing secret is not configured (CRON_SECRET).",
+            },
+            { status: 500 },
+          );
+        }
+      }
+
       const walletResult = await applyBulkDualRewardsWalletReversals({
         supabaseAdmin,
         submissionIds: reversalIds,

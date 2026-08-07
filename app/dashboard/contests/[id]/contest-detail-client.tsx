@@ -4886,13 +4886,13 @@ export default function ContestDetailClient({
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
 
-        // Expected Reward is a live preview (same idea as Twitter leaderboard):
-        // include pending creators so standings show projected prizes before verify.
-        // Actual payout still ranks verified/paid only (see bulk-payment / prize helper).
-        const rankingViewsForDisplay = (group: any): number =>
+        // Expected Reward matches payout eligibility: verified/paid only.
+        // Pending rows are excluded so admins do not pay based on projected standings.
+        const rankingViewsForPayout = (group: any): number =>
           (group.submissions || []).reduce((sum: number, s: any) => {
             const st = String(s?.status || "").toLowerCase();
-            if (st === "rejected") return sum;
+            const paid = s?.paid === true;
+            if (st !== "verified" && st !== "paid" && !paid) return sum;
             return sum + Math.max(0, Number(s?.views) || 0);
           }, 0);
 
@@ -4905,16 +4905,16 @@ export default function ContestDetailClient({
           const hasRankableSubmissions = (group.submissions || []).some(
             (s: any) => {
               const st = String(s?.status || "").toLowerCase();
-              return st !== "rejected";
+              return st === "verified" || st === "paid" || s?.paid === true;
             },
           );
-          return hasRankableSubmissions || rankingViewsForDisplay(group) > 0;
+          return hasRankableSubmissions || rankingViewsForPayout(group) > 0;
         });
 
-        // Rank by total non-rejected views (pending + verified + paid).
+        // Rank by total verified/paid views (same as bulk-payment / prize helper).
         eligibleCreators.sort(
           (a: any, b: any) =>
-            rankingViewsForDisplay(b) - rankingViewsForDisplay(a) ||
+            rankingViewsForPayout(b) - rankingViewsForPayout(a) ||
             String(a.creator?.id || "").localeCompare(
               String(b.creator?.id || ""),
             ),
@@ -8154,6 +8154,7 @@ export default function ContestDetailClient({
       let totalBonusCents = 0;
       let totalCpmCents = 0;
       let totalMilestoneCents = 0;
+      let usedEstimatedAmounts = false;
 
       for (const group of selectedGroups) {
         const creatorId = String(group.creator?.id || "");
@@ -8296,38 +8297,9 @@ export default function ContestDetailClient({
             }
             if (creatorPaidAny) {
               paidCreators++;
-              // Creator-wise expected is the display source of truth for this path.
-              const expectedCents = Math.max(
-                0,
-                Number(group.earnings?.expected || 0),
-              );
-              const bonusExpectedCents = Math.max(
-                0,
-                Number(group.bonus?.expected || 0),
-              );
-              if (isDualRewardsContest) {
-                // Dual creator-wise expected is combined; split unknown without per-row maps.
-                if (paymentType === "standard") {
-                  totalCpmCents += expectedCents;
-                  totalPaidCents += expectedCents;
-                } else if (paymentType === "bonus") {
-                  totalMilestoneCents += expectedCents;
-                  totalPaidCents += expectedCents;
-                } else {
-                  totalCpmCents += expectedCents;
-                  totalPaidCents += expectedCents;
-                }
-              } else if (paymentType === "standard") {
-                totalRewardCents += expectedCents;
-                totalPaidCents += expectedCents;
-              } else if (paymentType === "bonus") {
-                totalBonusCents += bonusExpectedCents;
-                totalPaidCents += bonusExpectedCents;
-              } else {
-                totalRewardCents += expectedCents;
-                totalBonusCents += bonusExpectedCents;
-                totalPaidCents += expectedCents + bonusExpectedCents;
-              }
+              // Individual verify responses do not reliably return credited cents —
+              // avoid overstating toast totals from Expected Reward.
+              usedEstimatedAmounts = true;
             } else {
               skippedCreators++;
             }
@@ -8397,28 +8369,35 @@ export default function ContestDetailClient({
       }
 
       const toastMeta = getBulkPaymentToastMeta(paidCreators, skippedCreators);
-      const descriptionLines = isDualRewardsContest
+      const descriptionLines = usedEstimatedAmounts
         ? [
             `Paid creators: ${paidCreators}`,
             `Skipped: ${skippedCreators}`,
             ``,
-            `CPM: ${formatMoney(totalCpmCents)}`,
-            `Milestone: ${formatMoney(totalMilestoneCents)}`,
-            `Total paid: ${formatMoney(totalPaidCents)}`,
+            `Reload the page to confirm credited wallet amounts.`,
           ]
-        : [
-            `Paid creators: ${paidCreators}`,
-            `Skipped: ${skippedCreators}`,
-            ``,
-            ...(paymentType !== "bonus"
-              ? [`Reward paid: ${formatMoney(totalRewardCents)}`]
-              : []),
-            ...(paymentType !== "standard" &&
-            (hasFlatFeeBonus || totalBonusCents > 0)
-              ? [`Bonus paid: ${formatMoney(totalBonusCents)}`]
-              : []),
-            `Total paid: ${formatMoney(totalPaidCents)}`,
-          ];
+        : isDualRewardsContest
+          ? [
+              `Paid creators: ${paidCreators}`,
+              `Skipped: ${skippedCreators}`,
+              ``,
+              `CPM: ${formatMoney(totalCpmCents)}`,
+              `Milestone: ${formatMoney(totalMilestoneCents)}`,
+              `Total paid: ${formatMoney(totalPaidCents)}`,
+            ]
+          : [
+              `Paid creators: ${paidCreators}`,
+              `Skipped: ${skippedCreators}`,
+              ``,
+              ...(paymentType !== "bonus"
+                ? [`Reward paid: ${formatMoney(totalRewardCents)}`]
+                : []),
+              ...(paymentType !== "standard" &&
+              (hasFlatFeeBonus || totalBonusCents > 0)
+                ? [`Bonus paid: ${formatMoney(totalBonusCents)}`]
+                : []),
+              `Total paid: ${formatMoney(totalPaidCents)}`,
+            ];
 
       toast({
         title: toastMeta.title,
