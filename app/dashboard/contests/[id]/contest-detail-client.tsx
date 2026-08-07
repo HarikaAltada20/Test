@@ -4886,13 +4886,20 @@ export default function ContestDetailClient({
       if (prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
 
-        // Expected Reward matches payout eligibility: verified/paid only.
+        // Expected Reward matches payout eligibility: verified/approved/paid.
         // Pending rows are excluded so admins do not pay based on projected standings.
         const rankingViewsForPayout = (group: any): number =>
           (group.submissions || []).reduce((sum: number, s: any) => {
             const st = String(s?.status || "").toLowerCase();
             const paid = s?.paid === true;
-            if (st !== "verified" && st !== "paid" && !paid) return sum;
+            if (
+              st !== "verified" &&
+              st !== "approved" &&
+              st !== "paid" &&
+              !paid
+            ) {
+              return sum;
+            }
             return sum + Math.max(0, Number(s?.views) || 0);
           }, 0);
 
@@ -4905,7 +4912,12 @@ export default function ContestDetailClient({
           const hasRankableSubmissions = (group.submissions || []).some(
             (s: any) => {
               const st = String(s?.status || "").toLowerCase();
-              return st === "verified" || st === "paid" || s?.paid === true;
+              return (
+                st === "verified" ||
+                st === "approved" ||
+                st === "paid" ||
+                s?.paid === true
+              );
             },
           );
           return hasRankableSubmissions || rankingViewsForPayout(group) > 0;

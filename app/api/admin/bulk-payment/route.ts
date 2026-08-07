@@ -29,6 +29,7 @@ import {
   buildLeaderboardCreatorPrizeIdempotencyKey,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
+  isLeaderboardCreatorPrizeFullyPaid,
   isTwitterTextImageLeaderboardContest,
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
@@ -677,13 +678,18 @@ export async function POST(request: NextRequest) {
       if (
         finalCpmAmount > 0 ||
         finalBonusAmount > 0 ||
-        // Leaderboard: mark remaining verified rows paid after prize is on this
-        // creator (this batch or a prior payment). Do not mark unpaid when prize is $0.
+        // Leaderboard: mark remaining verified rows paid only after the creator
+        // prize is fully covered (this batch or prior). Never mark when prize is $0
+        // or only partially paid — that locks creators as paid with remaining prize.
         (isLeaderboardContest &&
           payment_type !== "bonus" &&
           !(sub.paid === true) &&
           leaderboardPrizeCents > 0 &&
-          (leaderboardPrizeAssigned || alreadyPaidAmount > 0))
+          (leaderboardPrizeAssigned ||
+            isLeaderboardCreatorPrizeFullyPaid(
+              alreadyPaidAmount,
+              leaderboardPrizeCents,
+            )))
       ) {
         if (isMilestoneContest) {
           breakdown.push({
@@ -726,11 +732,15 @@ export async function POST(request: NextRequest) {
           ? " Milestone: confirm submissions are not already paid, creator max earnings is not exhausted, and view counts qualify for the ladder (pending entries count toward winner limits)."
           : "";
 
-      // Leaderboard: prize may already be granted; still mark remaining verified rows paid.
+      // Leaderboard: prize may already be fully granted; still mark remaining rows paid.
       const allowLeaderboardMarkPaidOnly =
         isLeaderboardContest &&
         payment_type !== "bonus" &&
-        breakdown.length > 0;
+        breakdown.length > 0 &&
+        isLeaderboardCreatorPrizeFullyPaid(
+          alreadyPaidAmount,
+          leaderboardPrizeCents,
+        );
 
       if (!allowLeaderboardMarkPaidOnly) {
         if (payment_type === "bonus") {
@@ -1172,7 +1182,7 @@ export async function POST(request: NextRequest) {
         applyResult.appliedEarningsCents < freshPrizeCreditedCents
       ) {
         // Concurrent pay wrote some/all prize earnings — roll back excess wallet
-        // credit (full or partial) but keep sibling mark-paid from the RPC.
+        // credit. Sibling mark-paid only happens in the RPC when remaining is 0.
         const excessCents =
           freshPrizeCreditedCents - applyResult.appliedEarningsCents;
         const dupRollback = await debitCreatorWithdrawableBalance(
@@ -1198,10 +1208,11 @@ export async function POST(request: NextRequest) {
                 credited_cents: freshPrizeCreditedCents,
                 applied_earnings_cents: applyResult.appliedEarningsCents,
                 excess_cents: excessCents,
+                remaining_cents: applyResult.remainingCents,
               },
             },
           );
-          // Wallet now matches applied earnings; prize persist already succeeded.
+          // Wallet now matches applied earnings.
           payableTotalMainPaid = applyResult.appliedEarningsCents;
           payableTotalAmount = payableTotalMainPaid + totalBonusPaid;
           if (prizeRow) {
@@ -1222,7 +1233,19 @@ export async function POST(request: NextRequest) {
             }
           }
           freshPrizeCreditedCents = 0;
-          appliedUpdates.push(...submissionUpdates);
+          if (
+            applyResult.remainingCents > 0 &&
+            applyResult.appliedEarningsCents <= 0
+          ) {
+            // Full miss: RPC did not write prize earnings or mark siblings.
+            updateFailures.push({
+              submission_id: String(prizeRow?.id || creator_id),
+              message:
+                "Leaderboard prize could not be applied after concurrent payout; wallet excess was rolled back. Submissions were not marked paid.",
+            });
+          } else {
+            appliedUpdates.push(...submissionUpdates);
+          }
         } else {
           updateFailures.push({
             submission_id: String(prizeRow?.id || creator_id),
@@ -1231,12 +1254,24 @@ export async function POST(request: NextRequest) {
           });
         }
       } else {
-        // Treat all breakdown rows as applied for metrics/response accounting.
-        appliedUpdates.push(...submissionUpdates);
+        const markPaidOnly =
+          !prizeRow || (Number(prizeRow.cpm_amount) || 0) <= 0;
+        if (markPaidOnly && applyResult.remainingCents > 0) {
+          updateFailures.push({
+            submission_id: String(prizeRow?.id || creator_id),
+            message:
+              "Cannot mark submissions paid: leaderboard creator prize is not fully paid yet.",
+          });
+        } else {
+          // Prize (or mark-paid-only) persisted. Do not refund prize on later
+          // bonus-flag failures — only bonus wallet should roll back.
+          appliedUpdates.push(...submissionUpdates);
+          freshPrizeCreditedCents = 0;
+        }
       }
 
       // Bonus portion (if payment_type === both) still needs per-row bonus flags.
-      if (payment_type === "both") {
+      if (payment_type === "both" && updateFailures.length === 0) {
         for (const update of submissionUpdates) {
           if (update.bonus_paid === undefined) continue;
           const { data: updatedRows, error: updateError } = await supabaseAdmin
@@ -1319,10 +1354,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (updateFailures.length > 0) {
+      const prizeRollbackCents = Math.max(0, freshPrizeCreditedCents);
+      const bonusRollbackCents = Math.max(0, freshBonusCreditedCents);
       const rollbackCents =
-        freshPrizeCreditedCents + freshBonusCreditedCents > 0
-          ? freshPrizeCreditedCents + freshBonusCreditedCents
-          : !creditResult.alreadyApplied && payableTotalAmount > 0
+        prizeRollbackCents + bonusRollbackCents > 0
+          ? prizeRollbackCents + bonusRollbackCents
+          : !creditResult.alreadyApplied &&
+              payableTotalAmount > 0 &&
+              !useLeaderboardAtomicApply
             ? payableTotalAmount
             : 0;
       if (rollbackCents > 0) {
@@ -1347,8 +1386,8 @@ export async function POST(request: NextRequest) {
                 payout_type: "bulk_payment_rollback",
                 original_reward_transaction_id: creditResult.transactionId,
                 payout_operation_key: bulkPayIdempotencyKey,
-                fresh_prize_credited_cents: freshPrizeCreditedCents,
-                fresh_bonus_credited_cents: freshBonusCreditedCents,
+                fresh_prize_credited_cents: prizeRollbackCents,
+                fresh_bonus_credited_cents: bonusRollbackCents,
                 update_failures: updateFailures,
               },
             },
@@ -1362,13 +1401,16 @@ export async function POST(request: NextRequest) {
 
         for (const applied of appliedUpdates) {
           const revertPayload: Record<string, unknown> = {};
-          if (payment_type !== "bonus") {
+          // Only undo prize/paid when this request's prize credit is being refunded.
+          // After a durable leaderboard RPC apply, freshPrizeCreditedCents is cleared
+          // so bonus-flag failures must not un-pay siblings or the prize row.
+          if (payment_type !== "bonus" && prizeRollbackCents > 0) {
             revertPayload.earnings = null;
             revertPayload.paid = false;
             revertPayload.paid_at = null;
             revertPayload.status = "verified";
           }
-          if (applied.bonus_paid !== undefined) {
+          if (applied.bonus_paid !== undefined && bonusRollbackCents > 0) {
             revertPayload.bonus_paid = false;
             revertPayload.bonus_paid_at = null;
             revertPayload.bonus_amount = null;
@@ -1386,7 +1428,11 @@ export async function POST(request: NextRequest) {
         {
           error: creditResult.alreadyApplied
             ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
-            : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+            : prizeRollbackCents === 0 &&
+                useLeaderboardAtomicApply &&
+                payment_type === "both"
+              ? "Leaderboard prize was applied, but bonus flags could not be reconciled. Prize was not rolled back; retry bonus payment."
+              : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
           updateFailures,
           transaction_id: creditResult.transactionId,
           already_applied_idempotent: Boolean(creditResult.alreadyApplied),

@@ -2,6 +2,9 @@
 -- Serializes concurrent pays for the same (contest, creator) via advisory xact lock so
 -- only one request can write prize earnings even when wallet idempotency already deduped.
 -- REQUIRED in production: app code fails closed if this function is missing (no fallback).
+--
+-- Sibling mark-paid runs ONLY when remaining prize is 0 (avoids "paid with $0" lock-in).
+-- Marked siblings get earnings = 0 so stale projections cannot inflate already-paid sums.
 
 CREATE OR REPLACE FUNCTION public.apply_non_twitter_leaderboard_creator_payout(
   p_contest_id uuid,
@@ -50,7 +53,8 @@ BEGIN
     WHERE id = p_earnings_submission_id
       AND contest_id = p_contest_id
       AND creator_id = p_creator_id
-      AND COALESCE(paid, FALSE) IS NOT TRUE;
+      AND COALESCE(paid, FALSE) IS NOT TRUE
+      AND LOWER(COALESCE(status, '')) IN ('verified', 'approved');
 
     IF FOUND THEN
       v_paid := v_paid + v_apply;
@@ -60,20 +64,24 @@ BEGIN
     END IF;
   END IF;
 
-  -- Mark remaining verified unpaid rows paid (no extra earnings).
-  WITH updated AS (
-    UPDATE submissions
-    SET
-      paid = TRUE,
-      status = 'paid',
-      paid_at = v_now
-    WHERE contest_id = p_contest_id
-      AND creator_id = p_creator_id
-      AND LOWER(COALESCE(status, '')) = 'verified'
-      AND COALESCE(paid, FALSE) IS NOT TRUE
-    RETURNING id
-  )
-  SELECT COUNT(*)::int INTO v_marked FROM updated;
+  -- Only mark siblings when the creator prize is fully covered. Otherwise a missed
+  -- earnings UPDATE + mark-all would lock the creator as paid with $0 remaining prize.
+  IF v_remaining = 0 THEN
+    WITH updated AS (
+      UPDATE submissions
+      SET
+        earnings = 0,
+        paid = TRUE,
+        status = 'paid',
+        paid_at = v_now
+      WHERE contest_id = p_contest_id
+        AND creator_id = p_creator_id
+        AND LOWER(COALESCE(status, '')) IN ('verified', 'approved')
+        AND COALESCE(paid, FALSE) IS NOT TRUE
+      RETURNING id
+    )
+    SELECT COUNT(*)::int INTO v_marked FROM updated;
+  END IF;
 
   RETURN jsonb_build_object(
     'already_paid_cents', v_paid,

@@ -47,6 +47,7 @@ import {
   buildLeaderboardCreatorPrizeIdempotencyKey,
   computeNonTwitterLeaderboardCreatorPrizeCents,
   fetchCreatorLeaderboardPaidEarningsCents,
+  isLeaderboardCreatorPrizeFullyPaid,
   isTwitterTextImageLeaderboardContest,
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
@@ -1922,18 +1923,32 @@ export async function POST(request: Request) {
                       credited_cents: leaderboardFreshPrizeCreditedCents,
                       applied_earnings_cents: applyResult.appliedEarningsCents,
                       excess_cents: excessCents,
+                      remaining_cents: applyResult.remainingCents,
                     },
                   },
                 );
-                // Wallet matches applied earnings; prize persist already succeeded.
-                rewardAmount = applyResult.appliedEarningsCents;
                 leaderboardFreshPrizeCreditedCents = 0;
+                rewardAmount = applyResult.appliedEarningsCents;
+                // Full miss: nothing applied and prize still owed — surface failure.
+                // Partial apply with remaining > 0 is durable; another pay can finish it.
+                if (
+                  applyResult.remainingCents > 0 &&
+                  applyResult.appliedEarningsCents <= 0
+                ) {
+                  paidPersistError = {
+                    message:
+                      "Leaderboard prize could not be applied after concurrent payout; wallet excess was rolled back. Submission was not marked paid.",
+                  };
+                }
               } else {
                 paidPersistError = {
                   message:
                     "Leaderboard prize earnings were already applied by a concurrent payout, but rolling back excess wallet credit failed.",
                 };
               }
+            } else {
+              // Prize persist succeeded — do not refund on later failures in this path.
+              leaderboardFreshPrizeCreditedCents = 0;
             }
           } else if (shouldPersistEarnings) {
             const { error } = await supabaseAdmin
@@ -2023,18 +2038,17 @@ export async function POST(request: Request) {
           action === SUBMISSION_STATUS.paid &&
           !customAmount &&
           rewardAmount <= 0 &&
-          leaderboardAlreadyPaidAmount > 0
+          isLeaderboardCreatorPrizeFullyPaid(
+            leaderboardAlreadyPaidAmount,
+            leaderboardPrizeCents,
+          )
         ) {
-          // Prize already on this creator — mark this row + siblings paid with no new credit.
-          // Pass the real prize ceiling (not already-paid) so remaining stays correct.
+          // Prize already fully on this creator — mark this row + siblings paid with no new credit.
           const applyResult = await applyNonTwitterLeaderboardCreatorPayout({
             supabaseAdmin,
             contestId: submissionFull.contest_id,
             creatorId: submissionFull.creator_id,
-            prizeCents:
-              leaderboardPrizeCents > 0
-                ? leaderboardPrizeCents
-                : leaderboardAlreadyPaidAmount,
+            prizeCents: leaderboardPrizeCents,
             earningsSubmissionId: null,
             earningsCents: 0,
           });
@@ -2045,6 +2059,16 @@ export async function POST(request: Request) {
                 details: applyResult.error,
               },
               { status: 500 },
+            );
+          }
+          if (applyResult.remainingCents > 0) {
+            return NextResponse.json(
+              {
+                error:
+                  "Cannot mark submission paid: leaderboard creator prize is not fully paid yet.",
+                remaining_cents: applyResult.remainingCents,
+              },
+              { status: 409 },
             );
           }
         }

@@ -5,6 +5,7 @@ import {
   applyNonTwitterLeaderboardCreatorPayout,
   buildLeaderboardCreatorPrizeIdempotencyFields,
   buildLeaderboardCreatorPrizeIdempotencyKey,
+  isLeaderboardCreatorPrizeFullyPaid,
   isTwitterTextImageLeaderboardContest,
   LEADERBOARD_CREATOR_PRIZE_IDEMPOTENCY_PREFIX,
   prizeCentsForLeaderboardRank,
@@ -14,15 +15,16 @@ import {
 } from "./non-twitter-leaderboard-creator-prize";
 
 describe("non-twitter leaderboard creator ranking", () => {
-  it("sums only verified/paid views per creator", () => {
+  it("sums only verified/approved/paid views per creator", () => {
     const views = accumulateLeaderboardViewsByCreator([
       { creator_id: "a", views: 100, status: "verified" },
       { creator_id: "a", views: 50, status: "pending" },
       { creator_id: "a", views: 25, status: "rejected" },
+      { creator_id: "a", views: 40, status: "approved" },
       { creator_id: "b", views: 500, status: "paid" },
       { creator_id: "c", views: 200, status: "verified", paid: true },
     ]);
-    assert.equal(views.get("a"), 100);
+    assert.equal(views.get("a"), 140);
     assert.equal(views.get("b"), 500);
     assert.equal(views.get("c"), 200);
   });
@@ -101,6 +103,41 @@ describe("non-twitter leaderboard creator ranking", () => {
       ]),
       1250,
     );
+  });
+
+  it("isLeaderboardCreatorPrizeFullyPaid requires prize covered", () => {
+    assert.equal(isLeaderboardCreatorPrizeFullyPaid(0, 1000), false);
+    assert.equal(isLeaderboardCreatorPrizeFullyPaid(500, 1000), false);
+    assert.equal(isLeaderboardCreatorPrizeFullyPaid(1000, 1000), true);
+    assert.equal(isLeaderboardCreatorPrizeFullyPaid(1500, 1000), true);
+    assert.equal(isLeaderboardCreatorPrizeFullyPaid(1000, 0), false);
+  });
+
+  it("applyNonTwitterLeaderboardCreatorPayout parses remaining and marked counts", async () => {
+    const supabaseAdmin = {
+      rpc: async () => ({
+        data: {
+          ok: true,
+          already_paid_cents: 1000,
+          remaining_cents: 0,
+          applied_earnings_cents: 1000,
+          marked_paid_count: 2,
+        },
+        error: null,
+      }),
+    };
+    const result = await applyNonTwitterLeaderboardCreatorPayout({
+      supabaseAdmin: supabaseAdmin as any,
+      contestId: "c1",
+      creatorId: "u1",
+      prizeCents: 1000,
+      earningsSubmissionId: "s1",
+      earningsCents: 1000,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.remainingCents, 0);
+    assert.equal(result.appliedEarningsCents, 1000);
+    assert.equal(result.markedPaidCount, 2);
   });
 
   it("builds creator-scoped idempotency fields without submission ids or payment_type", () => {

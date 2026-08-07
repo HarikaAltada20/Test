@@ -43,13 +43,13 @@ export function isLeaderboardRankingEligibleStatus(
   paid?: boolean | null,
 ): boolean {
   const st = String(status || "").toLowerCase();
-  if (st === "verified" || st === "paid") return true;
+  if (st === "verified" || st === "approved" || st === "paid") return true;
   if (paid === true) return true;
   return false;
 }
 
 /**
- * Sum views by creator for ranking-eligible rows only (verified / paid).
+ * Sum views by creator for ranking-eligible rows only (verified / approved / paid).
  * Uses the submissions.views column — same source as bulk payout.
  */
 export function accumulateLeaderboardViewsByCreator(
@@ -209,8 +209,19 @@ function isRpcMissingError(error: {
   );
 }
 
+/** True when paid earnings already cover the creator prize (safe to mark-paid-only). */
+export function isLeaderboardCreatorPrizeFullyPaid(
+  alreadyPaidCents: number,
+  prizeCents: number,
+): boolean {
+  const prize = Math.max(0, Math.round(prizeCents) || 0);
+  if (prize <= 0) return false;
+  return Math.max(0, Math.round(alreadyPaidCents) || 0) >= prize;
+}
+
 /**
- * Persist creator prize earnings (at most once) and mark verified siblings paid.
+ * Persist creator prize earnings (at most once) and mark verified/approved
+ * siblings paid with earnings=0 — but only when remaining prize is 0.
  * Requires the transactional RPC (advisory lock). No non-atomic fallback —
  * concurrent pays could otherwise write prize earnings onto multiple rows.
  */
@@ -285,7 +296,7 @@ export async function computeNonTwitterLeaderboardCreatorPrizeCents(params: {
     params.contestId,
     "creator_id, views, status, paid",
     {
-      statusIn: ["verified", "paid"],
+      statusIn: ["verified", "approved", "paid"],
       order: { column: "created_at", ascending: true },
     },
   );
