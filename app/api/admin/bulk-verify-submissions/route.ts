@@ -275,6 +275,7 @@ export async function POST(request: Request) {
 
     let forceSkipWalletDebit = false;
     let walletReversalContinuationOut: string | undefined;
+    let walletContinuationIssueError: string | undefined;
 
     if (walletReversalContinuation) {
       const verified = verifyBulkVerifyWalletContinuation({
@@ -352,6 +353,8 @@ export async function POST(request: Request) {
       });
 
       // Later client chunks must present this signed token to skip re-debit.
+      // If signing fails after debit, still process THIS chunk (skipWalletDebitIds
+      // is already populated). Client stops later chunks when continuation is missing.
       if (isChunkedWalletPreflight) {
         try {
           walletReversalContinuationOut = issueBulkVerifyWalletContinuation({
@@ -364,13 +367,10 @@ export async function POST(request: Request) {
             "[bulk-verify-submissions] Failed to issue wallet continuation token:",
             tokenErr,
           );
-          return NextResponse.json(
-            {
-              error:
-                "Wallet reversal succeeded but continuation token could not be issued. Do not retry blindly — funds may already be reversed. Retry the same selection once (server will net against existing refunds) or contact support.",
-            },
-            { status: 500 },
-          );
+          walletContinuationIssueError =
+            tokenErr instanceof Error
+              ? tokenErr.message
+              : "Failed to issue wallet reversal continuation token";
         }
       }
     }
@@ -450,7 +450,7 @@ export async function POST(request: Request) {
         : undefined;
 
     return NextResponse.json({
-      success: errors.length === 0,
+      success: errors.length === 0 && !walletContinuationIssueError,
       processed: results.length,
       failed: errors.length,
       results,
@@ -460,6 +460,12 @@ export async function POST(request: Request) {
         : {}),
       ...(walletReversalContinuationOut
         ? { wallet_reversal_continuation: walletReversalContinuationOut }
+        : {}),
+      ...(walletContinuationIssueError
+        ? {
+            error: `Wallet reversal succeeded and this chunk was processed, but continuation token could not be issued (${walletContinuationIssueError}). Do not start a new selection — re-run the same bulk action after fixing signing secrets, or contact support. Funds were already reversed for the full selection.`,
+            wallet_reversal_continuation_error: walletContinuationIssueError,
+          }
         : {}),
     });
   } catch (error: unknown) {

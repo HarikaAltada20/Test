@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applyCreatorMaxEarningsCapCents,
   buildLeaderboardPrizeCentsBySubmissionId,
+  clearLeaderboardPrizeCacheForTests,
   isLeaderboardRankingEligibleStatus,
   isTwitterTextImageLeaderboardContest,
   prizeCentsForLeaderboardRank,
@@ -145,5 +146,10 @@ describe("non-twitter leaderboard submission ranking", () => {
       }),
       5000,
     );
+  });
+
+  it("exposes a test-only cache clear helper", () => {
+    clearLeaderboardPrizeCacheForTests();
+    clearLeaderboardPrizeCacheForTests();
   });
 });

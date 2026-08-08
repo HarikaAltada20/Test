@@ -201,6 +201,8 @@ export async function POST(
     const prizes = leaderboardContest?.prizes || [];
 
     let rewardAmount = 0;
+    /** Fresh CPM points used for pay math + transaction metadata (not stale leaderboard cache). */
+    let computedTotalPoints: number | null = null;
     const parsedCustomAmount = Number(amountInCents);
     if (
       isCustom &&
@@ -283,6 +285,7 @@ export async function POST(
         tweetPoints +
           (Number((leaderboardEntry as any).manual_points_adjustment) || 0),
       );
+      computedTotalPoints = totalPoints;
       const rate = cpmContest.cpm_rate_usd; // dollars per 1000 points
       // Convert to cents: (points / 1000) * rate (USD) * 100
       rewardAmount = Math.round((totalPoints * rate * 100) / 1000);
@@ -507,7 +510,8 @@ export async function POST(
               payout_cycle: nextCycle,
               rank: leaderboardEntry.current_rank,
               prize_amount: rewardAmount,
-              total_points: leaderboardEntry.total_points,
+              total_points:
+                computedTotalPoints ?? leaderboardEntry.total_points,
             },
           },
         );
@@ -519,13 +523,17 @@ export async function POST(
       );
     }
 
-    // Update leaderboard entry with payment information
-    const updateData: any = {
+    // Update leaderboard payment status. For CPM, do not write the credit delta
+    // as earnings — reconcile after tweet rows update sets the sum of paid tweet
+    // earnings (avoids Reward Granted under-reporting on top-ups).
+    const updateData: Record<string, unknown> = {
       paid_at: new Date().toISOString(),
-      earnings: rewardAmount,
       paid_rank: leaderboardEntry.current_rank, // Store rank at payment time for audit
       moderation_status: "paid",
     };
+    if (contest.contest_type !== "cpm") {
+      updateData.earnings = rewardAmount;
+    }
 
     const { error: updateError } = await supabaseAdmin
       .from("twitter_campaign_leaderboard")
@@ -537,6 +545,33 @@ export async function POST(
         "[pay-twitter-creator] Error updating leaderboard:",
         updateError,
       );
+      if (!creditRes.alreadyApplied) {
+        const debitRes = await debitCreatorWithdrawableBalance(
+          creatorId,
+          rewardAmount,
+        );
+        if (debitRes.success) {
+          await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            rewardAmount,
+            "success",
+            `Rollback: Twitter creator payment leaderboard update failed - ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                payout_type: "twitter_creator_rollback",
+                original_reward_transaction_id: creditRes.transactionId,
+              },
+            },
+          );
+        }
+      }
       return NextResponse.json(
         { error: "Failed to update leaderboard payment status" },
         { status: 500 },
@@ -559,6 +594,62 @@ export async function POST(
         "[pay-twitter-creator] Error fetching tweets for earnings split:",
         tweetsFetchError,
       );
+      if (contest.contest_type === "cpm") {
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            rewardAmount,
+          );
+          if (debitRes.success) {
+            await logTransactionAsAdmin(
+              creatorId,
+              "refund",
+              rewardAmount,
+              "success",
+              `Rollback: Twitter creator payment tweet fetch failed - ${
+                contest.title || "Contest"
+              }`,
+              {
+                remarks: REVERSAL_TRANSACTION_REMARK,
+                paymentMethod: "refund",
+                metadata: {
+                  contest_id: contestId,
+                  twitter_creator_id: creatorId,
+                  payout_type: "twitter_creator_rollback",
+                  original_reward_transaction_id: creditRes.transactionId,
+                },
+              },
+            );
+          } else {
+            return NextResponse.json(
+              {
+                error:
+                  "Creator was credited but tweets could not be loaded for earnings split, and automatic wallet rollback failed. Contact support immediately.",
+                details: debitRes.error,
+              },
+              { status: 500 },
+            );
+          }
+        }
+        await supabaseAdmin
+          .from("twitter_campaign_leaderboard")
+          .update({
+            paid_at: leaderboardEntry.paid_at,
+            earnings: leaderboardEntry.earnings,
+            paid_rank: leaderboardEntry.paid_rank,
+            moderation_status: leaderboardEntry.moderation_status,
+          })
+          .eq("id", leaderboardEntry.id);
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Creator payout existed, but tweets could not be loaded to reconcile earnings. Retry or contact support."
+              : "Creator payment tweet fetch failed. Wallet credit was rolled back; retry.",
+            details: tweetsFetchError.message,
+          },
+          { status: 500 },
+        );
+      }
     } else if (tweetsToPay?.length) {
       const unpaidTweets = tweetsToPay.filter(
         (tweet) => tweet.moderation_status !== "paid",
@@ -750,6 +841,84 @@ export async function POST(
         console.error(
           "[pay-twitter-creator] Leaderboard earnings reconcile failed:",
           reconciled.error,
+        );
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            rewardAmount,
+          );
+          if (debitRes.success) {
+            await logTransactionAsAdmin(
+              creatorId,
+              "refund",
+              rewardAmount,
+              "success",
+              `Rollback: Twitter creator payment leaderboard reconcile failed - ${
+                contest.title || "Contest"
+              }`,
+              {
+                remarks: REVERSAL_TRANSACTION_REMARK,
+                paymentMethod: "refund",
+                metadata: {
+                  contest_id: contestId,
+                  twitter_creator_id: creatorId,
+                  payout_type: "twitter_creator_rollback",
+                  original_reward_transaction_id: creditRes.transactionId,
+                  reconcile_error: reconciled.error,
+                },
+              },
+            );
+          } else {
+            console.error(
+              "[pay-twitter-creator] CRITICAL: wallet rollback failed after reconcile error:",
+              debitRes.error,
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Creator was credited but leaderboard earnings could not be reconciled, and automatic wallet rollback failed. Contact support immediately.",
+                details: debitRes.error,
+              },
+              { status: 500 },
+            );
+          }
+        }
+        await supabaseAdmin
+          .from("twitter_campaign_leaderboard")
+          .update({
+            paid_at: leaderboardEntry.paid_at,
+            earnings: leaderboardEntry.earnings,
+            paid_rank: leaderboardEntry.paid_rank,
+            moderation_status: leaderboardEntry.moderation_status,
+          })
+          .eq("id", leaderboardEntry.id);
+        if (tweetsToPay?.length) {
+          const unpaidTweets = tweetsToPay.filter(
+            (tweet) => tweet.moderation_status !== "paid",
+          );
+          const tweetsNeedingMainPayment =
+            unpaidTweets.length > 0 ? unpaidTweets : tweetsToPay;
+          await Promise.all(
+            tweetsNeedingMainPayment.map((t) =>
+              supabaseAdmin
+                .from("twitter_campaign_tweets")
+                .update({
+                  moderation_status: t.moderation_status,
+                  earnings: t.earnings,
+                })
+                .eq("id", t.id)
+                .eq("contest_id", contestId),
+            ),
+          );
+        }
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Creator payout existed, but leaderboard earnings could not be reconciled. Retry or contact support."
+              : "Creator payment succeeded in wallet but leaderboard earnings reconcile failed. Wallet credit was rolled back; retry.",
+            details: reconciled.error,
+          },
+          { status: 500 },
         );
       }
     }

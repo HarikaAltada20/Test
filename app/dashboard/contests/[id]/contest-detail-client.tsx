@@ -3731,7 +3731,8 @@ export default function ContestDetailClient({
   ]);
 
   // Non-Twitter leaderboard: prize per eligible submission (verified/approved/paid by views).
-  // Rejected/pending are excluded so Expected Reward matches payout + creator-wise totals.
+  // Always rank from live currentSubmissions (not post-campaign overlay) so Expected
+  // Reward matches bulk-payment / verify-submission. Requires the full contest set.
   const leaderboardPrizeCentsBySubmissionId = useMemo(() => {
     if (
       currentContest?.contest_type !== "leaderboard" ||
@@ -3750,7 +3751,7 @@ export default function ContestDetailClient({
       status?: string | null;
       paid?: boolean | null;
     }> = [];
-    for (const s of leaderboardSubmissions || []) {
+    for (const s of currentSubmissions || []) {
       const id = String((s as any)?.id || "");
       if (!id) continue;
       eligibleSubs.push({
@@ -3761,7 +3762,7 @@ export default function ContestDetailClient({
       });
     }
     return buildLeaderboardPrizeCentsBySubmissionId(eligibleSubs, prizes);
-  }, [currentContest, leaderboardSubmissions]);
+  }, [currentContest, currentSubmissions]);
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
@@ -7374,7 +7375,9 @@ export default function ContestDetailClient({
             results.push({
               success: false,
               error:
-                "Missing wallet reversal continuation for remaining verify chunks. Re-run the same bulk action after fixing server signing secrets (BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET).",
+                typeof data?.error === "string" && data.error
+                  ? data.error
+                  : "Missing wallet reversal continuation for remaining verify chunks. This chunk may already be processed and wallets reversed — re-run the same selection after fixing BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET (do not change the selection).",
             });
             chunkHardFailed = true;
             break;
@@ -8231,8 +8234,9 @@ export default function ContestDetailClient({
       let totalMilestoneCents = 0;
       let usedEstimatedAmounts = false;
       const creatorPayErrors: string[] = [];
-      // Serial creator pays: safer for wallet shortfall retries and leaderboard caps.
-      const CREATOR_WISE_PAY_CONCURRENCY = 1;
+      // Serial-ish creator pays: small concurrency is safe now that leaderboard
+      // ranking is cached server-side (~45s). Keep low for wallet shortfall retries.
+      const CREATOR_WISE_PAY_CONCURRENCY = 3;
 
       const payOneCreator = async (group: any) => {
         const creatorId = String(group.creator?.id || "");

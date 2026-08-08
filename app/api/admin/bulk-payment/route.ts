@@ -25,10 +25,9 @@ import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions
 import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 import {
-  buildLeaderboardPrizeCentsBySubmissionId,
+  fetchNonTwitterLeaderboardPrizeMap,
   isTwitterTextImageLeaderboardContest,
   sumPaidEarningsCents,
-  type LeaderboardRankableSubmission,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import {
   bulkPaymentRollbackRevertFlags,
@@ -497,48 +496,25 @@ export async function POST(request: NextRequest) {
     runningTotal = alreadyPaidAmount;
 
     // Non-Twitter leaderboard: per-submission prizes from contest-wide views rank.
+    // Cached briefly so creator-wise bulk pay across many creators reuses one scan.
     let leaderboardPrizeBySubmissionId = new Map<string, number>();
     const isLeaderboardContest = contest.contest_type === "leaderboard";
     if (isLeaderboardContest && payment_type !== "bonus") {
       const prizes =
         (contest.contest_based_details as any)?.leaderboard_contest?.prizes ||
         [];
-      const {
-        data: rankingRows,
-        error: rankingErr,
-        truncated: rankingTruncated,
-      } = await fetchContestSubmissionsAllPages(
+      const prizeMapResult = await fetchNonTwitterLeaderboardPrizeMap({
         supabaseAdmin,
-        contest_id,
-        "id, views, status, paid",
-        {
-          // Keep in sync with computeNonTwitterLeaderboardSubmissionPrizeCents.
-          // submission_status_enum has no "approved" — do not include it in .in().
-          statusIn: ["verified", "paid"],
-          order: { column: "views", ascending: false },
-        },
-      );
-      if (rankingErr) {
-        return NextResponse.json(
-          {
-            error: `Failed to load leaderboard ranking submissions: ${String((rankingErr as { message?: string })?.message ?? rankingErr)}`,
-          },
-          { status: 500 },
-        );
-      }
-      if (rankingTruncated) {
-        return NextResponse.json(
-          {
-            error:
-              "Contest has too many verified/paid submissions to rank safely; contact support before paying.",
-          },
-          { status: 500 },
-        );
-      }
-      leaderboardPrizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionId(
-        (rankingRows || []) as LeaderboardRankableSubmission[],
+        contestId: contest_id,
         prizes,
-      );
+      });
+      if (prizeMapResult.error) {
+        return NextResponse.json(
+          { error: `Failed to load leaderboard ranking submissions: ${prizeMapResult.error}` },
+          { status: 500 },
+        );
+      }
+      leaderboardPrizeBySubmissionId = prizeMapResult.prizeBySubmissionId;
     }
 
     for (const sub of sortedSubmissions) {

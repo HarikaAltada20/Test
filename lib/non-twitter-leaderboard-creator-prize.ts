@@ -103,6 +103,109 @@ export function applyCreatorMaxEarningsCapCents(params: {
   return Math.min(amount, remaining);
 }
 
+/** In-process cache so creator-wise bulk pay does not re-scan the full contest N times. */
+const LEADERBOARD_PRIZE_CACHE_TTL_MS = 45_000;
+type LeaderboardPrizeCacheEntry = {
+  expiresAt: number;
+  prizeBySubmissionId: Map<string, number>;
+  rankingRows: LeaderboardRankableSubmission[];
+};
+const leaderboardPrizeCache = new Map<string, LeaderboardPrizeCacheEntry>();
+
+function prizesCacheKey(
+  contestId: string,
+  prizes: LeaderboardPrize[],
+): string {
+  const prizeSig = prizes
+    .map((p) => `${Number(p.position) || 0}:${Number(p.amount) || 0}`)
+    .sort()
+    .join("|");
+  return `${contestId}::${prizeSig}`;
+}
+
+/** Test helper — clear ranking cache between tests. */
+export function clearLeaderboardPrizeCacheForTests(): void {
+  leaderboardPrizeCache.clear();
+}
+
+/**
+ * Load contest-wide leaderboard prize map (verified/paid by views).
+ * Cached briefly so serial creator-wise bulk pays reuse one ranking scan.
+ */
+export async function fetchNonTwitterLeaderboardPrizeMap(params: {
+  supabaseAdmin: SupabaseClient;
+  contestId: string;
+  prizes: LeaderboardPrize[] | null | undefined;
+  /** Skip cache (e.g. after mutations that change eligible set / views). */
+  bypassCache?: boolean;
+}): Promise<{
+  prizeBySubmissionId: Map<string, number>;
+  rankingRows: LeaderboardRankableSubmission[];
+  error?: string;
+}> {
+  const prizes = Array.isArray(params.prizes) ? params.prizes : [];
+  if (prizes.length === 0) {
+    return {
+      prizeBySubmissionId: new Map(),
+      rankingRows: [],
+    };
+  }
+
+  const cacheKey = prizesCacheKey(String(params.contestId), prizes);
+  if (!params.bypassCache) {
+    const hit = leaderboardPrizeCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      return {
+        prizeBySubmissionId: hit.prizeBySubmissionId,
+        rankingRows: hit.rankingRows,
+      };
+    }
+  }
+
+  // submission_status_enum only has verified/paid (not "approved"). Never send
+  // "approved" to PostgREST — it errors: invalid input value for enum.
+  const { data: rows, error, truncated } = await fetchContestSubmissionsAllPages(
+    params.supabaseAdmin,
+    params.contestId,
+    "id, views, status, paid",
+    {
+      statusIn: ["verified", "paid"],
+      order: { column: "views", ascending: false },
+    },
+  );
+
+  if (error) {
+    return {
+      prizeBySubmissionId: new Map(),
+      rankingRows: [],
+      error: String((error as { message?: string })?.message ?? error),
+    };
+  }
+
+  if (truncated) {
+    return {
+      prizeBySubmissionId: new Map(),
+      rankingRows: [],
+      error:
+        "Contest has too many verified/paid submissions to rank safely; contact support before paying.",
+    };
+  }
+
+  const rankingRows = (rows || []) as LeaderboardRankableSubmission[];
+  const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionId(
+    rankingRows,
+    prizes,
+  );
+
+  leaderboardPrizeCache.set(cacheKey, {
+    expiresAt: Date.now() + LEADERBOARD_PRIZE_CACHE_TTL_MS,
+    prizeBySubmissionId,
+    rankingRows,
+  });
+
+  return { prizeBySubmissionId, rankingRows };
+}
+
 /**
  * Per-submission prize for non-Twitter leaderboard contests.
  * Ranks verified/approved/paid submissions by views (id asc tie-break), then maps to prize.
@@ -128,44 +231,33 @@ export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
   }
 
   const submissionId = String(params.submissionId);
-  // submission_status_enum only has verified/paid (not "approved"). Never send
-  // "approved" to PostgREST — it errors: invalid input value for enum.
-  const { data: rows, error, truncated } = await fetchContestSubmissionsAllPages(
-    params.supabaseAdmin,
-    params.contestId,
-    "id, views, status, paid",
-    {
-      statusIn: ["verified", "paid"],
-      order: { column: "views", ascending: false },
-    },
-  );
+  const fetched = await fetchNonTwitterLeaderboardPrizeMap({
+    supabaseAdmin: params.supabaseAdmin,
+    contestId: params.contestId,
+    prizes,
+  });
+  if (fetched.error) {
+    return { prizeCents: 0, rank: null, error: fetched.error };
+  }
 
-  if (error) {
+  const cachedPrize = fetched.prizeBySubmissionId.get(submissionId);
+  if (cachedPrize != null) {
+    const ranked = rankLeaderboardSubmissionsByViews(fetched.rankingRows);
+    const rankIndex = ranked.findIndex((row) => String(row.id) === submissionId);
     return {
-      prizeCents: 0,
-      rank: null,
-      error: String((error as { message?: string })?.message ?? error),
+      prizeCents: cachedPrize,
+      rank: rankIndex >= 0 ? rankIndex + 1 : null,
     };
   }
 
-  if (truncated) {
-    return {
-      prizeCents: 0,
-      rank: null,
-      error:
-        "Contest has too many verified/paid submissions to rank safely; contact support before paying.",
-    };
-  }
-
-  const list = ((rows || []) as LeaderboardRankableSubmission[]).slice();
-  if (!list.some((row) => String(row.id) === submissionId)) {
-    list.push({
-      id: submissionId,
-      views: params.views ?? 0,
-      status: "verified",
-      paid: false,
-    });
-  }
+  // Submission not yet in verified/paid set (e.g. mid-verify) — rank with synthetic row.
+  const list = fetched.rankingRows.slice();
+  list.push({
+    id: submissionId,
+    views: params.views ?? 0,
+    status: "verified",
+    paid: false,
+  });
 
   const ranked = rankLeaderboardSubmissionsByViews(list);
   const rankIndex = ranked.findIndex((row) => String(row.id) === submissionId);
