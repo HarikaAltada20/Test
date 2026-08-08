@@ -103,40 +103,26 @@ export function applyCreatorMaxEarningsCapCents(params: {
   return Math.min(amount, remaining);
 }
 
-/** In-process cache so creator-wise bulk pay does not re-scan the full contest N times. */
-const LEADERBOARD_PRIZE_CACHE_TTL_MS = 45_000;
-type LeaderboardPrizeCacheEntry = {
-  expiresAt: number;
-  prizeBySubmissionId: Map<string, number>;
-  rankingRows: LeaderboardRankableSubmission[];
-};
-const leaderboardPrizeCache = new Map<string, LeaderboardPrizeCacheEntry>();
-
-function prizesCacheKey(
-  contestId: string,
-  prizes: LeaderboardPrize[],
-): string {
-  const prizeSig = prizes
-    .map((p) => `${Number(p.position) || 0}:${Number(p.amount) || 0}`)
-    .sort()
-    .join("|");
-  return `${contestId}::${prizeSig}`;
-}
-
-/** Test helper — clear ranking cache between tests. */
+/**
+ * Test helper — previously cleared an in-process TTL cache. Ranking is always
+ * fetched fresh now (stale cache could overpay when verifies landed mid-pay).
+ */
 export function clearLeaderboardPrizeCacheForTests(): void {
-  leaderboardPrizeCache.clear();
+  // no-op (kept for test import stability)
 }
 
 /**
  * Load contest-wide leaderboard prize map (verified/paid by views).
- * Cached briefly so serial creator-wise bulk pays reuse one ranking scan.
+ * Always fetches fresh — money paths must not reuse rankings after concurrent
+ * verify/pay changes the eligible set.
  */
 export async function fetchNonTwitterLeaderboardPrizeMap(params: {
   supabaseAdmin: SupabaseClient;
   contestId: string;
   prizes: LeaderboardPrize[] | null | undefined;
-  /** Skip cache (e.g. after mutations that change eligible set / views). */
+  /**
+   * @deprecated Ignored — ranking is always fresh to avoid overpay from stale ranks.
+   */
   bypassCache?: boolean;
 }): Promise<{
   prizeBySubmissionId: Map<string, number>;
@@ -149,17 +135,6 @@ export async function fetchNonTwitterLeaderboardPrizeMap(params: {
       prizeBySubmissionId: new Map(),
       rankingRows: [],
     };
-  }
-
-  const cacheKey = prizesCacheKey(String(params.contestId), prizes);
-  if (!params.bypassCache) {
-    const hit = leaderboardPrizeCache.get(cacheKey);
-    if (hit && hit.expiresAt > Date.now()) {
-      return {
-        prizeBySubmissionId: hit.prizeBySubmissionId,
-        rankingRows: hit.rankingRows,
-      };
-    }
   }
 
   // submission_status_enum only has verified/paid (not "approved"). Never send
@@ -196,12 +171,6 @@ export async function fetchNonTwitterLeaderboardPrizeMap(params: {
     rankingRows,
     prizes,
   );
-
-  leaderboardPrizeCache.set(cacheKey, {
-    expiresAt: Date.now() + LEADERBOARD_PRIZE_CACHE_TTL_MS,
-    prizeBySubmissionId,
-    rankingRows,
-  });
 
   return { prizeBySubmissionId, rankingRows };
 }

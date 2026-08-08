@@ -4,6 +4,21 @@ Short checklist for deploying changes that affect production.
 
 ---
 
+## Bulk verify wallet continuation (creator-wise / large paid reversals)
+
+**When:** Deploying chunked bulk verify/reject/pending for paid submissions (wallet reversal continuation tokens).
+
+**Required env (pick one):**
+
+- Prefer: `BULK_VERIFY_WALLET_CONTINUATION_SECRET` — dedicated HMAC secret for continuation tokens
+- Fallback: `CRON_SECRET` — reused if the dedicated secret is unset
+
+Without either secret, the **first** chunk of a paid bulk reversal fails **before** debiting wallets (safe), but admins cannot complete large paid selections in chunks.
+
+**After deploy:** Confirm at least `CRON_SECRET` is set in production (already required for crons). Optionally set `BULK_VERIFY_WALLET_CONTINUATION_SECRET` so continuation signing is isolated from cron auth.
+
+---
+
 ## Campaign list pagination + `contest_stats` (required before app traffic)
 
 **When:** Deploying the SQL-paginated campaign / opportunities lists (`campaign_list_page_ids`, Redis list cache, `contest_stats`).

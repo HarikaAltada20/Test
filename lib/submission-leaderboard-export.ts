@@ -563,6 +563,15 @@ export function buildSubmissionExportCellValue(
     case "adjusted_reward": {
       const cents = computeExpectedRewardCents(submission, rank, ctx);
       if (!ctx.showAdjustedReward || cents <= 0) return EMPTY_CELL;
+      // Non-Twitter leaderboard: pay uses fixed rank prizes (no % adjustment).
+      const platform = ctx.platform.toLowerCase();
+      const isTwitterLeaderboard =
+        (platform === "twitter" || platform === "x") &&
+        ctx.contestFormat === "text_image" &&
+        ctx.contestType === "leaderboard";
+      if (ctx.contestType === "leaderboard" && !isTwitterLeaderboard) {
+        return formatMoneyFromCents(cents);
+      }
       const adjusted = applyPayoutAdjustment(cents, ctx.payoutAdjustmentPct);
       return formatMoneyFromCents(adjusted);
     }

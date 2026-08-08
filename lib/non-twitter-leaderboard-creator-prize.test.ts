@@ -148,7 +148,7 @@ describe("non-twitter leaderboard submission ranking", () => {
     );
   });
 
-  it("exposes a test-only cache clear helper", () => {
+  it("exposes a test-only cache clear helper (no-op; ranking is always fresh)", () => {
     clearLeaderboardPrizeCacheForTests();
     clearLeaderboardPrizeCacheForTests();
   });

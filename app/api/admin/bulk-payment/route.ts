@@ -496,7 +496,8 @@ export async function POST(request: NextRequest) {
     runningTotal = alreadyPaidAmount;
 
     // Non-Twitter leaderboard: per-submission prizes from contest-wide views rank.
-    // Cached briefly so creator-wise bulk pay across many creators reuses one scan.
+    // Ranking is always fetched fresh (no cross-request cache) so concurrent
+    // verifies cannot cause two submissions to both receive the same prize rank.
     let leaderboardPrizeBySubmissionId = new Map<string, number>();
     const isLeaderboardContest = contest.contest_type === "leaderboard";
     if (isLeaderboardContest && payment_type !== "bonus") {

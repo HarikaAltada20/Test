@@ -1800,7 +1800,13 @@ export default function ContestDetailClient({
       currentContest?.contest_type,
     ],
   );
-  const showAdjustedRewardColumn = payoutAdjustmentForUi.shouldAdjustReward;
+  // Non-Twitter leaderboard prizes are fixed rank amounts on pay — hide the
+  // adjusted column so Expected Reward matches what bulk-payment credits.
+  const isNonTwitterLeaderboardForUi =
+    currentContest?.contest_type === "leaderboard" &&
+    !isTwitterTextImageLeaderboardContest(currentContest);
+  const showAdjustedRewardColumn =
+    payoutAdjustmentForUi.shouldAdjustReward && !isNonTwitterLeaderboardForUi;
   const payoutAdjustmentPercentageForUi = payoutAdjustmentForUi.percentage;
 
   // Lock YouTube metrics/refresh/modify headers from in_review onward (pending_review still allows refresh before review)
@@ -8234,9 +8240,9 @@ export default function ContestDetailClient({
       let totalMilestoneCents = 0;
       let usedEstimatedAmounts = false;
       const creatorPayErrors: string[] = [];
-      // Serial-ish creator pays: small concurrency is safe now that leaderboard
-      // ranking is cached server-side (~45s). Keep low for wallet shortfall retries.
-      const CREATOR_WISE_PAY_CONCURRENCY = 3;
+      // Serial creator pays avoid contest-wallet shortfall races under parallel credits.
+      // Ranking is always fetched fresh per request (no cross-request prize cache).
+      const CREATOR_WISE_PAY_CONCURRENCY = 1;
 
       const payOneCreator = async (group: any) => {
         const creatorId = String(group.creator?.id || "");
@@ -20499,30 +20505,21 @@ export default function ContestDetailClient({
 
                                     // Non-Twitter: contest-wide views rank among
                                     // verified/approved/paid only (not table display rank).
+                                    // Do not apply % payout adjustment — server pays fixed rank prizes.
                                     const preCents =
                                       leaderboardPrizeCentsBySubmissionId.get(
                                         String(submission.id),
                                       ) ?? 0;
                                     if (preCents > 0) {
-                                      const postCents =
-                                        payoutAdjCpmOrLeaderboardPrize
-                                          ? applyPayoutAdjustment(
-                                              preCents,
-                                              payoutAdjustmentPercentage,
-                                            )
-                                          : preCents;
                                       const preDollars =
                                         centsToDollars(preCents);
-                                      const postDollars =
-                                        centsToDollars(postCents);
                                       return {
                                         amount: preDollars,
                                         label: "Expected",
                                         className:
                                           "text-slate-700 font-semibold",
                                         preAdjustmentAmountDollars: preDollars,
-                                        postAdjustmentAmountDollars:
-                                          postDollars,
+                                        postAdjustmentAmountDollars: preDollars,
                                       };
                                     }
                                     return {

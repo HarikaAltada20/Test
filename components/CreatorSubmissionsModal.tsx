@@ -1301,6 +1301,10 @@ export function CreatorSubmissionsModal({
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
 
+  // Non-Twitter leaderboard: fixed rank prizes — pay path skips % adjustment.
+  const isNonTwitterLeaderboardContest =
+    contest?.contest_type === "leaderboard" && !isTwitterLeaderboardContest;
+
   const isTwitterCpmContest =
     contest?.contest_type === "cpm" &&
     (contest?.platform?.toLowerCase() === "twitter" ||
@@ -2427,6 +2431,7 @@ export function CreatorSubmissionsModal({
                         </TableHead>
                         {hasPayoutAdjustment &&
                           shouldAdjustReward &&
+                          !isNonTwitterLeaderboardContest &&
                           (!isYouTubeContest ||
                             showYtColumn("adjusted_reward")) &&
                           (!isDualRewardsContest ||
@@ -2877,6 +2882,7 @@ export function CreatorSubmissionsModal({
                         )}
                         {hasPayoutAdjustment &&
                           shouldAdjustReward &&
+                          !isNonTwitterLeaderboardContest &&
                           (!isYouTubeContest ||
                             showYtColumn("adjusted_reward")) &&
                           (!isDualRewardsContest ||
@@ -3256,12 +3262,13 @@ export function CreatorSubmissionsModal({
                       // Get pre-calculated expected reward (with cap applied in submission time order)
                       const expectedReward =
                         expectedRewardsMap.get(submission.id) || 0;
-                      const adjustedExpectedReward = shouldAdjustReward
-                        ? applyPayoutAdjustment(
-                            expectedReward,
-                            payoutAdjustmentPercentage,
-                          )
-                        : expectedReward;
+                      const adjustedExpectedReward =
+                        shouldAdjustReward && !isNonTwitterLeaderboardContest
+                          ? applyPayoutAdjustment(
+                              expectedReward,
+                              payoutAdjustmentPercentage,
+                            )
+                          : expectedReward;
                       const expectedRewardForDisplay = expectedReward;
 
                       const milestoneUncappedForDual =
@@ -3836,6 +3843,7 @@ export function CreatorSubmissionsModal({
                               </TableCell>
                               {hasPayoutAdjustment &&
                                 shouldAdjustReward &&
+                                !isNonTwitterLeaderboardContest &&
                                 (!isYouTubeContest ||
                                   showYtColumn("adjusted_reward")) &&
                                 (!isDualRewardsContest ||
@@ -4582,6 +4590,7 @@ export function CreatorSubmissionsModal({
                                   )}
                                   {hasPayoutAdjustment &&
                                     shouldAdjustReward &&
+                                    !isNonTwitterLeaderboardContest &&
                                     (!isYouTubeContest ||
                                       showYtColumn("adjusted_reward")) &&
                                     (!isDualRewardsContest ||
