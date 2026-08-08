@@ -2539,24 +2539,15 @@ export default function ContestDetailClient({
   const [creatorWiseSelectedCreators, setCreatorWiseSelectedCreators] =
     useState<Set<string>>(new Set());
   type CreatorWiseBulkPaymentActiveKey =
-    | "standard:0"
-    | "standard:1"
-    | "bonus:0"
-    | "bonus:1"
-    | "both:0"
-    | "both:1";
+    | "standard"
+    | "bonus"
+    | "both";
   const [creatorWiseBulkPaymentActiveKey, setCreatorWiseBulkPaymentActiveKey] =
     useState<CreatorWiseBulkPaymentActiveKey | null>(null);
-  const creatorWiseBulkPayKey = (
-    payType: "standard" | "bonus" | "both",
-    isBulk: boolean,
-  ): CreatorWiseBulkPaymentActiveKey =>
-    `${payType}:${isBulk ? "1" : "0"}` as CreatorWiseBulkPaymentActiveKey;
   const isCreatorWiseBulkPayBtnLoading = (
     payType: "standard" | "bonus" | "both",
-    isBulk: boolean,
   ) =>
-    creatorWiseBulkPaymentActiveKey === creatorWiseBulkPayKey(payType, isBulk);
+    creatorWiseBulkPaymentActiveKey === payType;
   const isAnyCreatorWiseBulkPaymentBusy =
     creatorWiseBulkPaymentActiveKey !== null;
   const [
@@ -3739,6 +3730,39 @@ export default function ContestDetailClient({
     milestoneSubmissionExpectedPayoutCents,
   ]);
 
+  // Non-Twitter leaderboard: prize per eligible submission (verified/approved/paid by views).
+  // Rejected/pending are excluded so Expected Reward matches payout + creator-wise totals.
+  const leaderboardPrizeCentsBySubmissionId = useMemo(() => {
+    if (
+      currentContest?.contest_type !== "leaderboard" ||
+      isTwitterTextImageLeaderboardContest(currentContest)
+    ) {
+      return new Map<string, number>();
+    }
+    const prizes =
+      currentContest?.contest_based_details?.leaderboard_contest?.prizes || [];
+    if (!Array.isArray(prizes) || prizes.length === 0) {
+      return new Map<string, number>();
+    }
+    const eligibleSubs: Array<{
+      id: string;
+      views?: number | null;
+      status?: string | null;
+      paid?: boolean | null;
+    }> = [];
+    for (const s of leaderboardSubmissions || []) {
+      const id = String((s as any)?.id || "");
+      if (!id) continue;
+      eligibleSubs.push({
+        id,
+        views: (s as any)?.views,
+        status: (s as any)?.status,
+        paid: (s as any)?.paid,
+      });
+    }
+    return buildLeaderboardPrizeCentsBySubmissionId(eligibleSubs, prizes);
+  }, [currentContest, leaderboardSubmissions]);
+
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
     if (!filteredSubmissions) return [];
@@ -4905,40 +4929,16 @@ export default function ContestDetailClient({
       !isTwitterTextImageLeaderboardContest(currentContest);
 
     if (isNonTwitterLeaderboard) {
-      const leaderboardDetails =
-        currentContest?.contest_based_details?.leaderboard_contest;
-      const prizes = leaderboardDetails?.prizes || [];
-
-      if (prizes.length > 0) {
+      const prizes =
+        currentContest?.contest_based_details?.leaderboard_contest?.prizes ||
+        [];
+      if (Array.isArray(prizes) && prizes.length > 0) {
         const allCreators = Object.values(grouped) as any[];
-        // Rank from the full loaded contest list (not status-filtered groups) so
-        // Expected Reward matches bulk-payment / verify-submission contest-wide ranks.
-        const eligibleSubs: Array<{
-          id: string;
-          views?: number | null;
-          status?: string | null;
-          paid?: boolean | null;
-        }> = [];
-        for (const s of leaderboardSubmissions || []) {
-          const id = String((s as any)?.id || "");
-          if (!id) continue;
-          eligibleSubs.push({
-            id,
-            views: (s as any)?.views,
-            status: (s as any)?.status,
-            paid: (s as any)?.paid,
-          });
-        }
-
-        const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionId(
-          eligibleSubs,
-          prizes,
-        );
-
         allCreators.forEach((group: any) => {
           group.earnings.expected = (group.submissions || []).reduce(
             (sum: number, s: any) =>
-              sum + (prizeBySubmissionId.get(String(s.id)) || 0),
+              sum +
+              (leaderboardPrizeCentsBySubmissionId.get(String(s.id)) || 0),
             0,
           );
 
@@ -5048,6 +5048,7 @@ export default function ContestDetailClient({
     milestoneSubmissionExpectedPayoutCents,
     getStatus,
     cappedExpectedRewardBySubmissionId,
+    leaderboardPrizeCentsBySubmissionId,
   ]);
 
   /** Stable creator for CreatorSubmissionsModal when parent status filter excludes rejected rows from groups. */
@@ -5230,6 +5231,7 @@ export default function ContestDetailClient({
       creatorRankingMap,
       leaderboardPrizes:
         currentContest.contest_based_details?.leaderboard_contest?.prizes,
+      leaderboardPrizeCentsBySubmissionId,
       cappedCpmExpectedMap:
         cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap,
       dualMilestoneExpectedMap:
@@ -5277,6 +5279,7 @@ export default function ContestDetailClient({
       dualAdjustCpmForDisplay,
       dualAdjustMilestoneForDisplay,
       creatorRankingMap,
+      leaderboardPrizeCentsBySubmissionId,
       cappedExpectedRewardBySubmissionId,
       milestoneSubmissionExpectedPayoutCents,
       milestoneSubmissionAssignedLabelBySubmissionId,
@@ -7347,11 +7350,12 @@ export default function ContestDetailClient({
           }
 
           if (typeof data?.wallet_reversal_continuation === "string") {
-            walletReversalContinuation = data.wallet_reversal_continuation;
+            const continuationToken = data.wallet_reversal_continuation;
+            walletReversalContinuation = continuationToken;
             if (needsChunkedWalletPreflight) {
               saveBulkVerifyWalletContinuation({
                 ...continuationStorageParams,
-                token: walletReversalContinuation,
+                token: continuationToken,
               });
             }
           }
@@ -8133,7 +8137,6 @@ export default function ContestDetailClient({
 
   const handleCreatorWiseBulkPayment = async (
     paymentType: "standard" | "bonus" | "both",
-    isBulkTransaction: boolean,
   ) => {
     const selectedGroups = filteredCreatorGroups.filter((group: any) =>
       creatorWiseSelectedCreators.has(String(group.creator?.id || "")),
@@ -8182,6 +8185,20 @@ export default function ContestDetailClient({
         }
         return false;
       }
+      if (isTwitterCpmCreatorWise && paymentType !== "bonus") {
+        const creatorStatus = String(
+          group.creator_moderation_status || "",
+        ).toLowerCase();
+        const expectedCents = Math.max(
+          0,
+          Number(group.earnings?.expected) || 0,
+        );
+        const grantedCents = Math.max(
+          0,
+          Number(group.earnings?.granted) || 0,
+        );
+        return creatorStatus !== "rejected" && expectedCents > grantedCents;
+      }
       return (
         filterCreatorWisePayableSubmissions(
           group.submissions || [],
@@ -8203,9 +8220,7 @@ export default function ContestDetailClient({
       return;
     }
 
-    setCreatorWiseBulkPaymentActiveKey(
-      creatorWiseBulkPayKey(paymentType, isBulkTransaction),
-    );
+    setCreatorWiseBulkPaymentActiveKey(paymentType);
     try {
       let paidCreators = 0;
       let skippedCreators = 0;
@@ -8287,6 +8302,92 @@ export default function ContestDetailClient({
               creatorPaidNow,
               creatorRewardCents,
               creatorBonusCents,
+              totalCpmCents: 0,
+              totalMilestoneCents: 0,
+              isDual: false,
+              estimated: false,
+            };
+          }
+          return { kind: "skipped" as const };
+        }
+
+        // Twitter CPM creator-wise payment is based on the creator's Expected
+        // Reward (total creator points, including creator-level manual points).
+        // The creator endpoint also tops up any earlier submission-wise payouts.
+        if (isTwitterCpmCreatorWise && paymentType !== "bonus") {
+          let creatorRewardCents = 0;
+          let creatorBonusCents = 0;
+
+          const expectedCents = Math.max(
+            0,
+            Number(group.earnings?.expected) || 0,
+          );
+          const grantedCents = Math.max(
+            0,
+            Number(group.earnings?.granted) || 0,
+          );
+          if (
+            String(group.creator_moderation_status || "").toLowerCase() ===
+              "rejected" ||
+            expectedCents <= grantedCents
+          ) {
+            return { kind: "skipped" as const };
+          }
+
+          const rewardResponse = await fetch(
+            `/api/contests/${contestId}/pay-twitter-creator`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ creatorId }),
+            },
+          );
+          const rewardResult = await rewardResponse.json().catch(() => ({}));
+          if (!rewardResponse.ok) {
+            throw new Error(
+              rewardResult?.error || "Failed to process creator CPM payment",
+            );
+          }
+          creatorRewardCents = Number(rewardResult?.amount) || 0;
+
+          if (paymentType === "both" && hasFlatFeeBonus) {
+            const bonusEligibleTweets = (group.submissions || []).filter(
+              (submission: any) =>
+                submission?.is_twitter_tweet === true &&
+                !submission?.bonus_paid &&
+                ["verified", "approved", "paid"].includes(
+                  getCreatorWiseSubmissionPayStatus(submission),
+                ),
+            );
+
+            for (const tweet of bonusEligibleTweets) {
+              const bonusResponse = await fetch(
+                `/api/contests/${contestId}/pay-twitter-bonus`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ tweetId: tweet.id }),
+                },
+              );
+              const bonusResult = await bonusResponse.json().catch(() => ({}));
+              if (!bonusResponse.ok && !bonusResult?.alreadyPaid) {
+                throw new Error(
+                  bonusResult?.error || "Failed to process creator bonus",
+                );
+              }
+              creatorBonusCents += Number(bonusResult?.amount) || 0;
+            }
+          }
+
+          const creatorPaidNow = creatorRewardCents + creatorBonusCents;
+          if (creatorPaidNow > 0) {
+            return {
+              kind: "paid" as const,
+              creatorPaidNow,
+              creatorRewardCents,
+              creatorBonusCents,
+              totalCpmCents: 0,
+              totalMilestoneCents: 0,
               isDual: false,
               estimated: false,
             };
@@ -8359,70 +8460,7 @@ export default function ContestDetailClient({
           };
         };
 
-        // Non-bulk: one wallet credit per submission (CreatorSubmissionsModal semantics).
-        // Still uses bulk pay APIs with a single ID — avoids verify-submission soft-fail /
-        // invalid enum issues called out for creator-wise multi-pay.
-        if (!isBulkTransaction) {
-          let creatorPaidNow = 0;
-          let creatorRewardCents = 0;
-          let creatorBonusCents = 0;
-          let totalCpmCents = 0;
-          let totalMilestoneCents = 0;
-          let paidAny = false;
-          const perSubErrors: string[] = [];
-
-          for (const submission of payableSubs) {
-            const submissionId = String(submission?.id || "");
-            if (!submissionId) continue;
-            try {
-              const result = await payCreatorSubmissionIds([submissionId]);
-              const data = (result?.data || {}) as Record<string, unknown>;
-              const paid = toPaidResult(data);
-              if (!paid) continue;
-              paidAny = true;
-              creatorPaidNow += paid.creatorPaidNow;
-              creatorRewardCents += paid.creatorRewardCents;
-              creatorBonusCents += paid.creatorBonusCents;
-              totalCpmCents += paid.totalCpmCents || 0;
-              totalMilestoneCents += paid.totalMilestoneCents || 0;
-            } catch (err) {
-              const message =
-                err instanceof Error ? err.message : String(err || "Payment failed");
-              perSubErrors.push(`${submissionId}: ${message}`);
-            }
-          }
-
-          if (perSubErrors.length > 0) {
-            creatorPayErrors.push(
-              `${group.creator?.username || creatorId}: ${perSubErrors.slice(0, 3).join("; ")}${
-                perSubErrors.length > 3
-                  ? ` (+${perSubErrors.length - 3} more)`
-                  : ""
-              }`,
-            );
-          }
-
-          if (paidAny && creatorPaidNow > 0) {
-            return {
-              kind: "paid" as const,
-              creatorPaidNow,
-              creatorRewardCents,
-              creatorBonusCents,
-              totalCpmCents,
-              totalMilestoneCents,
-              isDual: isDualRewardsContest,
-              estimated: false,
-            };
-          }
-          if (!paidAny && perSubErrors.length === 0) {
-            creatorPayErrors.push(
-              `${group.creator?.username || creatorId}: No payable amount for this creator (already paid, outside prize ranks, or cap reached)`,
-            );
-          }
-          return { kind: "skipped" as const };
-        }
-
-        // Bulk: one wallet credit for all payable submissions of this creator.
+        // One wallet credit for all payable submissions of this creator.
         const submissionIds = payableSubs
           .map((submission: any) => String(submission?.id || ""))
           .filter(Boolean);
@@ -10722,6 +10760,9 @@ export default function ContestDetailClient({
       );
     }
     if (currentContest?.contest_type === "leaderboard") {
+      if (!isTwitterTextImageLeaderboardContest(currentContest)) {
+        return leaderboardPrizeCentsBySubmissionId.get(submission.id) ?? 0;
+      }
       return Number(submission.earnings || 0);
     }
     if (isCpmContestType(currentContest?.contest_type)) {
@@ -20377,7 +20418,6 @@ export default function ContestDetailClient({
                                     Array.isArray(contestDetails.prizes)
                                   ) {
                                     // For Twitter leaderboard campaigns, use creator rank instead of submission rank
-                                    let currentRank: number;
                                     const isTwitterLeaderboard =
                                       isTwitterTweet &&
                                       (currentContest.platform?.toLowerCase() ===
@@ -20387,49 +20427,99 @@ export default function ContestDetailClient({
                                       currentContest.contest_format ===
                                         "text_image";
 
+                                    const submissionStatusRaw = String(
+                                      isTwitterTweet
+                                        ? (submission as any)
+                                            .moderation_status ||
+                                            submission.status ||
+                                            ""
+                                        : submission.status || "",
+                                    ).toLowerCase();
+                                    const isRejectedSubmission =
+                                      submissionStatusRaw === "rejected";
+
+                                    // Rejected never earns a prize — show No Prize even if
+                                    // display rank / creator rank would otherwise map to one.
+                                    if (isRejectedSubmission) {
+                                      return {
+                                        amount: 0,
+                                        label: "No Prize",
+                                        className: "text-slate-500",
+                                      };
+                                    }
+
                                     if (isTwitterLeaderboard) {
-                                      // Use creator's rank based on total points
-                                      currentRank =
+                                      const currentRank =
                                         creatorRankingMap.get(
                                           submission.creator_id || "",
                                         ) || 0;
-                                    } else {
-                                      // For other platforms, use global submission rank (not page index)
-                                      currentRank = rank; // rank is already globalIndex + 1
+                                      if (currentRank > 0) {
+                                        const prizeForRank =
+                                          contestDetails.prizes.find(
+                                            (prize: any) =>
+                                              prize.position === currentRank,
+                                          );
+                                        if (prizeForRank) {
+                                          const preCents = Number(
+                                            prizeForRank.amount || 0,
+                                          );
+                                          const postCents =
+                                            payoutAdjCpmOrLeaderboardPrize
+                                              ? applyPayoutAdjustment(
+                                                  preCents,
+                                                  payoutAdjustmentPercentage,
+                                                )
+                                              : preCents;
+                                          const preDollars =
+                                            centsToDollars(preCents);
+                                          const postDollars =
+                                            centsToDollars(postCents);
+                                          return {
+                                            amount: preDollars,
+                                            label: "Expected",
+                                            className:
+                                              "text-slate-700 font-semibold",
+                                            preAdjustmentAmountDollars:
+                                              preDollars,
+                                            postAdjustmentAmountDollars:
+                                              postDollars,
+                                          };
+                                        }
+                                      }
+                                      return {
+                                        amount: 0,
+                                        label: "No Prize",
+                                        className: "text-slate-500",
+                                      };
                                     }
 
-                                    if (currentRank > 0) {
-                                      const prizeForRank =
-                                        contestDetails.prizes.find(
-                                          (prize: any) =>
-                                            prize.position === currentRank,
-                                        );
-                                      if (prizeForRank) {
-                                        const preCents = Number(
-                                          prizeForRank.amount || 0,
-                                        );
-                                        const postCents =
-                                          payoutAdjCpmOrLeaderboardPrize
-                                            ? applyPayoutAdjustment(
-                                                preCents,
-                                                payoutAdjustmentPercentage,
-                                              )
-                                            : preCents;
-                                        const preDollars =
-                                          centsToDollars(preCents);
-                                        const postDollars =
-                                          centsToDollars(postCents);
-                                        return {
-                                          amount: preDollars,
-                                          label: "Expected",
-                                          className:
-                                            "text-slate-700 font-semibold",
-                                          preAdjustmentAmountDollars:
-                                            preDollars,
-                                          postAdjustmentAmountDollars:
-                                            postDollars,
-                                        };
-                                      }
+                                    // Non-Twitter: contest-wide views rank among
+                                    // verified/approved/paid only (not table display rank).
+                                    const preCents =
+                                      leaderboardPrizeCentsBySubmissionId.get(
+                                        String(submission.id),
+                                      ) ?? 0;
+                                    if (preCents > 0) {
+                                      const postCents =
+                                        payoutAdjCpmOrLeaderboardPrize
+                                          ? applyPayoutAdjustment(
+                                              preCents,
+                                              payoutAdjustmentPercentage,
+                                            )
+                                          : preCents;
+                                      const preDollars =
+                                        centsToDollars(preCents);
+                                      const postDollars =
+                                        centsToDollars(postCents);
+                                      return {
+                                        amount: preDollars,
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                        preAdjustmentAmountDollars: preDollars,
+                                        postAdjustmentAmountDollars:
+                                          postDollars,
+                                      };
                                     }
                                     return {
                                       amount: 0,
@@ -21017,7 +21107,47 @@ export default function ContestDetailClient({
                               };
 
                               const expectedInfo = getExpectedReward();
-                              const grantedInfo = getGrantedReward();
+                              const storedGrantedInfo = getGrantedReward();
+                              const isTwitterCpmSubmission =
+                                isTwitterTweet &&
+                                currentContest.contest_type === "cpm" &&
+                                (currentContest.platform?.toLowerCase() ===
+                                  "twitter" ||
+                                  currentContest.platform?.toLowerCase() ===
+                                    "x") &&
+                                currentContest.contest_format === "text_image";
+                              const normalizedPaidStatus = String(
+                                (submission as any).moderation_status ||
+                                  submission.status ||
+                                  "",
+                              ).toLowerCase();
+                              const explicitPaidAmountCents =
+                                (submission as any).granted_amount_cents ??
+                                (submission as any).paid_amount_cents ??
+                                submission.other_stats?.paid_amount_cents ??
+                                submission.other_stats?.granted_amount_cents;
+                              // Creator-level manual-point rewards belong to the
+                              // creator-wise total, not an individual tweet.
+                              // For paid Twitter CPM rows, show the tweet's own
+                              // formula reward unless an explicit custom amount exists.
+                              const grantedInfo =
+                                isTwitterCpmSubmission &&
+                                (normalizedPaidStatus === "paid" ||
+                                  (submission as any).paid === true) &&
+                                !(
+                                  explicitPaidAmountCents != null &&
+                                  Number(explicitPaidAmountCents) > 0
+                                )
+                                  ? {
+                                      ...storedGrantedInfo,
+                                      amount:
+                                        expectedInfo.postAdjustmentAmountDollars ??
+                                        expectedInfo.amount,
+                                      label: "Paid",
+                                      className:
+                                        "text-blue-600 font-semibold",
+                                    }
+                                  : storedGrantedInfo;
                               const isDualRewardContest =
                                 isDualRewardsContestType(
                                   currentContest.contest_type,
@@ -24046,104 +24176,6 @@ export default function ContestDetailClient({
                                           onClick={() =>
                                             handleCreatorWiseBulkPayment(
                                               "standard",
-                                              false,
-                                            )
-                                          }
-                                          disabled={
-                                            creatorWiseBulkStatusActionsBusy
-                                          }
-                                          className="h-8 bg-blue-600 text-white hover:bg-blue-700"
-                                        >
-                                          {isCreatorWiseBulkPayBtnLoading(
-                                            "standard",
-                                            false,
-                                          ) ? (
-                                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                          ) : (
-                                            <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                          )}
-                                          {isDualRewardsContestType(
-                                            currentContest.contest_type,
-                                          )
-                                            ? "Mark as Paid (CPM)"
-                                            : "Mark as Paid"}
-                                        </Button>
-                                        {(creatorWiseHasFlatFeeBonus ||
-                                          isDualRewardsContestType(
-                                            currentContest.contest_type,
-                                          )) && (
-                                          <>
-                                            <Button
-                                              size="sm"
-                                              onClick={() =>
-                                                handleCreatorWiseBulkPayment(
-                                                  "bonus",
-                                                  false,
-                                                )
-                                              }
-                                              disabled={
-                                                creatorWiseBulkStatusActionsBusy
-                                              }
-                                              className="h-8 bg-green-600 text-white hover:bg-green-700"
-                                            >
-                                              {isCreatorWiseBulkPayBtnLoading(
-                                                "bonus",
-                                                false,
-                                              ) ? (
-                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                              ) : (
-                                                <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                              )}
-                                              {isDualRewardsContestType(
-                                                currentContest.contest_type,
-                                              )
-                                                ? "Mark as Paid (Milestone)"
-                                                : "Mark Bonus as Paid"}
-                                            </Button>
-                                            <Button
-                                              size="sm"
-                                              onClick={() =>
-                                                handleCreatorWiseBulkPayment(
-                                                  "both",
-                                                  false,
-                                                )
-                                              }
-                                              disabled={
-                                                creatorWiseBulkStatusActionsBusy
-                                              }
-                                              className="h-8 bg-purple-600 text-white hover:bg-purple-700"
-                                            >
-                                              {isCreatorWiseBulkPayBtnLoading(
-                                                "both",
-                                                false,
-                                              ) ? (
-                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                              ) : (
-                                                <DollarSign className="mr-1 h-3.5 w-3.5" />
-                                              )}
-                                              {isDualRewardsContestType(
-                                                currentContest.contest_type,
-                                              )
-                                                ? "Mark Both as Paid (CPM+Milestone)"
-                                                : "Mark Both as Paid"}
-                                            </Button>
-                                          </>
-                                        )}
-                                        <span
-                                          className={cn(
-                                            "hidden h-6 w-px shrink-0 self-center sm:block",
-                                            isDark
-                                              ? "bg-white/15"
-                                              : "bg-border",
-                                          )}
-                                          aria-hidden
-                                        />
-                                        <Button
-                                          size="sm"
-                                          onClick={() =>
-                                            handleCreatorWiseBulkPayment(
-                                              "standard",
-                                              true,
                                             )
                                           }
                                           disabled={
@@ -24153,7 +24185,6 @@ export default function ContestDetailClient({
                                         >
                                           {isCreatorWiseBulkPayBtnLoading(
                                             "standard",
-                                            true,
                                           ) ? (
                                             <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                                           ) : (
@@ -24175,7 +24206,6 @@ export default function ContestDetailClient({
                                               onClick={() =>
                                                 handleCreatorWiseBulkPayment(
                                                   "bonus",
-                                                  true,
                                                 )
                                               }
                                               disabled={
@@ -24185,7 +24215,6 @@ export default function ContestDetailClient({
                                             >
                                               {isCreatorWiseBulkPayBtnLoading(
                                                 "bonus",
-                                                true,
                                               ) ? (
                                                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                                               ) : (
@@ -24202,7 +24231,6 @@ export default function ContestDetailClient({
                                               onClick={() =>
                                                 handleCreatorWiseBulkPayment(
                                                   "both",
-                                                  true,
                                                 )
                                               }
                                               disabled={
@@ -24212,7 +24240,6 @@ export default function ContestDetailClient({
                                             >
                                               {isCreatorWiseBulkPayBtnLoading(
                                                 "both",
-                                                true,
                                               ) ? (
                                                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
                                               ) : (
@@ -31102,6 +31129,12 @@ export default function ContestDetailClient({
           contest={currentContest}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
+          }
+          leaderboardExpectedPayoutBySubmissionId={
+            currentContest?.contest_type === "leaderboard" &&
+            !isTwitterTextImageLeaderboardContest(currentContest)
+              ? leaderboardPrizeCentsBySubmissionId
+              : undefined
           }
           milestoneExpectedPayoutBySubmissionId={
             isMilestoneContestType(currentContest?.contest_type) ||

@@ -102,6 +102,8 @@ export type RewardExportContext = {
   dualAdjustMilestone: boolean;
   creatorRankingMap: Map<string, number>;
   leaderboardPrizes?: Array<{ position: number; amount: number }>;
+  /** Non-Twitter leaderboard: prize cents by submission id (eligible ranks only). */
+  leaderboardPrizeCentsBySubmissionId?: Map<string, number>;
   cappedCpmExpectedMap: Map<string, number>;
   dualMilestoneExpectedMap: Map<string, number>;
   milestoneExpectedMap: Map<string, number>;
@@ -230,13 +232,36 @@ function computeExpectedRewardCents(
     const isTwitterLeaderboard =
       (platform === "twitter" || platform === "x") &&
       ctx.contestFormat === "text_image";
-    const currentRank = isTwitterLeaderboard
-      ? ctx.creatorRankingMap.get(String(submission.creator_id || "")) || 0
-      : rank;
-    if (currentRank > 0) {
-      const prize = ctx.leaderboardPrizes.find(
-        (p) => p.position === currentRank,
+
+    const statusRaw = String(
+      submission.is_twitter_tweet === true
+        ? submission.moderation_status || submission.status || ""
+        : submission.status || "",
+    ).toLowerCase();
+    if (statusRaw === "rejected") return 0;
+
+    if (isTwitterLeaderboard) {
+      const currentRank =
+        ctx.creatorRankingMap.get(String(submission.creator_id || "")) || 0;
+      if (currentRank > 0) {
+        const prize = ctx.leaderboardPrizes.find(
+          (p) => p.position === currentRank,
+        );
+        if (prize) return Number(prize.amount) || 0;
+      }
+      return 0;
+    }
+
+    // Non-Twitter: contest-wide eligible rank prize (not display/table rank)
+    if (ctx.leaderboardPrizeCentsBySubmissionId) {
+      return (
+        ctx.leaderboardPrizeCentsBySubmissionId.get(String(submission.id)) ?? 0
       );
+    }
+
+    // Fallback for callers that only pass display rank
+    if (rank > 0) {
+      const prize = ctx.leaderboardPrizes.find((p) => p.position === rank);
       if (prize) return Number(prize.amount) || 0;
     }
     return 0;
