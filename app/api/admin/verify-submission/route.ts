@@ -74,6 +74,12 @@ import {
 } from "@/lib/contest-payout-idempotency";
 import { creditDualRewardsSubmissionReward } from "@/lib/dual-rewards-reward-credit";
 import { logDualRewardsReversalRefund } from "@/lib/dual-rewards-bulk-reversal";
+import { verifyBulkVerifyWalletDebitBypass } from "@/lib/bulk-verify-wallet-continuation";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 function isDualRewardsLedgerReward(r: {
   metadata?: Record<string, unknown> | null;
@@ -95,6 +101,7 @@ function getTransactionPayoutCycle(metadata: any): number {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
+  let payoutLease: CreatorContestPayoutLease | null = null;
 
   try {
     let paidStatusReversalSummary: {
@@ -104,13 +111,30 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
-      await request.json();
+    const {
+      submissionId,
+      action,
+      reason,
+      paymentDetails,
+      skipWalletDebit,
+      walletDebitBypassToken,
+      qualityScore,
+    } = await request.json();
 
     if (!submissionId || !action) {
       return NextResponse.json(
         { error: "Submission ID and action are required" },
         { status: 400 },
+      );
+    }
+
+    if (skipWalletDebit === true) {
+      return NextResponse.json(
+        {
+          error:
+            "skipWalletDebit is not accepted from clients. Wallet reversals must be authorized by the bulk endpoint.",
+        },
+        { status: 403 },
       );
     }
 
@@ -194,6 +218,15 @@ export async function POST(request: Request) {
     } else {
       currentUserId = adminUser?.id || "";
     }
+
+    const walletDebitWasHandledByBulk =
+      typeof walletDebitBypassToken === "string" &&
+      verifyBulkVerifyWalletDebitBypass({
+        token: walletDebitBypassToken,
+        actorId: currentUserId,
+        action: String(action),
+        submissionId: String(submissionId),
+      });
 
     // Fetch the submission to verify it exists
     const { data: submission, error: submissionError } = await supabase
@@ -336,6 +369,20 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+    }
+
+    if (isPaymentAction) {
+      const leaseResult = await acquireCreatorContestPayoutLease({
+        contestId: String(submissionFull.contest_id),
+        creatorId: String(submissionFull.creator_id),
+      });
+      if (!leaseResult.ok) {
+        return NextResponse.json(
+          { error: leaseResult.error },
+          { status: leaseResult.busy ? 409 : 500 },
+        );
+      }
+      payoutLease = leaseResult.lease;
     }
 
     const shouldMarkPaid =
@@ -1997,7 +2044,7 @@ export async function POST(request: Request) {
         };
       }
 
-      if (reversalAmount > 0 && !skipWalletDebit) {
+      if (reversalAmount > 0 && !walletDebitWasHandledByBulk) {
         const { data: reversalProfile } = await supabaseAdmin
           .from("creator_profiles")
           .select("withdrawable_balance")
@@ -2185,6 +2232,8 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }
 

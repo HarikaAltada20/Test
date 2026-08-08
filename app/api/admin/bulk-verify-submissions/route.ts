@@ -6,8 +6,7 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
 import {
   assertBulkVerifyWalletContinuationSigningReady,
-  issueBulkVerifyWalletContinuation,
-  verifyBulkVerifyWalletContinuation,
+  issueBulkVerifyWalletDebitBypass,
 } from "@/lib/bulk-verify-wallet-continuation";
 
 const PAYMENT_BULK_ACTIONS = new Set([
@@ -153,14 +152,11 @@ export async function POST(request: Request) {
       reason,
       paymentDetails,
       qualityScore,
-      /** When set, wallet reversal runs once for this full set (not just this verify chunk). */
+      /** @deprecated Full-selection preflight is unsafe in serverless requests. */
       walletReversalSubmissionIds,
-      /**
-       * Signed continuation from a prior chunk that already ran wallet preflight.
-       * Do not accept a client boolean — that would allow skipping wallet debit.
-       */
+      /** @deprecated Continuations are no longer accepted; each bounded chunk reverses itself. */
       walletReversalContinuation,
-      /** @deprecated Rejected — use walletReversalContinuation instead. */
+      /** @deprecated Never accepted from clients. */
       skipWalletReversal,
     } = await request.json();
 
@@ -170,20 +166,32 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-
-    if (skipWalletReversal === true && !walletReversalContinuation) {
+    if (submissionIds.length > 10) {
       return NextResponse.json(
         {
           error:
-            "skipWalletReversal is not allowed. Pass walletReversalContinuation from the first chunk response.",
+            "At most 10 submissions may be processed per request. Split larger selections into bounded chunks.",
+        },
+        { status: 413 },
+      );
+    }
+
+    if (
+      skipWalletReversal === true ||
+      walletReversalContinuation ||
+      (Array.isArray(walletReversalSubmissionIds) &&
+        walletReversalSubmissionIds.length > 0)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Wallet reversal continuations and full-selection preflights are no longer accepted. Send only the bounded submissionIds chunk.",
         },
         { status: 400 },
       );
     }
 
-    const walletIdsForOwnership = Array.isArray(walletReversalSubmissionIds)
-      ? walletReversalSubmissionIds.map(String).filter(Boolean)
-      : [];
+    const walletIdsForOwnership: string[] = [];
 
     let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
     if (action === "verified") {
@@ -273,53 +281,26 @@ export async function POST(request: Request) {
       }
     >();
 
-    let forceSkipWalletDebit = false;
-    let walletReversalContinuationOut: string | undefined;
-    let walletContinuationIssueError: string | undefined;
-
-    if (walletReversalContinuation) {
-      const verified = verifyBulkVerifyWalletContinuation({
-        token: walletReversalContinuation,
-        actorId,
-        action: String(action),
-        chunkSubmissionIds: submissionIds.map(String),
-        reversalSubmissionIds: walletIdsForOwnership,
-      });
-      if (!verified.ok) {
-        return NextResponse.json({ error: verified.error }, { status: 403 });
-      }
-      // Full preflight already debited; skip wallet debit for every ID in later chunks.
-      forceSkipWalletDebit = true;
-    } else if (isPaidReversalBulkAction(action)) {
+    if (isPaidReversalBulkAction(action)) {
       const supabaseAdmin = createAdminClient();
-      const reversalIds =
-        walletIdsForOwnership.length > 0
-          ? walletIdsForOwnership
-          : submissionIds.map(String);
+      const reversalIds = submissionIds.map(String);
 
-      // Chunked paid reversals must pass walletReversalSubmissionIds so we can
-      // debit once and issue a continuation token. Unpaid moderation still runs
-      // wallet preflight on the chunk only (no-op when nothing is paid).
-      const isChunkedWalletPreflight = walletIdsForOwnership.length > 0;
-
-      // Ensure we can sign continuation BEFORE debiting wallets (avoids
-      // "money moved, token failed" when signing secret is missing).
-      if (isChunkedWalletPreflight) {
-        try {
-          assertBulkVerifyWalletContinuationSigningReady();
-        } catch (secretErr) {
-          console.error(
-            "[bulk-verify-submissions] Wallet continuation signing not ready:",
-            secretErr,
-          );
-          return NextResponse.json(
-            {
-              error:
-                "Cannot start chunked wallet reversal: server signing secret is not configured (BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET).",
-            },
-            { status: 500 },
-          );
-        }
+      // Every per-item call needs an unforgeable, short-lived authorization to
+      // skip the debit already completed by this bounded preflight.
+      try {
+        assertBulkVerifyWalletContinuationSigningReady();
+      } catch (secretErr) {
+        console.error(
+          "[bulk-verify-submissions] Wallet bypass signing not ready:",
+          secretErr,
+        );
+        return NextResponse.json(
+          {
+            error:
+              "Cannot start wallet reversal: server signing secret is not configured (BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET).",
+          },
+          { status: 500 },
+        );
       }
 
       const walletResult = await applyBulkDualRewardsWalletReversals({
@@ -352,27 +333,6 @@ export async function POST(request: Request) {
         bulkRefundSummaryById.set(id, summary);
       });
 
-      // Later client chunks must present this signed token to skip re-debit.
-      // If signing fails after debit, still process THIS chunk (skipWalletDebitIds
-      // is already populated). Client stops later chunks when continuation is missing.
-      if (isChunkedWalletPreflight) {
-        try {
-          walletReversalContinuationOut = issueBulkVerifyWalletContinuation({
-            actorId,
-            action: String(action),
-            reversalIds,
-          });
-        } catch (tokenErr) {
-          console.error(
-            "[bulk-verify-submissions] Failed to issue wallet continuation token:",
-            tokenErr,
-          );
-          walletContinuationIssueError =
-            tokenErr instanceof Error
-              ? tokenErr.message
-              : "Failed to issue wallet reversal continuation token";
-        }
-      }
     }
 
     const results: { id: string; data: unknown }[] = [];
@@ -398,9 +358,16 @@ export async function POST(request: Request) {
                 paymentDetails,
                 qualityScore:
                   action === "verified" ? resolvedBulkQualityScore : undefined,
-                skipWalletDebit:
-                  forceSkipWalletDebit ||
-                  skipWalletDebitIds.has(String(id)),
+                ...(skipWalletDebitIds.has(String(id))
+                  ? {
+                      walletDebitBypassToken:
+                        issueBulkVerifyWalletDebitBypass({
+                          actorId,
+                          action: String(action),
+                          submissionId: String(id),
+                        }),
+                    }
+                  : {}),
               }),
             });
 
@@ -450,22 +417,13 @@ export async function POST(request: Request) {
         : undefined;
 
     return NextResponse.json({
-      success: errors.length === 0 && !walletContinuationIssueError,
+      success: errors.length === 0,
       processed: results.length,
       failed: errors.length,
       results,
       errors,
       ...(walletRefundSummaries
         ? { wallet_refund_summaries: walletRefundSummaries }
-        : {}),
-      ...(walletReversalContinuationOut
-        ? { wallet_reversal_continuation: walletReversalContinuationOut }
-        : {}),
-      ...(walletContinuationIssueError
-        ? {
-            error: `Wallet reversal succeeded and this chunk was processed, but continuation token could not be issued (${walletContinuationIssueError}). Do not start a new selection — re-run the same bulk action after fixing signing secrets, or contact support. Funds were already reversed for the full selection.`,
-            wallet_reversal_continuation_error: walletContinuationIssueError,
-          }
         : {}),
     });
   } catch (error: unknown) {

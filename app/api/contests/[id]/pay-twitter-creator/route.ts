@@ -9,6 +9,11 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 /** Split total cents across rows by non-negative weights; remainder by largest fractional parts. Equal split when all weights are 0. */
 function distributeCentsByWeights(
@@ -64,6 +69,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let payoutLease: CreatorContestPayoutLease | null = null;
   try {
     const supabase = await createClient();
     const {
@@ -144,6 +150,18 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    const leaseResult = await acquireCreatorContestPayoutLease({
+      contestId,
+      creatorId: String(creatorId),
+    });
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        { error: leaseResult.error },
+        { status: leaseResult.busy ? 409 : 500 },
+      );
+    }
+    payoutLease = leaseResult.lease;
 
     const supabaseAdmin = createAdminClient();
 
@@ -936,5 +954,7 @@ export async function POST(
       { error: error?.message || "Internal server error" },
       { status: 500 },
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }

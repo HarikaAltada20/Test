@@ -2,6 +2,8 @@ import { createHash, createHmac, timingSafeEqual } from "crypto";
 
 const TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const TOKEN_VERSION = 2 as const;
+const WALLET_DEBIT_BYPASS_VERSION = 1 as const;
+const WALLET_DEBIT_BYPASS_TTL_MS = 2 * 60 * 1000;
 
 /**
  * Compact continuation payload: stores a hash of the preflight ID set instead of
@@ -63,6 +65,79 @@ function safeEqualString(a: string, b: string): boolean {
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
   return timingSafeEqual(bufA, bufB);
+}
+
+type WalletDebitBypassPayload = {
+  v: typeof WALLET_DEBIT_BYPASS_VERSION;
+  purpose: "bulk-verify-wallet-debit-bypass";
+  actorId: string;
+  action: string;
+  submissionId: string;
+  exp: number;
+};
+
+/**
+ * Authorize exactly one in-process verify call after the bulk route has already
+ * reversed that submission's wallet amount. This replaces the public
+ * `skipWalletDebit` boolean, which a caller could forge.
+ */
+export function issueBulkVerifyWalletDebitBypass(params: {
+  actorId: string;
+  action: string;
+  submissionId: string;
+  ttlMs?: number;
+}): string {
+  const payload: WalletDebitBypassPayload = {
+    v: WALLET_DEBIT_BYPASS_VERSION,
+    purpose: "bulk-verify-wallet-debit-bypass",
+    actorId: String(params.actorId),
+    action: String(params.action),
+    submissionId: String(params.submissionId),
+    exp: Date.now() + (params.ttlMs ?? WALLET_DEBIT_BYPASS_TTL_MS),
+  };
+  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString(
+    "base64url",
+  );
+  return `${encoded}.${signEncodedPayload(encoded)}`;
+}
+
+export function verifyBulkVerifyWalletDebitBypass(params: {
+  token: unknown;
+  actorId: string;
+  action: string;
+  submissionId: string;
+}): boolean {
+  if (typeof params.token !== "string") return false;
+  const dot = params.token.indexOf(".");
+  if (dot <= 0) return false;
+  const encoded = params.token.slice(0, dot);
+  const signature = params.token.slice(dot + 1);
+  if (!signature) return false;
+
+  let expectedSignature: string;
+  try {
+    expectedSignature = signEncodedPayload(encoded);
+  } catch {
+    return false;
+  }
+  if (!safeEqualString(signature, expectedSignature)) return false;
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    ) as WalletDebitBypassPayload;
+    return (
+      payload.v === WALLET_DEBIT_BYPASS_VERSION &&
+      payload.purpose === "bulk-verify-wallet-debit-bypass" &&
+      payload.actorId === String(params.actorId) &&
+      payload.action === String(params.action) &&
+      payload.submissionId === String(params.submissionId) &&
+      typeof payload.exp === "number" &&
+      Date.now() <= payload.exp
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -55,6 +55,23 @@ describe("non-twitter leaderboard submission ranking", () => {
     assert.equal(map.has("d"), false);
   });
 
+  it("preserves competition ranking for equal view counts", () => {
+    const map = buildLeaderboardPrizeCentsBySubmissionId(
+      [
+        { id: "a", views: 300, status: "verified" },
+        { id: "b", views: 200, status: "verified" },
+        { id: "c", views: 200, status: "verified" },
+      ],
+      [
+        { position: 1, amount: 10000 },
+        { position: 2, amount: 5000 },
+      ],
+    );
+    assert.equal(map.get("a"), 10000);
+    assert.equal(map.get("b"), 5000);
+    assert.equal(map.get("c"), 5000);
+  });
+
   it("maps rank to prize cents", () => {
     const prizes = [
       { position: 1, amount: 10000 },

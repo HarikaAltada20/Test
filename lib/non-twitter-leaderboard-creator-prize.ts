@@ -64,6 +64,20 @@ export function rankLeaderboardSubmissionsByViews(
     });
 }
 
+/** Competition rank: equal view counts share a rank; the next rank is skipped. */
+function leaderboardRankAtIndex(
+  ranked: readonly LeaderboardRankableSubmission[],
+  index: number,
+): number {
+  if (index <= 0) return 1;
+  const currentViews = Math.max(0, Number(ranked[index]?.views) || 0);
+  for (let i = index - 1; i >= 0; i--) {
+    const previousViews = Math.max(0, Number(ranked[i]?.views) || 0);
+    if (previousViews !== currentViews) return i + 2;
+  }
+  return 1;
+}
+
 /** Map each eligible submission id → prize cents for its contest-wide rank. */
 export function buildLeaderboardPrizeCentsBySubmissionId(
   rows: readonly LeaderboardRankableSubmission[],
@@ -72,7 +86,13 @@ export function buildLeaderboardPrizeCentsBySubmissionId(
   const ranked = rankLeaderboardSubmissionsByViews(rows);
   const map = new Map<string, number>();
   ranked.forEach((row, index) => {
-    map.set(String(row.id), prizeCentsForLeaderboardRank(prizes, index + 1));
+    map.set(
+      String(row.id),
+      prizeCentsForLeaderboardRank(
+        prizes,
+        leaderboardRankAtIndex(ranked, index),
+      ),
+    );
   });
   return map;
 }
@@ -215,7 +235,8 @@ export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
     const rankIndex = ranked.findIndex((row) => String(row.id) === submissionId);
     return {
       prizeCents: cachedPrize,
-      rank: rankIndex >= 0 ? rankIndex + 1 : null,
+      rank:
+        rankIndex >= 0 ? leaderboardRankAtIndex(ranked, rankIndex) : null,
     };
   }
 
@@ -234,7 +255,7 @@ export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
     return { prizeCents: 0, rank: null };
   }
 
-  const rank = rankIndex + 1;
+  const rank = leaderboardRankAtIndex(ranked, rankIndex);
   return {
     prizeCents: prizeCentsForLeaderboardRank(prizes, rank),
     rank,

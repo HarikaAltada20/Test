@@ -121,11 +121,6 @@ import {
   buildLeaderboardPrizeCentsBySubmissionId,
   isTwitterTextImageLeaderboardContest,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
-import {
-  clearBulkVerifyWalletContinuation,
-  loadBulkVerifyWalletContinuation,
-  saveBulkVerifyWalletContinuation,
-} from "@/lib/bulk-verify-wallet-continuation-storage";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
   parseSubmissionMetadata,
@@ -7268,13 +7263,7 @@ export default function ContestDetailClient({
     try {
       const results: any[] = [];
       /** Keep each bulk-verify request small enough for Supabase filters + serverless time. */
-      const BULK_VERIFY_CLIENT_CHUNK_SIZE = 50;
-      // Only run one-shot full-set wallet preflight when paid rows may be reversed.
-      // Unpaid verify/reject does not need signing secrets or continuation tokens.
-      const needsChunkedWalletPreflight =
-        isModerationBulkAction &&
-        selectionIncludesPaidRow(currentSubmissions, normalIds);
-
+      const BULK_VERIFY_CLIENT_CHUNK_SIZE = 10;
       if (normalIds.length > 0) {
         // Map action for normal submissions
         const normalAction =
@@ -7283,30 +7272,6 @@ export default function ContestDetailClient({
             : action === "reject"
               ? "rejected"
               : action;
-
-        const continuationStorageParams = {
-          contestId: String(contestId || ""),
-          action: String(normalAction),
-          reversalSubmissionIds: normalIds,
-        };
-
-        // Resume after mid-run failure / reload: reuse signed token so wallets
-        // are not reverse-debited twice for the same paid selection.
-        let walletReversalContinuation: string | undefined =
-          needsChunkedWalletPreflight
-            ? loadBulkVerifyWalletContinuation(continuationStorageParams)
-            : undefined;
-
-        let chunkHardFailed = false;
-        let chunkHadPartialFailures = false;
-        const chunkHasPartialFailures = (data: {
-          success?: boolean;
-          failed?: number;
-          errors?: unknown[];
-        }) =>
-          data?.success === false ||
-          (typeof data?.failed === "number" && data.failed > 0) ||
-          (Array.isArray(data?.errors) && data.errors.length > 0);
 
         for (
           let i = 0;
@@ -7317,7 +7282,6 @@ export default function ContestDetailClient({
             i,
             i + BULK_VERIFY_CLIENT_CHUNK_SIZE,
           );
-          const isFirstChunk = i === 0;
           const res = await fetch("/api/admin/bulk-verify-submissions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -7326,77 +7290,21 @@ export default function ContestDetailClient({
               action: normalAction,
               reason,
               qualityScore: options?.qualityScore,
-              // One wallet reversal for the full paid selection → one money_transactions
-              // row per creator (not one per 50-ID verify chunk). Later chunks must
-              // present the signed continuation + the same full ID set (hashed in token).
-              ...(needsChunkedWalletPreflight
-                ? { walletReversalSubmissionIds: normalIds }
-                : {}),
-              ...(walletReversalContinuation
-                ? { walletReversalContinuation }
-                : {}),
             }),
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok && !data?.results) {
             const baseError =
               data?.error || `Bulk verify failed (HTTP ${res.status})`;
-            const retryHint =
-              needsChunkedWalletPreflight && walletReversalContinuation
-                ? " Wallet funds were already reversed for this selection — re-run the same bulk action to finish remaining rows (continuation is saved in this browser session)."
-                : needsChunkedWalletPreflight && isFirstChunk
-                  ? " If wallets were reversed, re-run the same selection once continuation is available, or contact support."
-                  : "";
             results.push({
               success: false,
-              error: `${baseError}${retryHint}`,
+              error: baseError,
             });
             // Always stop on hard failure — continuing would skip failed IDs.
-            chunkHardFailed = true;
             break;
           }
 
-          if (typeof data?.wallet_reversal_continuation === "string") {
-            const continuationToken = data.wallet_reversal_continuation;
-            walletReversalContinuation = continuationToken;
-            if (needsChunkedWalletPreflight) {
-              saveBulkVerifyWalletContinuation({
-                ...continuationStorageParams,
-                token: continuationToken,
-              });
-            }
-          }
-          if (chunkHasPartialFailures(data)) {
-            chunkHadPartialFailures = true;
-          }
           results.push(data);
-          const hasMoreChunks =
-            i + BULK_VERIFY_CLIENT_CHUNK_SIZE < normalIds.length;
-          if (
-            isFirstChunk &&
-            hasMoreChunks &&
-            needsChunkedWalletPreflight &&
-            !walletReversalContinuation
-          ) {
-            results.push({
-              success: false,
-              error:
-                typeof data?.error === "string" && data.error
-                  ? data.error
-                  : "Missing wallet reversal continuation for remaining verify chunks. This chunk may already be processed and wallets reversed — re-run the same selection after fixing BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET (do not change the selection).",
-            });
-            chunkHardFailed = true;
-            break;
-          }
-        }
-
-        if (
-          needsChunkedWalletPreflight &&
-          !chunkHardFailed &&
-          !chunkHadPartialFailures
-        ) {
-          // All chunks fully succeeded — drop saved token so a future selection starts clean.
-          clearBulkVerifyWalletContinuation(continuationStorageParams);
         }
       }
 

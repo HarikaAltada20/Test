@@ -21,6 +21,11 @@ import {
   sumBonusRefunds,
 } from "@/lib/twitter-bonus-accounting";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 type PaymentType = "standard" | "bonus" | "both";
 
@@ -36,6 +41,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let payoutLease: CreatorContestPayoutLease | null = null;
   try {
     const supabase = await createClient();
     const {
@@ -123,6 +129,18 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    const leaseResult = await acquireCreatorContestPayoutLease({
+      contestId,
+      creatorId,
+    });
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        { error: leaseResult.error },
+        { status: leaseResult.busy ? 409 : 500 },
+      );
+    }
+    payoutLease = leaseResult.lease;
 
     const cpmContest = (contest.contest_based_details as any)?.cpm_contest;
     if (!cpmContest || typeof cpmContest.cpm_rate_usd !== "number") {
@@ -866,5 +884,7 @@ export async function POST(
       { error: error?.message || "Internal server error" },
       { status: 500 }
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }

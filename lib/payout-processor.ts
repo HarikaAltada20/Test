@@ -5,6 +5,11 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { isTwitterTextImageLeaderboardContest } from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 export interface PayoutJobResult {
   id: string;
@@ -36,6 +41,7 @@ export async function processQueuedPayouts(
   const results: PayoutJobResult[] = [];
 
   for (const job of jobs) {
+    let payoutLease: CreatorContestPayoutLease | null = null;
     try {
       const { data: claimedJob, error: claimErr } = await supabaseAdmin
         .from("payout_jobs")
@@ -84,6 +90,28 @@ export async function processQueuedPayouts(
           "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not queued payout jobs.",
         );
       }
+
+      const leaseResult = await acquireCreatorContestPayoutLease({
+        contestId: String(sub.contest_id),
+        creatorId: String(sub.creator_id),
+      });
+      if (!leaseResult.ok) {
+        if (leaseResult.busy) {
+          await supabaseAdmin
+            .from("payout_jobs")
+            .update({ status: "queued" })
+            .eq("id", job.id)
+            .eq("status", "processing");
+          results.push({
+            id: job.id,
+            status: "error",
+            error: leaseResult.error,
+          });
+          continue;
+        }
+        throw new Error(leaseResult.error);
+      }
+      payoutLease = leaseResult.lease;
 
       // Compute reward amount with support for custom payload
       let rewardAmount = sub.earnings || 0; // cents
@@ -264,9 +292,15 @@ export async function processQueuedPayouts(
         }
 
         // 2) Mark submission paid only after the wallet credit is known to be safe.
+        const paidAt = new Date().toISOString();
         const { error: paidUpdateErr } = await supabaseAdmin
           .from("submissions")
-          .update({ earnings: rewardAmount, status: "paid" })
+          .update({
+            earnings: rewardAmount,
+            status: "paid",
+            paid: true,
+            paid_at: paidAt,
+          })
           .eq("id", sub.id);
         if (paidUpdateErr) {
           throw new Error(
@@ -296,6 +330,8 @@ export async function processQueuedPayouts(
         })
         .eq("id", job.id);
       results.push({ id: job.id, status: "error", error: message });
+    } finally {
+      await releaseCreatorContestPayoutLease(payoutLease);
     }
   }
 

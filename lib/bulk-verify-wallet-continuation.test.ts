@@ -4,7 +4,9 @@ import {
   assertBulkVerifyWalletContinuationSigningReady,
   hashReversalIds,
   issueBulkVerifyWalletContinuation,
+  issueBulkVerifyWalletDebitBypass,
   verifyBulkVerifyWalletContinuation,
+  verifyBulkVerifyWalletDebitBypass,
 } from "./bulk-verify-wallet-continuation";
 
 describe("bulk verify wallet continuation token", () => {
@@ -223,5 +225,51 @@ describe("bulk verify wallet continuation token", () => {
         process.env.BULK_VERIFY_WALLET_CONTINUATION_SECRET = prevCont;
       }
     }
+  });
+
+  it("scopes wallet debit bypass authorization to one actor, action, and submission", () => {
+    withTestSecret(() => {
+      const token = issueBulkVerifyWalletDebitBypass({
+        actorId: "admin-1",
+        action: "rejected",
+        submissionId: "s1",
+      });
+      assert.equal(
+        verifyBulkVerifyWalletDebitBypass({
+          token,
+          actorId: "admin-1",
+          action: "rejected",
+          submissionId: "s1",
+        }),
+        true,
+      );
+      assert.equal(
+        verifyBulkVerifyWalletDebitBypass({
+          token,
+          actorId: "admin-2",
+          action: "rejected",
+          submissionId: "s1",
+        }),
+        false,
+      );
+      assert.equal(
+        verifyBulkVerifyWalletDebitBypass({
+          token,
+          actorId: "admin-1",
+          action: "pending",
+          submissionId: "s1",
+        }),
+        false,
+      );
+      assert.equal(
+        verifyBulkVerifyWalletDebitBypass({
+          token,
+          actorId: "admin-1",
+          action: "rejected",
+          submissionId: "s2",
+        }),
+        false,
+      );
+    });
   });
 });

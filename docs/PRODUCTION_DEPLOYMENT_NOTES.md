@@ -4,18 +4,22 @@ Short checklist for deploying changes that affect production.
 
 ---
 
-## Bulk verify wallet continuation (creator-wise / large paid reversals)
+## Bulk payouts and paid-reversal authorization
 
-**When:** Deploying chunked bulk verify/reject/pending for paid submissions (wallet reversal continuation tokens).
+**When:** Deploying creator-wise bulk payouts or chunked verify/reject/pending for paid submissions.
+
+**Required migration before app traffic:**
+
+- `SUPABASE/migrations/20260808120000_creator_contest_payout_leases.sql`
+
+This serializes rank/cap/ledger calculations for the same contest and creator across API routes and workers.
 
 **Required env (pick one):**
 
-- Prefer: `BULK_VERIFY_WALLET_CONTINUATION_SECRET` — dedicated HMAC secret for continuation tokens
-- Fallback: `CRON_SECRET` — reused if the dedicated secret is unset
+- Prefer: `BULK_VERIFY_WALLET_CONTINUATION_SECRET` — dedicated HMAC secret for short-lived internal wallet-debit bypass authorization
+- Fallback: `CRON_SECRET`
 
-Without either secret, the **first** chunk of a paid bulk reversal fails **before** debiting wallets (safe), but admins cannot complete large paid selections in chunks.
-
-**After deploy:** Confirm at least `CRON_SECRET` is set in production (already required for crons). Optionally set `BULK_VERIFY_WALLET_CONTINUATION_SECRET` so continuation signing is isolated from cron auth.
+Each client chunk performs its own bounded wallet reversal. Full-selection continuation tokens are rejected. Without either secret, reversal fails before wallets are changed.
 
 ---
 

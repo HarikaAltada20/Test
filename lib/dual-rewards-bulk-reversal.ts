@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import {
@@ -459,9 +460,31 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     }
 
     if (debitCents > 0) {
+      const debitOperationKey = `bulk_paid_reversal:v1:${createHash("sha256")
+        .update(
+          JSON.stringify({
+            contestId,
+            creatorId,
+            submissionIds: groupRows
+              .map((row) => String(row.id))
+              .sort((a, b) => a.localeCompare(b)),
+            rewardTransactionIds: rewardTxns
+              .map((row: any) => String(row.id || ""))
+              .filter(Boolean)
+              .sort((a: string, b: string) => a.localeCompare(b)),
+            refundTransactionIds: refundTxns
+              .map((row: any) => String(row.id || ""))
+              .filter(Boolean)
+              .sort((a: string, b: string) => a.localeCompare(b)),
+            debitCents,
+          }),
+        )
+        .digest("hex")
+        .slice(0, 48)}`;
       const debitRes = await debitCreatorWithdrawableBalance(
         creatorId,
         debitCents,
+        { idempotencyKey: debitOperationKey },
       );
       if (!debitRes.success) {
         for (const row of groupRows) {

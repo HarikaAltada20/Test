@@ -33,9 +33,15 @@ import {
   bulkPaymentRollbackRevertFlags,
   splitFreshBulkCreditCents,
 } from "@/lib/bulk-payment-rollback";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
+  let payoutLease: CreatorContestPayoutLease | null = null;
 
   try {
     // Authenticate user
@@ -163,6 +169,18 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    const leaseResult = await acquireCreatorContestPayoutLease({
+      contestId: contest_id,
+      creatorId: creator_id,
+    });
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        { error: leaseResult.error },
+        { status: leaseResult.busy ? 409 : 500 },
+      );
+    }
+    payoutLease = leaseResult.lease;
 
     if (contest.contest_type === "dual_rewards") {
       const dualResult = await executeDualRewardsBulkPayment({
@@ -1003,6 +1021,7 @@ export async function POST(request: NextRequest) {
           : !creditResult.alreadyApplied && payableTotalAmount > 0
             ? payableTotalAmount
             : 0;
+      let rollbackFailedError: string | undefined;
       if (rollbackCents > 0) {
         const rollback = await debitCreatorWithdrawableBalance(
           creator_id,
@@ -1032,47 +1051,59 @@ export async function POST(request: NextRequest) {
             },
           );
         } else {
+          rollbackFailedError =
+            rollback.error || "Unknown wallet rollback failure";
           console.error(
             "[bulk-payment] CRITICAL: wallet rollback failed after submission update failure:",
-            rollback.error,
+            rollbackFailedError,
           );
         }
 
-        for (const applied of appliedUpdates) {
-          const revertPayload: Record<string, unknown> = {};
-          const { revertPrize, revertBonus } = bulkPaymentRollbackRevertFlags({
-            paymentType: payment_type as "standard" | "bonus" | "both",
-            prizeRollbackCents,
-            bonusRollbackCents,
-            rollbackCents,
-            hadBonusPaidUpdate: applied.bonus_paid !== undefined,
-          });
-          // Only clear prize flags on rows we actually marked paid this request.
-          if (revertPrize && applied.paid === true) {
-            revertPayload.earnings = null;
-            revertPayload.paid = false;
-            revertPayload.paid_at = null;
-            revertPayload.status = "verified";
-          }
-          if (revertBonus) {
-            revertPayload.bonus_paid = false;
-            revertPayload.bonus_paid_at = null;
-            revertPayload.bonus_amount = null;
-          }
-          if (Object.keys(revertPayload).length > 0) {
-            await supabaseAdmin
-              .from("submissions")
-              .update(revertPayload)
-              .eq("id", applied.id);
+        // Never make successfully updated rows look unpaid while the wallet
+        // still contains their credit. Preserve them for deterministic retry.
+        if (!rollbackFailedError) {
+          for (const applied of appliedUpdates) {
+            const revertPayload: Record<string, unknown> = {};
+            const { revertPrize, revertBonus } =
+              bulkPaymentRollbackRevertFlags({
+                paymentType: payment_type as "standard" | "bonus" | "both",
+                prizeRollbackCents,
+                bonusRollbackCents,
+                rollbackCents,
+                hadBonusPaidUpdate: applied.bonus_paid !== undefined,
+              });
+            // Only clear prize flags on rows we actually marked paid this request.
+            if (revertPrize && applied.paid === true) {
+              revertPayload.earnings = null;
+              revertPayload.paid = false;
+              revertPayload.paid_at = null;
+              revertPayload.status = "verified";
+            }
+            if (revertBonus) {
+              revertPayload.bonus_paid = false;
+              revertPayload.bonus_paid_at = null;
+              revertPayload.bonus_amount = null;
+            }
+            if (Object.keys(revertPayload).length > 0) {
+              await supabaseAdmin
+                .from("submissions")
+                .update(revertPayload)
+                .eq("id", applied.id);
+            }
           }
         }
       }
 
       return NextResponse.json(
         {
-          error: creditResult.alreadyApplied
-            ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
-            : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+          error: rollbackFailedError
+            ? "CRITICAL: creator wallet was credited and automatic rollback failed. Successfully updated rows were preserved as paid; do not retry with a different selection. Contact support immediately."
+            : creditResult.alreadyApplied
+              ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
+              : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+          ...(rollbackFailedError
+            ? { wallet_rollback_error: rollbackFailedError }
+            : {}),
           updateFailures,
           transaction_id: creditResult.transactionId,
           already_applied_idempotent: Boolean(creditResult.alreadyApplied),
@@ -1139,5 +1170,7 @@ export async function POST(request: NextRequest) {
       { error: "Internal server error", details: error.message },
       { status: 500 },
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }
