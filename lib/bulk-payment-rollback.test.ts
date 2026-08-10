@@ -1,8 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildLedgerScopedReversalDebitIdempotencyKey,
   buildWalletRollbackDebitIdempotencyKey,
   bulkPaymentRollbackRevertFlags,
+  sortUniqueTransactionIds,
   splitFreshBulkCreditCents,
 } from "./bulk-payment-rollback";
 
@@ -31,6 +33,63 @@ describe("buildWalletRollbackDebitIdempotencyKey", () => {
     });
     assert.notEqual(a, b);
     assert.match(a, /^wallet_rollback:v1:/);
+  });
+});
+
+describe("buildLedgerScopedReversalDebitIdempotencyKey", () => {
+  const base = {
+    prefix: "verify_reversal:v1",
+    reason: "paid_status_reversal",
+    scope: {
+      submissionId: "sub-1",
+      creatorId: "creator-1",
+      contestId: "contest-1",
+      action: "pending",
+    },
+    debitCents: 1000,
+  };
+
+  it("is stable for the same ledger fingerprint (retry-safe)", () => {
+    const a = buildLedgerScopedReversalDebitIdempotencyKey({
+      ...base,
+      rewardTransactionIds: ["r2", "r1"],
+      refundTransactionIds: ["f1"],
+    });
+    const b = buildLedgerScopedReversalDebitIdempotencyKey({
+      ...base,
+      // Different order / duplicate ids must not change the key.
+      rewardTransactionIds: ["r1", "r1", "r2"],
+      refundTransactionIds: ["f1"],
+    });
+    assert.equal(a, b);
+    assert.match(a, /^wallet_rollback:v1:verify_reversal:v1:/);
+  });
+
+  it("changes after a new pay→reverse cycle adds reward or refund rows", () => {
+    const firstCycle = buildLedgerScopedReversalDebitIdempotencyKey({
+      ...base,
+      rewardTransactionIds: ["reward-1"],
+      refundTransactionIds: [],
+    });
+    const secondCycle = buildLedgerScopedReversalDebitIdempotencyKey({
+      ...base,
+      rewardTransactionIds: ["reward-1", "reward-2"],
+      refundTransactionIds: ["refund-1"],
+    });
+    assert.notEqual(firstCycle, secondCycle);
+  });
+
+  it("sortUniqueTransactionIds drops blanks and sorts", () => {
+    assert.deepEqual(
+      sortUniqueTransactionIds([
+        { id: "b" },
+        { id: "" },
+        { id: "a" },
+        { id: "b" },
+        { id: null },
+      ]),
+      ["a", "b"],
+    );
   });
 });
 
