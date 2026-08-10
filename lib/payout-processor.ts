@@ -1,22 +1,33 @@
-import { createAdminClient } from '@/utils/supabase/admin';
-import { MetricsService } from '@/lib/metrics-service';
-import { creditCreatorWithdrawableBalance, REVERSAL_TRANSACTION_REMARK } from '@/lib/payment-utils';
+import { createAdminClient } from "@/utils/supabase/admin";
+import { MetricsService } from "@/lib/metrics-service";
+import {
+  creditCreatorWithdrawableBalance,
+  REVERSAL_TRANSACTION_REMARK,
+} from "@/lib/payment-utils";
+import { isTwitterTextImageLeaderboardContest } from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 export interface PayoutJobResult {
   id: string;
-  status: 'done' | 'error';
+  status: "done" | "error";
   error?: string;
 }
 
 // Processes up to batchSize queued payout jobs. Returns per-job results.
-export async function processQueuedPayouts(batchSize: number = 10): Promise<PayoutJobResult[]> {
+export async function processQueuedPayouts(
+  batchSize: number = 10,
+): Promise<PayoutJobResult[]> {
   const supabaseAdmin = createAdminClient();
 
   const { data: jobs, error: jobsErr } = await supabaseAdmin
-    .from('payout_jobs')
-    .select('id, submission_id, requested_by, payload, status, created_at')
-    .eq('status', 'queued')
-    .order('created_at', { ascending: true })
+    .from("payout_jobs")
+    .select("id, submission_id, requested_by, payload, status, created_at")
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
     .limit(batchSize);
 
   if (jobsErr) {
@@ -30,111 +41,221 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
   const results: PayoutJobResult[] = [];
 
   for (const job of jobs) {
+    let payoutLease: CreatorContestPayoutLease | null = null;
     try {
       const { data: claimedJob, error: claimErr } = await supabaseAdmin
-        .from('payout_jobs')
-        .update({ status: 'processing' })
-        .eq('id', job.id)
-        .eq('status', 'queued')
-        .select('id')
+        .from("payout_jobs")
+        .update({ status: "processing" })
+        .eq("id", job.id)
+        .eq("status", "queued")
+        .select("id")
         .maybeSingle();
       if (claimErr) {
         throw new Error(`Failed to claim job: ${claimErr.message}`);
       }
       if (!claimedJob) {
-        results.push({ id: job.id, status: 'done' });
+        results.push({ id: job.id, status: "done" });
         continue;
       }
 
       // Load submission + contest
       const { data: sub, error: subErr } = await supabaseAdmin
-        .from('submissions')
-        .select('id, contest_id, creator_id, status, earnings, views')
-        .eq('id', job.submission_id)
+        .from("submissions")
+        .select("id, contest_id, creator_id, status, earnings, views")
+        .eq("id", job.submission_id)
         .single();
-      if (subErr || !sub) throw new Error(`Submission not found: ${subErr?.message || ''}`);
+      if (subErr || !sub)
+        throw new Error(`Submission not found: ${subErr?.message || ""}`);
 
       const { data: contest, error: contestErr } = await supabaseAdmin
-        .from('contests')
-        .select('title, contest_type, contest_based_details')
-        .eq('id', sub.contest_id)
+        .from("contests")
+        .select(
+          "title, contest_type, contest_format, platform, contest_based_details, max_earnings_per_creator",
+        )
+        .eq("id", sub.contest_id)
         .single();
-      if (contestErr || !contest) throw new Error(`Contest not found: ${contestErr?.message || ''}`);
+      if (contestErr || !contest)
+        throw new Error(`Contest not found: ${contestErr?.message || ""}`);
 
-      if ((contest as { contest_type?: string }).contest_type === 'dual_rewards') {
+      if (
+        (contest as { contest_type?: string }).contest_type === "dual_rewards"
+      ) {
         throw new Error(
-          'Dual rewards contests require per-component payout via admin verify-submission; queued payout jobs are not supported.',
+          "Dual rewards contests require per-component payout via admin verify-submission; queued payout jobs are not supported.",
         );
       }
 
+      if (isTwitterTextImageLeaderboardContest(contest)) {
+        throw new Error(
+          "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not queued payout jobs.",
+        );
+      }
+
+      const leaseResult = await acquireCreatorContestPayoutLease({
+        contestId: String(sub.contest_id),
+        creatorId: String(sub.creator_id),
+      });
+      if (!leaseResult.ok) {
+        if (leaseResult.busy) {
+          await supabaseAdmin
+            .from("payout_jobs")
+            .update({ status: "queued" })
+            .eq("id", job.id)
+            .eq("status", "processing");
+          results.push({
+            id: job.id,
+            status: "error",
+            error: leaseResult.error,
+          });
+          continue;
+        }
+        throw new Error(leaseResult.error);
+      }
+      payoutLease = leaseResult.lease;
+
       // Compute reward amount with support for custom payload
       let rewardAmount = sub.earnings || 0; // cents
-      let payoutType: 'custom' | 'standard' = 'standard';
+      let payoutType: "custom" | "standard" = "standard";
 
       // Parse job payload
       let payload: any = (job as any)?.payload;
-      if (typeof payload === 'string') {
-        try { payload = JSON.parse(payload); } catch { payload = undefined; }
+      if (typeof payload === "string") {
+        try {
+          payload = JSON.parse(payload);
+        } catch {
+          payload = undefined;
+        }
       }
 
-      if (payload?.isCustom && typeof payload?.amountInCents === 'number' && payload.amountInCents > 0) {
+      if (
+        payload?.isCustom &&
+        typeof payload?.amountInCents === "number" &&
+        payload.amountInCents > 0
+      ) {
         rewardAmount = payload.amountInCents;
-        payoutType = 'custom';
+        payoutType = "custom";
       }
 
       if (!rewardAmount || rewardAmount <= 0) {
         if ((contest as any).contest_type === "cpm") {
           const cpm = (contest as any)?.contest_based_details?.cpm_contest;
-          const rate = typeof cpm?.cpm_rate_usd === 'number' ? cpm.cpm_rate_usd : 0;
+          const rate =
+            typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
           let effectiveViews = sub.views || 0;
-          if (typeof cpm?.min_views === 'number' && effectiveViews < cpm.min_views) effectiveViews = 0;
-          if (typeof cpm?.max_views === 'number' && effectiveViews > cpm.max_views) effectiveViews = cpm.max_views;
-          rewardAmount = Math.round((effectiveViews * rate / 1000) * 100);
-        } else if ((contest as any).contest_type === 'leaderboard') {
-          const { count: higherViewsCount } = await supabaseAdmin
-            .from('submissions')
-            .select('id', { count: 'exact', head: true })
-            .eq('contest_id', sub.contest_id)
-            .in('status', ['verified', 'paid'])
-            .gt('views', sub.views || 0);
-          const rank = (higherViewsCount || 0) + 1;
-          const prizes = (contest as any)?.contest_based_details?.leaderboard_contest?.prizes || [];
-          const prizeForRank = prizes.find((p: any) => p.position === rank);
-          rewardAmount = prizeForRank?.amount || 0; // cents
+          if (
+            typeof cpm?.min_views === "number" &&
+            effectiveViews < cpm.min_views
+          )
+            effectiveViews = 0;
+          if (
+            typeof cpm?.max_views === "number" &&
+            effectiveViews > cpm.max_views
+          )
+            effectiveViews = cpm.max_views;
+          rewardAmount = Math.round(((effectiveViews * rate) / 1000) * 100);
+        } else if ((contest as any).contest_type === "leaderboard") {
+          const {
+            applyCreatorMaxEarningsCapCents,
+            computeNonTwitterLeaderboardSubmissionPrizeCents,
+            sumPaidEarningsCents,
+          } = await import("@/lib/non-twitter-leaderboard-creator-prize");
+          const { fetchContestSubmissionsAllPages } =
+            await import("@/lib/fetch-contest-submissions");
+          const prizes =
+            (contest as any)?.contest_based_details?.leaderboard_contest
+              ?.prizes || [];
+          const prizeResult =
+            await computeNonTwitterLeaderboardSubmissionPrizeCents({
+              supabaseAdmin,
+              contestId: sub.contest_id,
+              submissionId: sub.id,
+              views: sub.views,
+              prizes,
+            });
+          if (prizeResult.error) {
+            throw new Error(
+              `Failed to compute leaderboard prize: ${prizeResult.error}`,
+            );
+          }
+          rewardAmount = prizeResult.prizeCents;
+          const maxEarningsPerCreator =
+            Number((contest as any).max_earnings_per_creator) ||
+            Number(
+              (contest as any)?.contest_based_details?.leaderboard_contest
+                ?.max_earnings_per_creator,
+            ) ||
+            0;
+          if (rewardAmount > 0 && maxEarningsPerCreator > 0) {
+            const { data: paidRowsForCap, error: paidRowsForCapErr } =
+              await fetchContestSubmissionsAllPages(
+                supabaseAdmin,
+                sub.contest_id,
+                "earnings, paid",
+                {
+                  creatorId: sub.creator_id,
+                  paid: true,
+                  order: { column: "created_at", ascending: true },
+                },
+              );
+            if (paidRowsForCapErr) {
+              throw new Error(
+                `Failed to load creator paid earnings for cap: ${String(
+                  (paidRowsForCapErr as { message?: string })?.message ??
+                    paidRowsForCapErr,
+                )}`,
+              );
+            }
+            rewardAmount = applyCreatorMaxEarningsCapCents({
+              amountCents: rewardAmount,
+              alreadyPaidCents: sumPaidEarningsCents(
+                (paidRowsForCap || []) as Array<{
+                  earnings?: number | null;
+                  paid?: boolean | null;
+                }>,
+              ),
+              maxEarningsCents: maxEarningsPerCreator,
+            });
+          }
         }
       }
 
       if (rewardAmount > 0) {
         // 1) Idempotency-safe wallet crediting
         // Determine payout cycle based on prior rewards/refunds for this submission
-        const [{ data: existingRewards }, { data: existingRefunds }] = await Promise.all([
-          supabaseAdmin
-            .from('money_transactions')
-            .select('id')
-            .eq('user_id', sub.creator_id)
-            .eq('type', 'reward')
-            .contains('metadata', { submission_id: sub.id }),
-          supabaseAdmin
-            .from('money_transactions')
-            .select('id, remarks')
-            .eq('user_id', sub.creator_id)
-            .eq('type', 'refund')
-            .contains('metadata', { submission_id: sub.id })
-        ] as any);
+        const [{ data: existingRewards }, { data: existingRefunds }] =
+          await Promise.all([
+            supabaseAdmin
+              .from("money_transactions")
+              .select("id")
+              .eq("user_id", sub.creator_id)
+              .eq("type", "reward")
+              .contains("metadata", { submission_id: sub.id }),
+            supabaseAdmin
+              .from("money_transactions")
+              .select("id, remarks")
+              .eq("user_id", sub.creator_id)
+              .eq("type", "refund")
+              .contains("metadata", { submission_id: sub.id }),
+          ] as any);
 
         const rewardsCount = (existingRewards || []).length;
-        const refundsCount = (existingRefunds || [])
-          ?.filter((r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK)
-          .length || 0;
-        const nextCycle = rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
+        const refundsCount =
+          (existingRefunds || [])?.filter(
+            (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
+          ).length || 0;
+        const nextCycle =
+          rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
 
         // Avoid duplicate reward for the same cycle
         const { data: rewardInThisCycle } = await supabaseAdmin
-          .from('money_transactions')
-          .select('id')
-          .eq('user_id', sub.creator_id)
-          .eq('type', 'reward')
-          .contains('metadata', { submission_id: sub.id, payout_cycle: nextCycle });
+          .from("money_transactions")
+          .select("id")
+          .eq("user_id", sub.creator_id)
+          .eq("type", "reward")
+          .contains("metadata", {
+            submission_id: sub.id,
+            payout_cycle: nextCycle,
+          });
 
         if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
           const customRemarks = payload?.customRemarks as string | undefined;
@@ -145,9 +266,9 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
           const creditRes = await creditCreatorWithdrawableBalance(
             sub.creator_id,
             rewardAmount,
-            payoutType === 'custom'
-              ? `Custom contest payment credited - ${(contest as any)?.title || 'Contest'}`
-              : `Contest reward credited - ${(contest as any)?.title || 'Contest'}`,
+            payoutType === "custom"
+              ? `Custom contest payment credited - ${(contest as any)?.title || "Contest"}`
+              : `Contest reward credited - ${(contest as any)?.title || "Contest"}`,
             {
               idempotencyKey: contestRewardIdempotencyKey,
               remarks:
@@ -164,17 +285,27 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
             },
           );
           if (!creditRes.success) {
-            throw new Error(`Failed to credit creator wallet: ${creditRes.error}`);
+            throw new Error(
+              `Failed to credit creator wallet: ${creditRes.error}`,
+            );
           }
         }
 
         // 2) Mark submission paid only after the wallet credit is known to be safe.
+        const paidAt = new Date().toISOString();
         const { error: paidUpdateErr } = await supabaseAdmin
-          .from('submissions')
-          .update({ earnings: rewardAmount, status: 'paid' })
-          .eq('id', sub.id);
+          .from("submissions")
+          .update({
+            earnings: rewardAmount,
+            status: "paid",
+            paid: true,
+            paid_at: paidAt,
+          })
+          .eq("id", sub.id);
         if (paidUpdateErr) {
-          throw new Error(`Reward credited but failed to mark submission paid: ${paidUpdateErr.message}`);
+          throw new Error(
+            `Reward credited but failed to mark submission paid: ${paidUpdateErr.message}`,
+          );
         }
 
         // 3) Metrics are now updated automatically by database triggers when status changes to 'paid'
@@ -183,22 +314,26 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
       }
 
       await supabaseAdmin
-        .from('payout_jobs')
-        .update({ status: 'done', processed_at: new Date().toISOString() })
-        .eq('id', job.id);
+        .from("payout_jobs")
+        .update({ status: "done", processed_at: new Date().toISOString() })
+        .eq("id", job.id);
 
-      results.push({ id: job.id, status: 'done' });
+      results.push({ id: job.id, status: "done" });
     } catch (e: any) {
-      const message = e?.message || 'unknown error';
+      const message = e?.message || "unknown error";
       await supabaseAdmin
-        .from('payout_jobs')
-        .update({ status: 'error', error: message, processed_at: new Date().toISOString() })
-        .eq('id', job.id);
-      results.push({ id: job.id, status: 'error', error: message });
+        .from("payout_jobs")
+        .update({
+          status: "error",
+          error: message,
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      results.push({ id: job.id, status: "error", error: message });
+    } finally {
+      await releaseCreatorContestPayoutLease(payoutLease);
     }
   }
 
   return results;
 }
-
-

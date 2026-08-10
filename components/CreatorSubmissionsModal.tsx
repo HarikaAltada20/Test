@@ -181,6 +181,11 @@ interface CreatorSubmissionsModalProps {
   isAdminView?: boolean;
   /** For leaderboard contests: creator's rank (1-based) so expected reward per tweet matches main view */
   creatorRank?: number;
+  /**
+   * Non-Twitter leaderboard: prize cents per submission from contest-wide views rank
+   * (verified/approved/paid only). Rejected/pending map to 0 / missing.
+   */
+  leaderboardExpectedPayoutBySubmissionId?: Map<string, number>;
   /** For milestone contests: precomputed expected payout per submission from normal view logic */
   milestoneExpectedPayoutBySubmissionId?: Map<string, number>;
   /** For milestone contests: precomputed milestone label per submission from normal view logic */
@@ -231,6 +236,7 @@ export function CreatorSubmissionsModal({
   onCustomPayment,
   isAdminView = false,
   creatorRank,
+  leaderboardExpectedPayoutBySubmissionId,
   milestoneExpectedPayoutBySubmissionId,
   milestoneAssignedLabelBySubmissionId,
   ytVisibleColumns,
@@ -1171,25 +1177,43 @@ export function CreatorSubmissionsModal({
     let baseExpectedReward =
       useStoredEarnings && submission.earnings ? submission.earnings : 0;
 
-    // Leaderboard: expected reward per tweet = prize for this creator's rank (same as normal view)
-    if (
-      contest?.contest_type === "leaderboard" &&
-      creatorRank != null &&
-      creatorRank > 0
-    ) {
-      const leaderboardContest = (contest?.contest_based_details as any)
-        ?.leaderboard_contest;
-      const prizes = leaderboardContest?.prizes;
-      if (Array.isArray(prizes)) {
-        const prizeForRank = prizes.find(
-          (p: any) => p.position === creatorRank,
+    // Leaderboard expected reward
+    if (contest?.contest_type === "leaderboard") {
+      // Non-Twitter: per-submission contest-wide views rank (matches normal view / payout).
+      // Rejected and pending are omitted from the map → $0.
+      if (leaderboardExpectedPayoutBySubmissionId) {
+        return Math.max(
+          Number(
+            leaderboardExpectedPayoutBySubmissionId.get(submission.id) ?? 0,
+          ) || 0,
+          0,
         );
-        if (prizeForRank?.amount != null) {
-          // Prize amounts are stored in cents; modal uses cents for formatCurrency
-          return Math.max(Number(prizeForRank.amount), 0);
-        }
       }
-      return 0;
+
+      // Twitter text/image: one prize per creator rank applied to each tweet row
+      if (creatorRank != null && creatorRank > 0) {
+        const statusRaw = String(
+          (submission as any).moderation_status ||
+            submission.status ||
+            "",
+        ).toLowerCase();
+        if (statusRaw === "rejected") {
+          return 0;
+        }
+        const leaderboardContest = (contest?.contest_based_details as any)
+          ?.leaderboard_contest;
+        const prizes = leaderboardContest?.prizes;
+        if (Array.isArray(prizes)) {
+          const prizeForRank = prizes.find(
+            (p: any) => p.position === creatorRank,
+          );
+          if (prizeForRank?.amount != null) {
+            // Prize amounts are stored in cents; modal uses cents for formatCurrency
+            return Math.max(Number(prizeForRank.amount), 0);
+          }
+        }
+        return 0;
+      }
     }
 
     // Milestone: use the globally precomputed per-submission payout map from normal view.
@@ -1276,6 +1300,10 @@ export function CreatorSubmissionsModal({
     (contest?.platform?.toLowerCase() === "twitter" ||
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
+
+  // Non-Twitter leaderboard: fixed rank prizes — pay path skips % adjustment.
+  const isNonTwitterLeaderboardContest =
+    contest?.contest_type === "leaderboard" && !isTwitterLeaderboardContest;
 
   const isTwitterCpmContest =
     contest?.contest_type === "cpm" &&
@@ -1642,9 +1670,9 @@ export function CreatorSubmissionsModal({
     [contest, bonusCapSubmissions, submissions],
   );
 
-  // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
-  const isLeaderboard = contest?.contest_type === "leaderboard";
-  if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
+  // Apply creator max-earnings cap for all contest types (including leaderboard)
+  // so Expected Reward matches bulk-payment / verify-submission pay amounts.
+  if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
     // Sort by created_at to apply creator cap in submission order
     const submissionsByTime = [...submissions].sort((a, b) => {
       return (
@@ -1677,7 +1705,7 @@ export function CreatorSubmissionsModal({
       runningTotal += amountApplied;
     });
   } else {
-    // No cap (or leaderboard): use formula-only expected per submission
+    // No max_earnings_per_creator configured: use formula-only expected per submission
     submissions.forEach((sub) => {
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(
         sub,
@@ -2403,6 +2431,7 @@ export function CreatorSubmissionsModal({
                         </TableHead>
                         {hasPayoutAdjustment &&
                           shouldAdjustReward &&
+                          !isNonTwitterLeaderboardContest &&
                           (!isYouTubeContest ||
                             showYtColumn("adjusted_reward")) &&
                           (!isDualRewardsContest ||
@@ -2853,6 +2882,7 @@ export function CreatorSubmissionsModal({
                         )}
                         {hasPayoutAdjustment &&
                           shouldAdjustReward &&
+                          !isNonTwitterLeaderboardContest &&
                           (!isYouTubeContest ||
                             showYtColumn("adjusted_reward")) &&
                           (!isDualRewardsContest ||
@@ -3232,12 +3262,13 @@ export function CreatorSubmissionsModal({
                       // Get pre-calculated expected reward (with cap applied in submission time order)
                       const expectedReward =
                         expectedRewardsMap.get(submission.id) || 0;
-                      const adjustedExpectedReward = shouldAdjustReward
-                        ? applyPayoutAdjustment(
-                            expectedReward,
-                            payoutAdjustmentPercentage,
-                          )
-                        : expectedReward;
+                      const adjustedExpectedReward =
+                        shouldAdjustReward && !isNonTwitterLeaderboardContest
+                          ? applyPayoutAdjustment(
+                              expectedReward,
+                              payoutAdjustmentPercentage,
+                            )
+                          : expectedReward;
                       const expectedRewardForDisplay = expectedReward;
 
                       const milestoneUncappedForDual =
@@ -3353,9 +3384,16 @@ export function CreatorSubmissionsModal({
                         (submission as any).paid_amount_cents ??
                         submission.other_stats?.paid_amount_cents ??
                         submission.other_stats?.granted_amount_cents;
+                      const isTwitterCpmSubmission =
+                        isTwitterTweet &&
+                        contest?.contest_type === "cpm";
                       const grantedReward = isPaidForGranted
                         ? explicitPaidAmount != null && explicitPaidAmount > 0
                           ? Number(explicitPaidAmount)
+                          : isTwitterCpmSubmission
+                            ? shouldAdjustReward
+                              ? adjustedExpectedReward
+                              : expectedReward
                           : submission.earnings && submission.earnings > 0
                             ? submission.earnings
                             : contest?.contest_type === "milestone"
@@ -3805,6 +3843,7 @@ export function CreatorSubmissionsModal({
                               </TableCell>
                               {hasPayoutAdjustment &&
                                 shouldAdjustReward &&
+                                !isNonTwitterLeaderboardContest &&
                                 (!isYouTubeContest ||
                                   showYtColumn("adjusted_reward")) &&
                                 (!isDualRewardsContest ||
@@ -4551,6 +4590,7 @@ export function CreatorSubmissionsModal({
                                   )}
                                   {hasPayoutAdjustment &&
                                     shouldAdjustReward &&
+                                    !isNonTwitterLeaderboardContest &&
                                     (!isYouTubeContest ||
                                       showYtColumn("adjusted_reward")) &&
                                     (!isDualRewardsContest ||

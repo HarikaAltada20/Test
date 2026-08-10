@@ -20,6 +20,13 @@ import {
   sumBonusRewards,
   sumBonusRefunds,
 } from "@/lib/twitter-bonus-accounting";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 type PaymentType = "standard" | "bonus" | "both";
 
@@ -35,6 +42,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let payoutLease: CreatorContestPayoutLease | null = null;
   try {
     const supabase = await createClient();
     const {
@@ -123,6 +131,18 @@ export async function POST(
       );
     }
 
+    const leaseResult = await acquireCreatorContestPayoutLease({
+      contestId,
+      creatorId,
+    });
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        { error: leaseResult.error },
+        { status: leaseResult.busy ? 409 : 500 },
+      );
+    }
+    payoutLease = leaseResult.lease;
+
     const cpmContest = (contest.contest_based_details as any)?.cpm_contest;
     if (!cpmContest || typeof cpmContest.cpm_rate_usd !== "number") {
       return NextResponse.json(
@@ -146,13 +166,17 @@ export async function POST(
 
     const supabaseAdmin = createAdminClient();
 
-    const { data: tweets, error: tweetsError } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select(
-        "id, creator_id, points, manual_points_adjustment, moderation_status, tweet_created_at, bonus_paid, bonus_paid_at, bonus_amount"
-      )
-      .eq("contest_id", contestId)
-      .in("id", tweetIds);
+    const { data: tweets, error: tweetsError } = await fetchByIdsInChunks({
+      ids: (tweetIds as unknown[]).map((value) => String(value)),
+      fetchChunk: async (chunkIds) =>
+        await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .select(
+            "id, creator_id, points, manual_points_adjustment, moderation_status, tweet_created_at, bonus_paid, bonus_paid_at, bonus_amount"
+          )
+          .eq("contest_id", contestId)
+          .in("id", chunkIds),
+    });
 
     if (tweetsError) {
       console.error("[bulk-pay-twitter-cpm] tweet fetch error:", tweetsError);
@@ -588,9 +612,14 @@ export async function POST(
         // Idempotent retries (alreadyApplied) must not debit — that would strip balance
         // when no new credit happened in this invocation.
         if (!creditRes.alreadyApplied) {
+          const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+            payoutOperationKey: twitterBulkIdempotencyKey,
+            reason: "tweet_row_update_failed",
+          });
           const debitRes = await debitCreatorWithdrawableBalance(
             creatorId,
-            totalAmount
+            totalAmount,
+            { idempotencyKey: rollbackDebitKey },
           );
           if (!debitRes.success) {
             console.error(
@@ -623,6 +652,11 @@ export async function POST(
                 rollback_reason: "tweet_row_update_failed",
                 failed_tweet_id: tid,
                 original_reward_transaction_id: creditRes.transactionId,
+                payout_operation_key: twitterBulkIdempotencyKey,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  debitRes.alreadyApplied,
+                ),
                 total_cpm: totalCpm,
                 total_bonus: totalBonus,
                 ...(totalBonus > 0
@@ -637,7 +671,7 @@ export async function POST(
               },
             }
           );
-          if (!logged) {
+          if (!logged && !debitRes.alreadyApplied) {
             console.error(
               "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
               creatorId
@@ -740,9 +774,14 @@ export async function POST(
 
         // Only roll back wallet if this request actually credited fresh funds.
         if (!creditRes.alreadyApplied) {
+          const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+            payoutOperationKey: twitterBulkIdempotencyKey,
+            reason: "bonus_row_update_failed",
+          });
           const debitRes = await debitCreatorWithdrawableBalance(
             creatorId,
             totalAmount,
+            { idempotencyKey: rollbackDebitKey },
           );
           if (!debitRes.success) {
             console.error(
@@ -775,6 +814,11 @@ export async function POST(
                 rollback_reason: "bonus_row_update_failed",
                 failed_tweet_id: tid,
                 original_reward_transaction_id: creditRes.transactionId,
+                payout_operation_key: twitterBulkIdempotencyKey,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  debitRes.alreadyApplied,
+                ),
                 total_cpm: totalCpm,
                 total_bonus: totalBonus,
                 ...(totalBonus > 0
@@ -789,7 +833,7 @@ export async function POST(
               },
             },
           );
-          if (!logged) {
+          if (!logged && !debitRes.alreadyApplied) {
             console.error(
               "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
               creatorId,
@@ -861,5 +905,7 @@ export async function POST(
       { error: error?.message || "Internal server error" },
       { status: 500 }
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }

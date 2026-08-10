@@ -31,6 +31,12 @@ import {
 } from "@/lib/payout-rules";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { MetricsService } from "@/lib/metrics-service";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
+import {
+  renewCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 import {
   debitCreatorWithdrawableBalance,
   logTransactionAsAdmin,
@@ -91,6 +97,8 @@ export async function executeDualRewardsBulkPayment(params: {
   creatorId: string;
   submissionIds: string[];
   paymentType: "standard" | "bonus" | "both";
+  /** Optional lease held by the caller; renewed during long row-update loops. */
+  payoutLease?: CreatorContestPayoutLease | null;
 }): Promise<
   | {
       ok: true;
@@ -116,16 +124,22 @@ export async function executeDualRewardsBulkPayment(params: {
     creatorId,
     submissionIds,
     paymentType,
+    payoutLease,
   } = params;
 
   const component = paymentTypeToComponent(paymentType);
   const contestTitle = String(contest.title || "Contest");
 
-  const { data: submissions, error: submissionsError } = await supabaseAdmin
-    .from("submissions")
-    .select("*")
-    .in("id", submissionIds)
-    .eq("contest_id", contestId);
+  const { data: submissions, error: submissionsError } =
+    await fetchByIdsInChunks({
+      ids: submissionIds,
+      fetchChunk: async (chunkIds) =>
+        await supabaseAdmin
+          .from("submissions")
+          .select("*")
+          .in("id", chunkIds)
+          .eq("contest_id", contestId),
+    });
 
   if (submissionsError || !submissions?.length) {
     return {
@@ -484,6 +498,8 @@ export async function executeDualRewardsBulkPayment(params: {
   const appliedIds: string[] = [];
 
   for (const item of breakdown) {
+    await renewCreatorContestPayoutLease(payoutLease);
+
     const sub = sortedSubmissions.find((s) => String(s.id) === item.submission_id);
     if (!sub) continue;
 
@@ -560,12 +576,17 @@ export async function executeDualRewardsBulkPayment(params: {
     let walletRollbackError: string | undefined;
 
     if (!creditResult.alreadyApplied) {
+      const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+        payoutOperationKey: payoutOperationKey,
+        reason: "submission_row_update_failed",
+      });
       const rollback = await debitCreatorWithdrawableBalance(
         creatorId,
         payableCents,
+        { idempotencyKey: rollbackDebitKey },
       );
       if (rollback.success) {
-        await logTransactionAsAdmin(
+        const refundLogged = await logTransactionAsAdmin(
           creatorId,
           "refund",
           payableCents,
@@ -579,10 +600,27 @@ export async function executeDualRewardsBulkPayment(params: {
               payout_type: "bulk_dual_rewards_rollback",
               original_reward_transaction_id: creditResult.transactionId,
               payout_operation_key: payoutOperationKey,
+              wallet_rollback_debit_key: rollbackDebitKey,
+              wallet_rollback_already_applied: Boolean(rollback.alreadyApplied),
               update_failures: updateFailures,
             },
           },
         );
+        if (!refundLogged && !rollback.alreadyApplied) {
+          walletRollbackFailed = true;
+          walletRollbackError =
+            "Wallet debit succeeded but refund ledger row could not be written";
+          console.error(
+            "[dual-rewards-bulk-payment] CRITICAL: wallet rolled back but refund log failed:",
+            {
+              creatorId,
+              contestId,
+              payableCents,
+              payoutOperationKey,
+              rollbackDebitKey,
+            },
+          );
+        }
       } else {
         walletRollbackFailed = true;
         walletRollbackError = rollback.error;
@@ -600,43 +638,51 @@ export async function executeDualRewardsBulkPayment(params: {
         );
       }
 
-      for (const id of appliedIds) {
-        const item = breakdown.find((b) => b.submission_id === id);
-        const sub = sortedSubmissions.find((s) => String(s.id) === id);
-        if (!item || !sub) continue;
+      // Never make successfully updated rows look unpaid while the wallet
+      // still contains their credit (or when refund ledger write failed).
+      // Preserve them for deterministic retry / manual reconciliation.
+      if (!walletRollbackFailed) {
+        for (const id of appliedIds) {
+          const item = breakdown.find((b) => b.submission_id === id);
+          const sub = sortedSubmissions.find((s) => String(s.id) === id);
+          if (!item || !sub) continue;
 
-        const priorComponents = getDualRewardsSubmissionPaidComponents({
-          id,
-          earnings: sub.earnings,
-          paid: sub.paid,
-          bonus_amount: sub.bonus_amount,
-          bonus_paid: sub.bonus_paid,
-          dual_rewards_payout: sub.dual_rewards_payout,
-        });
-        const revertPayload = buildDualRewardsBulkRollbackRevertPayload(
-          priorComponents,
-          item,
-        );
-        await supabaseAdmin.from("submissions").update(revertPayload).eq("id", id);
-      }
+          const priorComponents = getDualRewardsSubmissionPaidComponents({
+            id,
+            earnings: sub.earnings,
+            paid: sub.paid,
+            bonus_amount: sub.bonus_amount,
+            bonus_paid: sub.bonus_paid,
+            dual_rewards_payout: sub.dual_rewards_payout,
+          });
+          const revertPayload = buildDualRewardsBulkRollbackRevertPayload(
+            priorComponents,
+            item,
+          );
+          await supabaseAdmin
+            .from("submissions")
+            .update(revertPayload)
+            .eq("id", id);
+        }
 
-      for (const prior of poolCommits) {
-        await rollbackDualRewardsPoolCommitIfNeeded(
-          supabaseAdmin,
-          contestId,
-          prior.submissionId,
-          prior.result,
-        );
+        for (const prior of poolCommits) {
+          await rollbackDualRewardsPoolCommitIfNeeded(
+            supabaseAdmin,
+            contestId,
+            prior.submissionId,
+            prior.result,
+          );
+        }
       }
     }
 
     return {
       ok: false,
       status: 500,
-      error: creditResult.alreadyApplied
-        ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
-        : walletRollbackFailed
-          ? "Submission rows could not be marked paid and wallet rollback failed. Manual reconciliation required — see details."
+      error: walletRollbackFailed
+        ? "CRITICAL: creator wallet was credited and automatic rollback failed. Successfully updated rows were preserved as paid; do not retry with a different selection. Contact support immediately."
+        : creditResult.alreadyApplied
+          ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
           : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
       details: {
         updateFailures,
@@ -650,17 +696,21 @@ export async function executeDualRewardsBulkPayment(params: {
         wallet_rollback_error: walletRollbackError,
         reconciliation_hint:
           walletRollbackFailed || creditResult.alreadyApplied
-            ? "Compare money_transactions reward/refund rows for payout_operation_key and submission dual_rewards_payout JSON."
+            ? "Compare money_transactions reward/refund rows for payout_operation_key and submission dual_rewards_payout JSON. Do not retry with a different submission selection while wallet_rollback_failed is true."
             : undefined,
       },
     };
   }
 
   if (appliedIds.length > 0) {
-    const { data: paidRows } = await supabaseAdmin
-      .from("submissions")
-      .select("id, views, creator_id, platform, other_stats")
-      .in("id", appliedIds);
+    const { data: paidRows } = await fetchByIdsInChunks({
+      ids: appliedIds,
+      fetchChunk: async (chunkIds) =>
+        await supabaseAdmin
+          .from("submissions")
+          .select("id, views, creator_id, platform, other_stats")
+          .in("id", chunkIds),
+    });
     try {
       await MetricsService.creditSubmissionViewsForCreators(paidRows || []);
     } catch (e) {

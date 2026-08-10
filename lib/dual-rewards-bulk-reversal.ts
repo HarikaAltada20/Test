@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import {
@@ -13,6 +14,7 @@ import {
   type DualPoolSpendSubmissionRow,
   type DualRewardsSubmissionReversalDue,
 } from "@/lib/dual-rewards-pool-budget";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 export type BulkDualReversalRefundSummary = {
   reward_refunded_cents: number;
@@ -277,12 +279,25 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     return { ok: true, skipWalletDebitIds: new Set(), refundSummaryBySubmissionId: new Map() };
   }
 
-  const { data: rows, error: rowsErr } = await params.supabaseAdmin
-    .from("submissions")
-    .select(
-      "id, contest_id, creator_id, status, earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, contests!inner(contest_type, title)",
-    )
-    .in("id", ids);
+  const { data: rows, error: rowsErr } = await fetchByIdsInChunks({
+    ids,
+    fetchChunk: async (chunkIds) => {
+      const result = await params.supabaseAdmin
+        .from("submissions")
+        .select(
+          "id, contest_id, creator_id, status, earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, contests!inner(contest_type, title)",
+        )
+        .in("id", chunkIds);
+      return {
+        data: (result.data || null) as Array<
+          SubmissionRow & {
+            contests?: ContestJoinRow | ContestJoinRow[] | null;
+          }
+        > | null,
+        error: result.error,
+      };
+    },
+  });
 
   if (rowsErr) {
     return { ok: false, error: rowsErr.message };
@@ -445,9 +460,31 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     }
 
     if (debitCents > 0) {
+      const debitOperationKey = `bulk_paid_reversal:v1:${createHash("sha256")
+        .update(
+          JSON.stringify({
+            contestId,
+            creatorId,
+            submissionIds: groupRows
+              .map((row) => String(row.id))
+              .sort((a, b) => a.localeCompare(b)),
+            rewardTransactionIds: rewardTxns
+              .map((row: any) => String(row.id || ""))
+              .filter(Boolean)
+              .sort((a: string, b: string) => a.localeCompare(b)),
+            refundTransactionIds: refundTxns
+              .map((row: any) => String(row.id || ""))
+              .filter(Boolean)
+              .sort((a: string, b: string) => a.localeCompare(b)),
+            debitCents,
+          }),
+        )
+        .digest("hex")
+        .slice(0, 48)}`;
       const debitRes = await debitCreatorWithdrawableBalance(
         creatorId,
         debitCents,
+        { idempotencyKey: debitOperationKey },
       );
       if (!debitRes.success) {
         for (const row of groupRows) {

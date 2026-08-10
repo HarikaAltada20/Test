@@ -1221,8 +1221,14 @@ async function debitCreatorWithdrawableBalanceLegacy(
 
 export async function debitCreatorWithdrawableBalance(
   creatorId: string,
-  amountInCents: number
-): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  amountInCents: number,
+  opts?: { idempotencyKey?: string | null },
+): Promise<{
+  success: boolean;
+  newBalance?: number;
+  alreadyApplied?: boolean;
+  error?: string;
+}> {
   try {
     if (amountInCents <= 0) {
       return { success: false, error: "Amount must be positive" };
@@ -1230,16 +1236,38 @@ export async function debitCreatorWithdrawableBalance(
 
     const supabase = createAdminClient();
 
+    const idempotencyKey = String(opts?.idempotencyKey || "").trim();
+    const rpcName = idempotencyKey
+      ? "creator_payout_debit_idempotent_atomic"
+      : "creator_payout_debit_atomic";
+    const rpcArgs = idempotencyKey
+      ? {
+          p_creator_id: creatorId,
+          p_amount_cents: amountInCents,
+          p_idempotency_key: idempotencyKey,
+        }
+      : {
+          p_creator_id: creatorId,
+          p_amount_cents: amountInCents,
+        };
     const { data: rpcRaw, error: rpcErr } = await supabase.rpc(
-      "creator_payout_debit_atomic",
-      {
-        p_creator_id: creatorId,
-        p_amount_cents: amountInCents,
-      },
+      rpcName,
+      rpcArgs,
     );
 
     if (rpcErr) {
       const msg = rpcErr.message || "Debit failed";
+      if (
+        idempotencyKey &&
+        msg.includes("creator_payout_debit_idempotent_atomic") &&
+        (msg.includes("Could not find") || msg.includes("does not exist"))
+      ) {
+        return {
+          success: false,
+          error:
+            "Idempotent wallet debit migration is not installed; refusing an unsafe reversal",
+        };
+      }
       if (
         msg.includes("creator_payout_debit_atomic") &&
         (msg.includes("Could not find") || msg.includes("does not exist"))
@@ -1255,7 +1283,10 @@ export async function debitCreatorWithdrawableBalance(
       return { success: false, error: msg };
     }
 
-    const row = rpcRaw as { new_balance?: number | string } | null;
+    const row = rpcRaw as {
+      new_balance?: number | string;
+      already_applied?: boolean;
+    } | null;
     const newBalance =
       row?.new_balance == null ? NaN : Number(row.new_balance);
     if (!Number.isFinite(newBalance)) {
@@ -1265,7 +1296,11 @@ export async function debitCreatorWithdrawableBalance(
       };
     }
 
-    return { success: true, newBalance };
+    return {
+      success: true,
+      newBalance,
+      alreadyApplied: Boolean(row?.already_applied),
+    };
   } catch (error: any) {
     return { success: false, error: error?.message || "Unknown error" };
   }

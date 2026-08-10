@@ -8,6 +8,10 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import {
+  buildLedgerScopedReversalDebitIdempotencyKey,
+  sortUniqueTransactionIds,
+} from "@/lib/bulk-payment-rollback";
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
@@ -42,6 +46,12 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
+import {
+  applyCreatorMaxEarningsCapCents,
+  computeNonTwitterLeaderboardSubmissionPrizeCents,
+  isTwitterTextImageLeaderboardContest,
+  sumPaidEarningsCents,
+} from "@/lib/non-twitter-leaderboard-creator-prize";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -68,6 +78,12 @@ import {
 } from "@/lib/contest-payout-idempotency";
 import { creditDualRewardsSubmissionReward } from "@/lib/dual-rewards-reward-credit";
 import { logDualRewardsReversalRefund } from "@/lib/dual-rewards-bulk-reversal";
+import { verifyBulkVerifyWalletDebitBypass } from "@/lib/bulk-verify-wallet-continuation";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 
 function isDualRewardsLedgerReward(r: {
   metadata?: Record<string, unknown> | null;
@@ -89,6 +105,7 @@ function getTransactionPayoutCycle(metadata: any): number {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
+  let payoutLease: CreatorContestPayoutLease | null = null;
 
   try {
     let paidStatusReversalSummary: {
@@ -98,13 +115,30 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
-      await request.json();
+    const {
+      submissionId,
+      action,
+      reason,
+      paymentDetails,
+      skipWalletDebit,
+      walletDebitBypassToken,
+      qualityScore,
+    } = await request.json();
 
     if (!submissionId || !action) {
       return NextResponse.json(
         { error: "Submission ID and action are required" },
         { status: 400 },
+      );
+    }
+
+    if (skipWalletDebit === true) {
+      return NextResponse.json(
+        {
+          error:
+            "skipWalletDebit is not accepted from clients. Wallet reversals must be authorized by the bulk endpoint.",
+        },
+        { status: 403 },
       );
     }
 
@@ -189,6 +223,15 @@ export async function POST(request: Request) {
       currentUserId = adminUser?.id || "";
     }
 
+    const walletDebitWasHandledByBulk =
+      typeof walletDebitBypassToken === "string" &&
+      verifyBulkVerifyWalletDebitBypass({
+        token: walletDebitBypassToken,
+        actorId: currentUserId,
+        action: String(action),
+        submissionId: String(submissionId),
+      });
+
     // Fetch the submission to verify it exists
     const { data: submission, error: submissionError } = await supabase
       .from("submissions")
@@ -207,7 +250,7 @@ export async function POST(request: Request) {
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "title, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
+        "title, contest_type, contest_format, platform, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
       )
       .eq("id", submission.contest_id)
       .single();
@@ -245,6 +288,19 @@ export async function POST(request: Request) {
       action === SUBMISSION_STATUS.paid ||
       action === "mark_bonus_paid" ||
       action === "mark_both_paid";
+
+    if (
+      isPaymentAction &&
+      isTwitterTextImageLeaderboardContest(contest)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not verify-submission payment actions.",
+        },
+        { status: 400 },
+      );
+    }
 
     if (isPaymentAction && !isAdmin) {
       return NextResponse.json(
@@ -317,6 +373,20 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+    }
+
+    if (isPaymentAction) {
+      const leaseResult = await acquireCreatorContestPayoutLease({
+        contestId: String(submissionFull.contest_id),
+        creatorId: String(submissionFull.creator_id),
+      });
+      if (!leaseResult.ok) {
+        return NextResponse.json(
+          { error: leaseResult.error },
+          { status: leaseResult.busy ? 409 : 500 },
+        );
+      }
+      payoutLease = leaseResult.lease;
     }
 
     const shouldMarkPaid =
@@ -1176,6 +1246,65 @@ export async function POST(request: Request) {
               rewardAmount = cappedBase;
             }
           }
+        } else if (contest.contest_type === "leaderboard" && !customAmount) {
+          // Per-submission prize by contest-wide views rank.
+          const prizes =
+            (contest as any)?.contest_based_details?.leaderboard_contest
+              ?.prizes || [];
+          const prizeResult =
+            await computeNonTwitterLeaderboardSubmissionPrizeCents({
+              supabaseAdmin,
+              contestId: submissionFull.contest_id,
+              submissionId: String(submissionFull.id),
+              views: submissionFull.views || 0,
+              prizes,
+            });
+          if (prizeResult.error) {
+            return NextResponse.json(
+              {
+                error: `Failed to compute leaderboard prize: ${prizeResult.error}`,
+              },
+              { status: 500 },
+            );
+          }
+          rewardAmount = prizeResult.prizeCents;
+          // Match bulk-payment + creator-wise Expected Reward: respect max_earnings_per_creator.
+          if (
+            rewardAmount > 0 &&
+            maxEarningsPerCreator &&
+            Number(maxEarningsPerCreator) > 0
+          ) {
+            const { data: paidRowsForCap, error: paidRowsForCapErr } =
+              await fetchContestSubmissionsAllPages(
+                supabaseAdmin,
+                submissionFull.contest_id,
+                "earnings, paid",
+                {
+                  creatorId: submissionFull.creator_id,
+                  paid: true,
+                  order: { column: "created_at", ascending: true },
+                },
+              );
+            if (paidRowsForCapErr) {
+              return NextResponse.json(
+                {
+                  error: `Failed to load creator paid earnings for cap: ${formatSubmissionFetchError(paidRowsForCapErr)}`,
+                },
+                { status: 500 },
+              );
+            }
+            const alreadyPaidCents = sumPaidEarningsCents(
+              (paidRowsForCap || []) as Array<{
+                earnings?: number | null;
+                paid?: boolean | null;
+              }>,
+            );
+            rewardAmount = applyCreatorMaxEarningsCapCents({
+              amountCents: rewardAmount,
+              alreadyPaidCents,
+              maxEarningsCents: Number(maxEarningsPerCreator),
+            });
+          }
         } else {
           rewardAmount = Number(submissionFull.earnings) || 0;
 
@@ -1268,20 +1397,6 @@ export async function POST(request: Request) {
               }
               
               rewardAmount = finalCpmCappedAmount;
-            } else if (contest.contest_type === "leaderboard") {
-              // Compute prize by rank among verified (and already paid) submissions only
-              const { count: higherViewsCount } = await supabase
-                .from("submissions")
-                .select("id", { count: "exact", head: true })
-                .eq("contest_id", submissionFull.contest_id)
-                .in("status", ["verified", "paid"])
-                .gt("views", submissionFull.views || 0);
-              const rank = (higherViewsCount || 0) + 1;
-              const prizes =
-                (contest as any)?.contest_based_details?.leaderboard_contest
-                  ?.prizes || [];
-              const prizeForRank = prizes.find((p: any) => p.position === rank);
-              rewardAmount = prizeForRank?.amount || 0; // already in cents
             }
           }
 
@@ -1458,7 +1573,11 @@ export async function POST(request: Request) {
           rewardAmount <= 0;
 
         if (rewardAmount > 0 || shouldCreditDualRewardsPaid) {
-          if (rewardAmount > 0 && !customAmount) {
+          if (
+            rewardAmount > 0 &&
+            !customAmount &&
+            contest.contest_type !== "leaderboard"
+          ) {
             rewardAmount = adjustRewardCents(rewardAmount, {
               shouldAdjustReward,
               percentage: payoutAdjustment.percentage,
@@ -1622,7 +1741,14 @@ export async function POST(request: Request) {
               }
             }
 
-            const creditRes = await creditWithWalletShortfallRetry({
+            let creditRes: {
+              success: boolean;
+              error?: string;
+              alreadyApplied?: boolean;
+              transactionId?: string | null;
+            };
+
+            creditRes = await creditWithWalletShortfallRetry({
               payableCents:
                 contest.contest_type === "dual_rewards"
                   ? dualCreditTotalCents
@@ -1695,6 +1821,7 @@ export async function POST(request: Request) {
           const shouldPersistEarnings =
             !!customAmount ||
             contest.contest_type === "milestone" ||
+            contest.contest_type === "leaderboard" ||
             !submissionFull.earnings ||
             submissionFull.earnings <= 0;
 
@@ -1921,7 +2048,7 @@ export async function POST(request: Request) {
         };
       }
 
-      if (reversalAmount > 0 && !skipWalletDebit) {
+      if (reversalAmount > 0 && !walletDebitWasHandledByBulk) {
         const { data: reversalProfile } = await supabaseAdmin
           .from("creator_profiles")
           .select("withdrawable_balance")
@@ -1971,9 +2098,25 @@ export async function POST(request: Request) {
         }
 
         if (walletDebitCents > 0) {
+          // Fingerprint reward/refund txn ids so a later pay→reverse cycle
+          // (new reward rows + prior refund rows) gets a distinct debit key.
+          const reversalDebitKey = buildLedgerScopedReversalDebitIdempotencyKey({
+            prefix: "verify_reversal:v1",
+            reason: "paid_status_reversal",
+            scope: {
+              submissionId: String(submissionId),
+              creatorId: String(submissionFull.creator_id),
+              contestId: String(submissionFull.contest_id),
+              action: String(action),
+            },
+            rewardTransactionIds: sortUniqueTransactionIds(rewardTxns),
+            refundTransactionIds: sortUniqueTransactionIds(refundTxns),
+            debitCents: walletDebitCents,
+          });
           const debitRes = await debitCreatorWithdrawableBalance(
             submissionFull.creator_id,
             walletDebitCents,
+            { idempotencyKey: reversalDebitKey },
           );
           if (!debitRes.success) {
             return NextResponse.json(
@@ -2109,6 +2252,8 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }
 

@@ -4,6 +4,10 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+import {
+  assertBulkVerifyWalletContinuationSigningReady,
+  issueBulkVerifyWalletDebitBypass,
+} from "@/lib/bulk-verify-wallet-continuation";
 
 const PAYMENT_BULK_ACTIONS = new Set([
   "paid",
@@ -142,12 +146,47 @@ async function invokeVerifyWithRetries(
 
 export async function POST(request: Request) {
   try {
-    const { submissionIds, action, reason, paymentDetails, qualityScore } =
-      await request.json();
+    const {
+      submissionIds,
+      action,
+      reason,
+      paymentDetails,
+      qualityScore,
+      /** @deprecated Full-selection preflight is unsafe in serverless requests. */
+      walletReversalSubmissionIds,
+      /** @deprecated Continuations are no longer accepted; each bounded chunk reverses itself. */
+      walletReversalContinuation,
+      /** @deprecated Never accepted from clients. */
+      skipWalletReversal,
+    } = await request.json();
 
     if (!Array.isArray(submissionIds)) {
       return NextResponse.json(
         { error: "submissionIds must be an array" },
+        { status: 400 },
+      );
+    }
+    if (submissionIds.length > 10) {
+      return NextResponse.json(
+        {
+          error:
+            "At most 10 submissions may be processed per request. Split larger selections into bounded chunks.",
+        },
+        { status: 413 },
+      );
+    }
+
+    if (
+      skipWalletReversal === true ||
+      walletReversalContinuation ||
+      (Array.isArray(walletReversalSubmissionIds) &&
+        walletReversalSubmissionIds.length > 0)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Wallet reversal continuations and full-selection preflights are no longer accepted. Send only the bounded submissionIds chunk.",
+        },
         { status: 400 },
       );
     }
@@ -168,7 +207,10 @@ export async function POST(request: Request) {
       resolvedBulkQualityScore = parsed;
     }
 
-    const { isAdmin, error: adminError } = await verifyAdminAccess();
+    const { isAdmin, error: adminError, user: adminUser } =
+      await verifyAdminAccess();
+
+    let actorId: string | null = adminUser?.id ?? null;
 
     if (!isAdmin) {
       const supabase = await createClient();
@@ -204,6 +246,8 @@ export async function POST(request: Request) {
         );
       }
 
+      actorId = authUser.id;
+
       const ownershipError = await assertAdvertiserOwnsSubmissions(
         submissionIds,
         authUser.id,
@@ -211,6 +255,13 @@ export async function POST(request: Request) {
       if (ownershipError) {
         return ownershipError;
       }
+    }
+
+    if (!actorId) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 },
+      );
     }
 
     const skipWalletDebitIds = new Set<string>();
@@ -227,15 +278,44 @@ export async function POST(request: Request) {
 
     if (isPaidReversalBulkAction(action)) {
       const supabaseAdmin = createAdminClient();
+      const reversalIds = submissionIds.map(String);
+
+      // Every per-item call needs an unforgeable, short-lived authorization to
+      // skip the debit already completed by this bounded preflight.
+      try {
+        assertBulkVerifyWalletContinuationSigningReady();
+      } catch (secretErr) {
+        console.error(
+          "[bulk-verify-submissions] Wallet bypass signing not ready:",
+          secretErr,
+        );
+        return NextResponse.json(
+          {
+            error:
+              "Cannot start wallet reversal: server signing secret is not configured (CRON_SECRET).",
+          },
+          { status: 500 },
+        );
+      }
+
       const walletResult = await applyBulkDualRewardsWalletReversals({
         supabaseAdmin,
-        submissionIds,
+        submissionIds: reversalIds,
       });
       if (!walletResult.ok) {
+        console.error(
+          "[bulk-verify-submissions] Wallet reversal preflight failed:",
+          walletResult.error,
+          {
+            submissionCount: reversalIds.length,
+            failedCount: walletResult.failedSubmissionIds?.length,
+          },
+        );
         return NextResponse.json(
           {
             error: walletResult.error,
-            failed: walletResult.failedSubmissionIds?.length ?? submissionIds.length,
+            failed:
+              walletResult.failedSubmissionIds?.length ?? reversalIds.length,
             failedSubmissionIds: walletResult.failedSubmissionIds,
           },
           { status: 500 },
@@ -247,6 +327,7 @@ export async function POST(request: Request) {
       walletResult.refundSummaryBySubmissionId.forEach((summary, id) => {
         bulkRefundSummaryById.set(id, summary);
       });
+
     }
 
     const results: { id: string; data: unknown }[] = [];
@@ -272,7 +353,16 @@ export async function POST(request: Request) {
                 paymentDetails,
                 qualityScore:
                   action === "verified" ? resolvedBulkQualityScore : undefined,
-                skipWalletDebit: skipWalletDebitIds.has(String(id)),
+                ...(skipWalletDebitIds.has(String(id))
+                  ? {
+                      walletDebitBypassToken:
+                        issueBulkVerifyWalletDebitBypass({
+                          actorId,
+                          action: String(action),
+                          submissionId: String(id),
+                        }),
+                    }
+                  : {}),
               }),
             });
 
@@ -316,12 +406,20 @@ export async function POST(request: Request) {
       });
     }
 
+    const walletRefundSummaries =
+      bulkRefundSummaryById.size > 0
+        ? Object.fromEntries(bulkRefundSummaryById.entries())
+        : undefined;
+
     return NextResponse.json({
       success: errors.length === 0,
       processed: results.length,
       failed: errors.length,
       results,
       errors,
+      ...(walletRefundSummaries
+        ? { wallet_refund_summaries: walletRefundSummaries }
+        : {}),
     });
   } catch (error: unknown) {
     console.error("[bulk-verify-submissions] Error:", error);

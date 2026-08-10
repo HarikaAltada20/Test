@@ -8,6 +8,7 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
 import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 
 /**
@@ -381,9 +382,14 @@ export async function POST(
         updateTweetErr
       );
       if (!creditRes.alreadyApplied) {
+        const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+          payoutOperationKey: twitterTweetPayKey,
+          reason: "tweet_row_update_failed",
+        });
         const debitRes = await debitCreatorWithdrawableBalance(
           creatorId,
           rewardAmount,
+          { idempotencyKey: rollbackDebitKey },
         );
         if (debitRes.success) {
           await logTransactionAsAdmin(
@@ -403,6 +409,10 @@ export async function POST(
                 tweet_id: tweetId,
                 payout_type: "twitter_cpm_tweet_rollback",
                 original_reward_transaction_id: creditRes.transactionId,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  debitRes.alreadyApplied,
+                ),
               },
             },
           );

@@ -8,6 +8,7 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
@@ -272,17 +273,6 @@ export async function POST(
         );
       }
 
-      const debitRes = await debitCreatorWithdrawableBalance(
-        creatorId,
-        reversalAmount,
-      );
-      if (!debitRes.success) {
-        return NextResponse.json(
-          { error: debitRes.error || "Failed to debit creator balance" },
-          { status: 400 },
-        );
-      }
-
       const paidTrackRefundsForCycle = (paidRefunds || []).filter(
         (tx: any) =>
           (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
@@ -290,6 +280,22 @@ export async function POST(
             `milestone_most_verified_${track}`,
       ).length;
       const nextReversalCycle = paidTrackRefundsForCycle + 1;
+
+      const reversalDebitKey = buildWalletRollbackDebitIdempotencyKey({
+        payoutOperationKey: `milestone_mv_bonus_rev:v1:${contestId}:${creatorId}:${track}:cycle:${nextReversalCycle}`,
+        reason: "milestone_mv_bonus_reversal",
+      });
+      const debitRes = await debitCreatorWithdrawableBalance(
+        creatorId,
+        reversalAmount,
+        { idempotencyKey: reversalDebitKey },
+      );
+      if (!debitRes.success) {
+        return NextResponse.json(
+          { error: debitRes.error || "Failed to debit creator balance" },
+          { status: 400 },
+        );
+      }
 
       const refundLogged = await logTransactionAsAdmin(
         creatorId,
@@ -308,6 +314,8 @@ export async function POST(
             submission_id: `${target.id}:milestone_most_verified_${track}:reverse`,
             source_submission_id: target.id,
             payout_cycle: nextReversalCycle,
+            wallet_rollback_debit_key: reversalDebitKey,
+            wallet_rollback_already_applied: Boolean(debitRes.alreadyApplied),
           },
         },
       );

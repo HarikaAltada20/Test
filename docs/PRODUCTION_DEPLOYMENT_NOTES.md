@@ -4,6 +4,27 @@ Short checklist for deploying changes that affect production.
 
 ---
 
+## Bulk payouts and paid-reversal authorization
+
+**When:** Deploying creator-wise bulk payouts or chunked verify/reject/pending for paid submissions.
+
+**Required migration before app traffic:**
+
+- `SUPABASE/migrations/20260808120000_creator_contest_payout_leases.sql`
+
+This serializes rank/cap/ledger calculations for the same contest and creator across API routes and workers.
+
+Lease TTL defaults to 15 minutes (SQL max 30 minutes). Long bulk pays renew the owned lease while submission rows update so a slow request cannot be stolen by a concurrent pay.
+
+**Required env (pick one):**
+
+- Prefer: — dedicated HMAC secret for short-lived internal wallet-debit bypass authorization
+- Fallback: `CRON_SECRET`
+
+Each client chunk performs its own bounded wallet reversal. Full-selection continuation tokens are rejected. Without either secret, reversal fails before wallets are changed.
+
+---
+
 ## Campaign list pagination + `contest_stats` (required before app traffic)
 
 **When:** Deploying the SQL-paginated campaign / opportunities lists (`campaign_list_page_ids`, Redis list cache, `contest_stats`).

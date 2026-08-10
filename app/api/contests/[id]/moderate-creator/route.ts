@@ -7,6 +7,10 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import {
+  buildLedgerScopedReversalDebitIdempotencyKey,
+  sortUniqueTransactionIds,
+} from "@/lib/bulk-payment-rollback";
+import {
   sumBonusRewards,
   sumBonusRefunds,
 } from "@/lib/twitter-bonus-accounting";
@@ -129,42 +133,69 @@ export async function POST(
 
     // Handle payment reversal if creator is currently paid and status is being changed away from paid
     if (currentLeaderboardEntry?.moderation_status === "paid") {
+      // Always load main + bonus ledger rows so the debit key fingerprints the
+      // current cycle (new rewards / prior refunds) instead of only amounts.
+      const [
+        { data: rewardTxns, error: rewardErr },
+        { data: mainRefundTxns, error: refundErr },
+        { data: bonusRewardTxns, error: bonusRewardErr },
+        { data: bonusRefundTxns, error: bonusRefundErr },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount")
+          .eq("user_id", creatorId)
+          .eq("type", "reward")
+          .contains("metadata", {
+            contest_id: contestId,
+            twitter_creator_id: creatorId,
+          }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, remarks, metadata")
+          .eq("user_id", creatorId)
+          .eq("type", "refund")
+          .contains("metadata", {
+            contest_id: contestId,
+            twitter_creator_id: creatorId,
+          }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, metadata")
+          .eq("user_id", creatorId)
+          .eq("type", "reward")
+          .contains("metadata", {
+            contest_id: contestId,
+            bonus_type: "flat_fee",
+          }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, metadata, remarks")
+          .eq("user_id", creatorId)
+          .eq("type", "refund")
+          .contains("metadata", {
+            contest_id: contestId,
+            bonus_type: "flat_fee",
+          }),
+      ] as any);
+
+      if (rewardErr || refundErr || bonusRewardErr || bonusRefundErr) {
+        const message =
+          rewardErr?.message ||
+          refundErr?.message ||
+          bonusRewardErr?.message ||
+          bonusRefundErr?.message ||
+          "unknown";
+        return NextResponse.json(
+          { error: `Failed to fetch transactions for reversal: ${message}` },
+          { status: 500 }
+        );
+      }
+
       let mainReversalAmount = currentLeaderboardEntry.earnings || 0;
 
       if (!mainReversalAmount || mainReversalAmount <= 0) {
         // Fallback: main reward = rewards (contest_id + twitter_creator_id) - prior main reversals (refunds without bonus_type)
-        const [
-          { data: rewardTxns, error: rewardErr },
-          { data: mainRefundTxns, error: refundErr },
-        ] = await Promise.all([
-          supabaseAdmin
-            .from("money_transactions")
-            .select("id, amount")
-            .eq("user_id", creatorId)
-            .eq("type", "reward")
-            .contains("metadata", {
-              contest_id: contestId,
-              twitter_creator_id: creatorId,
-            }),
-          supabaseAdmin
-            .from("money_transactions")
-            .select("id, amount, remarks, metadata")
-            .eq("user_id", creatorId)
-            .eq("type", "refund")
-            .contains("metadata", {
-              contest_id: contestId,
-              twitter_creator_id: creatorId,
-            }),
-        ] as any);
-
-        if (rewardErr || refundErr) {
-          const message = rewardErr?.message || refundErr?.message || "unknown";
-          return NextResponse.json(
-            { error: `Failed to fetch transactions for reversal: ${message}` },
-            { status: 500 }
-          );
-        }
-
         const totalMainRewards = (rewardTxns || []).reduce(
           (sum: number, tx: any) => sum + (tx.amount || 0),
           0
@@ -186,41 +217,6 @@ export async function POST(
       // pack `CPM + bonus` into `amount`, with the bonus-only slice in
       // `metadata.total_bonus`. Summing `amount` would refund CPM twice (once via
       // mainReversalAmount, again here), so we use bonus-only accounting.
-      const [
-        { data: bonusRewardTxns, error: bonusRewardErr },
-        { data: bonusRefundTxns, error: bonusRefundErr },
-      ] = await Promise.all([
-        supabaseAdmin
-          .from("money_transactions")
-          .select("id, amount, metadata")
-          .eq("user_id", creatorId)
-          .eq("type", "reward")
-          .contains("metadata", {
-            contest_id: contestId,
-            bonus_type: "flat_fee",
-          }),
-        supabaseAdmin
-          .from("money_transactions")
-          .select("id, amount, metadata, remarks")
-          .eq("user_id", creatorId)
-          .eq("type", "refund")
-          .contains("metadata", {
-            contest_id: contestId,
-            bonus_type: "flat_fee",
-          }),
-      ] as any);
-
-      if (bonusRewardErr || bonusRefundErr) {
-        const message =
-          bonusRewardErr?.message || bonusRefundErr?.message || "unknown";
-        return NextResponse.json(
-          {
-            error: `Failed to fetch bonus transactions for reversal: ${message}`,
-          },
-          { status: 500 }
-        );
-      }
-
       const bonusCredited = sumBonusRewards(bonusRewardTxns || []);
       const bonusAlreadyReversed = sumBonusRefunds(bonusRefundTxns || [], {
         reversalRemark: REVERSAL_TRANSACTION_REMARK,
@@ -233,9 +229,32 @@ export async function POST(
       const totalReversalAmount = mainReversalAmount + bonusReversalAmount;
 
       if (totalReversalAmount > 0) {
+        const mainRefundIdsForKey = (mainRefundTxns || []).filter(
+          (tx: any) =>
+            (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
+            !(tx.metadata && (tx.metadata as any).bonus_type)
+        );
+        const reversalDebitKey = buildLedgerScopedReversalDebitIdempotencyKey({
+          prefix: "twitter_creator_reversal:v1",
+          reason: "moderate_creator_reversal",
+          scope: {
+            contestId,
+            creatorId,
+          },
+          rewardTransactionIds: [
+            ...sortUniqueTransactionIds(rewardTxns),
+            ...sortUniqueTransactionIds(bonusRewardTxns),
+          ],
+          refundTransactionIds: [
+            ...sortUniqueTransactionIds(mainRefundIdsForKey),
+            ...sortUniqueTransactionIds(bonusRefundTxns),
+          ],
+          debitCents: totalReversalAmount,
+        });
         const debitRes = await debitCreatorWithdrawableBalance(
           creatorId,
-          totalReversalAmount
+          totalReversalAmount,
+          { idempotencyKey: reversalDebitKey },
         );
         if (!debitRes.success) {
           return NextResponse.json(

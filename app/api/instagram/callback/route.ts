@@ -192,6 +192,16 @@ export async function GET(request: NextRequest) {
         // --- END REFINED ---
 
         // 4. Store in Supabase (`creator_profiles.instagram_account`)
+        const { data: existingIgProfile } = await supabase
+            .from('creator_profiles')
+            .select('instagram_account')
+            .eq('id', user.id)
+            .maybeSingle();
+        const existingIgAccount =
+            (existingIgProfile?.instagram_account as Record<string, unknown> | null) ||
+            null;
+        const connectedAtNow = new Date().toISOString();
+
         const instagramAccountData = {
             access_token: long_lived_access_token, // Use long-lived token
             instagram_user_id: globalInstagramUserID,
@@ -204,7 +214,13 @@ export async function GET(request: NextRequest) {
             token_expiry: actualTokenExpiry, // Use actual expiry from long-lived token
             name_of_account: profile.name,
             app_scoped_user_id: profile.id,
-            updated_at: new Date().toISOString(),
+            updated_at: connectedAtNow,
+            // First connect only; weekly refresh cadence anchors to this.
+            connected_at:
+                typeof existingIgAccount?.connected_at === 'string' &&
+                existingIgAccount.connected_at
+                    ? existingIgAccount.connected_at
+                    : connectedAtNow,
         };
 
         const { error: updateError } = await supabase

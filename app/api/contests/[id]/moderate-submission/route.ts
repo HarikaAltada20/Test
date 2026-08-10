@@ -6,6 +6,10 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import {
+  buildLedgerScopedReversalDebitIdempotencyKey,
+  sortUniqueTransactionIds,
+} from "@/lib/bulk-payment-rollback";
 import { syncTwitterLeaderboardFromTweets } from "@/lib/twitter/sync-twitter-leaderboard-from-tweets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import {
@@ -303,9 +307,34 @@ export async function POST(
       const totalReversalAmount = cpmReversalCents + bonusReversalAmount;
 
       if (totalReversalAmount > 0) {
+        // Include reward/refund txn ids so a later pay→reverse cycle gets a new
+        // debit key (same pattern as bulk paid reversal).
+        const reversalDebitKey = buildLedgerScopedReversalDebitIdempotencyKey({
+          prefix: "twitter_tweet_reversal:v1",
+          reason: "moderate_submission_reversal",
+          scope: {
+            contestId,
+            creatorId,
+            tweetId,
+          },
+          rewardTransactionIds: [
+            ...sortUniqueTransactionIds(tweetRewardTxns),
+            ...sortUniqueTransactionIds(
+              Array.from(bonusRewardCandidates.values()),
+            ),
+          ],
+          refundTransactionIds: [
+            ...sortUniqueTransactionIds(tweetRefundTxns),
+            ...sortUniqueTransactionIds(
+              Array.from(bonusRefundCandidates.values()),
+            ),
+          ],
+          debitCents: totalReversalAmount,
+        });
         const debitRes = await debitCreatorWithdrawableBalance(
           creatorId,
-          totalReversalAmount
+          totalReversalAmount,
+          { idempotencyKey: reversalDebitKey },
         );
         if (!debitRes.success) {
           return NextResponse.json(

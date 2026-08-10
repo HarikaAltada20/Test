@@ -218,6 +218,12 @@ export async function GET(req: NextRequest) {
     }
     // --- END REFINED ---
 
+    const connectedAtNow = new Date().toISOString();
+    const prev = {
+      ...(existingProfile?.tiktok_account || {}),
+    } as Record<string, unknown>;
+    delete prev.marketing;
+
     const connectionData = {
       platform_user_id: profile.id,
       username: profile.username,
@@ -232,13 +238,14 @@ export async function GET(req: NextRequest) {
         Date.now() + (tokens.expiresIn || 86400) * 1000,
       ).toISOString(),
       scopes: tokens.scope ? [tokens.scope] : [],
-      last_synced_at: new Date().toISOString(),
+      last_synced_at: connectedAtNow,
+      // First connect only; weekly refresh cadence anchors to this.
+      connected_at:
+        typeof prev.connected_at === "string" && prev.connected_at
+          ? prev.connected_at
+          : connectedAtNow,
     };
 
-    const prev = {
-      ...(existingProfile?.tiktok_account || {}),
-    } as Record<string, unknown>;
-    delete prev.marketing;
     const finalTikTokAccount = {
       ...prev,
       ...connectionData,
