@@ -102,6 +102,16 @@ export async function GET(request: NextRequest) {
       console.warn('YouTube Callback: tokens.expiry_date not found, defaulting to 1 hour.');
     }
 
+    const { data: existingYoutubeProfile } = await supabase
+      .from('creator_profiles')
+      .select('youtube_account')
+      .eq('id', user.id)
+      .maybeSingle();
+    const existingYoutubeAccount =
+      (existingYoutubeProfile?.youtube_account as Record<string, unknown> | null) ||
+      null;
+    const connectedAtNow = new Date().toISOString();
+
     const youtubeAccount = {
       channel_id: channelInfo.id,
       channel_title: channelInfo.snippet?.title,
@@ -116,7 +126,13 @@ export async function GET(request: NextRequest) {
       token_type: tokens.token_type,
       expires_at: newExpiresAt,
       scopes: tokens.scope?.split(' '),
-      updated_at: new Date().toISOString(),
+      updated_at: connectedAtNow,
+      // First connect only; weekly refresh cadence anchors to this.
+      connected_at:
+        typeof existingYoutubeAccount?.connected_at === 'string' &&
+        existingYoutubeAccount.connected_at
+          ? existingYoutubeAccount.connected_at
+          : connectedAtNow,
       needs_reconnect: false,
     };
 

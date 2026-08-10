@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { enqueueTokenRefreshJobs } from "@/lib/queue/token-refresh-queue";
+import { isCreatorDueForWeeklyTokenRefresh } from "@/lib/token-refresh-eligibility";
 import { triggerProcessTokenRefreshQueue, getQStashPublishBaseUrl } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Entry point for daily token refresh.
- * Fetches all creators with connected accounts and pushes them to the Redis queue.
+ * Daily sweeper for weekly token + account-details refresh.
+ * Only enqueues creators whose connected social account(s) are due
+ * (7 days from connection / last successful details refresh).
  */
 export async function GET(request: Request) {
   // Verify CRON secret
@@ -24,32 +26,63 @@ export async function GET(request: Request) {
     }
   );
 
-  console.log("[Token Refresh] Starting global token refresh process (Enqueuing)...");
+  console.log("[Token Refresh] Starting weekly-due token refresh enqueue...");
 
   try {
-    // 1. Fetch all profiles that need refreshing
-    const { data: profiles, error: fetchError } = await supabaseAdmin
-      .from("creator_profiles")
-      .select("id")
-      .or("tiktok_account.not.is.null,instagram_account.not.is.null,youtube_account.not.is.null");
+    const now = new Date();
+    const PAGE_SIZE = 1000;
+    const dueJobs: { creatorId: string }[] = [];
+    let scanned = 0;
+    let cursor: string | null = null;
 
-    if (fetchError) throw fetchError;
+    // Page through connected creators and keep only those due for weekly refresh.
+    for (;;) {
+      let query = supabaseAdmin
+        .from("creator_profiles")
+        .select("id, tiktok_account, instagram_account, youtube_account")
+        .or(
+          "tiktok_account.not.is.null,instagram_account.not.is.null,youtube_account.not.is.null",
+        )
+        .order("id", { ascending: true })
+        .limit(PAGE_SIZE);
 
-    if (!profiles || profiles.length === 0) {
-      return NextResponse.json({ message: "No profiles to refresh" });
+      if (cursor) {
+        query = query.gt("id", cursor);
+      }
+
+      const { data: profiles, error: fetchError } = await query;
+      if (fetchError) throw fetchError;
+      if (!profiles || profiles.length === 0) break;
+
+      scanned += profiles.length;
+      for (const profile of profiles) {
+        if (isCreatorDueForWeeklyTokenRefresh(profile, now)) {
+          dueJobs.push({ creatorId: profile.id });
+        }
+      }
+
+      cursor = profiles[profiles.length - 1]?.id ?? null;
+      if (profiles.length < PAGE_SIZE || !cursor) break;
     }
 
-    console.log(`[Token Refresh] Found ${profiles.length} creators. Enqueueing to Redis...`);
+    if (dueJobs.length === 0) {
+      return NextResponse.json({
+        message: "No creators due for weekly token refresh",
+        scanned,
+        count: 0,
+      });
+    }
 
-    // 2. Batch enqueue to Redis (max 1000 per rpush for safety)
-    const jobs = profiles.map(p => ({ creatorId: p.id }));
+    console.log(
+      `[Token Refresh] Scanned ${scanned} creators; ${dueJobs.length} due. Enqueueing...`,
+    );
+
     const CHUNK_SIZE = 1000;
-    for (let i = 0; i < jobs.length; i += CHUNK_SIZE) {
-      const chunk = jobs.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < dueJobs.length; i += CHUNK_SIZE) {
+      const chunk = dueJobs.slice(i, i + CHUNK_SIZE);
       await enqueueTokenRefreshJobs(chunk);
     }
 
-    // 3. Trigger the processor
     const baseUrl = getQStashPublishBaseUrl(request);
     const triggerRes = await triggerProcessTokenRefreshQueue(baseUrl);
     if (triggerRes?.error) {
@@ -61,8 +94,9 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: "Token refresh jobs enqueued successfully",
-      count: profiles.length
+      message: "Weekly-due token refresh jobs enqueued successfully",
+      scanned,
+      count: dueJobs.length,
     });
 
   } catch (error: any) {
@@ -70,4 +104,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
