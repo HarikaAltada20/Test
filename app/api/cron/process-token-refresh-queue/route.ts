@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
-import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
 import { refreshToken as refreshInstagramToken } from "@/lib/instagram-insights";
 import {
   refreshAccessToken as refreshYouTubeToken,
@@ -164,11 +163,15 @@ async function refreshProfileTokensAndDetails(
 async function refreshTikTokAccount(
   supabase: SupabaseClient,
   creatorId: string,
-  existing: Record<string, unknown>,
+  _existing: Record<string, unknown>,
   now: Date,
 ) {
   try {
-    const fresh = await ensureFreshTikTokToken(supabase, creatorId);
+    // Always exchange refresh_token and re-fetch profile details (followers, username, etc.).
+    const fresh = await ensureFreshTikTokToken(supabase, creatorId, {
+      forceRefresh: true,
+      syncProfile: true,
+    });
     if (!fresh.ok) {
       console.error(
         `[Token Refresh Queue] TikTok token refresh failed for ${creatorId}:`,
@@ -177,29 +180,20 @@ async function refreshTikTokAccount(
       return;
     }
 
-    const provider = new TikTokProvider();
-    const profile = await provider.getProfile(fresh.accessToken);
-    const base = {
-      ...(fresh.tiktokAccount || existing),
-      platform_user_id: profile.id || existing.platform_user_id,
-      username: profile.username || existing.username,
-      avatar_url: profile.avatarUrl || existing.avatar_url,
-      follower_count: profile.followerCount ?? existing.follower_count,
-      following_count: profile.followingCount ?? existing.following_count,
-      likes_count: profile.likesCount ?? existing.likes_count,
-      video_count: profile.videoCount ?? existing.video_count,
-      last_synced_at: now.toISOString(),
-      needs_reconnect: false,
-    };
-
-    const updated = withWeeklyRefreshTimestamps(base, now);
-    await supabase
+    const updated = withWeeklyRefreshTimestamps(
+      { ...fresh.tiktokAccount },
+      now,
+    );
+    const { error } = await supabase
       .from("creator_profiles")
       .update({
         tiktok_account: updated,
         updated_at: now.toISOString(),
       })
       .eq("id", creatorId);
+    if (error) {
+      throw error;
+    }
   } catch (e) {
     console.error(`[Token Refresh Queue] TikTok details refresh failed for ${creatorId}:`, e);
   }
