@@ -9,6 +9,7 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
 import {
   acquireCreatorContestPayoutLease,
   releaseCreatorContestPayoutLease,
@@ -49,6 +50,70 @@ function distributeCentsByWeights(
     amounts[i] = base + (i < rem ? 1 : 0);
   }
   return amounts;
+}
+
+async function rollbackTwitterCreatorWalletCredit(params: {
+  creatorId: string;
+  rewardAmount: number;
+  contestId: string;
+  contestTitle: string;
+  payKey: string;
+  reason: string;
+  transactionId?: string | null;
+  extraMetadata?: Record<string, unknown>;
+}): Promise<{ ok: boolean; error?: string; alreadyApplied?: boolean }> {
+  const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+    payoutOperationKey: params.payKey,
+    reason: params.reason,
+  });
+  const debitRes = await debitCreatorWithdrawableBalance(
+    params.creatorId,
+    params.rewardAmount,
+    { idempotencyKey: rollbackDebitKey },
+  );
+  if (!debitRes.success) {
+    return {
+      ok: false,
+      error: debitRes.error || "Unknown wallet rollback failure",
+    };
+  }
+
+  const refundLogged = await logTransactionAsAdmin(
+    params.creatorId,
+    "refund",
+    params.rewardAmount,
+    "success",
+    `Rollback: Twitter creator payment ${params.reason} - ${params.contestTitle}`,
+    {
+      remarks: REVERSAL_TRANSACTION_REMARK,
+      paymentMethod: "refund",
+      metadata: {
+        contest_id: params.contestId,
+        twitter_creator_id: params.creatorId,
+        payout_type: "twitter_creator_rollback",
+        original_reward_transaction_id: params.transactionId,
+        payout_operation_key: params.payKey,
+        wallet_rollback_debit_key: rollbackDebitKey,
+        wallet_rollback_already_applied: Boolean(debitRes.alreadyApplied),
+        rollback_reason: params.reason,
+        ...(params.extraMetadata || {}),
+      },
+    },
+  );
+
+  if (!refundLogged && !debitRes.alreadyApplied) {
+    return {
+      ok: false,
+      alreadyApplied: Boolean(debitRes.alreadyApplied),
+      error:
+        "Wallet debit succeeded but refund ledger row could not be written",
+    };
+  }
+
+  return {
+    ok: true,
+    alreadyApplied: Boolean(debitRes.alreadyApplied),
+  };
 }
 
 /**
@@ -564,31 +629,15 @@ export async function POST(
         updateError,
       );
       if (!creditRes.alreadyApplied) {
-        const debitRes = await debitCreatorWithdrawableBalance(
+        await rollbackTwitterCreatorWalletCredit({
           creatorId,
           rewardAmount,
-        );
-        if (debitRes.success) {
-          await logTransactionAsAdmin(
-            creatorId,
-            "refund",
-            rewardAmount,
-            "success",
-            `Rollback: Twitter creator payment leaderboard update failed - ${
-              contest.title || "Contest"
-            }`,
-            {
-              remarks: REVERSAL_TRANSACTION_REMARK,
-              paymentMethod: "refund",
-              metadata: {
-                contest_id: contestId,
-                twitter_creator_id: creatorId,
-                payout_type: "twitter_creator_rollback",
-                original_reward_transaction_id: creditRes.transactionId,
-              },
-            },
-          );
-        }
+          contestId,
+          contestTitle: contest.title || "Contest",
+          payKey: twitterCreatorPayKey,
+          reason: "leaderboard_update_failed",
+          transactionId: creditRes.transactionId,
+        });
       }
       return NextResponse.json(
         { error: "Failed to update leaderboard payment status" },
@@ -612,62 +661,45 @@ export async function POST(
         "[pay-twitter-creator] Error fetching tweets for earnings split:",
         tweetsFetchError,
       );
-      if (contest.contest_type === "cpm") {
-        if (!creditRes.alreadyApplied) {
-          const debitRes = await debitCreatorWithdrawableBalance(
-            creatorId,
-            rewardAmount,
+      if (!creditRes.alreadyApplied) {
+        const debitRes = await rollbackTwitterCreatorWalletCredit({
+          creatorId,
+          rewardAmount,
+          contestId,
+          contestTitle: contest.title || "Contest",
+          payKey: twitterCreatorPayKey,
+          reason: "tweet_fetch_failed",
+          transactionId: creditRes.transactionId,
+        });
+        if (!debitRes.ok) {
+          return NextResponse.json(
+            {
+              error:
+                "Creator was credited but tweets could not be loaded for earnings split, and automatic wallet rollback failed. Contact support immediately.",
+              details: debitRes.error,
+            },
+            { status: 500 },
           );
-          if (debitRes.success) {
-            await logTransactionAsAdmin(
-              creatorId,
-              "refund",
-              rewardAmount,
-              "success",
-              `Rollback: Twitter creator payment tweet fetch failed - ${
-                contest.title || "Contest"
-              }`,
-              {
-                remarks: REVERSAL_TRANSACTION_REMARK,
-                paymentMethod: "refund",
-                metadata: {
-                  contest_id: contestId,
-                  twitter_creator_id: creatorId,
-                  payout_type: "twitter_creator_rollback",
-                  original_reward_transaction_id: creditRes.transactionId,
-                },
-              },
-            );
-          } else {
-            return NextResponse.json(
-              {
-                error:
-                  "Creator was credited but tweets could not be loaded for earnings split, and automatic wallet rollback failed. Contact support immediately.",
-                details: debitRes.error,
-              },
-              { status: 500 },
-            );
-          }
         }
-        await supabaseAdmin
-          .from("twitter_campaign_leaderboard")
-          .update({
-            paid_at: leaderboardEntry.paid_at,
-            earnings: leaderboardEntry.earnings,
-            paid_rank: leaderboardEntry.paid_rank,
-            moderation_status: leaderboardEntry.moderation_status,
-          })
-          .eq("id", leaderboardEntry.id);
-        return NextResponse.json(
-          {
-            error: creditRes.alreadyApplied
-              ? "Creator payout existed, but tweets could not be loaded to reconcile earnings. Retry or contact support."
-              : "Creator payment tweet fetch failed. Wallet credit was rolled back; retry.",
-            details: tweetsFetchError.message,
-          },
-          { status: 500 },
-        );
       }
+      await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .update({
+          paid_at: leaderboardEntry.paid_at,
+          earnings: leaderboardEntry.earnings,
+          paid_rank: leaderboardEntry.paid_rank,
+          moderation_status: leaderboardEntry.moderation_status,
+        })
+        .eq("id", leaderboardEntry.id);
+      return NextResponse.json(
+        {
+          error: creditRes.alreadyApplied
+            ? "Creator payout existed, but tweets could not be loaded to reconcile earnings. Retry or contact support."
+            : "Creator payment tweet fetch failed. Wallet credit was rolled back; retry.",
+          details: tweetsFetchError.message,
+        },
+        { status: 500 },
+      );
     } else if (tweetsToPay?.length) {
       const unpaidTweets = tweetsToPay.filter(
         (tweet) => tweet.moderation_status !== "paid",
@@ -708,31 +740,16 @@ export async function POST(
           tweetUpdateErr,
         );
         if (!creditRes.alreadyApplied) {
-          const debitRes = await debitCreatorWithdrawableBalance(
+          const debitRes = await rollbackTwitterCreatorWalletCredit({
             creatorId,
             rewardAmount,
-          );
-          if (debitRes.success) {
-            await logTransactionAsAdmin(
-              creatorId,
-              "refund",
-              rewardAmount,
-              "success",
-              `Rollback: Twitter creator payment tweet update failed - ${
-                contest.title || "Contest"
-              }`,
-              {
-                remarks: REVERSAL_TRANSACTION_REMARK,
-                paymentMethod: "refund",
-                metadata: {
-                  contest_id: contestId,
-                  twitter_creator_id: creatorId,
-                  payout_type: "twitter_creator_rollback",
-                  original_reward_transaction_id: creditRes.transactionId,
-                },
-              },
-            );
-          } else {
+            contestId,
+            contestTitle: contest.title || "Contest",
+            payKey: twitterCreatorPayKey,
+            reason: "tweet_update_failed",
+            transactionId: creditRes.transactionId,
+          });
+          if (!debitRes.ok) {
             console.error(
               "[pay-twitter-creator] CRITICAL: wallet rollback failed after tweet update error:",
               debitRes.error,
@@ -791,11 +808,16 @@ export async function POST(
           tweetsUpdateError,
         );
         if (!creditRes.alreadyApplied) {
-          const debitRes = await debitCreatorWithdrawableBalance(
+          const debitRes = await rollbackTwitterCreatorWalletCredit({
             creatorId,
             rewardAmount,
-          );
-          if (!debitRes.success) {
+            contestId,
+            contestTitle: contest.title || "Contest",
+            payKey: twitterCreatorPayKey,
+            reason: "tweet_status_update_failed",
+            transactionId: creditRes.transactionId,
+          });
+          if (!debitRes.ok) {
             return NextResponse.json(
               {
                 error:
@@ -805,25 +827,6 @@ export async function POST(
               { status: 500 },
             );
           }
-          await logTransactionAsAdmin(
-            creatorId,
-            "refund",
-            rewardAmount,
-            "success",
-            `Rollback: Twitter creator payment tweet update failed - ${
-              contest.title || "Contest"
-            }`,
-            {
-              remarks: REVERSAL_TRANSACTION_REMARK,
-              paymentMethod: "refund",
-              metadata: {
-                contest_id: contestId,
-                twitter_creator_id: creatorId,
-                payout_type: "twitter_creator_rollback",
-                original_reward_transaction_id: creditRes.transactionId,
-              },
-            },
-          );
         }
         await supabaseAdmin
           .from("twitter_campaign_leaderboard")
@@ -861,32 +864,17 @@ export async function POST(
           reconciled.error,
         );
         if (!creditRes.alreadyApplied) {
-          const debitRes = await debitCreatorWithdrawableBalance(
+          const debitRes = await rollbackTwitterCreatorWalletCredit({
             creatorId,
             rewardAmount,
-          );
-          if (debitRes.success) {
-            await logTransactionAsAdmin(
-              creatorId,
-              "refund",
-              rewardAmount,
-              "success",
-              `Rollback: Twitter creator payment leaderboard reconcile failed - ${
-                contest.title || "Contest"
-              }`,
-              {
-                remarks: REVERSAL_TRANSACTION_REMARK,
-                paymentMethod: "refund",
-                metadata: {
-                  contest_id: contestId,
-                  twitter_creator_id: creatorId,
-                  payout_type: "twitter_creator_rollback",
-                  original_reward_transaction_id: creditRes.transactionId,
-                  reconcile_error: reconciled.error,
-                },
-              },
-            );
-          } else {
+            contestId,
+            contestTitle: contest.title || "Contest",
+            payKey: twitterCreatorPayKey,
+            reason: "leaderboard_reconcile_failed",
+            transactionId: creditRes.transactionId,
+            extraMetadata: { reconcile_error: reconciled.error },
+          });
+          if (!debitRes.ok) {
             console.error(
               "[pay-twitter-creator] CRITICAL: wallet rollback failed after reconcile error:",
               debitRes.error,

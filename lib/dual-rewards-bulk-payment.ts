@@ -32,6 +32,11 @@ import {
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
+import {
+  renewCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
 import {
   debitCreatorWithdrawableBalance,
   logTransactionAsAdmin,
@@ -92,6 +97,8 @@ export async function executeDualRewardsBulkPayment(params: {
   creatorId: string;
   submissionIds: string[];
   paymentType: "standard" | "bonus" | "both";
+  /** Optional lease held by the caller; renewed during long row-update loops. */
+  payoutLease?: CreatorContestPayoutLease | null;
 }): Promise<
   | {
       ok: true;
@@ -117,6 +124,7 @@ export async function executeDualRewardsBulkPayment(params: {
     creatorId,
     submissionIds,
     paymentType,
+    payoutLease,
   } = params;
 
   const component = paymentTypeToComponent(paymentType);
@@ -490,6 +498,8 @@ export async function executeDualRewardsBulkPayment(params: {
   const appliedIds: string[] = [];
 
   for (const item of breakdown) {
+    await renewCreatorContestPayoutLease(payoutLease);
+
     const sub = sortedSubmissions.find((s) => String(s.id) === item.submission_id);
     if (!sub) continue;
 
@@ -566,12 +576,17 @@ export async function executeDualRewardsBulkPayment(params: {
     let walletRollbackError: string | undefined;
 
     if (!creditResult.alreadyApplied) {
+      const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+        payoutOperationKey: payoutOperationKey,
+        reason: "submission_row_update_failed",
+      });
       const rollback = await debitCreatorWithdrawableBalance(
         creatorId,
         payableCents,
+        { idempotencyKey: rollbackDebitKey },
       );
       if (rollback.success) {
-        await logTransactionAsAdmin(
+        const refundLogged = await logTransactionAsAdmin(
           creatorId,
           "refund",
           payableCents,
@@ -585,10 +600,27 @@ export async function executeDualRewardsBulkPayment(params: {
               payout_type: "bulk_dual_rewards_rollback",
               original_reward_transaction_id: creditResult.transactionId,
               payout_operation_key: payoutOperationKey,
+              wallet_rollback_debit_key: rollbackDebitKey,
+              wallet_rollback_already_applied: Boolean(rollback.alreadyApplied),
               update_failures: updateFailures,
             },
           },
         );
+        if (!refundLogged && !rollback.alreadyApplied) {
+          walletRollbackFailed = true;
+          walletRollbackError =
+            "Wallet debit succeeded but refund ledger row could not be written";
+          console.error(
+            "[dual-rewards-bulk-payment] CRITICAL: wallet rolled back but refund log failed:",
+            {
+              creatorId,
+              contestId,
+              payableCents,
+              payoutOperationKey,
+              rollbackDebitKey,
+            },
+          );
+        }
       } else {
         walletRollbackFailed = true;
         walletRollbackError = rollback.error;

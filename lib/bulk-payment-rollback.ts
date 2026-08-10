@@ -1,4 +1,22 @@
 /**
+ * Stable debit idempotency key for payout rollback paths.
+ * Prevents double-debit when a server timeout retries after a successful debit.
+ */
+export function buildWalletRollbackDebitIdempotencyKey(params: {
+  payoutOperationKey: string;
+  reason: string;
+}): string {
+  const payoutKey = String(params.payoutOperationKey || "")
+    .trim()
+    .slice(0, 160);
+  const reason = String(params.reason || "rollback")
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]+/g, "_")
+    .slice(0, 64);
+  return `wallet_rollback:v1:${payoutKey}:${reason || "rollback"}`;
+}
+
+/**
  * Split a fresh (non-idempotent) bulk wallet credit into prize vs bonus
  * components so failed row updates can revert the correct submission flags.
  */

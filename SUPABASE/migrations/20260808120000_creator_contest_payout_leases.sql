@@ -33,7 +33,8 @@ begin
   values (
     v_key,
     p_owner_token,
-    now() + make_interval(secs => greatest(15, least(p_ttl_seconds, 300))),
+    -- Cap at 30m so long bulk pays can finish; owners renew via re-acquire.
+    now() + make_interval(secs => greatest(15, least(p_ttl_seconds, 1800))),
     now()
   )
   on conflict (lease_key) do update

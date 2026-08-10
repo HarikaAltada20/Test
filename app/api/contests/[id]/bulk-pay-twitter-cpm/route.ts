@@ -21,6 +21,7 @@ import {
   sumBonusRefunds,
 } from "@/lib/twitter-bonus-accounting";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
 import {
   acquireCreatorContestPayoutLease,
   releaseCreatorContestPayoutLease,
@@ -611,9 +612,14 @@ export async function POST(
         // Idempotent retries (alreadyApplied) must not debit — that would strip balance
         // when no new credit happened in this invocation.
         if (!creditRes.alreadyApplied) {
+          const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+            payoutOperationKey: twitterBulkIdempotencyKey,
+            reason: "tweet_row_update_failed",
+          });
           const debitRes = await debitCreatorWithdrawableBalance(
             creatorId,
-            totalAmount
+            totalAmount,
+            { idempotencyKey: rollbackDebitKey },
           );
           if (!debitRes.success) {
             console.error(
@@ -646,6 +652,11 @@ export async function POST(
                 rollback_reason: "tweet_row_update_failed",
                 failed_tweet_id: tid,
                 original_reward_transaction_id: creditRes.transactionId,
+                payout_operation_key: twitterBulkIdempotencyKey,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  debitRes.alreadyApplied,
+                ),
                 total_cpm: totalCpm,
                 total_bonus: totalBonus,
                 ...(totalBonus > 0
@@ -660,7 +671,7 @@ export async function POST(
               },
             }
           );
-          if (!logged) {
+          if (!logged && !debitRes.alreadyApplied) {
             console.error(
               "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
               creatorId
@@ -763,9 +774,14 @@ export async function POST(
 
         // Only roll back wallet if this request actually credited fresh funds.
         if (!creditRes.alreadyApplied) {
+          const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+            payoutOperationKey: twitterBulkIdempotencyKey,
+            reason: "bonus_row_update_failed",
+          });
           const debitRes = await debitCreatorWithdrawableBalance(
             creatorId,
             totalAmount,
+            { idempotencyKey: rollbackDebitKey },
           );
           if (!debitRes.success) {
             console.error(
@@ -798,6 +814,11 @@ export async function POST(
                 rollback_reason: "bonus_row_update_failed",
                 failed_tweet_id: tid,
                 original_reward_transaction_id: creditRes.transactionId,
+                payout_operation_key: twitterBulkIdempotencyKey,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  debitRes.alreadyApplied,
+                ),
                 total_cpm: totalCpm,
                 total_bonus: totalBonus,
                 ...(totalBonus > 0
@@ -812,7 +833,7 @@ export async function POST(
               },
             },
           );
-          if (!logged) {
+          if (!logged && !debitRes.alreadyApplied) {
             console.error(
               "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
               creatorId,

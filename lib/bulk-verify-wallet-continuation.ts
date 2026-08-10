@@ -20,13 +20,12 @@ export type BulkVerifyWalletContinuationPayload = {
 
 function getSigningSecret(): string {
   const secret = (
-    process.env.BULK_VERIFY_WALLET_CONTINUATION_SECRET ||
     process.env.CRON_SECRET ||
     ""
   ).trim();
   if (!secret) {
     throw new Error(
-      "BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET is required to sign wallet continuation tokens",
+      "CRON_SECRET is required to sign wallet continuation tokens",
     );
   }
   return secret;
@@ -210,7 +209,10 @@ export function verifyBulkVerifyWalletContinuation(params: {
   }
 
   if (!safeEqualString(signature, expectedSig)) {
-    return { ok: false, error: "Wallet reversal continuation signature mismatch" };
+    return {
+      ok: false,
+      error: "Wallet reversal continuation signature mismatch",
+    };
   }
 
   let payload: BulkVerifyWalletContinuationPayload;
@@ -219,11 +221,17 @@ export function verifyBulkVerifyWalletContinuation(params: {
       Buffer.from(encoded, "base64url").toString("utf8"),
     ) as BulkVerifyWalletContinuationPayload;
   } catch {
-    return { ok: false, error: "Wallet reversal continuation payload is invalid" };
+    return {
+      ok: false,
+      error: "Wallet reversal continuation payload is invalid",
+    };
   }
 
   if (payload?.v !== TOKEN_VERSION) {
-    return { ok: false, error: "Unsupported wallet reversal continuation version" };
+    return {
+      ok: false,
+      error: "Unsupported wallet reversal continuation version",
+    };
   }
   if (
     !payload.actorId ||
@@ -231,7 +239,10 @@ export function verifyBulkVerifyWalletContinuation(params: {
     typeof payload.reversalIdsHash !== "string" ||
     !payload.reversalIdsHash
   ) {
-    return { ok: false, error: "Wallet reversal continuation payload is incomplete" };
+    return {
+      ok: false,
+      error: "Wallet reversal continuation payload is incomplete",
+    };
   }
   if (typeof payload.exp !== "number" || Date.now() > payload.exp) {
     return { ok: false, error: "Wallet reversal continuation has expired" };

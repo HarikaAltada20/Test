@@ -30,12 +30,14 @@ import {
   sumPaidEarningsCents,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import {
+  buildWalletRollbackDebitIdempotencyKey,
   bulkPaymentRollbackRevertFlags,
   splitFreshBulkCreditCents,
 } from "@/lib/bulk-payment-rollback";
 import {
   acquireCreatorContestPayoutLease,
   releaseCreatorContestPayoutLease,
+  renewCreatorContestPayoutLease,
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
 
@@ -191,6 +193,7 @@ export async function POST(request: NextRequest) {
         creatorId: creator_id,
         submissionIds: submission_ids,
         paymentType: payment_type,
+        payoutLease,
       });
 
       if (!dualResult.ok) {
@@ -960,6 +963,8 @@ export async function POST(request: NextRequest) {
 
     // Update each submission
     for (const update of submissionUpdates) {
+      await renewCreatorContestPayoutLease(payoutLease);
+
       const updatePayload: Record<string, unknown> = {};
 
       // Mark prize paid only when this update actually includes a prize credit.
@@ -1023,12 +1028,19 @@ export async function POST(request: NextRequest) {
             : 0;
       let rollbackFailedError: string | undefined;
       if (rollbackCents > 0) {
+        const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+          payoutOperationKey: bulkPayIdempotencyKey,
+          reason: "submission_row_update_failed",
+        });
         const rollback = await debitCreatorWithdrawableBalance(
           creator_id,
           rollbackCents,
+          { idempotencyKey: rollbackDebitKey },
         );
         if (rollback.success) {
-          await logTransactionAsAdmin(
+          // Fresh debit must leave a ledger refund. alreadyApplied means a prior
+          // attempt already debited; still attempt the refund log once.
+          const refundLogged = await logTransactionAsAdmin(
             creator_id,
             "refund",
             rollbackCents,
@@ -1044,12 +1056,24 @@ export async function POST(request: NextRequest) {
                 payout_type: "bulk_payment_rollback",
                 original_reward_transaction_id: creditResult.transactionId,
                 payout_operation_key: bulkPayIdempotencyKey,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  rollback.alreadyApplied,
+                ),
                 fresh_prize_credited_cents: prizeRollbackCents,
                 fresh_bonus_credited_cents: bonusRollbackCents,
                 update_failures: updateFailures,
               },
             },
           );
+          if (!refundLogged && !rollback.alreadyApplied) {
+            rollbackFailedError =
+              "Wallet debit succeeded but refund ledger row could not be written";
+            console.error(
+              "[bulk-payment] CRITICAL: wallet rolled back but refund log failed:",
+              { creator_id, rollbackDebitKey, rollbackCents },
+            );
+          }
         } else {
           rollbackFailedError =
             rollback.error || "Unknown wallet rollback failure";

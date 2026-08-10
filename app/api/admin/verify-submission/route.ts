@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextResponse } from "next/server";
@@ -8,6 +9,7 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
@@ -2094,9 +2096,25 @@ export async function POST(request: Request) {
         }
 
         if (walletDebitCents > 0) {
+          const reversalDebitKey = buildWalletRollbackDebitIdempotencyKey({
+            payoutOperationKey: `verify_reversal:v1:${createHash("sha256")
+              .update(
+                JSON.stringify({
+                  submissionId: String(submissionId),
+                  creatorId: String(submissionFull.creator_id),
+                  contestId: String(submissionFull.contest_id),
+                  action: String(action),
+                  walletDebitCents,
+                }),
+              )
+              .digest("hex")
+              .slice(0, 40)}`,
+            reason: "paid_status_reversal",
+          });
           const debitRes = await debitCreatorWithdrawableBalance(
             submissionFull.creator_id,
             walletDebitCents,
+            { idempotencyKey: reversalDebitKey },
           );
           if (!debitRes.success) {
             return NextResponse.json(

@@ -1,9 +1,38 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildWalletRollbackDebitIdempotencyKey,
   bulkPaymentRollbackRevertFlags,
   splitFreshBulkCreditCents,
 } from "./bulk-payment-rollback";
+
+describe("buildWalletRollbackDebitIdempotencyKey", () => {
+  it("is stable for the same payout key + reason", () => {
+    assert.equal(
+      buildWalletRollbackDebitIdempotencyKey({
+        payoutOperationKey: "bulk_pay_v2:abc",
+        reason: "submission_row_update_failed",
+      }),
+      buildWalletRollbackDebitIdempotencyKey({
+        payoutOperationKey: "bulk_pay_v2:abc",
+        reason: "submission_row_update_failed",
+      }),
+    );
+  });
+
+  it("changes when reason changes so different rollback stages stay distinct", () => {
+    const a = buildWalletRollbackDebitIdempotencyKey({
+      payoutOperationKey: "twitter_creator_pay:v1:c1:u1:cycle:1",
+      reason: "tweet_fetch_failed",
+    });
+    const b = buildWalletRollbackDebitIdempotencyKey({
+      payoutOperationKey: "twitter_creator_pay:v1:c1:u1:cycle:1",
+      reason: "tweet_update_failed",
+    });
+    assert.notEqual(a, b);
+    assert.match(a, /^wallet_rollback:v1:/);
+  });
+});
 
 describe("splitFreshBulkCreditCents", () => {
   it("attributes bonus-only credits to bonus", () => {

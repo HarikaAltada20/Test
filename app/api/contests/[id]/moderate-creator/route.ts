@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -6,6 +7,7 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { buildWalletRollbackDebitIdempotencyKey } from "@/lib/bulk-payment-rollback";
 import {
   sumBonusRewards,
   sumBonusRefunds,
@@ -233,9 +235,24 @@ export async function POST(
       const totalReversalAmount = mainReversalAmount + bonusReversalAmount;
 
       if (totalReversalAmount > 0) {
+        const reversalDebitKey = buildWalletRollbackDebitIdempotencyKey({
+          payoutOperationKey: `twitter_creator_reversal:v1:${createHash("sha256")
+            .update(
+              JSON.stringify({
+                contestId,
+                creatorId,
+                mainReversalAmount,
+                bonusReversalAmount,
+              }),
+            )
+            .digest("hex")
+            .slice(0, 40)}`,
+          reason: "moderate_creator_reversal",
+        });
         const debitRes = await debitCreatorWithdrawableBalance(
           creatorId,
-          totalReversalAmount
+          totalReversalAmount,
+          { idempotencyKey: reversalDebitKey },
         );
         if (!debitRes.success) {
           return NextResponse.json(

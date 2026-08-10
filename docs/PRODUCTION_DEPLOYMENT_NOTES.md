@@ -14,9 +14,11 @@ Short checklist for deploying changes that affect production.
 
 This serializes rank/cap/ledger calculations for the same contest and creator across API routes and workers.
 
+Lease TTL defaults to 15 minutes (SQL max 30 minutes). Long bulk pays renew the owned lease while submission rows update so a slow request cannot be stolen by a concurrent pay.
+
 **Required env (pick one):**
 
-- Prefer: `BULK_VERIFY_WALLET_CONTINUATION_SECRET` — dedicated HMAC secret for short-lived internal wallet-debit bypass authorization
+- Prefer: — dedicated HMAC secret for short-lived internal wallet-debit bypass authorization
 - Fallback: `CRON_SECRET`
 
 Each client chunk performs its own bounded wallet reversal. Full-selection continuation tokens are rejected. Without either secret, reversal fails before wallets are changed.

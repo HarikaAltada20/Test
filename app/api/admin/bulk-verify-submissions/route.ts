@@ -191,8 +191,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const walletIdsForOwnership: string[] = [];
-
     let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
     if (action === "verified") {
       const { requireVerifyQualityScore } = await import("@/lib/quality-score");
@@ -250,11 +248,8 @@ export async function POST(request: Request) {
 
       actorId = authUser.id;
 
-      const ownershipIds = Array.from(
-        new Set([...submissionIds.map(String), ...walletIdsForOwnership]),
-      );
       const ownershipError = await assertAdvertiserOwnsSubmissions(
-        ownershipIds,
+        submissionIds,
         authUser.id,
       );
       if (ownershipError) {
@@ -297,7 +292,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              "Cannot start wallet reversal: server signing secret is not configured (BULK_VERIFY_WALLET_CONTINUATION_SECRET or CRON_SECRET).",
+              "Cannot start wallet reversal: server signing secret is not configured CRON_SECRET).",
           },
           { status: 500 },
         );
