@@ -638,43 +638,51 @@ export async function executeDualRewardsBulkPayment(params: {
         );
       }
 
-      for (const id of appliedIds) {
-        const item = breakdown.find((b) => b.submission_id === id);
-        const sub = sortedSubmissions.find((s) => String(s.id) === id);
-        if (!item || !sub) continue;
+      // Never make successfully updated rows look unpaid while the wallet
+      // still contains their credit (or when refund ledger write failed).
+      // Preserve them for deterministic retry / manual reconciliation.
+      if (!walletRollbackFailed) {
+        for (const id of appliedIds) {
+          const item = breakdown.find((b) => b.submission_id === id);
+          const sub = sortedSubmissions.find((s) => String(s.id) === id);
+          if (!item || !sub) continue;
 
-        const priorComponents = getDualRewardsSubmissionPaidComponents({
-          id,
-          earnings: sub.earnings,
-          paid: sub.paid,
-          bonus_amount: sub.bonus_amount,
-          bonus_paid: sub.bonus_paid,
-          dual_rewards_payout: sub.dual_rewards_payout,
-        });
-        const revertPayload = buildDualRewardsBulkRollbackRevertPayload(
-          priorComponents,
-          item,
-        );
-        await supabaseAdmin.from("submissions").update(revertPayload).eq("id", id);
-      }
+          const priorComponents = getDualRewardsSubmissionPaidComponents({
+            id,
+            earnings: sub.earnings,
+            paid: sub.paid,
+            bonus_amount: sub.bonus_amount,
+            bonus_paid: sub.bonus_paid,
+            dual_rewards_payout: sub.dual_rewards_payout,
+          });
+          const revertPayload = buildDualRewardsBulkRollbackRevertPayload(
+            priorComponents,
+            item,
+          );
+          await supabaseAdmin
+            .from("submissions")
+            .update(revertPayload)
+            .eq("id", id);
+        }
 
-      for (const prior of poolCommits) {
-        await rollbackDualRewardsPoolCommitIfNeeded(
-          supabaseAdmin,
-          contestId,
-          prior.submissionId,
-          prior.result,
-        );
+        for (const prior of poolCommits) {
+          await rollbackDualRewardsPoolCommitIfNeeded(
+            supabaseAdmin,
+            contestId,
+            prior.submissionId,
+            prior.result,
+          );
+        }
       }
     }
 
     return {
       ok: false,
       status: 500,
-      error: creditResult.alreadyApplied
-        ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
-        : walletRollbackFailed
-          ? "Submission rows could not be marked paid and wallet rollback failed. Manual reconciliation required — see details."
+      error: walletRollbackFailed
+        ? "CRITICAL: creator wallet was credited and automatic rollback failed. Successfully updated rows were preserved as paid; do not retry with a different selection. Contact support immediately."
+        : creditResult.alreadyApplied
+          ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
           : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
       details: {
         updateFailures,
@@ -688,7 +696,7 @@ export async function executeDualRewardsBulkPayment(params: {
         wallet_rollback_error: walletRollbackError,
         reconciliation_hint:
           walletRollbackFailed || creditResult.alreadyApplied
-            ? "Compare money_transactions reward/refund rows for payout_operation_key and submission dual_rewards_payout JSON."
+            ? "Compare money_transactions reward/refund rows for payout_operation_key and submission dual_rewards_payout JSON. Do not retry with a different submission selection while wallet_rollback_failed is true."
             : undefined,
       },
     };

@@ -292,7 +292,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              "Cannot start wallet reversal: server signing secret is not configured CRON_SECRET).",
+              "Cannot start wallet reversal: server signing secret is not configured (CRON_SECRET).",
           },
           { status: 500 },
         );
