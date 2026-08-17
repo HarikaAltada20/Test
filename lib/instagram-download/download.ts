@@ -94,9 +94,17 @@ export async function getInstagramVideoStream(
 }> {
   const { videoUrl, shortcode } = await getInstagramVideoUrlFromLink(contentLink);
 
-  const videoResponse = await fetch(videoUrl, {
-    headers: VIDEO_FETCH_HEADERS,
-  });
+  const fetchCdn = (url: string) =>
+    fetch(url, {
+      headers: VIDEO_FETCH_HEADERS,
+    });
+
+  let videoResponse = await fetchCdn(videoUrl);
+
+  if (!videoResponse.ok && [403, 404, 429, 500, 502, 503].includes(videoResponse.status)) {
+    const retryLink = await getInstagramVideoUrlFromLink(contentLink);
+    videoResponse = await fetchCdn(retryLink.videoUrl);
+  }
 
   if (!videoResponse.ok) {
     throw new InstagramDownloadError(

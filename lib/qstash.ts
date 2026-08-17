@@ -233,6 +233,11 @@ function getProcessTokenRefreshQueueUrl(): string {
   return `${getBaseUrl()}/api/cron/process-token-refresh-queue`;
 }
 
+/** Canonical URL for the Instagram/YouTube video download queue processor. */
+function getProcessVideoDownloadQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-video-download-queue`;
+}
+
 /**
  * Verify that the request is from QStash (Upstash-Signature).
  * Use with the raw body string; call before consuming the body.
@@ -398,6 +403,36 @@ export async function triggerProcessTokenRefreshQueue(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[qstash] triggerProcessTokenRefreshQueue failed:", message);
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-video-download-queue endpoint via QStash.
+ * Optional delay spaces IG/YT jobs so RapidAPI / Instagram are less likely to throttle.
+ */
+export async function triggerProcessVideoDownloadQueue(
+  baseUrl?: string,
+  options?: { delaySeconds?: number },
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-video-download-queue`;
+  if (isLoopbackUrl(url)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+  try {
+    const delaySeconds = Math.max(0, Math.floor(options?.delaySeconds ?? 0));
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+      ...(delaySeconds > 0 ? { delay: delaySeconds } : {}),
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessVideoDownloadQueue failed:", message);
     return { error: message };
   }
 }
@@ -858,6 +893,58 @@ export async function authorizeProcessTokenRefreshQueue(
     } catch {
       return false;
     }
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) return auth === `Bearer ${cronSecret}`;
+  return true;
+}
+
+async function verifyQStashSignatureVideoDownload(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessVideoDownloadQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-video-download-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-video-download-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/** Authorize process-video-download-queue: QStash signature or Bearer CRON_SECRET. */
+export async function authorizeProcessVideoDownloadQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureVideoDownload(request, rawBody);
   }
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");

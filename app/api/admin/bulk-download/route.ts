@@ -1,102 +1,70 @@
 import { NextResponse } from "next/server";
-import { createWriteStream, existsSync } from "fs";
-import { mkdir, readFile, rm, stat } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { ZipArchive } from "archiver";
-import {
-  downloadInstagramVideoToFile,
-  InstagramDownloadError,
-} from "@/lib/instagram-download/download";
-import {
-  downloadYouTubeVideoToFile,
-  YouTubeDownloadError,
-} from "@/lib/youtube-download/ytstream";
 import {
   isAdminDownloadUser,
-  MAX_BULK_DOWNLOAD_BYTES,
   MAX_BULK_VIDEO_DOWNLOADS,
   submissionOwnedByDownloadUser,
   verifyAdminOrBrandDownloadAccess,
 } from "@/lib/video-download-auth";
-import { buildViewsBasedVideoFilename } from "@/lib/utils";
+import {
+  joinedRecordUsername,
+  parseVideoFilenamePattern,
+  uniqueVideoDownloadFilename,
+} from "@/lib/video-download-filename";
+import {
+  enqueueVideoDownloadJob,
+  isVideoDownloadQueueEnabled,
+  type VideoDownloadItem,
+} from "@/lib/queue/video-download-queue";
+import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
+import {
+  getQStashPublishBaseUrl,
+  isLoopbackUrl,
+  isQStashEnabled,
+  resolveLocalAwareBaseUrl,
+  triggerProcessVideoDownloadQueue,
+} from "@/lib/qstash";
 
-function parseDownloadError(error: unknown, isInstagram: boolean): string {
-  if (error instanceof InstagramDownloadError || error instanceof YouTubeDownloadError) {
-    return error.message;
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  const errorLower = message.toLowerCase();
-  if (errorLower.includes("rate limit") || errorLower.includes("too many") || errorLower.includes("429")) {
-    return isInstagram
-      ? "Too many requests to Instagram. Please wait a few minutes."
-      : "Too many YouTube download requests. Please wait a few minutes.";
-  }
-  return isInstagram
-    ? "Instagram download failed. The post may be private or restricted."
-    : "YouTube download failed. The video may be private or restricted.";
-}
+export const maxDuration = 300;
 
-function isSupportedVideoUrl(url: string): { ok: true; isInstagram: boolean } | { ok: false } {
+function isSupportedVideoUrl(
+  url: string,
+): { ok: true; isInstagram: boolean } | { ok: false } {
   const isInstagram = url.includes("instagram.com");
   const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
   if (!isInstagram && !isYouTube) return { ok: false };
   return { ok: true, isInstagram };
 }
 
-async function downloadVideoFile(
-  url: string,
-  outputPath: string,
-  isInstagram: boolean,
-): Promise<void> {
-  if (isInstagram) {
-    await downloadInstagramVideoToFile(url, outputPath);
-  } else {
-    await downloadYouTubeVideoToFile(url, outputPath);
+function kickProcessor(request: Request) {
+  const qstashUrl = getQStashPublishBaseUrl(request);
+  const localUrl = resolveLocalAwareBaseUrl(request);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (process.env.CRON_SECRET) {
+    headers.Authorization = `Bearer ${process.env.CRON_SECRET}`;
   }
-}
+  const fallback = () =>
+    fetch(`${localUrl}/api/cron/process-video-download-queue`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    }).catch((e) =>
+      console.error("[bulk-download] Direct processor trigger failed:", e),
+    );
 
-async function buildZipFile(
-  zipPath: string,
-  files: { path: string; name: string }[],
-  failedReport: string | null,
-): Promise<void> {
-  const output = createWriteStream(zipPath);
-  // MP4s are already compressed — store avoids CPU and speeds up zip.
-  const archive = new ZipArchive({ store: true });
-
-  await new Promise<void>((resolve, reject) => {
-    output.on("close", () => resolve());
-    output.on("error", reject);
-    archive.on("error", reject);
-
-    archive.pipe(output);
-
-    for (const file of files) {
-      archive.file(file.path, { name: file.name });
-    }
-
-    if (failedReport) {
-      archive.append(failedReport, { name: "failed_downloads_report.txt" });
-    }
-
-    void archive.finalize();
-  });
+  if (isQStashEnabled() && !isLoopbackUrl(qstashUrl)) {
+    triggerProcessVideoDownloadQueue(qstashUrl)
+      .then((res) => {
+        if (res?.error) void fallback();
+      })
+      .catch(() => fallback());
+    return;
+  }
+  void fallback();
 }
 
 export async function POST(request: Request) {
   const requestId = randomUUID().substring(0, 8);
-  const startTime = Date.now();
-  const tempDir = join(tmpdir(), `bulk_${randomUUID()}`);
-  let cleanedUp = false;
-
-  const cleanup = async () => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    console.log(`[BULK-${requestId}] Clean up temp folder: ${tempDir}`);
-    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  };
 
   try {
     const access = await verifyAdminOrBrandDownloadAccess();
@@ -109,11 +77,21 @@ export async function POST(request: Request) {
 
     const { user, supabase } = access;
     const body = await request.json().catch(() => ({}));
-    const { urls = [], submissionIds = [], options = {} } = body as {
+    const {
+      urls = [],
+      submissionIds = [],
+      namingPattern: rawNamingPattern,
+      options = {},
+    } = body as {
       urls?: unknown;
       submissionIds?: unknown;
-      options?: { format?: string };
+      namingPattern?: unknown;
+      options?: { format?: string; namingPattern?: unknown };
     };
+    const namingPattern = parseVideoFilenamePattern(
+      rawNamingPattern ?? options?.namingPattern,
+    );
+    console.log(`[BULK-${requestId}] Naming pattern: ${namingPattern}`);
 
     if (options?.format === "audio" || options?.format === "mp3") {
       return NextResponse.json(
@@ -136,14 +114,13 @@ export async function POST(request: Request) {
     if (submissionIdList.length > MAX_BULK_VIDEO_DOWNLOADS) {
       return NextResponse.json(
         {
-          error: `Too many submissions. Select at most ${MAX_BULK_VIDEO_DOWNLOADS} videos per bulk download.`,
+          error: `Too many submissions. Select at most ${MAX_BULK_VIDEO_DOWNLOADS} videos for one ZIP download.`,
           max: MAX_BULK_VIDEO_DOWNLOADS,
         },
         { status: 400 },
       );
     }
 
-    // Raw URL proxy is admin-only (prevents advertiser RapidAPI / bandwidth abuse).
     if (urlList.length > 0 && !isAdminDownloadUser(user)) {
       return NextResponse.json(
         { error: "Custom URL bulk download is restricted to admins." },
@@ -154,14 +131,14 @@ export async function POST(request: Request) {
     if (urlList.length > MAX_BULK_VIDEO_DOWNLOADS) {
       return NextResponse.json(
         {
-          error: `Too many URLs. Provide at most ${MAX_BULK_VIDEO_DOWNLOADS} URLs per bulk download.`,
+          error: `Too many URLs. Provide at most ${MAX_BULK_VIDEO_DOWNLOADS} URLs for one ZIP download.`,
           max: MAX_BULK_VIDEO_DOWNLOADS,
         },
         { status: 400 },
       );
     }
 
-    const downloadQueue: { url: string; filename: string; isInstagram: boolean }[] = [];
+    const downloadQueue: VideoDownloadItem[] = [];
 
     if (submissionIdList.length > 0) {
       console.log(`[BULK-${requestId}] Resolving ${submissionIdList.length} submission IDs`);
@@ -172,6 +149,8 @@ export async function POST(request: Request) {
           content_link,
           platform,
           views,
+          status,
+          quality_score,
           contests!inner(id, title, advertiser_id),
           users!creator_id(username)
         `)
@@ -203,7 +182,6 @@ export async function POST(request: Request) {
         );
       }
 
-      // Highest views first; filenames are view-based so Explorer sort stays useful.
       const ownedSorted = [...owned].sort(
         (a, b) => (Number(b.views) || 0) - (Number(a.views) || 0),
       );
@@ -214,15 +192,23 @@ export async function POST(request: Request) {
         const supported = isSupportedVideoUrl(sub.content_link);
         if (!supported.ok) continue;
 
-        let baseName = buildViewsBasedVideoFilename(sub.views);
-        if (usedFilenames.has(`${baseName}.${format}`)) {
-          baseName = buildViewsBasedVideoFilename(sub.views, String(sub.id).slice(0, 8));
-        }
-        usedFilenames.add(`${baseName}.${format}`);
+        const filename = uniqueVideoDownloadFilename(
+          usedFilenames,
+          namingPattern,
+          {
+            views: sub.views,
+            username: joinedRecordUsername(sub.users),
+            status: typeof sub.status === "string" ? sub.status : null,
+            qualityScore:
+              sub.quality_score == null ? null : Number(sub.quality_score),
+            uniqueSuffix: String(sub.id).slice(0, 8),
+          },
+          format,
+        );
 
         downloadQueue.push({
           url: sub.content_link,
-          filename: `${baseName}.${format}`,
+          filename,
           isInstagram: supported.isInstagram,
         });
       }
@@ -247,105 +233,56 @@ export async function POST(request: Request) {
       );
     }
 
-    await mkdir(tempDir, { recursive: true });
-
-    const zippedFiles: { path: string; name: string }[] = [];
-    const failedQueue: { url: string; error: string }[] = [];
-    let totalBytes = 0;
-
-    for (const item of downloadQueue) {
-      if (totalBytes >= MAX_BULK_DOWNLOAD_BYTES) {
-        failedQueue.push({
-          url: item.url,
-          error: `Skipped: bulk download size limit (${MAX_BULK_DOWNLOAD_BYTES} bytes) reached.`,
-        });
-        continue;
+    if (isVideoDownloadQueueEnabled()) {
+      const jobId = randomUUID();
+      const enqueued = await enqueueVideoDownloadJob({
+        jobId,
+        userId: user.id,
+        items: downloadQueue,
+      });
+      if (enqueued.error) {
+        return NextResponse.json(
+          { error: enqueued.error || "Failed to enqueue download job" },
+          { status: 500 },
+        );
       }
-
-      const targetPath = join(tempDir, item.filename);
-      try {
-        console.log(`[BULK-${requestId}] Downloading: ${item.url} -> ${targetPath}`);
-        await downloadVideoFile(item.url, targetPath, item.isInstagram);
-
-        if (existsSync(targetPath)) {
-          const fileStat = await stat(targetPath);
-          if (fileStat.size > 0) {
-            if (totalBytes + fileStat.size > MAX_BULK_DOWNLOAD_BYTES) {
-              await rm(targetPath, { force: true }).catch(() => {});
-              failedQueue.push({
-                url: item.url,
-                error: `Skipped: file would exceed bulk download size limit.`,
-              });
-              continue;
-            }
-            totalBytes += fileStat.size;
-            zippedFiles.push({ path: targetPath, name: item.filename });
-          } else {
-            failedQueue.push({
-              url: item.url,
-              error: "Download completed but file was empty.",
-            });
-          }
-        } else {
-          failedQueue.push({
-            url: item.url,
-            error: "Download completed but file was not generated.",
-          });
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[BULK-${requestId}] Failed downloading ${item.url}:`, message);
-        failedQueue.push({
-          url: item.url,
-          error: parseDownloadError(err, item.isInstagram),
-        });
-      }
+      kickProcessor(request);
+      return NextResponse.json({
+        queued: true,
+        jobId,
+        total: downloadQueue.length,
+      });
     }
 
-    if (zippedFiles.length === 0) {
-      await cleanup();
+    const result = await executeQueuedVideoDownloads({
+      items: downloadQueue,
+      requestId,
+    });
+
+    if (result.downloaded === 0) {
       return NextResponse.json(
         {
-          error: "No files could be downloaded",
-          failures: failedQueue,
+          error: result.failures[0]?.error || "No files could be downloaded",
+          completed: 0,
+          failed: result.failures.length,
         },
-        { status: 400 },
+        { status: 422 },
       );
     }
 
-    const failedReport =
-      failedQueue.length > 0
-        ? failedQueue
-            .map((f, idx) => `${idx + 1}. URL: ${f.url}\n   Error: ${f.error}`)
-            .join("\n\n")
-        : null;
-
-    // Bounded batches keep an in-memory ZIP response acceptable for Next.js.
-    const zipPath = join(tempDir, `bulk_${requestId}.zip`);
-    console.log(`[BULK-${requestId}] Building ZIP with ${zippedFiles.length} file(s)`);
-    await buildZipFile(zipPath, zippedFiles, failedReport);
-
-    const zipBuffer = await readFile(zipPath);
-    await cleanup();
-
-    console.log(
-      `[BULK-${requestId}] Returning ZIP (${zipBuffer.byteLength} bytes) after ${Date.now() - startTime}ms`,
-    );
-
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(result.zipBuffer), {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="bulk_download_${requestId}.zip"`,
-        "Content-Length": String(zipBuffer.byteLength),
+        "Content-Length": String(result.zipBuffer.byteLength),
         "Cache-Control": "no-cache",
-        "X-Bulk-Downloaded": String(zippedFiles.length),
-        "X-Bulk-Failed": String(failedQueue.length),
+        "X-Bulk-Downloaded": String(result.downloaded),
+        "X-Bulk-Failed": String(result.failures.length),
       },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to initiate bulk download";
     console.error(`[BULK-${requestId}] Fatal bulk downloader error:`, error);
-    await cleanup();
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

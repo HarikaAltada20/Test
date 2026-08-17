@@ -107,8 +107,10 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   downloadSubmissionVideosInChunks,
-  MAX_BULK_VIDEO_DOWNLOADS,
+  type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
+import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
+import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
@@ -2534,6 +2536,10 @@ export default function ContestDetailClient({
     useState<Set<string>>(new Set());
   const [normalViewBulkDownloading, setNormalViewBulkDownloading] =
     useState(false);
+  const [normalViewBulkDownloadProgress, setNormalViewBulkDownloadProgress] =
+    useState<BulkVideoDownloadProgressState | null>(null);
+  const [normalViewBulkDownloadDialogOpen, setNormalViewBulkDownloadDialogOpen] =
+    useState(false);
   const [normalViewBulkActiveAction, setNormalViewBulkActiveAction] = useState<
     "verify" | "reject" | "pending" | null
   >(null);
@@ -3385,48 +3391,49 @@ export default function ContestDetailClient({
       return;
     }
 
+    setNormalViewBulkDownloadDialogOpen(true);
+  };
+
+  const runNormalViewBulkDownload = async (
+    namingPattern: VideoFilenamePattern,
+  ) => {
     const submissionIds = Array.from(normalViewSelectedSubmissions);
+    if (submissionIds.length < 2) return;
+
     setNormalViewBulkDownloading(true);
-    toast({
-      title: "Bulk Download Started",
-      description:
-        submissionIds.length > MAX_BULK_VIDEO_DOWNLOADS
-          ? `Downloading ${submissionIds.length} videos in automatic batches of ${MAX_BULK_VIDEO_DOWNLOADS}...`
-          : "Compressing and zipping selected videos. Please wait...",
+    setNormalViewBulkDownloadProgress({
+      successCount: 0,
+      failedCount: 0,
+      total: submissionIds.length,
     });
 
     try {
       const result = await downloadSubmissionVideosInChunks({
         submissionIds,
-        fileNamePrefix: `bulk_submissions_${sanitizeFilename(currentContest.title || "contest")}`,
-        onProgress: ({ chunkIndex, totalChunks, totalVideos }) => {
-          toast({
-            title: `Downloading batch ${chunkIndex} of ${totalChunks}`,
-            description: `Processing ${totalVideos} selected videos...`,
+        namingPattern,
+        fileNamePrefix: `bulk_submissions_${sanitizeFilename(currentContest?.title || "contest")}`,
+        onProgress: ({ successCount, failedCount, totalVideos }) => {
+          setNormalViewBulkDownloadProgress({
+            successCount,
+            failedCount,
+            total: totalVideos,
           });
         },
       });
 
-      if (result.succeededChunks === 0) {
+      if (result.successCount === 0 && result.failedCount === 0) {
         throw new Error(result.errors[0] || "Failed to download ZIP archives.");
       }
 
-      if (result.failedChunks > 0) {
-        toast({
-          title: "Bulk download partially completed",
-          description: `${result.succeededChunks}/${result.totalChunks} ZIP batches downloaded. ${result.errors[0] || "Some batches failed."}`,
-          variant: "destructive",
-        });
-        return;
-      }
-
       toast({
-        title: "Success",
-        description:
-          result.totalChunks > 1
-            ? `Downloaded ${result.totalVideos} videos as ${result.totalChunks} ZIP files.`
-            : "ZIP file containing videos downloaded successfully.",
+        title:
+          result.failedCount > 0
+            ? "Download finished with failures"
+            : "Download complete",
+        description: `${result.totalVideos} selected · ${result.successCount} succeeded · ${result.failedCount} failed`,
+        variant: result.failedCount > 0 ? "destructive" : "success",
       });
+      setNormalViewBulkDownloadDialogOpen(false);
     } catch (error: any) {
       console.error("Bulk download failed:", error);
       toast({
@@ -3437,6 +3444,7 @@ export default function ContestDetailClient({
       });
     } finally {
       setNormalViewBulkDownloading(false);
+      setNormalViewBulkDownloadProgress(null);
     }
   };
 
@@ -19753,7 +19761,7 @@ export default function ContestDetailClient({
                                     normalViewBulkStatusActionsBusy
                                   }
                                   loading={normalViewBulkDownloading}
-                                  loadingText="Downloading batches..."
+                                  loadingText="Downloading..."
                                   className={cn(
                                     "h-8 shrink-0 whitespace-nowrap rounded-md",
                                     isDark
@@ -30571,6 +30579,16 @@ export default function ContestDetailClient({
         }
         isCreatorRejection={pendingTwitterRejection?.type === "creator"}
         creatorUsername={pendingTwitterRejection?.creatorUsername}
+      />
+
+      <BulkVideoDownloadDialog
+        open={normalViewBulkDownloadDialogOpen}
+        onOpenChange={setNormalViewBulkDownloadDialogOpen}
+        isDark={isDark}
+        videoCount={normalViewSelectedSubmissions.size}
+        downloading={normalViewBulkDownloading}
+        progress={normalViewBulkDownloadProgress}
+        onConfirm={runNormalViewBulkDownload}
       />
 
       {/* Rejection Details Modal (submission-wise: view reason from submission.metadata) */}

@@ -9,12 +9,12 @@ import {
 
 describe("video-download-ui", () => {
   it("exposes a bounded bulk download limit", () => {
-    assert.equal(MAX_BULK_VIDEO_DOWNLOADS, 10);
+    assert.equal(MAX_BULK_VIDEO_DOWNLOADS, 200);
   });
 
-  it("chunks large selections into batches of 10", () => {
+  it("chunks arrays by a given size", () => {
     const ids = Array.from({ length: 25 }, (_, i) => `id-${i + 1}`);
-    const chunks = chunkArray(ids, MAX_BULK_VIDEO_DOWNLOADS);
+    const chunks = chunkArray(ids, 10);
     assert.equal(chunks.length, 3);
     assert.equal(chunks[0].length, 10);
     assert.equal(chunks[1].length, 10);

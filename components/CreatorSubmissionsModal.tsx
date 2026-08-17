@@ -59,8 +59,10 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   downloadSubmissionVideosInChunks,
-  MAX_BULK_VIDEO_DOWNLOADS,
+  type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
+import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
+import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -283,6 +285,9 @@ export function CreatorSubmissionsModal({
     string | null
   >(null);
   const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkDownloadProgress, setBulkDownloadProgress] =
+    useState<BulkVideoDownloadProgressState | null>(null);
+  const [bulkDownloadDialogOpen, setBulkDownloadDialogOpen] = useState(false);
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
   const [qualityEditSubmissionIds, setQualityEditSubmissionIds] = useState<
@@ -416,49 +421,47 @@ export function CreatorSubmissionsModal({
       return;
     }
 
-    const submissionIds = Array.from(selectedSubmissions);
-    setBulkDownloading(true);
+    setBulkDownloadDialogOpen(true);
+  };
 
-    toast({
-      title: "Bulk Download Started",
-      description:
-        submissionIds.length > MAX_BULK_VIDEO_DOWNLOADS
-          ? `Downloading ${submissionIds.length} videos in automatic batches of ${MAX_BULK_VIDEO_DOWNLOADS}...`
-          : "Compressing and zipping selected videos. Please wait...",
+  const runBulkDownloadReels = async (namingPattern: VideoFilenamePattern) => {
+    const submissionIds = Array.from(selectedSubmissions);
+    if (submissionIds.length < 2) return;
+
+    setBulkDownloading(true);
+    setBulkDownloadProgress({
+      successCount: 0,
+      failedCount: 0,
+      total: submissionIds.length,
     });
 
     try {
       const result = await downloadSubmissionVideosInChunks({
         submissionIds,
+        namingPattern,
         fileNamePrefix: `bulk_submissions_${sanitizeFilename(contest.title || "contest")}`,
-        onProgress: ({ chunkIndex, totalChunks, totalVideos }) => {
-          toast({
-            title: `Downloading batch ${chunkIndex} of ${totalChunks}`,
-            description: `Processing ${totalVideos} selected videos...`,
+        onProgress: ({ successCount, failedCount, totalVideos }) => {
+          setBulkDownloadProgress({
+            successCount,
+            failedCount,
+            total: totalVideos,
           });
         },
       });
 
-      if (result.succeededChunks === 0) {
+      if (result.successCount === 0 && result.failedCount === 0) {
         throw new Error(result.errors[0] || "Failed to download ZIP archives.");
       }
 
-      if (result.failedChunks > 0) {
-        toast({
-          title: "Bulk download partially completed",
-          description: `${result.succeededChunks}/${result.totalChunks} ZIP batches downloaded. ${result.errors[0] || "Some batches failed."}`,
-          variant: "destructive",
-        });
-        return;
-      }
-
       toast({
-        title: "Success",
-        description:
-          result.totalChunks > 1
-            ? `Downloaded ${result.totalVideos} videos as ${result.totalChunks} ZIP files.`
-            : "ZIP file containing videos downloaded successfully.",
+        title:
+          result.failedCount > 0
+            ? "Download finished with failures"
+            : "Download complete",
+        description: `${result.totalVideos} selected · ${result.successCount} succeeded · ${result.failedCount} failed`,
+        variant: result.failedCount > 0 ? "destructive" : "success",
       });
+      setBulkDownloadDialogOpen(false);
     } catch (error: any) {
       console.error("Bulk download failed:", error);
       toast({
@@ -468,6 +471,7 @@ export function CreatorSubmissionsModal({
       });
     } finally {
       setBulkDownloading(false);
+      setBulkDownloadProgress(null);
     }
   };
 
@@ -2096,7 +2100,7 @@ export function CreatorSubmissionsModal({
                       onClick={handleBulkDownloadReels}
                       disabled={bulkDownloading || bulkStatusActionsBusy}
                       loading={bulkDownloading}
-                      loadingText="Downloading batches..."
+                      loadingText="Downloading..."
                       className={cn(
                         "h-8 shrink-0 whitespace-nowrap rounded-md",
                         isDark
@@ -5304,6 +5308,16 @@ export function CreatorSubmissionsModal({
             })()}
         </DialogContent>
       </Dialog>
+
+      <BulkVideoDownloadDialog
+        open={bulkDownloadDialogOpen}
+        onOpenChange={setBulkDownloadDialogOpen}
+        isDark={isDark}
+        videoCount={selectedSubmissions.size}
+        downloading={bulkDownloading}
+        progress={bulkDownloadProgress}
+        onConfirm={runBulkDownloadReels}
+      />
 
       <VerifyQualityDialog
         open={qualityEditSubmissionIds.length > 0}
