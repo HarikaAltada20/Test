@@ -10,6 +10,8 @@ import {
   joinedRecordUsername,
   parseVideoFilenamePattern,
   uniqueVideoDownloadFilename,
+  bulkZipFilenameFromContestTitle,
+  toBulkZipDownloadFilename,
 } from "@/lib/video-download-filename";
 import {
   enqueueVideoDownloadJob,
@@ -81,12 +83,14 @@ export async function POST(request: Request) {
       urls = [],
       submissionIds = [],
       namingPattern: rawNamingPattern,
+      zipFilename: rawZipFilename,
       options = {},
     } = body as {
       urls?: unknown;
       submissionIds?: unknown;
       namingPattern?: unknown;
-      options?: { format?: string; namingPattern?: unknown };
+      zipFilename?: unknown;
+      options?: { format?: string; namingPattern?: unknown; zipFilename?: unknown };
     };
     const namingPattern = parseVideoFilenamePattern(
       rawNamingPattern ?? options?.namingPattern,
@@ -139,6 +143,7 @@ export async function POST(request: Request) {
     }
 
     const downloadQueue: VideoDownloadItem[] = [];
+    let contestTitle: string | null = null;
 
     if (submissionIdList.length > 0) {
       console.log(`[BULK-${requestId}] Resolving ${submissionIdList.length} submission IDs`);
@@ -188,6 +193,11 @@ export async function POST(request: Request) {
       const usedFilenames = new Set<string>();
 
       for (const sub of ownedSorted) {
+        if (!contestTitle) {
+          const contest = Array.isArray(sub.contests) ? sub.contests[0] : sub.contests;
+          const title = (contest as { title?: string } | null)?.title;
+          if (typeof title === "string" && title.trim()) contestTitle = title.trim();
+        }
         if (!sub.content_link) continue;
         const supported = isSupportedVideoUrl(sub.content_link);
         if (!supported.ok) continue;
@@ -233,12 +243,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const zipFilename = toBulkZipDownloadFilename(
+      rawZipFilename ??
+        options?.zipFilename ??
+        bulkZipFilenameFromContestTitle(contestTitle),
+    );
+
     if (isVideoDownloadQueueEnabled()) {
       const jobId = randomUUID();
       const enqueued = await enqueueVideoDownloadJob({
         jobId,
         userId: user.id,
         items: downloadQueue,
+        zipFilename,
       });
       if (enqueued.error) {
         return NextResponse.json(
@@ -273,7 +290,7 @@ export async function POST(request: Request) {
     return new NextResponse(new Uint8Array(result.zipBuffer), {
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="bulk_download_${requestId}.zip"`,
+        "Content-Disposition": `attachment; filename="${zipFilename}"`,
         "Content-Length": String(result.zipBuffer.byteLength),
         "Cache-Control": "no-cache",
         "X-Bulk-Downloaded": String(result.downloaded),

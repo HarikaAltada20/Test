@@ -7,6 +7,8 @@ import {
   joinedRecordUsername,
   parseVideoFilenamePattern,
   uniqueVideoDownloadFilename,
+  toBulkZipDownloadFilename,
+  bulkZipFilenameFromContestTitle,
 } from "./video-download-filename";
 
 describe("video download filename patterns", () => {
@@ -72,5 +74,18 @@ describe("video download filename patterns", () => {
     assert.equal(joinedRecordUsername({ username: "alice" }), "alice");
     assert.equal(joinedRecordUsername([{ username: "bob" }]), "bob");
     assert.equal(joinedRecordUsername(null), "");
+  });
+
+  it("names the ZIP after the contest title", () => {
+    assert.equal(
+      bulkZipFilenameFromContestTitle(
+        "Zahra Jani Premium Clips Challenge Milestone Rewards Original Edits only",
+      ),
+      "bulk_submissions_Zahra_Jani_Premium_Clips_Challenge_Milestone_Rewards_Original_Edits_only.zip",
+    );
+    assert.equal(
+      toBulkZipDownloadFilename("bulk_download_a14395c9.zip"),
+      "bulk_download_a14395c9.zip",
+    );
   });
 });

@@ -122,6 +122,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       errors: current?.errors ?? [],
       storagePath: current?.storagePath,
       zipBytes: current?.zipBytes,
+      zipFilename: current?.zipFilename || job.zipFilename,
       createdAt: current?.createdAt || now(),
       ...partial,
       updatedAt: now(),
@@ -148,6 +149,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         completed: 0,
         failed: result.failures.length || job.items.length,
         errors: result.failures.map((f) => f.error).slice(0, 5),
+        zipFilename: existing?.zipFilename || job.zipFilename,
         createdAt: existing?.createdAt || now(),
         updatedAt: now(),
       });
@@ -187,6 +189,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       errors: result.failures.map((f) => f.error),
       storagePath,
       zipBytes: result.zipBuffer.byteLength,
+      zipFilename: existing?.zipFilename || job.zipFilename,
       createdAt: existing?.createdAt || now(),
       updatedAt: now(),
     });

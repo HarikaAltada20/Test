@@ -28,6 +28,7 @@ export type VideoDownloadJob = {
   userId: string;
   items: VideoDownloadItem[];
   attempt?: number;
+  zipFilename?: string;
 };
 
 export type VideoDownloadJobStatus = {
@@ -40,6 +41,7 @@ export type VideoDownloadJobStatus = {
   errors: string[];
   storagePath?: string;
   zipBytes?: number;
+  zipFilename?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -91,10 +93,15 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
       typeof item.isInstagram === "boolean",
   );
   if (items.length === 0) return null;
+  const zipFilename =
+    typeof parsed.zipFilename === "string" && parsed.zipFilename.trim()
+      ? parsed.zipFilename.trim()
+      : undefined;
   return {
     jobId: parsed.jobId,
     userId: parsed.userId,
     items,
+    zipFilename,
     attempt:
       typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
         ? Math.max(0, Math.floor(parsed.attempt))
@@ -161,6 +168,7 @@ export async function enqueueVideoDownloadJob(
       completed: 0,
       failed: 0,
       errors: [],
+      zipFilename: normalized.zipFilename,
       createdAt: now,
       updatedAt: now,
     });
@@ -247,6 +255,7 @@ export async function retryOrDeadLetterVideoDownload(options: {
         completed: 0,
         failed: parsed.items.length,
         errors: [options.reason || "Download job failed after retries"],
+        zipFilename: parsed.zipFilename,
         createdAt: now,
         updatedAt: now,
       });
@@ -267,6 +276,7 @@ export async function retryOrDeadLetterVideoDownload(options: {
       completed: existing?.completed ?? 0,
       failed: existing?.failed ?? 0,
       errors: existing?.errors ?? [],
+      zipFilename: existing?.zipFilename ?? parsed.zipFilename,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });

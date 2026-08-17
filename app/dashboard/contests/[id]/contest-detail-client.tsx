@@ -23911,6 +23911,65 @@ export default function ContestDetailClient({
                                                   );
                                                 })()}
                                               </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                disabled={
+                                                  (!isPostCampaignLeaderboard &&
+                                                    ytPostContestLocked) ||
+                                                  (loadingDetailedAnalytics[
+                                                    submission.id
+                                                  ] !== undefined &&
+                                                    loadingDetailedAnalytics[
+                                                      submission.id
+                                                    ] !== null)
+                                                }
+                                                onClick={() =>
+                                                  handleRefreshDetailedAnalytics(
+                                                    "all",
+                                                    {
+                                                      submissionId:
+                                                        submission.id,
+                                                    },
+                                                  )
+                                                }
+                                              >
+                                                {loadingDetailedAnalytics[
+                                                  submission.id
+                                                ] === "all" ? (
+                                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                ) : (
+                                                  <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
+                                                )}
+                                                Refresh All Metrics
+                                                {(() => {
+                                                  const ytStats =
+                                                    submission.other_stats
+                                                      ?.youtube ||
+                                                    submission.other_stats;
+                                                  const timestamps = [
+                                                    ytStats?.last_basic_update,
+                                                    ytStats?.last_traffic_update,
+                                                    ytStats?.last_demographics_update,
+                                                  ].filter(Boolean) as string[];
+                                                  const ts =
+                                                    timestamps.length > 0
+                                                      ? timestamps.reduce(
+                                                          (latest, current) =>
+                                                            current > latest
+                                                              ? current
+                                                              : latest,
+                                                        )
+                                                      : null;
+                                                  return ts ? (
+                                                    <span className="ml-auto text-xs text-slate-400">
+                                                      {formatTimeAgo(ts)}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="ml-auto text-xs text-slate-400">
+                                                      Never
+                                                    </span>
+                                                  );
+                                                })()}
+                                              </DropdownMenuItem>
                                             </>
                                           )}
                                       </DropdownMenuContent>

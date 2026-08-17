@@ -148,3 +148,25 @@ export function uniqueVideoDownloadFilename(
   used.add(name);
   return name;
 }
+
+const BULK_ZIP_FILENAME_MAX = 150;
+
+/** ZIP download name: bulk_submissions_{contest}.zip */
+export function toBulkZipDownloadFilename(raw: unknown): string {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  const withoutExt = value.replace(/\.zip$/i, "");
+  const cleaned =
+    withoutExt
+      .replace(/[^a-z0-9]/gi, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .substring(0, BULK_ZIP_FILENAME_MAX) || "bulk_submissions_contest";
+  return `${cleaned}.zip`;
+}
+
+export function bulkZipFilenameFromContestTitle(
+  contestTitle?: string | null,
+): string {
+  const title = sanitizeFilename(contestTitle || "contest") || "contest";
+  return toBulkZipDownloadFilename(`bulk_submissions_${title}`);
+}

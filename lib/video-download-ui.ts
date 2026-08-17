@@ -51,13 +51,26 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
 
 function triggerBrowserDownload(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
+  triggerUrlDownload(url, filename);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+}
+
+function triggerUrlDownload(url: string, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.rel = "noopener";
+  if (/^https?:/i.test(url)) {
+    a.target = "_blank";
+  }
   document.body.appendChild(a);
   a.click();
-  window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
+}
+
+function isNetworkFetchError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /failed to fetch|networkerror|load failed/i.test(message);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -87,49 +100,93 @@ export type BulkDownloadProgressInfo = {
   queueStatus?: string;
 };
 
+async function fetchJsonWithRetry<T>(
+  url: string,
+  options?: RequestInit,
+): Promise<{ ok: boolean; status: number; data: T }> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      const data = (await response.json().catch(() => ({}))) as T;
+      return { ok: response.ok, status: response.status, data };
+    } catch (error) {
+      lastError = error;
+      if (!isNetworkFetchError(error) || attempt === 2) {
+        throw error;
+      }
+      await sleep(800 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 async function waitForQueuedZipJob(
   jobId: string,
+  fileName: string,
   onProgress?: (info: {
     completed: number;
     failed: number;
     total: number;
     status: string;
   }) => void,
-): Promise<{ blob: Blob | null; completed: number; failed: number; total: number }> {
+): Promise<{ downloaded: boolean; completed: number; failed: number; total: number }> {
   const started = Date.now();
   let last = { completed: 0, failed: 0, total: 0 };
   while (Date.now() - started < QUEUED_DOWNLOAD_TIMEOUT_MS) {
-    const statusRes = await fetch(
-      `/api/admin/bulk-download/status?jobId=${encodeURIComponent(jobId)}`,
-    );
-    const status = await statusRes.json().catch(() => ({}));
+    const statusRes = await fetchJsonWithRetry<{
+      error?: string;
+      status?: string;
+      completed?: number;
+      failed?: number;
+      total?: number;
+    }>(`/api/admin/bulk-download/status?jobId=${encodeURIComponent(jobId)}`);
     if (!statusRes.ok) {
-      throw new Error(status.error || "Failed to check download queue status.");
+      throw new Error(statusRes.data.error || "Failed to check download queue status.");
     }
 
     last = {
-      completed: Number(status.completed) || 0,
-      failed: Number(status.failed) || 0,
-      total: Number(status.total) || 0,
+      completed: Number(statusRes.data.completed) || 0,
+      failed: Number(statusRes.data.failed) || 0,
+      total: Number(statusRes.data.total) || 0,
     };
     onProgress?.({
       ...last,
-      status: String(status.status || "queued"),
+      status: String(statusRes.data.status || "queued"),
     });
 
-    if (status.status === "ready") {
-      const fileRes = await fetch(
-        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}`,
+    if (statusRes.data.status === "ready") {
+      const fileRes = await fetchJsonWithRetry<{
+        error?: string;
+        url?: string;
+        filename?: string;
+        completed?: number;
+        failed?: number;
+        total?: number;
+      }>(
+        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}`,
       );
       if (!fileRes.ok) {
-        const errorData = await fileRes.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to download queued ZIP.");
+        if (fileRes.status === 409) {
+          await sleep(QUEUED_DOWNLOAD_POLL_MS);
+          continue;
+        }
+        throw new Error(fileRes.data.error || "Failed to download queued ZIP.");
       }
-      return { blob: await fileRes.blob(), ...last };
+      if (!fileRes.data.url) {
+        throw new Error("ZIP download URL was missing.");
+      }
+      triggerUrlDownload(fileRes.data.url, fileRes.data.filename || fileName);
+      return {
+        downloaded: true,
+        completed: Number(fileRes.data.completed) || last.completed,
+        failed: Number(fileRes.data.failed) || last.failed,
+        total: Number(fileRes.data.total) || last.total,
+      };
     }
 
-    if (status.status === "failed") {
-      return { blob: null, ...last };
+    if (statusRes.data.status === "failed") {
+      return { downloaded: false, ...last };
     }
 
     await sleep(QUEUED_DOWNLOAD_POLL_MS);
@@ -179,36 +236,36 @@ export async function downloadSubmissionVideosInChunks(options: {
     const response = await fetch("/api/admin/bulk-download", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        submissionIds: ids,
-        namingPattern,
-      }),
+        body: JSON.stringify({
+          submissionIds: ids,
+          namingPattern,
+          zipFilename: `${options.fileNamePrefix}.zip`,
+        }),
     });
 
     const contentType = response.headers.get("content-type");
     if (!response.ok || contentType?.includes("application/json")) {
       const payload = await response.json().catch(() => ({}));
       if (response.ok && payload.queued && typeof payload.jobId === "string") {
-        const queued = await waitForQueuedZipJob(payload.jobId, (queueInfo) => {
-          emitProgress({
-            queuedCompleted: queueInfo.completed,
-            queuedFailed: queueInfo.failed,
-            queuedTotal: queueInfo.total,
-            queueStatus: queueInfo.status,
-            successCount: queueInfo.completed,
-            failedCount: queueInfo.failed,
-          });
-        });
-        if (queued.blob && queued.blob.size > 0) {
-          triggerBrowserDownload(
-            queued.blob,
-            `${options.fileNamePrefix}_${Date.now()}.zip`,
-          );
-        }
+        const fileName = `${options.fileNamePrefix}_${Date.now()}.zip`;
+        const queued = await waitForQueuedZipJob(
+          payload.jobId,
+          fileName,
+          (queueInfo) => {
+            emitProgress({
+              queuedCompleted: queueInfo.completed,
+              queuedFailed: queueInfo.failed,
+              queuedTotal: queueInfo.total,
+              queueStatus: queueInfo.status,
+              successCount: queueInfo.completed,
+              failedCount: queueInfo.failed,
+            });
+          },
+        );
         return {
           totalVideos: ids.length,
           totalChunks: 1,
-          succeededChunks: queued.blob && queued.blob.size > 0 ? 1 : 0,
+          succeededChunks: queued.downloaded ? 1 : 0,
           failedChunks: 0,
           successCount: queued.completed,
           failedCount: Math.max(0, ids.length - queued.completed),

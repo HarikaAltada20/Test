@@ -4,12 +4,14 @@ import {
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   VIDEO_DOWNLOAD_STORAGE_BUCKET,
-  clearVideoDownloadJobStatus,
 } from "@/lib/queue/video-download-queue";
+import { toBulkZipDownloadFilename } from "@/lib/video-download-filename";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const SIGNED_URL_TTL_SECONDS = 10 * 60;
 
 export async function GET(request: Request) {
   const access = await verifyAdminOrBrandDownloadAccess();
@@ -44,32 +46,29 @@ export async function GET(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const downloaded = await supabase.storage
+  const requestedName = new URL(request.url).searchParams.get("filename");
+  const filename = toBulkZipDownloadFilename(
+    requestedName || status.zipFilename || `bulk_submissions_contest`,
+  );
+  const signed = await supabase.storage
     .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-    .download(status.storagePath);
+    .createSignedUrl(status.storagePath, SIGNED_URL_TTL_SECONDS, {
+      download: filename,
+    });
 
-  if (downloaded.error || !downloaded.data) {
+  if (signed.error || !signed.data?.signedUrl) {
     return NextResponse.json(
-      { error: downloaded.error?.message || "Failed to read ZIP archive" },
+      { error: signed.error?.message || "Could not create ZIP download URL" },
       { status: 500 },
     );
   }
 
-  const zipBuffer = Buffer.from(await downloaded.data.arrayBuffer());
-  void supabase.storage
-    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-    .remove([status.storagePath])
-    .catch(() => {});
-  await clearVideoDownloadJobStatus(jobId);
-
-  return new NextResponse(new Uint8Array(zipBuffer), {
-    headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="bulk_download_${jobId.slice(0, 8)}.zip"`,
-      "Content-Length": String(zipBuffer.byteLength),
-      "Cache-Control": "no-cache",
-      "X-Bulk-Downloaded": String(status.completed),
-      "X-Bulk-Failed": String(status.failed),
-    },
+  return NextResponse.json({
+    url: signed.data.signedUrl,
+    filename,
+    completed: status.completed,
+    failed: status.failed,
+    total: status.total,
+    zipBytes: status.zipBytes ?? null,
   });
 }

@@ -19,6 +19,19 @@ describe("video download redis job payload", () => {
     assert.equal(job?.jobId, "abc");
     assert.equal(job?.items.length, 1);
     assert.equal(job?.attempt, 2);
+    assert.equal(job?.zipFilename, undefined);
+  });
+
+  it("keeps a zip filename on the job", () => {
+    const job = parseVideoDownloadJob({
+      jobId: "abc",
+      userId: "user-1",
+      zipFilename: "bulk_submissions_My_Contest.zip",
+      items: [
+        { url: "https://instagram.com/reel/x", filename: "a.mp4", isInstagram: true },
+      ],
+    });
+    assert.equal(job?.zipFilename, "bulk_submissions_My_Contest.zip");
   });
 
   it("rejects jobs with no downloadable items", () => {
