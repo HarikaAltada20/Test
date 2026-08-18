@@ -41,7 +41,6 @@ export async function GET(request: Request) {
     failed: status.failed,
     errors: status.errors.slice(0, 5),
     zipBytes: status.zipBytes ?? null,
-    continuationJobId: status.continuationJobId ?? null,
   };
 
   return NextResponse.json(payload);

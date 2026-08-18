@@ -4,7 +4,7 @@ import {
   classifyRecoveredVideoDownloadJob,
   parseVideoDownloadJob,
   planRecoveredVideoDownloadJobs,
-  requireVideoDownloadContinuationJobId,
+  requireVideoDownloadRemainderRequeued,
   videoDownloadActiveJobLimitError,
   VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL,
   VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER,
@@ -48,16 +48,26 @@ describe("video download redis job payload", () => {
     assert.equal(job?.zipFilename, undefined);
   });
 
-  it("keeps a zip filename on the job", () => {
+  it("keeps remainder fields so leftover videos stay on the same ZIP job", () => {
     const job = parseVideoDownloadJob({
       jobId: "abc",
       userId: "user-1",
       zipFilename: "bulk_submissions_My_Contest.zip",
+      partialStoragePath: "user-1/abc.zip",
+      originalTotal: 10,
+      completedSoFar: 6,
+      failedSoFar: 1,
+      errorsSoFar: ["skip"],
       items: [
         { url: "https://instagram.com/reel/x", filename: "a.mp4", isInstagram: true },
       ],
     });
     assert.equal(job?.zipFilename, "bulk_submissions_My_Contest.zip");
+    assert.equal(job?.partialStoragePath, "user-1/abc.zip");
+    assert.equal(job?.originalTotal, 10);
+    assert.equal(job?.completedSoFar, 6);
+    assert.equal(job?.failedSoFar, 1);
+    assert.deepEqual(job?.errorsSoFar, ["skip"]);
   });
 
   it("rejects jobs with no downloadable items", () => {
@@ -172,18 +182,18 @@ describe("classifyRecoveredVideoDownloadJob", () => {
   });
 });
 
-describe("requireVideoDownloadContinuationJobId", () => {
+describe("requireVideoDownloadRemainderRequeued", () => {
   it("allows ready when nothing was deferred", () => {
-    requireVideoDownloadContinuationJobId(0, undefined);
+    requireVideoDownloadRemainderRequeued(0, false);
   });
 
-  it("allows ready when leftover videos were enqueued", () => {
-    requireVideoDownloadContinuationJobId(3, "continuation-1");
+  it("allows ready when leftover videos were requeued on the same job", () => {
+    requireVideoDownloadRemainderRequeued(3, true);
   });
 
-  it("refuses to mark ready if leftover videos were not enqueued", () => {
+  it("refuses to mark ready if leftover videos were not requeued", () => {
     assert.throws(
-      () => requireVideoDownloadContinuationJobId(3, undefined),
+      () => requireVideoDownloadRemainderRequeued(3, false),
       /leftover videos/,
     );
   });

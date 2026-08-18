@@ -22,9 +22,9 @@ export const VIDEO_DOWNLOAD_LEGACY_STORAGE_PREFIX = "video-downloads";
 /** Don't pull live jobs out of processing while a worker is still updating them. */
 export const VIDEO_DOWNLOAD_STALE_PROCESSING_MS = 6 * 60 * 1000;
 /** Cap in-flight jobs (queued + processing) so waiters stay inside the 15-minute UI timeout. */
-export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL = 3;
-export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER = 2;
-export const VIDEO_DOWNLOAD_CONTINUATION_ENQUEUE_ATTEMPTS = 5;
+export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL = 12;
+export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER = 4;
+export const VIDEO_DOWNLOAD_REMAINDER_ENQUEUE_ATTEMPTS = 5;
 
 /** Atomically move one payload from processing → queue (never leave it in neither list). */
 const REQUEUE_FROM_PROCESSING_LUA = `
@@ -47,6 +47,12 @@ export type VideoDownloadJob = {
   items: VideoDownloadItem[];
   attempt?: number;
   zipFilename?: string;
+  /** Same-job leftover wave: ZIP already stored, remaining items still to download. */
+  partialStoragePath?: string;
+  originalTotal?: number;
+  completedSoFar?: number;
+  failedSoFar?: number;
+  errorsSoFar?: string[];
 };
 
 export type VideoDownloadJobStatus = {
@@ -60,7 +66,6 @@ export type VideoDownloadJobStatus = {
   storagePath?: string;
   zipBytes?: number;
   zipFilename?: string;
-  continuationJobId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -115,13 +120,13 @@ export function planRecoveredVideoDownloadJobs(
   });
 }
 
-/** Partial ZIP must not be marked ready unless leftover videos were enqueued. */
-export function requireVideoDownloadContinuationJobId(
+/** Partial ZIP must not be marked ready unless leftover videos were requeued on the same job. */
+export function requireVideoDownloadRemainderRequeued(
   deferredCount: number,
-  continuationJobId: string | undefined,
+  requeued: boolean,
 ): void {
-  if (deferredCount > 0 && !continuationJobId) {
-    throw new Error("Failed to enqueue leftover videos");
+  if (deferredCount > 0 && !requeued) {
+    throw new Error("Failed to requeue leftover videos");
   }
 }
 
@@ -181,11 +186,35 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
     typeof parsed.zipFilename === "string" && parsed.zipFilename.trim()
       ? parsed.zipFilename.trim()
       : undefined;
+  const partialStoragePath =
+    typeof parsed.partialStoragePath === "string" && parsed.partialStoragePath.trim()
+      ? parsed.partialStoragePath.trim()
+      : undefined;
+  const originalTotal =
+    typeof parsed.originalTotal === "number" && Number.isFinite(parsed.originalTotal)
+      ? Math.max(0, Math.floor(parsed.originalTotal))
+      : undefined;
+  const completedSoFar =
+    typeof parsed.completedSoFar === "number" && Number.isFinite(parsed.completedSoFar)
+      ? Math.max(0, Math.floor(parsed.completedSoFar))
+      : undefined;
+  const failedSoFar =
+    typeof parsed.failedSoFar === "number" && Number.isFinite(parsed.failedSoFar)
+      ? Math.max(0, Math.floor(parsed.failedSoFar))
+      : undefined;
+  const errorsSoFar = Array.isArray(parsed.errorsSoFar)
+    ? parsed.errorsSoFar.filter((value): value is string => typeof value === "string")
+    : undefined;
   return {
     jobId: parsed.jobId,
     userId: parsed.userId,
     items,
     zipFilename,
+    partialStoragePath,
+    originalTotal,
+    completedSoFar,
+    failedSoFar,
+    errorsSoFar,
     attempt:
       typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
         ? Math.max(0, Math.floor(parsed.attempt))
@@ -267,7 +296,6 @@ async function listActiveVideoDownloadJobs(): Promise<VideoDownloadJob[]> {
 
 export async function enqueueVideoDownloadJob(
   job: VideoDownloadJob,
-  options?: { bypassActiveJobLimit?: boolean },
 ): Promise<{ error?: string; status?: number }> {
   const redis = getRedis();
   if (!redis) return { error: "Redis not configured" };
@@ -290,14 +318,12 @@ export async function enqueueVideoDownloadJob(
       };
     }
 
-    if (!options?.bypassActiveJobLimit) {
-      const active = await listActiveVideoDownloadJobs();
-      const limitError = videoDownloadActiveJobLimitError({
-        total: active.length,
-        userCount: active.filter((item) => item.userId === job.userId).length,
-      });
-      if (limitError) return limitError;
-    }
+    const active = await listActiveVideoDownloadJobs();
+    const limitError = videoDownloadActiveJobLimitError({
+      total: active.length,
+      userCount: active.filter((item) => item.userId === job.userId).length,
+    });
+    if (limitError) return limitError;
 
     const normalized: VideoDownloadJob = {
       ...job,
@@ -332,21 +358,52 @@ export async function enqueueVideoDownloadJob(
   }
 }
 
-/** Enqueue leftover videos as a new job. Callers must not mark the parent ZIP ready on error. */
-export async function enqueueVideoDownloadContinuationJob(
-  job: VideoDownloadJob,
-): Promise<{ error?: string }> {
-  let lastError: string | undefined;
-  for (let attempt = 0; attempt < VIDEO_DOWNLOAD_CONTINUATION_ENQUEUE_ATTEMPTS; attempt++) {
-    const enqueued = await enqueueVideoDownloadJob(
-      { ...job, attempt: 0 },
-      { bypassActiveJobLimit: true },
-    );
-    if (!enqueued.error) return {};
-    lastError = enqueued.error;
-    await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+/** Requeue leftover videos on the same job so the client still gets one ZIP. */
+export async function requeueVideoDownloadRemainder(options: {
+  rawJobString: string;
+  job: VideoDownloadJob;
+}): Promise<{ error?: string }> {
+  const redis = getRedis();
+  if (!redis) return { error: "Redis not configured" };
+  if (options.job.items.length === 0) {
+    return { error: "Failed to requeue leftover videos" };
   }
-  return { error: lastError || "Failed to enqueue leftover videos" };
+
+  let lastError: string | undefined;
+  for (let attempt = 0; attempt < VIDEO_DOWNLOAD_REMAINDER_ENQUEUE_ATTEMPTS; attempt++) {
+    try {
+      const nextJob: VideoDownloadJob = {
+        ...options.job,
+        attempt: 0,
+      };
+      await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(nextJob));
+      await removeVideoDownloadFromProcessing(options.rawJobString);
+      const existing = await getVideoDownloadJobStatus(nextJob.jobId);
+      const now = new Date().toISOString();
+      await setVideoDownloadJobStatus({
+        jobId: nextJob.jobId,
+        userId: nextJob.userId,
+        status: "queued",
+        total: nextJob.originalTotal || existing?.total || nextJob.items.length,
+        completed: nextJob.completedSoFar ?? existing?.completed ?? 0,
+        failed: nextJob.failedSoFar ?? existing?.failed ?? 0,
+        errors: nextJob.errorsSoFar ?? existing?.errors ?? [],
+        storagePath: nextJob.partialStoragePath || existing?.storagePath,
+        zipBytes: existing?.zipBytes,
+        zipFilename: existing?.zipFilename ?? nextJob.zipFilename,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      });
+      console.log(
+        `[video-download-queue] Requeued remainder jobId=${nextJob.jobId} leftover=${nextJob.items.length}`,
+      );
+      return {};
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+    }
+  }
+  return { error: lastError || "Failed to requeue leftover videos" };
 }
 
 export async function popVideoDownloadJob(): Promise<{
@@ -424,9 +481,9 @@ export async function retryOrDeadLetterVideoDownload(options: {
         jobId: parsed.jobId,
         userId: parsed.userId,
         status: "failed",
-        total: parsed.items.length,
+        total: parsed.originalTotal || parsed.items.length,
         completed: 0,
-        failed: parsed.items.length,
+        failed: parsed.originalTotal || parsed.items.length,
         errors: [options.reason || "Download job failed after retries"],
         zipFilename: parsed.zipFilename,
         createdAt: now,
@@ -445,10 +502,11 @@ export async function retryOrDeadLetterVideoDownload(options: {
       jobId: parsed.jobId,
       userId: parsed.userId,
       status: "queued",
-      total: parsed.items.length,
-      completed: existing?.completed ?? 0,
-      failed: existing?.failed ?? 0,
-      errors: existing?.errors ?? [],
+      total: existing?.total || parsed.originalTotal || parsed.items.length,
+      completed: existing?.completed ?? parsed.completedSoFar ?? 0,
+      failed: existing?.failed ?? parsed.failedSoFar ?? 0,
+      errors: existing?.errors ?? parsed.errorsSoFar ?? [],
+      storagePath: existing?.storagePath ?? parsed.partialStoragePath,
       zipFilename: existing?.zipFilename ?? parsed.zipFilename,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,

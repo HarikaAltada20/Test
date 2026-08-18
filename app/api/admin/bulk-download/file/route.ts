@@ -9,12 +9,13 @@ import { toBulkZipDownloadFilename } from "@/lib/video-download-filename";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const SIGNED_URL_TTL_SECONDS = 10 * 60;
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
+  const proxy = requestUrl.searchParams.get("proxy") === "1";
   const access = await verifyAdminOrBrandDownloadAccess();
   if (!access.allowed) {
     return NextResponse.json(
@@ -63,6 +64,24 @@ export async function GET(request: Request) {
       { error: signed.error?.message || "Could not create ZIP download URL" },
       { status: 500 },
     );
+  }
+
+  if (proxy) {
+    const upstream = await fetch(signed.data.signedUrl);
+    if (!upstream.ok || !upstream.body) {
+      return NextResponse.json(
+        { error: "Could not fetch ZIP archive" },
+        { status: 502 },
+      );
+    }
+    const headers = new Headers({
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    });
+    const length = upstream.headers.get("content-length");
+    if (length) headers.set("Content-Length", length);
+    return new NextResponse(upstream.body, { headers });
   }
 
   // Leave Redis status and the storage object in place so a dropped browser

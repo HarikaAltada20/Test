@@ -5,6 +5,8 @@ import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import { isYouTubeRefreshTarget } from "@/lib/youtube-url";
 import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldown";
 import {
+  applyPostCampaignOverlayRow,
+  postCampaignOverlayInsertFromSubmission,
   youtubeDetailedRefreshWriteOptions,
   youtubeMetricsWriteTarget,
 } from "@/lib/youtube-metrics-write-target";
@@ -134,35 +136,61 @@ export async function POST(request: Request) {
   let refreshRows: RefreshRow[] = youtubeSubmissions as RefreshRow[];
 
   if (isPostCampaign && refreshRows.length > 0) {
-    const { data: overlayRows, error: overlayError } = await supabaseAdmin
-      .from("post_campaign_submission_metrics")
-      .select("submission_id, views, other_stats")
-      .in(
-        "submission_id",
-        refreshRows.map((row) => row.id),
-      );
-    if (overlayError) {
-      return NextResponse.json(
-        { error: `Failed to fetch post-campaign metrics: ${overlayError.message}` },
-        { status: 500 },
-      );
-    }
-    const overlayById = new Map(
-      (overlayRows || []).map((row) => [row.submission_id as string, row]),
-    );
-    refreshRows = refreshRows
-      .map((row) => {
-        const overlay = overlayById.get(row.id);
-        if (!overlay) return null;
-        return {
-          ...row,
-          views: (overlay.views as number | null) ?? row.views,
+    const overlayById = new Map<string, {
+      submission_id: string;
+      views: number | null;
+      other_stats: Record<string, unknown> | null;
+    }>();
+    const overlayIds = refreshRows.map((row) => row.id);
+    const IN_CHUNK = 100;
+    for (let i = 0; i < overlayIds.length; i += IN_CHUNK) {
+      const chunk = overlayIds.slice(i, i + IN_CHUNK);
+      const { data: overlayRows, error: overlayError } = await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .select("submission_id, views, other_stats")
+        .in("submission_id", chunk);
+      if (overlayError) {
+        return NextResponse.json(
+          { error: `Failed to fetch post-campaign metrics: ${overlayError.message}` },
+          { status: 500 },
+        );
+      }
+      for (const row of overlayRows || []) {
+        overlayById.set(row.submission_id as string, {
+          submission_id: row.submission_id as string,
+          views: (row.views as number | null) ?? null,
           other_stats:
-            (overlay.other_stats as Record<string, unknown> | null) ??
-            row.other_stats,
-        };
-      })
-      .filter((row): row is RefreshRow => row != null);
+            (row.other_stats as Record<string, unknown> | null) ?? null,
+        });
+      }
+    }
+
+    const missingStubs = refreshRows
+      .filter((row) => !overlayById.has(row.id))
+      .map((row) =>
+        postCampaignOverlayInsertFromSubmission(row, new Date().toISOString()),
+      );
+    if (missingStubs.length > 0) {
+      const UPSERT_CHUNK = 200;
+      for (let i = 0; i < missingStubs.length; i += UPSERT_CHUNK) {
+        const chunk = missingStubs.slice(i, i + UPSERT_CHUNK);
+        const { error: upsertError } = await supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .upsert(chunk, { onConflict: "submission_id" });
+        if (upsertError) {
+          return NextResponse.json(
+            {
+              error: `Failed to create post-campaign metrics rows: ${upsertError.message}`,
+            },
+            { status: 500 },
+          );
+        }
+      }
+    }
+
+    refreshRows = refreshRows.map((row) =>
+      applyPostCampaignOverlayRow(row, overlayById.get(row.id) ?? null),
+    );
   }
 
   if (refreshRows.length === 0) {

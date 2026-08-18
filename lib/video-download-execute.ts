@@ -1,9 +1,8 @@
-import { createWriteStream, existsSync } from "fs";
+import { existsSync } from "fs";
 import { mkdir, rm, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
-import { ZipArchive } from "archiver";
 import {
   downloadInstagramVideoToFile,
   InstagramDownloadError,
@@ -21,6 +20,7 @@ import {
   withDownloadRetries,
 } from "@/lib/video-download-queue";
 import type { VideoDownloadItem } from "@/lib/queue/video-download-queue";
+import { buildZipFile } from "@/lib/video-download-zip";
 
 function parseDownloadError(error: unknown, isInstagram: boolean): string {
   if (error instanceof InstagramDownloadError || error instanceof YouTubeDownloadError) {
@@ -50,35 +50,12 @@ async function downloadVideoFile(
   }
 }
 
-async function buildZipFile(
-  zipPath: string,
-  files: { path: string; name: string }[],
-  failedReport: string | null,
-): Promise<void> {
-  const output = createWriteStream(zipPath);
-  const archive = new ZipArchive({ store: true });
-
-  await new Promise<void>((resolve, reject) => {
-    output.on("close", () => resolve());
-    output.on("error", reject);
-    archive.on("error", reject);
-    archive.pipe(output);
-    for (const file of files) {
-      archive.file(file.path, { name: file.name });
-    }
-    if (failedReport) {
-      archive.append(failedReport, { name: "failed_downloads_report.txt" });
-    }
-    void archive.finalize();
-  });
-}
-
 export type ExecuteVideoDownloadResult = {
   zipPath: string | null;
   zipBytes: number;
   downloaded: number;
   failures: { url: string; error: string }[];
-  /** Items skipped so this worker could zip; the processor should enqueue these. */
+  /** Items skipped so this worker could zip; the processor requeues these on the same job. */
   deferredItems: VideoDownloadItem[];
   cleanup: () => Promise<void>;
 };

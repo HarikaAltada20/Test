@@ -127,29 +127,6 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
-/** Navigate to the signed URL so the ZIP is not buffered in the tab. */
-function downloadZipFromUrl(url: string, filename: string): void {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener noreferrer";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
-/** Parent ZIP total already includes continuation items — do not add totals. */
-export function mergeQueuedZipProgress(
-  current: { completed: number; failed: number; total: number },
-  continuation: { completed: number; failed: number; total: number },
-): { completed: number; failed: number; total: number } {
-  return {
-    completed: current.completed + continuation.completed,
-    failed: current.failed + continuation.failed,
-    total: current.total,
-  };
-}
-
 function isNetworkFetchError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /failed to fetch|networkerror|load failed/i.test(message);
@@ -212,15 +189,9 @@ async function waitForQueuedZipJob(
     total: number;
     status: string;
   }) => void,
-  depth = 0,
-  progressBase?: { completed: number; failed: number; total: number },
-  pendingMeta?: { submissionIds: string[]; chunkIndex: number },
 ): Promise<{ downloaded: boolean; completed: number; failed: number; total: number }> {
-  if (depth > 8) {
-    throw new Error("Timed out following continued ZIP jobs.");
-  }
   const started = Date.now();
-  let last = { completed: 0, failed: 0, total: progressBase?.total || 0 };
+  let last = { completed: 0, failed: 0, total: 0 };
   while (Date.now() - started < QUEUED_DOWNLOAD_TIMEOUT_MS) {
     const statusRes = await fetchJsonWithRetry<{
       error?: string;
@@ -229,7 +200,6 @@ async function waitForQueuedZipJob(
       failed?: number;
       total?: number;
       errors?: string[];
-      continuationJobId?: string | null;
     }>(`/api/admin/bulk-download/status?jobId=${encodeURIComponent(jobId)}`);
     if (!statusRes.ok) {
       throw new Error(statusRes.data.error || "Failed to check download queue status.");
@@ -240,61 +210,27 @@ async function waitForQueuedZipJob(
       failed: Number(statusRes.data.failed) || 0,
       total: Number(statusRes.data.total) || 0,
     };
-    const progressTotal = progressBase?.total || last.total;
     onProgress?.({
-      completed: (progressBase?.completed || 0) + last.completed,
-      failed: (progressBase?.failed || 0) + last.failed,
-      total: progressTotal,
+      completed: last.completed,
+      failed: last.failed,
+      total: last.total,
       status: String(statusRes.data.status || "queued"),
     });
 
     if (statusRes.data.status === "ready") {
-      const fileRes = await fetchJsonWithRetry<{
-        error?: string;
-        url?: string;
-        filename?: string;
-      }>(
-        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}`,
-      );
-      if (!fileRes.ok || !fileRes.data.url) {
-        if (fileRes.status === 409) {
-          await sleep(QUEUED_DOWNLOAD_POLL_MS);
-          continue;
-        }
-        throw new Error(fileRes.data.error || "Failed to download queued ZIP.");
+      const proxyUrl = `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}&proxy=1`;
+      const fileRes = await fetch(proxyUrl);
+      if (fileRes.status === 409) {
+        await sleep(QUEUED_DOWNLOAD_POLL_MS);
+        continue;
       }
-      downloadZipFromUrl(
-        fileRes.data.url,
-        fileRes.data.filename || fileName,
-      );
-      const continuationJobId = statusRes.data.continuationJobId?.trim();
-      if (continuationJobId) {
-        if (pendingMeta) {
-          writePendingBulkZipJob({
-            jobId: continuationJobId,
-            fileName,
-            submissionIds: pendingMeta.submissionIds,
-            startedAt: Date.now(),
-            chunkIndex: pendingMeta.chunkIndex,
-          });
-        }
-        const continued = await waitForQueuedZipJob(
-          continuationJobId,
-          fileName,
-          onProgress,
-          depth + 1,
-          {
-            completed: (progressBase?.completed || 0) + last.completed,
-            failed: (progressBase?.failed || 0) + last.failed,
-            total: progressTotal,
-          },
-          pendingMeta,
-        );
-        return {
-          downloaded: true,
-          ...mergeQueuedZipProgress(last, continued),
-        };
+      const contentType = fileRes.headers.get("content-type") || "";
+      if (!fileRes.ok || contentType.includes("application/json")) {
+        const payload = (await fileRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "Failed to download queued ZIP.");
       }
+      const blob = await fileRes.blob();
+      triggerBrowserDownload(blob, fileName);
       return {
         downloaded: true,
         completed: last.completed,
@@ -374,9 +310,6 @@ async function downloadOneZipChunk(options: {
           failedCount: queueInfo.failed,
         });
       },
-      0,
-      { completed: 0, failed: 0, total: chunk.length },
-      { submissionIds: chunk, chunkIndex: options.chunkIndex },
     );
     clearPendingBulkZipJob();
     return {
@@ -445,8 +378,8 @@ async function downloadOneZipChunk(options: {
 
 /**
  * Downloads selected submissions as ZIP batches of at most MAX_BULK_VIDEO_DOWNLOADS.
- * When Redis is configured, each batch is enqueued and the browser is sent a
- * signed storage URL (the ZIP is not proxied through Next.js).
+ * When Redis is configured, each batch is enqueued and downloaded as a same-origin
+ * blob once the single ZIP is ready (time-budget leftovers stay on the same job).
  */
 export async function downloadSubmissionVideosInChunks(options: {
   submissionIds: string[];

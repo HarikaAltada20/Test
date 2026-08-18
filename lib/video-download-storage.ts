@@ -1,4 +1,5 @@
 import { createReadStream } from "fs";
+import { writeFile } from "fs/promises";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   VIDEO_DOWNLOAD_JOB_TTL_SECONDS,
@@ -32,6 +33,21 @@ export async function ensureVideoDownloadBucket(): Promise<void> {
     throw new Error(error.message || "Could not create video-downloads bucket");
   }
   ensuredPrivateBucket = true;
+}
+
+export async function downloadVideoDownloadZip(options: {
+  storagePath: string;
+  destPath: string;
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.storage
+    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+    .download(options.storagePath);
+  if (error || !data) {
+    return { error: error?.message || "Failed to load existing ZIP archive" };
+  }
+  await writeFile(options.destPath, Buffer.from(await data.arrayBuffer()));
+  return {};
 }
 
 export async function uploadVideoDownloadZip(options: {

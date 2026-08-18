@@ -8,32 +8,37 @@
  * - Local CRON_SECRET POST
  */
 
-import { randomUUID } from "crypto";
+import { mkdir, rm, stat } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 import { NextResponse } from "next/server";
 import {
   authorizeProcessVideoDownloadQueue,
   ensureProcessVideoDownloadQueueSchedule,
 } from "@/lib/qstash";
 import {
-  enqueueVideoDownloadContinuationJob,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   popVideoDownloadJob,
   recoverVideoDownloadProcessingToQueue,
   removeVideoDownloadFromProcessing,
-  requireVideoDownloadContinuationJobId,
+  requireVideoDownloadRemainderRequeued,
   retryOrDeadLetterVideoDownload,
+  requeueVideoDownloadRemainder,
   setVideoDownloadJobStatus,
   videoDownloadStoragePath,
+  type VideoDownloadJob,
   type VideoDownloadJobStatus,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
 import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
 import {
   cleanupExpiredVideoDownloadZips,
+  downloadVideoDownloadZip,
   ensureVideoDownloadBucket,
   uploadVideoDownloadZip,
 } from "@/lib/video-download-storage";
+import { mergeVideoDownloadZips } from "@/lib/video-download-zip";
 import {
   isRetryableDownloadError,
   shouldRetryZeroDownload,
@@ -102,6 +107,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
 
   const { job, raw: rawJobString } = popped;
   const existing = await getVideoDownloadJobStatus(job.jobId);
+  const completedBase = job.completedSoFar ?? existing?.completed ?? 0;
+  const failedBase = job.failedSoFar ?? existing?.failed ?? 0;
+  const originalTotal =
+    existing?.total || job.originalTotal || job.items.length;
   const now = () => new Date().toISOString();
   const patchStatus = async (
     partial: Partial<VideoDownloadJobStatus>,
@@ -111,7 +120,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       jobId: job.jobId,
       userId: job.userId,
       status: "processing",
-      total: current?.total || job.items.length,
+      total: current?.total || originalTotal,
       completed: current?.completed ?? 0,
       failed: current?.failed ?? 0,
       errors: current?.errors ?? [],
@@ -124,7 +133,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     });
   };
 
-  await patchStatus({ status: "processing" });
+  await patchStatus({ status: "processing", total: originalTotal });
 
   let cleanupTemp = async () => {};
 
@@ -133,13 +142,49 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       items: job.items,
       requestId: job.jobId.slice(0, 8),
       onProgress: async ({ completed, failed }) => {
-        await patchStatus({ status: "processing", completed, failed });
+        await patchStatus({
+          status: "processing",
+          completed: completedBase + completed,
+          failed: failedBase + failed,
+          total: originalTotal,
+        });
       },
     });
     cleanupTemp = result.cleanup;
 
+    const accumulatedFailed = failedBase + result.failures.length;
+    const accumulatedErrors = [
+      ...(job.errorsSoFar ?? existing?.errors ?? []),
+      ...result.failures.map((failure) => failure.error),
+    ].slice(0, 20);
+
     if (result.downloaded === 0 || !result.zipPath) {
       await cleanupTemp();
+      if (result.deferredItems.length > 0 && job.partialStoragePath) {
+        const remainder = await requeueVideoDownloadRemainder({
+          rawJobString,
+          job: buildRemainderJob({
+            job,
+            items: result.deferredItems,
+            partialStoragePath: job.partialStoragePath,
+            originalTotal,
+            completedSoFar: completedBase,
+            failedSoFar: accumulatedFailed,
+            errorsSoFar: accumulatedErrors,
+          }),
+        });
+        requireVideoDownloadRemainderRequeued(
+          result.deferredItems.length,
+          !remainder.error,
+        );
+        await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+        return NextResponse.json({
+          processed: 1,
+          jobId: job.jobId,
+          downloaded: 0,
+          remainder: true,
+        });
+      }
       const retryable = shouldRetryZeroDownload(
         result.failures,
         result.deferredItems.length,
@@ -160,7 +205,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
               status: "failed",
               errors: result.failures.map((f) => f.error).slice(0, 5),
               completed: 0,
-              failed: result.failures.length || job.items.length,
+              failed: result.failures.length || originalTotal,
             });
           }
           await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
@@ -177,9 +222,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         jobId: job.jobId,
         userId: job.userId,
         status: "failed",
-        total: existing?.total || job.items.length,
+        total: originalTotal,
         completed: 0,
-        failed: result.failures.length || job.items.length,
+        failed: result.failures.length || originalTotal,
         errors: result.failures.map((f) => f.error).slice(0, 5),
         zipFilename: existing?.zipFilename || job.zipFilename,
         createdAt: existing?.createdAt || now(),
@@ -194,7 +239,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         processed: 1,
         jobId: job.jobId,
         downloaded: 0,
-        failed: result.failures.length || job.items.length,
+        failed: result.failures.length || originalTotal,
       });
     }
 
@@ -202,46 +247,80 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     // so a later /file request on a different lambda would 410 a local ZIP.
     await ensureVideoDownloadBucket();
     const storagePath = videoDownloadStoragePath(job.userId, job.jobId);
+    let zipPath = result.zipPath;
+    let zipBytes = result.zipBytes;
+    const mergeRoot = join(tmpdir(), `merge_${job.jobId}`);
+
+    if (job.partialStoragePath) {
+      const existingLocal = join(mergeRoot, "existing.zip");
+      const mergedLocal = join(mergeRoot, "merged.zip");
+      await rm(mergeRoot, { recursive: true, force: true }).catch(() => {});
+      await mkdir(mergeRoot, { recursive: true });
+      const downloadedExisting = await downloadVideoDownloadZip({
+        storagePath: job.partialStoragePath,
+        destPath: existingLocal,
+      });
+      if (downloadedExisting.error) {
+        throw new Error(downloadedExisting.error || "Failed to load existing ZIP archive");
+      }
+      await mergeVideoDownloadZips({
+        existingZipPath: existingLocal,
+        newZipPath: zipPath,
+        outputZipPath: mergedLocal,
+        tempDir: mergeRoot,
+      });
+      zipPath = mergedLocal;
+      zipBytes = (await stat(mergedLocal)).size;
+    }
+
     const upload = await uploadVideoDownloadZip({
       storagePath,
-      zipPath: result.zipPath,
+      zipPath,
     });
+    await rm(mergeRoot, { recursive: true, force: true }).catch(() => {});
     if (upload.error) {
       throw new Error(upload.error || "Failed to store ZIP archive");
     }
 
-    let continuationJobId: string | undefined;
+    const completed = completedBase + result.downloaded;
     if (result.deferredItems.length > 0) {
-      const nextJobId = randomUUID();
-      const enqueued = await enqueueVideoDownloadContinuationJob({
-        jobId: nextJobId,
-        userId: job.userId,
-        items: result.deferredItems,
-        zipFilename: job.zipFilename,
-        attempt: 0,
+      const remainder = await requeueVideoDownloadRemainder({
+        rawJobString,
+        job: buildRemainderJob({
+          job,
+          items: result.deferredItems,
+          partialStoragePath: storagePath,
+          originalTotal,
+          completedSoFar: completed,
+          failedSoFar: accumulatedFailed,
+          errorsSoFar: accumulatedErrors,
+        }),
       });
-      if (enqueued.error) {
-        throw new Error(enqueued.error || "Failed to enqueue leftover videos");
-      }
-      continuationJobId = nextJobId;
+      requireVideoDownloadRemainderRequeued(
+        result.deferredItems.length,
+        !remainder.error,
+      );
+      await cleanupTemp();
+      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+      return NextResponse.json({
+        processed: 1,
+        jobId: job.jobId,
+        downloaded: result.downloaded,
+        remainder: true,
+      });
     }
-    requireVideoDownloadContinuationJobId(
-      result.deferredItems.length,
-      continuationJobId,
-    );
 
     await setVideoDownloadJobStatus({
       jobId: job.jobId,
       userId: job.userId,
       status: "ready",
-      total: existing?.total || job.items.length,
-      completed: result.downloaded,
-      failed: result.failures.length,
-      errors: result.failures.map((f) => f.error),
+      total: originalTotal,
+      completed,
+      failed: accumulatedFailed,
+      errors: accumulatedErrors,
       storagePath,
-      zipBytes: result.zipBytes,
+      zipBytes,
       zipFilename: existing?.zipFilename || job.zipFilename,
-      continuationJobId,
       createdAt: existing?.createdAt || now(),
       updatedAt: now(),
     });
@@ -254,9 +333,8 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     return NextResponse.json({
       processed: 1,
       jobId: job.jobId,
-      downloaded: result.downloaded,
-      failed: result.failures.length,
-      continuationJobId: continuationJobId ?? null,
+      downloaded: completed,
+      failed: accumulatedFailed,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Video download failed";
@@ -303,4 +381,26 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     }
     return NextResponse.json({ processed: 1, error: message, retry }, { status: 200 });
   }
+}
+
+function buildRemainderJob(options: {
+  job: VideoDownloadJob;
+  items: VideoDownloadJob["items"];
+  partialStoragePath: string;
+  originalTotal: number;
+  completedSoFar: number;
+  failedSoFar: number;
+  errorsSoFar: string[];
+}): VideoDownloadJob {
+  return {
+    jobId: options.job.jobId,
+    userId: options.job.userId,
+    items: options.items,
+    zipFilename: options.job.zipFilename,
+    partialStoragePath: options.partialStoragePath,
+    originalTotal: options.originalTotal,
+    completedSoFar: options.completedSoFar,
+    failedSoFar: options.failedSoFar,
+    errorsSoFar: options.errorsSoFar,
+  };
 }
