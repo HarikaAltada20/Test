@@ -36,6 +36,7 @@ import {
 import {
   isRetryableDownloadError,
   shouldRetryZeroDownload,
+  sleep,
 } from "@/lib/video-download-queue";
 
 export const dynamic = "force-dynamic";
@@ -212,23 +213,30 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     let continuationJobId: string | undefined;
     if (result.deferredItems.length > 0) {
       const nextJobId = randomUUID();
-      const enqueued = await enqueueVideoDownloadJob(
-        {
-          jobId: nextJobId,
-          userId: job.userId,
-          items: result.deferredItems,
-          zipFilename: job.zipFilename,
-          attempt: 0,
-        },
-        { bypassActiveJobLimit: true },
-      );
-      if (enqueued.error) {
-        console.warn(
-          `[process-video-download-queue] Could not enqueue leftover videos for ${job.jobId}:`,
-          enqueued.error,
+      let leftoverError: string | undefined;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const enqueued = await enqueueVideoDownloadJob(
+          {
+            jobId: nextJobId,
+            userId: job.userId,
+            items: result.deferredItems,
+            zipFilename: job.zipFilename,
+            attempt: 0,
+          },
+          { bypassActiveJobLimit: true },
         );
-      } else {
-        continuationJobId = nextJobId;
+        if (!enqueued.error) {
+          leftoverError = undefined;
+          continuationJobId = nextJobId;
+          break;
+        }
+        leftoverError = enqueued.error;
+        await sleep(200 * (attempt + 1));
+      }
+      if (!continuationJobId) {
+        throw new Error(
+          leftoverError || "Failed to enqueue leftover videos",
+        );
       }
     }
 
@@ -250,6 +258,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
 
     await removeVideoDownloadFromProcessing(rawJobString);
     await cleanupTemp();
+    await cleanupExpiredVideoDownloadZips({ maxDeletes: 25 });
     await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
 
     return NextResponse.json({
@@ -257,6 +266,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       jobId: job.jobId,
       downloaded: result.downloaded,
       failed: result.failures.length,
+      continuationJobId: continuationJobId ?? null,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Video download failed";
@@ -266,7 +276,8 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     const retryable =
       isRetryableDownloadError(message) ||
       messageLower.includes("failed to store") ||
-      messageLower.includes("zip archive");
+      messageLower.includes("zip archive") ||
+      messageLower.includes("leftover");
     if (!retryable) {
       await removeVideoDownloadFromProcessing(rawJobString);
       await patchStatus({

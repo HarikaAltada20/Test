@@ -138,6 +138,11 @@ export function isYouTubeAllLikeScope(scope: YouTubeRefreshScope): boolean {
   return scope === "all" || scope === "all_standard";
 }
 
+export {
+  youtubeMetricsWriteTarget,
+  type YouTubeMetricsWriteTarget,
+} from "./youtube-metrics-write-target";
+
 export type YouTubeScopeTimestamps = {
   core?: string;
   traffic?: string;

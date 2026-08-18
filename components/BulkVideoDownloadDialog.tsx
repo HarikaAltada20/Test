@@ -21,7 +21,7 @@ import {
   isVideoFilenamePattern,
   type VideoFilenamePattern,
 } from "@/lib/video-download-filename";
-import { MAX_BULK_VIDEO_DOWNLOADS } from "@/lib/video-download-ui";
+import { MAX_BULK_VIDEO_DOWNLOADS, readPendingBulkZipJob } from "@/lib/video-download-ui";
 import { BulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgress";
 import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 
@@ -66,9 +66,13 @@ export function BulkVideoDownloadDialog({
   const [pattern, setPattern] = useState<VideoFilenamePattern>(
     DEFAULT_VIDEO_FILENAME_PATTERN,
   );
+  const [canResume, setCanResume] = useState(false);
 
   useEffect(() => {
-    if (open) setPattern(readStoredPattern());
+    if (open) {
+      setPattern(readStoredPattern());
+      setCanResume(!!readPendingBulkZipJob());
+    }
   }, [open]);
 
   const selectedMeta = VIDEO_FILENAME_PATTERN_LABELS[pattern];
@@ -190,6 +194,17 @@ export function BulkVideoDownloadDialog({
           <span className="font-mono">{selectedMeta.example}</span>
         </p>
 
+        {canResume && !downloading && (
+          <p
+            className={cn(
+              "text-xs",
+              isDark ? "text-amber-300" : "text-amber-700",
+            )}
+          >
+            A ZIP job is still running. Click Resume to continue without starting over.
+          </p>
+        )}
+
         {downloading && (
           <div
             className={cn(
@@ -242,7 +257,7 @@ export function BulkVideoDownloadDialog({
             className="bg-purple-600 text-white hover:bg-purple-700"
           >
             <Download className="h-4 w-4 mr-1" />
-            Download ZIP
+            {canResume ? "Resume download" : "Download ZIP"}
           </Button>
         </DialogFooter>
       </DialogContent>

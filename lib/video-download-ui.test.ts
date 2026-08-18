@@ -5,6 +5,7 @@ import {
   canDownloadSubmissionVideo,
   chunkArray,
   MAX_BULK_VIDEO_DOWNLOADS,
+  mergeQueuedZipProgress,
 } from "./video-download-ui";
 
 describe("video-download-ui", () => {
@@ -53,5 +54,15 @@ describe("video-download-ui", () => {
     assert.equal(canBulkDownloadContestVideos("instagram"), true);
     assert.equal(canBulkDownloadContestVideos("YouTube Shorts"), true);
     assert.equal(canBulkDownloadContestVideos("twitter"), false);
+  });
+
+  it("keeps the parent ZIP total when merging continuation progress", () => {
+    assert.deepEqual(
+      mergeQueuedZipProgress(
+        { completed: 6, failed: 0, total: 10 },
+        { completed: 4, failed: 0, total: 4 },
+      ),
+      { completed: 10, failed: 0, total: 10 },
+    );
   });
 });

@@ -11,6 +11,7 @@ const REDIS_PREFIX = "video_download";
 const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
 const REDIS_PROCESSING_KEY = `${REDIS_PREFIX}:processing`;
 const REDIS_DEAD_LETTER_KEY = `${REDIS_PREFIX}:dead_letter`;
+const REDIS_DEAD_LETTER_MAX = 200;
 const MAX_RETRY_ATTEMPTS = 3;
 export const VIDEO_DOWNLOAD_JOB_TTL_SECONDS = 2 * 60 * 60;
 /** Private bucket. Do not store ZIPs in public contest-assets. */
@@ -355,6 +356,7 @@ export async function retryOrDeadLetterVideoDownload(options: {
           deadLetterReason: options.reason ?? "unknown",
         }),
       );
+      await redis.ltrim(REDIS_DEAD_LETTER_KEY, 0, REDIS_DEAD_LETTER_MAX - 1);
       await removeVideoDownloadFromProcessing(options.rawJobString);
       await setVideoDownloadJobStatus({
         jobId: parsed.jobId,

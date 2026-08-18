@@ -4,6 +4,7 @@ import {
   buildVideoDownloadFilename,
   buildViewsBasedVideoFilename,
   formatQualityScorePart,
+  joinedRecordAdvertiserId,
   joinedRecordUsername,
   parseVideoFilenamePattern,
   uniqueVideoDownloadFilename,
@@ -81,6 +82,19 @@ describe("video download filename patterns", () => {
     assert.equal(joinedRecordUsername({ username: "alice" }), "alice");
     assert.equal(joinedRecordUsername([{ username: "bob" }]), "bob");
     assert.equal(joinedRecordUsername(null), "");
+  });
+
+  it("reads advertiser_id from contest join object or array", () => {
+    assert.equal(
+      joinedRecordAdvertiserId({ advertiser_id: "brand-1" }),
+      "brand-1",
+    );
+    assert.equal(
+      joinedRecordAdvertiserId([{ advertiser_id: "brand-2" }]),
+      "brand-2",
+    );
+    assert.equal(joinedRecordAdvertiserId(null), null);
+    assert.equal(joinedRecordAdvertiserId({ advertiser_id: "  " }), null);
   });
 
   it("names the ZIP after the contest title", () => {

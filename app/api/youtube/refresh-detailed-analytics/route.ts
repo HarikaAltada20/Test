@@ -4,6 +4,7 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import { isYouTubeRefreshTarget } from "@/lib/youtube-url";
 import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldown";
+import { youtubeMetricsWriteTarget } from "@/lib/youtube-metrics-write-target";
 import {
   updateYouTubeSubmissionForScope,
   isYouTubeAllLikeScope,
@@ -114,7 +115,54 @@ export async function POST(request: Request) {
     isYouTubeRefreshTarget(s.platform, s.content_link),
   );
 
-  if (youtubeSubmissions.length === 0) {
+  const writeTarget = youtubeMetricsWriteTarget(isPostCampaign);
+
+  type RefreshRow = {
+    id: string;
+    contest_id: string;
+    creator_id: string;
+    content_link: string;
+    views: number | null;
+    other_stats: Record<string, unknown> | null;
+    created_at?: string;
+    platform?: string | null;
+  };
+
+  let refreshRows: RefreshRow[] = youtubeSubmissions as RefreshRow[];
+
+  if (isPostCampaign && refreshRows.length > 0) {
+    const { data: overlayRows, error: overlayError } = await supabaseAdmin
+      .from("post_campaign_submission_metrics")
+      .select("submission_id, views, other_stats")
+      .in(
+        "submission_id",
+        refreshRows.map((row) => row.id),
+      );
+    if (overlayError) {
+      return NextResponse.json(
+        { error: `Failed to fetch post-campaign metrics: ${overlayError.message}` },
+        { status: 500 },
+      );
+    }
+    const overlayById = new Map(
+      (overlayRows || []).map((row) => [row.submission_id as string, row]),
+    );
+    refreshRows = refreshRows
+      .map((row) => {
+        const overlay = overlayById.get(row.id);
+        if (!overlay) return null;
+        return {
+          ...row,
+          views: (overlay.views as number | null) ?? row.views,
+          other_stats:
+            (overlay.other_stats as Record<string, unknown> | null) ??
+            row.other_stats,
+        };
+      })
+      .filter((row): row is RefreshRow => row != null);
+  }
+
+  if (refreshRows.length === 0) {
     if (submissionId) {
       return NextResponse.json(
         { error: "YouTube submission not found" },
@@ -131,7 +179,7 @@ export async function POST(request: Request) {
     ...new Set(
       (contestId
         ? [contestId]
-        : youtubeSubmissions.map((submission) => submission.contest_id)
+        : refreshRows.map((submission) => submission.contest_id)
       ).filter(Boolean),
     ),
   ];
@@ -211,7 +259,7 @@ export async function POST(request: Request) {
   }
 
   // --- Group by creator to reuse tokens ---
-  const creatorIds = [...new Set(youtubeSubmissions.map((s) => s.creator_id))];
+  const creatorIds = [...new Set(refreshRows.map((s) => s.creator_id))];
 
   const { data: creators, error: creatorsError } = await supabaseAdmin
     .from("creator_profiles")
@@ -281,21 +329,32 @@ export async function POST(request: Request) {
   let skippedCount = 0;
   const reauthNeeded: string[] = [];
   const now = new Date().toISOString();
+  const patchInsightsStatus = async (
+    submissionIdToPatch: string,
+    status: "permanent_failure" | "temporary_failure",
+  ) => {
+    const payload = {
+      insights_status: status,
+      last_insights_update: now,
+      updated_at: now,
+    };
+    if (writeTarget === "post_campaign_submission_metrics") {
+      await supabaseAdmin
+        .from("post_campaign_submission_metrics")
+        .update(payload)
+        .eq("submission_id", submissionIdToPatch);
+      return;
+    }
+    await supabaseAdmin.from("submissions").update(payload).eq("id", submissionIdToPatch);
+  };
 
   // --- Process each submission ---
-  for (const sub of youtubeSubmissions) {
+  for (const sub of refreshRows) {
     const accessToken = tokenMap.get(sub.creator_id);
     if (!accessToken) {
       if (needsReauthCreators.includes(sub.creator_id)) {
         reauthNeeded.push(sub.id);
-        await supabaseAdmin
-          .from("submissions")
-          .update({
-            insights_status: "permanent_failure",
-            last_insights_update: now,
-            updated_at: now,
-          })
-          .eq("id", sub.id);
+        await patchInsightsStatus(sub.id, "permanent_failure");
       }
       skippedCount++;
       continue;
@@ -303,14 +362,7 @@ export async function POST(request: Request) {
 
     const videoId = extractYoutubeId(sub.content_link);
     if (!videoId) {
-      await supabaseAdmin
-        .from("submissions")
-        .update({
-          insights_status: "permanent_failure",
-          last_insights_update: now,
-          updated_at: now,
-        })
-        .eq("id", sub.id);
+      await patchInsightsStatus(sub.id, "permanent_failure");
       permanentFailureCount++;
       continue;
     }
@@ -329,6 +381,7 @@ export async function POST(request: Request) {
         accessToken,
         type,
         now,
+        { metricsTarget: writeTarget },
       );
 
       if (result.ok) {
@@ -349,14 +402,7 @@ export async function POST(request: Request) {
         `Failed for submission ${sub.id}:`,
         (err as Error)?.message,
       );
-      await supabaseAdmin
-        .from("submissions")
-        .update({
-          insights_status: "temporary_failure",
-          last_insights_update: now,
-          updated_at: now,
-        })
-        .eq("id", sub.id);
+      await patchInsightsStatus(sub.id, "temporary_failure");
       temporaryFailureCount++;
     }
   }

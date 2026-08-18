@@ -1,0 +1,10 @@
+export type YouTubeMetricsWriteTarget =
+  | "submissions"
+  | "post_campaign_submission_metrics";
+
+/** Live contest writes `submissions`; post-campaign writes the overlay table only. */
+export function youtubeMetricsWriteTarget(
+  isPostCampaign: boolean,
+): YouTubeMetricsWriteTarget {
+  return isPostCampaign ? "post_campaign_submission_metrics" : "submissions";
+}

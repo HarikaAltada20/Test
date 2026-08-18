@@ -88,6 +88,16 @@ export function joinedRecordUsername(users: unknown): string {
   return "";
 }
 
+/** Contest join may be an object (many-to-one) or a one-element array. */
+export function joinedRecordAdvertiserId(contests: unknown): string | null {
+  if (Array.isArray(contests)) return joinedRecordAdvertiserId(contests[0]);
+  if (contests && typeof contests === "object" && "advertiser_id" in contests) {
+    const value = (contests as { advertiser_id?: unknown }).advertiser_id;
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+  return null;
+}
+
 /**
  * Filename based on view count.
  * Optional suffix disambiguates equal view counts in the same ZIP.

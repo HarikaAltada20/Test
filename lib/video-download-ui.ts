@@ -51,6 +51,71 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+const PENDING_BULK_ZIP_KEY = "goc-bulk-zip-pending";
+
+export type PendingBulkZipJob = {
+  jobId: string;
+  fileName: string;
+  submissionIds: string[];
+  startedAt: number;
+  chunkIndex: number;
+};
+
+function sameIdList(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((id, index) => id === right[index]);
+}
+
+export function readPendingBulkZipJob(): PendingBulkZipJob | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_BULK_ZIP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingBulkZipJob;
+    if (
+      !parsed?.jobId ||
+      !parsed?.fileName ||
+      !Array.isArray(parsed.submissionIds) ||
+      typeof parsed.startedAt !== "number"
+    ) {
+      return null;
+    }
+    if (Date.now() - parsed.startedAt >= QUEUED_DOWNLOAD_TIMEOUT_MS) {
+      clearPendingBulkZipJob();
+      return null;
+    }
+    return {
+      ...parsed,
+      chunkIndex:
+        typeof parsed.chunkIndex === "number" && parsed.chunkIndex > 0
+          ? parsed.chunkIndex
+          : 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePendingBulkZipJob(job: PendingBulkZipJob): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PENDING_BULK_ZIP_KEY, JSON.stringify(job));
+  } catch {
+    // ignore quota / private-mode failures
+  }
+}
+
+export function clearPendingBulkZipJob(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(PENDING_BULK_ZIP_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function triggerBrowserDownload(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -62,25 +127,27 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
 }
 
-async function downloadZipFromUrl(url: string, filename: string): Promise<void> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Download failed (${response.status})`);
-    }
-    triggerBrowserDownload(await response.blob(), filename);
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Download failed")) {
-      throw error;
-    }
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+/** Navigate to the signed URL so the ZIP is not buffered in the tab. */
+function downloadZipFromUrl(url: string, filename: string): void {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/** Parent ZIP total already includes continuation items — do not add totals. */
+export function mergeQueuedZipProgress(
+  current: { completed: number; failed: number; total: number },
+  continuation: { completed: number; failed: number; total: number },
+): { completed: number; failed: number; total: number } {
+  return {
+    completed: current.completed + continuation.completed,
+    failed: current.failed + continuation.failed,
+    total: current.total,
+  };
 }
 
 function isNetworkFetchError(error: unknown): boolean {
@@ -146,12 +213,14 @@ async function waitForQueuedZipJob(
     status: string;
   }) => void,
   depth = 0,
+  progressBase?: { completed: number; failed: number; total: number },
+  pendingMeta?: { submissionIds: string[]; chunkIndex: number },
 ): Promise<{ downloaded: boolean; completed: number; failed: number; total: number }> {
   if (depth > 8) {
     throw new Error("Timed out following continued ZIP jobs.");
   }
   const started = Date.now();
-  let last = { completed: 0, failed: 0, total: 0 };
+  let last = { completed: 0, failed: 0, total: progressBase?.total || 0 };
   while (Date.now() - started < QUEUED_DOWNLOAD_TIMEOUT_MS) {
     const statusRes = await fetchJsonWithRetry<{
       error?: string;
@@ -171,8 +240,11 @@ async function waitForQueuedZipJob(
       failed: Number(statusRes.data.failed) || 0,
       total: Number(statusRes.data.total) || 0,
     };
+    const progressTotal = progressBase?.total || last.total;
     onProgress?.({
-      ...last,
+      completed: (progressBase?.completed || 0) + last.completed,
+      failed: (progressBase?.failed || 0) + last.failed,
+      total: progressTotal,
       status: String(statusRes.data.status || "queued"),
     });
 
@@ -191,23 +263,36 @@ async function waitForQueuedZipJob(
         }
         throw new Error(fileRes.data.error || "Failed to download queued ZIP.");
       }
-      await downloadZipFromUrl(
+      downloadZipFromUrl(
         fileRes.data.url,
         fileRes.data.filename || fileName,
       );
       const continuationJobId = statusRes.data.continuationJobId?.trim();
       if (continuationJobId) {
+        if (pendingMeta) {
+          writePendingBulkZipJob({
+            jobId: continuationJobId,
+            fileName,
+            submissionIds: pendingMeta.submissionIds,
+            startedAt: Date.now(),
+            chunkIndex: pendingMeta.chunkIndex,
+          });
+        }
         const continued = await waitForQueuedZipJob(
           continuationJobId,
           fileName,
           onProgress,
           depth + 1,
+          {
+            completed: (progressBase?.completed || 0) + last.completed,
+            failed: (progressBase?.failed || 0) + last.failed,
+            total: progressTotal,
+          },
+          pendingMeta,
         );
         return {
           downloaded: true,
-          completed: last.completed + continued.completed,
-          failed: last.failed + continued.failed,
-          total: last.total + continued.total,
+          ...mergeQueuedZipProgress(last, continued),
         };
       }
       return {
@@ -219,6 +304,7 @@ async function waitForQueuedZipJob(
     }
 
     if (statusRes.data.status === "failed") {
+      clearPendingBulkZipJob();
       const firstError = statusRes.data.errors?.[0];
       throw new Error(firstError || "Queued video download failed.");
     }
@@ -267,6 +353,52 @@ async function downloadOneZipChunk(options: {
     });
   };
 
+  const pollQueued = async (jobId: string, fileName: string) => {
+    writePendingBulkZipJob({
+      jobId,
+      fileName,
+      submissionIds: chunk,
+      startedAt: Date.now(),
+      chunkIndex: options.chunkIndex,
+    });
+    const queued = await waitForQueuedZipJob(
+      jobId,
+      fileName,
+      (queueInfo) => {
+        emit({
+          queuedCompleted: queueInfo.completed,
+          queuedFailed: queueInfo.failed,
+          queuedTotal: queueInfo.total,
+          queueStatus: queueInfo.status,
+          successCount: queueInfo.completed,
+          failedCount: queueInfo.failed,
+        });
+      },
+      0,
+      { completed: 0, failed: 0, total: chunk.length },
+      { submissionIds: chunk, chunkIndex: options.chunkIndex },
+    );
+    clearPendingBulkZipJob();
+    return {
+      successCount: queued.completed,
+      failedCount: Math.max(0, chunk.length - queued.completed),
+      downloaded: queued.downloaded,
+      errors,
+    };
+  };
+
+  const pending = readPendingBulkZipJob();
+  if (pending && sameIdList(pending.submissionIds, chunk)) {
+    try {
+      return await pollQueued(pending.jobId, pending.fileName);
+    } catch (error) {
+      if (error instanceof Error && /timed out/i.test(error.message)) {
+        throw error;
+      }
+      clearPendingBulkZipJob();
+    }
+  }
+
   const response = await fetch("/api/admin/bulk-download", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -282,26 +414,7 @@ async function downloadOneZipChunk(options: {
     const payload = await response.json().catch(() => ({}));
     if (response.ok && payload.queued && typeof payload.jobId === "string") {
       const fileName = `${options.fileNamePrefix}_${Date.now()}.zip`;
-      const queued = await waitForQueuedZipJob(
-        payload.jobId,
-        fileName,
-        (queueInfo) => {
-          emit({
-            queuedCompleted: queueInfo.completed,
-            queuedFailed: queueInfo.failed,
-            queuedTotal: queueInfo.total,
-            queueStatus: queueInfo.status,
-            successCount: queueInfo.completed,
-            failedCount: queueInfo.failed,
-          });
-        },
-      );
-      return {
-        successCount: queued.completed,
-        failedCount: Math.max(0, chunk.length - queued.completed),
-        downloaded: queued.downloaded,
-        errors,
-      };
+      return pollQueued(payload.jobId, fileName);
     }
     if (typeof payload.failed === "number") {
       const successCount = Number(payload.completed) || 0;
@@ -348,8 +461,13 @@ export async function downloadSubmissionVideosInChunks(options: {
   let succeededChunks = 0;
   let successCount = 0;
   let failedCount = 0;
+  const pending = readPendingBulkZipJob();
+  const resumeAt = pending
+    ? chunks.findIndex((chunk) => sameIdList(chunk, pending.submissionIds))
+    : -1;
+  const startIndex = resumeAt >= 0 ? resumeAt : 0;
 
-  for (let i = 0; i < chunks.length; i++) {
+  for (let i = startIndex; i < chunks.length; i++) {
     const chunk = chunks[i];
     const partSuffix =
       chunks.length > 1 ? `_part_${i + 1}_of_${chunks.length}` : "";

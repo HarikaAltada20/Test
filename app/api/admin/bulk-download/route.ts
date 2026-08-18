@@ -10,6 +10,7 @@ import {
   verifyAdminOrBrandDownloadAccess,
 } from "@/lib/video-download-auth";
 import {
+  joinedRecordAdvertiserId,
   joinedRecordUsername,
   parseVideoFilenamePattern,
   uniqueVideoDownloadFilename,
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
       }
 
       const owned = (submissions || []).filter((sub) => {
-        const advertiserId = (sub.contests as { advertiser_id?: string } | null)?.advertiser_id;
+        const advertiserId = joinedRecordAdvertiserId(sub.contests);
         return submissionOwnedByDownloadUser(user, advertiserId);
       });
 
@@ -246,13 +247,14 @@ export async function POST(request: Request) {
       requestId,
     });
 
+    const deferredFailed = result.deferredItems.length;
     if (result.downloaded === 0 || !result.zipPath) {
       await result.cleanup();
       return NextResponse.json(
         {
           error: result.failures[0]?.error || "No files could be downloaded",
           completed: 0,
-          failed: result.failures.length,
+          failed: result.failures.length + deferredFailed,
         },
         { status: 422 },
       );
@@ -274,7 +276,7 @@ export async function POST(request: Request) {
           "Content-Length": String(zipStat.size),
           "Cache-Control": "no-cache",
           "X-Bulk-Downloaded": String(result.downloaded),
-          "X-Bulk-Failed": String(result.failures.length),
+          "X-Bulk-Failed": String(result.failures.length + deferredFailed),
         },
       });
     } catch (streamError) {
