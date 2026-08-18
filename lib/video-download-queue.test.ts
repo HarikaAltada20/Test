@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   isRetryableDownloadError,
   isWorkerTimeBudgetExhausted,
+  isWorkerTimeBudgetSkip,
   processSequentialDownloadQueue,
+  shouldRetryZeroDownload,
   withDownloadRetries,
 } from "./video-download-queue";
 
@@ -97,5 +99,18 @@ describe("video download queue", () => {
   it("reports when the worker download budget is exhausted", () => {
     assert.equal(isWorkerTimeBudgetExhausted(0, 240_000), true);
     assert.equal(isWorkerTimeBudgetExhausted(0, 239_999), false);
+  });
+
+  it("retries a 0-download job for rate limits and budget skips", () => {
+    assert.equal(isWorkerTimeBudgetSkip("Skipped: worker time budget reached so remaining videos can be zipped."), true);
+    assert.equal(
+      shouldRetryZeroDownload([{ error: "Too many requests to Instagram. Please wait a few minutes." }]),
+      true,
+    );
+    assert.equal(
+      shouldRetryZeroDownload([{ error: "This Instagram video is private or restricted." }]),
+      false,
+    );
+    assert.equal(shouldRetryZeroDownload([], 2), true);
   });
 });

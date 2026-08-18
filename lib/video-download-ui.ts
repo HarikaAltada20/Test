@@ -53,19 +53,34 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
 
 function triggerBrowserDownload(blob: Blob, filename: string): void {
   const url = window.URL.createObjectURL(blob);
-  triggerUrlDownload(url, filename);
-  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-}
-
-function triggerUrlDownload(url: string, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
-  a.rel = "noopener";
-  a.target = "_blank";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+}
+
+async function downloadZipFromUrl(url: string, filename: string): Promise<void> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Download failed (${response.status})`);
+    }
+    triggerBrowserDownload(await response.blob(), filename);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Download failed")) {
+      throw error;
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }
 
 function isNetworkFetchError(error: unknown): boolean {
@@ -130,7 +145,11 @@ async function waitForQueuedZipJob(
     total: number;
     status: string;
   }) => void,
+  depth = 0,
 ): Promise<{ downloaded: boolean; completed: number; failed: number; total: number }> {
+  if (depth > 8) {
+    throw new Error("Timed out following continued ZIP jobs.");
+  }
   const started = Date.now();
   let last = { completed: 0, failed: 0, total: 0 };
   while (Date.now() - started < QUEUED_DOWNLOAD_TIMEOUT_MS) {
@@ -141,6 +160,7 @@ async function waitForQueuedZipJob(
       failed?: number;
       total?: number;
       errors?: string[];
+      continuationJobId?: string | null;
     }>(`/api/admin/bulk-download/status?jobId=${encodeURIComponent(jobId)}`);
     if (!statusRes.ok) {
       throw new Error(statusRes.data.error || "Failed to check download queue status.");
@@ -171,10 +191,25 @@ async function waitForQueuedZipJob(
         }
         throw new Error(fileRes.data.error || "Failed to download queued ZIP.");
       }
-      triggerUrlDownload(
+      await downloadZipFromUrl(
         fileRes.data.url,
         fileRes.data.filename || fileName,
       );
+      const continuationJobId = statusRes.data.continuationJobId?.trim();
+      if (continuationJobId) {
+        const continued = await waitForQueuedZipJob(
+          continuationJobId,
+          fileName,
+          onProgress,
+          depth + 1,
+        );
+        return {
+          downloaded: true,
+          completed: last.completed + continued.completed,
+          failed: last.failed + continued.failed,
+          total: last.total + continued.total,
+        };
+      }
       return {
         downloaded: true,
         completed: last.completed,

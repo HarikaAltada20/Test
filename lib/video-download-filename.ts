@@ -16,18 +16,18 @@ export const VIDEO_FILENAME_PATTERN_LABELS: Record<
 > = {
   views: {
     label: "Views only",
-    description: "Names the file with the view count.",
-    example: "12500.mp4",
+    description: "Names the file with the view count. Zero-padded so Explorer sort matches popularity.",
+    example: "000000012500.mp4",
   },
   views_username: {
     label: "Views + username",
     description: "Uses the view count and creator username.",
-    example: "12500_jane_creator.mp4",
+    example: "000000012500_jane_creator.mp4",
   },
   views_username_status_quality_score: {
     label: "Views + username + status + quality",
     description: "Includes moderation status and quality score.",
-    example: "12500_jane_creator_verified_3.mp4",
+    example: "000000012500_jane_creator_verified_3.mp4",
   },
 };
 
@@ -58,7 +58,7 @@ export function parseVideoFilenamePattern(
 
 export function formatViewCountPart(views: number | null | undefined): string {
   const n = Math.max(0, Math.floor(Number(views) || 0));
-  return String(n);
+  return String(n).padStart(12, "0");
 }
 
 function sanitizePart(
@@ -134,17 +134,19 @@ export function uniqueVideoDownloadFilename(
   format = "mp4",
 ): string {
   const { uniqueSuffix, ...baseParts } = parts;
-  let base = buildVideoDownloadFilename(pattern, baseParts);
-  let name = `${base}.${format}`;
-
-  if (used.has(name)) {
-    base = buildVideoDownloadFilename(pattern, {
+  let name = `${buildVideoDownloadFilename(pattern, baseParts)}.${format}`;
+  let attempt = 0;
+  while (used.has(name)) {
+    attempt += 1;
+    const suffix =
+      attempt === 1 && uniqueSuffix
+        ? uniqueSuffix
+        : `${String(uniqueSuffix || "dup").slice(0, 8)}_${attempt}`;
+    name = `${buildVideoDownloadFilename(pattern, {
       ...baseParts,
-      uniqueSuffix: uniqueSuffix || String(used.size + 1).padStart(3, "0"),
-    });
-    name = `${base}.${format}`;
+      uniqueSuffix: suffix,
+    })}.${format}`;
   }
-
   used.add(name);
   return name;
 }

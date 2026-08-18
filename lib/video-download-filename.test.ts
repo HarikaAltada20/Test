@@ -17,12 +17,13 @@ describe("video download filename patterns", () => {
     assert.equal(parseVideoFilenamePattern("views_username"), "views_username");
   });
 
-  it("uses the raw view count without leading zeros", () => {
+  it("zero-pads views so lexical sort matches numeric order", () => {
     const a = buildVideoDownloadFilename("views", { views: 999 });
     const b = buildVideoDownloadFilename("views", { views: 1500 });
-    assert.equal(a, "999");
-    assert.equal(b, "1500");
-    assert.equal(buildViewsBasedVideoFilename(1500), "1500");
+    assert.equal(a < b, true);
+    assert.equal(a, "000000000999");
+    assert.equal(b, "000000001500");
+    assert.equal(buildViewsBasedVideoFilename(1500), "000000001500");
   });
 
   it("builds views_username names", () => {
@@ -31,7 +32,7 @@ describe("video download filename patterns", () => {
         views: 12500,
         username: "Jane Creator!",
       }),
-      "12500_Jane_Creator",
+      "000000012500_Jane_Creator",
     );
   });
 
@@ -43,7 +44,7 @@ describe("video download filename patterns", () => {
         status: "verified",
         qualityScore: 3,
       }),
-      "12500_jane_creator_verified_3",
+      "000000012500_jane_creator_verified_3",
     );
   });
 
@@ -52,7 +53,7 @@ describe("video download filename patterns", () => {
       buildVideoDownloadFilename("views_username_status_quality_score", {
         views: 10,
       }),
-      "10_unknown_unknown_unscored",
+      "000000000010_unknown_unknown_unscored",
     );
     assert.equal(formatQualityScorePart(null), "unscored");
     assert.equal(formatQualityScorePart(2.4), "2");
@@ -65,9 +66,15 @@ describe("video download filename patterns", () => {
       views: 100,
       uniqueSuffix: "abcd1234",
     });
-    assert.equal(first, "100.mp4");
-    assert.equal(second, "100_abcd1234.mp4");
+    assert.equal(first, "000000000100.mp4");
+    assert.equal(second, "000000000100_abcd1234.mp4");
     assert.deepEqual([...used], [first, second]);
+    const third = uniqueVideoDownloadFilename(used, "views", {
+      views: 100,
+      uniqueSuffix: "abcd1234",
+    });
+    assert.equal(third, "000000000100_abcd1234_2.mp4");
+    assert.equal(used.has(third), true);
   });
 
   it("reads username from supabase join shapes", () => {

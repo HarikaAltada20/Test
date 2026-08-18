@@ -16,9 +16,10 @@ export function isYouTubeRefreshTarget(
   contentLink: string | null | undefined,
 ): boolean {
   if (!contentLink) return false;
+  if (extractYoutubeId(contentLink)) return true;
   const p = String(platform ?? "").toLowerCase();
-  if (p.includes("youtube")) return true;
-  return Boolean(extractYoutubeId(contentLink));
+  if (!p.includes("youtube")) return false;
+  return /youtube\.com|youtu\.be/i.test(contentLink);
 }
 
 export function isYoutubeShortUrl(url: string | null | undefined): boolean {

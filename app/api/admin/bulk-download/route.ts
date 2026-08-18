@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { readFile } from "fs/promises";
+import { createReadStream } from "fs";
+import { stat } from "fs/promises";
+import { Readable } from "stream";
 import {
   isAdminDownloadUser,
   MAX_BULK_VIDEO_DOWNLOADS,
@@ -244,31 +246,40 @@ export async function POST(request: Request) {
       requestId,
     });
 
-    try {
-      if (result.downloaded === 0 || !result.zipPath) {
-        return NextResponse.json(
-          {
-            error: result.failures[0]?.error || "No files could be downloaded",
-            completed: 0,
-            failed: result.failures.length,
-          },
-          { status: 422 },
-        );
-      }
+    if (result.downloaded === 0 || !result.zipPath) {
+      await result.cleanup();
+      return NextResponse.json(
+        {
+          error: result.failures[0]?.error || "No files could be downloaded",
+          completed: 0,
+          failed: result.failures.length,
+        },
+        { status: 422 },
+      );
+    }
 
-      const zipBuffer = await readFile(result.zipPath);
-      return new NextResponse(new Uint8Array(zipBuffer), {
+    try {
+      const zipStat = await stat(result.zipPath);
+      const nodeStream = createReadStream(result.zipPath);
+      const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+      const cleanupOnce = () => {
+        void result.cleanup();
+      };
+      nodeStream.on("close", cleanupOnce);
+      nodeStream.on("error", cleanupOnce);
+      return new NextResponse(webStream, {
         headers: {
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="${zipFilename}"`,
-          "Content-Length": String(zipBuffer.byteLength),
+          "Content-Length": String(zipStat.size),
           "Cache-Control": "no-cache",
           "X-Bulk-Downloaded": String(result.downloaded),
           "X-Bulk-Failed": String(result.failures.length),
         },
       });
-    } finally {
+    } catch (streamError) {
       await result.cleanup();
+      throw streamError;
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to initiate bulk download";

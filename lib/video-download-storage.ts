@@ -62,6 +62,18 @@ function isExpiredStorageObject(createdAt: string | null | undefined): boolean {
   );
 }
 
+async function listStoragePage(
+  supabase: ReturnType<typeof createAdminClient>,
+  bucket: string,
+  prefix: string,
+  offset: number,
+) {
+  return supabase.storage.from(bucket).list(prefix, {
+    limit: LIST_PAGE_SIZE,
+    offset,
+  });
+}
+
 async function deleteExpiredObjectsInPrefix(options: {
   bucket: string;
   prefix: string;
@@ -70,65 +82,82 @@ async function deleteExpiredObjectsInPrefix(options: {
   const supabase = createAdminClient();
   const { bucket, prefix, maxDeletes } = options;
   let deleted = 0;
+  const maxPages = 20;
 
-  const { data: folders, error: listError } = await supabase.storage
-    .from(bucket)
-    .list(prefix, { limit: LIST_PAGE_SIZE });
-  if (listError) {
-    console.error(
-      `[video-download-storage] list failed bucket=${bucket} prefix=${prefix}:`,
-      listError.message,
+  for (let page = 0; page < maxPages && deleted < maxDeletes; page++) {
+    const { data: entries, error: listError } = await listStoragePage(
+      supabase,
+      bucket,
+      prefix,
+      page * LIST_PAGE_SIZE,
     );
-    return 0;
-  }
+    if (listError) {
+      console.error(
+        `[video-download-storage] list failed bucket=${bucket} prefix=${prefix}:`,
+        listError.message,
+      );
+      break;
+    }
+    if (!entries?.length) break;
 
-  for (const entry of folders || []) {
-    if (deleted >= maxDeletes) break;
-    const entryPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-    const isFolder = entry.id == null;
+    for (const entry of entries) {
+      if (deleted >= maxDeletes) break;
+      const entryPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const isFolder = entry.id == null;
 
-    if (isFolder) {
-      const { data: files, error: filesError } = await supabase.storage
-        .from(bucket)
-        .list(entryPath, { limit: LIST_PAGE_SIZE });
-      if (filesError) {
-        console.error(
-          `[video-download-storage] list folder failed ${bucket}/${entryPath}:`,
-          filesError.message,
-        );
+      if (isFolder) {
+        for (let filePage = 0; filePage < maxPages && deleted < maxDeletes; filePage++) {
+          const { data: files, error: filesError } = await listStoragePage(
+            supabase,
+            bucket,
+            entryPath,
+            filePage * LIST_PAGE_SIZE,
+          );
+          if (filesError) {
+            console.error(
+              `[video-download-storage] list folder failed ${bucket}/${entryPath}:`,
+              filesError.message,
+            );
+            break;
+          }
+          if (!files?.length) break;
+          const expiredPaths = files
+            .filter((file) => file.id != null && isExpiredStorageObject(file.created_at))
+            .map((file) => `${entryPath}/${file.name}`)
+            .slice(0, maxDeletes - deleted);
+          if (expiredPaths.length > 0) {
+            const { error: removeError } = await supabase.storage
+              .from(bucket)
+              .remove(expiredPaths);
+            if (removeError) {
+              console.error(
+                `[video-download-storage] remove failed ${bucket}:`,
+                removeError.message,
+              );
+            } else {
+              deleted += expiredPaths.length;
+            }
+          }
+          if (files.length < LIST_PAGE_SIZE) break;
+        }
         continue;
       }
-      const expiredPaths = (files || [])
-        .filter((file) => file.id != null && isExpiredStorageObject(file.created_at))
-        .map((file) => `${entryPath}/${file.name}`)
-        .slice(0, maxDeletes - deleted);
-      if (expiredPaths.length === 0) continue;
+
+      if (!isExpiredStorageObject(entry.created_at)) continue;
       const { error: removeError } = await supabase.storage
         .from(bucket)
-        .remove(expiredPaths);
+        .remove([entryPath]);
       if (removeError) {
         console.error(
-          `[video-download-storage] remove failed ${bucket}:`,
+          `[video-download-storage] remove failed ${bucket}/${entryPath}:`,
           removeError.message,
         );
         continue;
       }
-      deleted += expiredPaths.length;
-      continue;
+      deleted += 1;
     }
 
-    if (!isExpiredStorageObject(entry.created_at)) continue;
-    const { error: removeError } = await supabase.storage
-      .from(bucket)
-      .remove([entryPath]);
-    if (removeError) {
-      console.error(
-        `[video-download-storage] remove failed ${bucket}/${entryPath}:`,
-        removeError.message,
-      );
-      continue;
-    }
-    deleted += 1;
+    if (entries.length < LIST_PAGE_SIZE) break;
   }
 
   return deleted;
@@ -141,7 +170,7 @@ async function deleteExpiredObjectsInPrefix(options: {
 export async function cleanupExpiredVideoDownloadZips(options?: {
   maxDeletes?: number;
 }): Promise<{ deleted: number }> {
-  const maxDeletes = Math.max(1, Math.min(options?.maxDeletes ?? 40, 200));
+  const maxDeletes = Math.max(1, Math.min(options?.maxDeletes ?? 100, 500));
   try {
     const privateDeleted = await deleteExpiredObjectsInPrefix({
       bucket: VIDEO_DOWNLOAD_STORAGE_BUCKET,

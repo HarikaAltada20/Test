@@ -9978,7 +9978,8 @@ export default function ContestDetailClient({
         }
       }
 
-      const body: Record<string, string> = { type };
+      const body: Record<string, unknown> = { type };
+      if (isPostCampaignLeaderboard) body.postCampaign = true;
       if (opts?.submissionId) body.submissionId = opts.submissionId;
       else if (opts?.creatorId) {
         body.creatorId = opts.creatorId;
@@ -10216,7 +10217,11 @@ export default function ContestDetailClient({
       const res2 = await fetch("/api/youtube/refresh-detailed-analytics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: scope, contestId }),
+        body: JSON.stringify({
+          type: scope,
+          contestId,
+          ...(isPostCampaignLeaderboard ? { postCampaign: true } : {}),
+        }),
       });
       const data2 = await res2.json();
       if (!res2.ok) throw new Error(data2?.error || "Analytics refresh failed");

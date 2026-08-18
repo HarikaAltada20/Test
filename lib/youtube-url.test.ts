@@ -44,10 +44,10 @@ describe("buildYouTubeContentViewUrl", () => {
 });
 
 describe("isYouTubeRefreshTarget", () => {
-  it("matches youtube platform even without a parseable URL", () => {
+  it("does not treat a youtube platform plus a non-YouTube URL as a target", () => {
     assert.equal(
       isYouTubeRefreshTarget("youtube", "https://example.com/video"),
-      true,
+      false,
     );
   });
 

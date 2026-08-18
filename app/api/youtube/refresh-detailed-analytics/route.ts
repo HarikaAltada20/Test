@@ -7,6 +7,7 @@ import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldow
 import {
   updateYouTubeSubmissionForScope,
   isYouTubeAllLikeScope,
+  mergePostCampaignYouTubeTimestamps,
 } from "@/lib/youtube-submission-refresh-by-scope";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
@@ -37,12 +38,15 @@ export async function POST(request: Request) {
     submissionId,
     creatorId,
     contestId,
+    postCampaign,
   }: {
     type: YouTubeRefreshScope;
     submissionId?: string;
     creatorId?: string;
     contestId?: string;
+    postCampaign?: boolean;
   } = body;
+  const isPostCampaign = postCampaign === true;
 
   const ANALYTICS_TYPES: YouTubeRefreshScope[] = [
     "core",
@@ -159,9 +163,16 @@ export async function POST(request: Request) {
                 traffic?: string;
                 demographics?: string;
               };
+              post_campaign_youtube_metrics_last_updated?: {
+                core?: string;
+                traffic?: string;
+                demographics?: string;
+              };
             }
           | undefined) ?? undefined;
-      const ytLast = details?.youtube_metrics_last_updated ?? {};
+      const ytLast = isPostCampaign
+        ? details?.post_campaign_youtube_metrics_last_updated ?? {}
+        : details?.youtube_metrics_last_updated ?? {};
       return youtubeDetailedCooldownTimestamp(type, ytLast);
     };
 
@@ -350,8 +361,8 @@ export async function POST(request: Request) {
     }
   }
 
-  // Update contest-level last-updated timestamps for contest-wide refreshes
-  if (targetContestIds.length > 0) {
+  // Stamp contest-level timestamps only after at least one successful update.
+  if (successCount > 0 && targetContestIds.length > 0) {
     const { data: contestRow } = await supabaseAdmin
       .from("contests")
       .select("contest_based_details")
@@ -360,24 +371,40 @@ export async function POST(request: Request) {
 
     const existing =
       (contestRow?.contest_based_details as Record<string, unknown>) || {};
-    const existingYt =
-      (existing.youtube_metrics_last_updated as Record<string, string>) || {};
-    const now = new Date().toISOString();
-    const nextYt = { ...existingYt };
-    if (type === "core" || isYouTubeAllLikeScope(type)) nextYt.core = now;
-    if (type === "traffic" || isYouTubeAllLikeScope(type)) nextYt.traffic = now;
-    if (type === "demographics" || isYouTubeAllLikeScope(type))
-      nextYt.demographics = now;
-    await supabaseAdmin
-      .from("contests")
-      .update({
-        last_metrics_updated: now,
-        contest_based_details: {
-          ...existing,
-          youtube_metrics_last_updated: nextYt,
-        },
-      })
-      .in("id", targetContestIds);
+    const stampNow = new Date().toISOString();
+
+    if (isPostCampaign) {
+      const merged = mergePostCampaignYouTubeTimestamps(existing, type, stampNow);
+      await supabaseAdmin
+        .from("contests")
+        .update({
+          post_campaign_last_metrics_updated:
+            merged.post_campaign_last_metrics_updated,
+          ...(merged.contest_based_details
+            ? { contest_based_details: merged.contest_based_details }
+            : {}),
+        })
+        .in("id", targetContestIds);
+    } else {
+      const existingYt =
+        (existing.youtube_metrics_last_updated as Record<string, string>) || {};
+      const nextYt = { ...existingYt };
+      if (type === "core" || isYouTubeAllLikeScope(type)) nextYt.core = stampNow;
+      if (type === "traffic" || isYouTubeAllLikeScope(type)) nextYt.traffic = stampNow;
+      if (type === "demographics" || isYouTubeAllLikeScope(type)) {
+        nextYt.demographics = stampNow;
+      }
+      await supabaseAdmin
+        .from("contests")
+        .update({
+          last_metrics_updated: stampNow,
+          contest_based_details: {
+            ...existing,
+            youtube_metrics_last_updated: nextYt,
+          },
+        })
+        .in("id", targetContestIds);
+    }
   }
 
   const failed = temporaryFailureCount + permanentFailureCount;

@@ -8,12 +8,14 @@
  * - Local CRON_SECRET POST
  */
 
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import {
   authorizeProcessVideoDownloadQueue,
   ensureProcessVideoDownloadQueueSchedule,
 } from "@/lib/qstash";
 import {
+  enqueueVideoDownloadJob,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   popVideoDownloadJob,
@@ -31,7 +33,10 @@ import {
   ensureVideoDownloadBucket,
   uploadVideoDownloadZip,
 } from "@/lib/video-download-storage";
-import { isRetryableDownloadError } from "@/lib/video-download-queue";
+import {
+  isRetryableDownloadError,
+  shouldRetryZeroDownload,
+} from "@/lib/video-download-queue";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -86,7 +91,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     }
   }
   if (!popped) {
-    const cleaned = await cleanupExpiredVideoDownloadZips({ maxDeletes: 40 });
+    const cleaned = await cleanupExpiredVideoDownloadZips({ maxDeletes: 100 });
     return NextResponse.json({
       processed: 0,
       message: "Queue empty",
@@ -133,6 +138,40 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     cleanupTemp = result.cleanup;
 
     if (result.downloaded === 0 || !result.zipPath) {
+      await cleanupTemp();
+      const retryable = shouldRetryZeroDownload(
+        result.failures,
+        result.deferredItems.length,
+      );
+      if (retryable) {
+        const retry = await retryOrDeadLetterVideoDownload({
+          rawJobString,
+          reason:
+            result.failures[0]?.error ||
+            "No files could be downloaded; retrying",
+        });
+        if (retry.requeued) {
+          await kickProcessVideoDownloadQueue(request, { delaySeconds: 5 });
+        } else {
+          if (!retry.deadLettered) {
+            await removeVideoDownloadFromProcessing(rawJobString);
+            await patchStatus({
+              status: "failed",
+              errors: result.failures.map((f) => f.error).slice(0, 5),
+              completed: 0,
+              failed: result.failures.length || job.items.length,
+            });
+          }
+          await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+        }
+        return NextResponse.json({
+          processed: 1,
+          jobId: job.jobId,
+          downloaded: 0,
+          retry,
+        });
+      }
+
       await setVideoDownloadJobStatus({
         jobId: job.jobId,
         userId: job.userId,
@@ -146,7 +185,6 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         updatedAt: now(),
       });
       await removeVideoDownloadFromProcessing(rawJobString);
-      await cleanupTemp();
       console.log(
         `[process-video-download-queue] Job ${job.jobId} finished with 0 downloads; not retrying`,
       );
@@ -171,6 +209,29 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       throw new Error(upload.error || "Failed to store ZIP archive");
     }
 
+    let continuationJobId: string | undefined;
+    if (result.deferredItems.length > 0) {
+      const nextJobId = randomUUID();
+      const enqueued = await enqueueVideoDownloadJob(
+        {
+          jobId: nextJobId,
+          userId: job.userId,
+          items: result.deferredItems,
+          zipFilename: job.zipFilename,
+          attempt: 0,
+        },
+        { bypassActiveJobLimit: true },
+      );
+      if (enqueued.error) {
+        console.warn(
+          `[process-video-download-queue] Could not enqueue leftover videos for ${job.jobId}:`,
+          enqueued.error,
+        );
+      } else {
+        continuationJobId = nextJobId;
+      }
+    }
+
     await setVideoDownloadJobStatus({
       jobId: job.jobId,
       userId: job.userId,
@@ -182,6 +243,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       storagePath,
       zipBytes: result.zipBytes,
       zipFilename: existing?.zipFilename || job.zipFilename,
+      continuationJobId,
       createdAt: existing?.createdAt || now(),
       updatedAt: now(),
     });

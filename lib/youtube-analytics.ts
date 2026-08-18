@@ -98,10 +98,9 @@ async function acquireAnalyticsRateLimit(): Promise<void> {
   const bucket = Math.floor(now / YT_ANALYTICS_RATE_WINDOW_MS);
   const key = `${YT_ANALYTICS_RATE_REDIS_PREFIX}:${bucket}`;
   const count = await redis.incr(key);
-
-  if (count === 1) {
-    await redis.expire(key, Math.ceil((YT_ANALYTICS_RATE_WINDOW_MS * 2) / 1000));
-  }
+  // Always refresh TTL so a crash between INCR and EXPIRE cannot leak a
+  // permanent counter. The key is per minute-bucket.
+  await redis.expire(key, Math.ceil((YT_ANALYTICS_RATE_WINDOW_MS * 2) / 1000));
 
   if (count <= YT_ANALYTICS_RATE_LIMIT) {
     return;

@@ -49,6 +49,7 @@ export type VideoDownloadJobStatus = {
   storagePath?: string;
   zipBytes?: number;
   zipFilename?: string;
+  continuationJobId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -220,16 +221,37 @@ async function listActiveVideoDownloadJobs(): Promise<VideoDownloadJob[]> {
 
 export async function enqueueVideoDownloadJob(
   job: VideoDownloadJob,
+  options?: { bypassActiveJobLimit?: boolean },
 ): Promise<{ error?: string; status?: number }> {
   const redis = getRedis();
   if (!redis) return { error: "Redis not configured" };
+  const lockKey = `${REDIS_PREFIX}:enqueue_lock`;
+  let locked = false;
   try {
-    const active = await listActiveVideoDownloadJobs();
-    const limitError = videoDownloadActiveJobLimitError({
-      total: active.length,
-      userCount: active.filter((item) => item.userId === job.userId).length,
-    });
-    if (limitError) return limitError;
+    for (let i = 0; i < 12; i++) {
+      const ok = await redis.set(lockKey, "1", { nx: true, ex: 8 });
+      if (ok) {
+        locked = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50 + i * 25));
+    }
+    if (!locked) {
+      return {
+        error:
+          "Download queue is busy. Wait for current ZIP jobs to finish, then try again.",
+        status: 429,
+      };
+    }
+
+    if (!options?.bypassActiveJobLimit) {
+      const active = await listActiveVideoDownloadJobs();
+      const limitError = videoDownloadActiveJobLimitError({
+        total: active.length,
+        userCount: active.filter((item) => item.userId === job.userId).length,
+      });
+      if (limitError) return limitError;
+    }
 
     const normalized: VideoDownloadJob = {
       ...job,
@@ -257,6 +279,10 @@ export async function enqueueVideoDownloadJob(
     const message = err instanceof Error ? err.message : String(err);
     console.error("[video-download-queue] rpush failed:", message);
     return { error: message };
+  } finally {
+    if (locked) {
+      await redis.del(lockKey).catch(() => {});
+    }
   }
 }
 
@@ -267,17 +293,23 @@ export async function popVideoDownloadJob(): Promise<{
   const redis = getRedis();
   if (!redis) return null;
   try {
-    const raw = await redis.lmove(
-      REDIS_QUEUE_KEY,
-      REDIS_PROCESSING_KEY,
-      "left",
-      "left",
-    );
-    if (raw === null || raw === undefined) return null;
-    const str = toRawString(raw);
-    const job = parseVideoDownloadJob(str);
-    if (!job) return null;
-    return { job, raw: str };
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const raw = await redis.lmove(
+        REDIS_QUEUE_KEY,
+        REDIS_PROCESSING_KEY,
+        "left",
+        "left",
+      );
+      if (raw === null || raw === undefined) return null;
+      const str = toRawString(raw);
+      const job = parseVideoDownloadJob(str);
+      if (job) return { job, raw: str };
+      await redis.lrem(REDIS_PROCESSING_KEY, 1, str);
+      console.warn(
+        "[video-download-queue] Dropped invalid payload from queue; continuing",
+      );
+    }
+    return null;
   } catch (e) {
     console.error("[video-download-queue] popJob (lmove) failed:", e);
     return null;

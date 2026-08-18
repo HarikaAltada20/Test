@@ -13,6 +13,27 @@ export const VIDEO_DOWNLOAD_WORKER_BUDGET_MS = 240 * 1000;
 export const WORKER_TIME_BUDGET_SKIP_MESSAGE =
   "Skipped: worker time budget reached so remaining videos can be zipped.";
 
+export function isWorkerTimeBudgetSkip(error: unknown): boolean {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  return message.includes("worker time budget");
+}
+
+/** Retry a 0-download job when at least one failure looks transient. */
+export function shouldRetryZeroDownload(
+  failures: { error: string }[],
+  deferredCount = 0,
+): boolean {
+  if (deferredCount > 0) return true;
+  if (failures.length === 0) return true;
+  return failures.some(
+    (failure) =>
+      isRetryableDownloadError(failure.error) ||
+      isWorkerTimeBudgetSkip(failure.error),
+  );
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

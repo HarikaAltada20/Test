@@ -78,6 +78,8 @@ export type ExecuteVideoDownloadResult = {
   zipBytes: number;
   downloaded: number;
   failures: { url: string; error: string }[];
+  /** Items skipped so this worker could zip; the processor should enqueue these. */
+  deferredItems: VideoDownloadItem[];
   cleanup: () => Promise<void>;
 };
 
@@ -103,16 +105,19 @@ export async function executeQueuedVideoDownloads(options: {
 
   const emptyResult = (
     failures: { url: string; error: string }[],
+    deferredItems: VideoDownloadItem[] = [],
   ): ExecuteVideoDownloadResult => ({
     zipPath: null,
     zipBytes: 0,
     downloaded: 0,
     failures,
+    deferredItems,
     cleanup,
   });
 
   const zippedFiles: { path: string; name: string }[] = [];
   const failedQueue: { url: string; error: string }[] = [];
+  const deferredItems: VideoDownloadItem[] = [];
   let totalBytes = 0;
   let budgetExhausted = false;
 
@@ -125,10 +130,7 @@ export async function executeQueuedVideoDownloads(options: {
           isWorkerTimeBudgetExhausted(startedAtMs, Date.now(), budgetMs)
         ) {
           budgetExhausted = true;
-          failedQueue.push({
-            url: item.url,
-            error: WORKER_TIME_BUDGET_SKIP_MESSAGE,
-          });
+          deferredItems.push(item);
           await options.onProgress?.({
             completed: zippedFiles.length,
             failed: failedQueue.length,
@@ -193,10 +195,7 @@ export async function executeQueuedVideoDownloads(options: {
             isWorkerTimeBudgetExhausted(startedAtMs, Date.now(), budgetMs)
           ) {
             budgetExhausted = true;
-            failedQueue.push({
-              url: item.url,
-              error: WORKER_TIME_BUDGET_SKIP_MESSAGE,
-            });
+            deferredItems.push(item);
           } else {
             console.error(`[BULK-${requestId}] Failed downloading ${item.url}:`, message);
             failedQueue.push({
@@ -215,7 +214,7 @@ export async function executeQueuedVideoDownloads(options: {
     );
 
     if (zippedFiles.length === 0) {
-      return emptyResult(failedQueue);
+      return emptyResult(failedQueue, deferredItems);
     }
 
     const failedReport =
@@ -238,6 +237,7 @@ export async function executeQueuedVideoDownloads(options: {
       zipBytes: zipStat.size,
       downloaded: zippedFiles.length,
       failures: failedQueue,
+      deferredItems,
       cleanup,
     };
   } catch (error) {
