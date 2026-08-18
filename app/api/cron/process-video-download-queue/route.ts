@@ -4,6 +4,9 @@
  */
 
 import { NextResponse } from "next/server";
+import { mkdir, writeFile } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 import {
   authorizeProcessVideoDownloadQueue,
   getQStashPublishBaseUrl,
@@ -20,7 +23,6 @@ import {
   removeVideoDownloadFromProcessing,
   retryOrDeadLetterVideoDownload,
   setVideoDownloadJobStatus,
-  videoDownloadStoragePath,
   VIDEO_DOWNLOAD_STORAGE_BUCKET,
   type VideoDownloadJobStatus,
 } from "@/lib/queue/video-download-queue";
@@ -166,17 +168,29 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       });
     }
 
-    const storagePath = videoDownloadStoragePath(job.userId, job.jobId);
-    const supabase = createAdminClient();
-    const upload = await supabase.storage
-      .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-      .upload(storagePath, result.zipBuffer, {
-        contentType: "application/zip",
-        upsert: true,
-      });
+    // Store ZIP locally to avoid Supabase Storage object size limits.
+    // Fall back to Supabase upload only for small files if local write fails.
+    const localDir = join(tmpdir(), "bulk_zip_ready");
+    await mkdir(localDir, { recursive: true });
+    const localZipPath = join(localDir, `${job.jobId}.zip`);
+    let storagePath: string | undefined;
 
-    if (upload.error) {
-      throw new Error(upload.error.message || "Failed to store ZIP archive");
+    try {
+      await writeFile(localZipPath, result.zipBuffer);
+    } catch (localErr) {
+      console.error("[process-video-download-queue] Local write failed, trying Supabase:", localErr);
+      const supabase = createAdminClient();
+      const remotePath = `video-downloads/${job.userId}/${job.jobId}.zip`;
+      const upload = await supabase.storage
+        .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+        .upload(remotePath, result.zipBuffer, {
+          contentType: "application/zip",
+          upsert: true,
+        });
+      if (upload.error) {
+        throw new Error(upload.error.message || "Failed to store ZIP archive");
+      }
+      storagePath = remotePath;
     }
 
     await setVideoDownloadJobStatus({
@@ -188,6 +202,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       failed: result.failures.length,
       errors: result.failures.map((f) => f.error),
       storagePath,
+      localZipPath: storagePath ? undefined : localZipPath,
       zipBytes: result.zipBuffer.byteLength,
       zipFilename: existing?.zipFilename || job.zipFilename,
       createdAt: existing?.createdAt || now(),

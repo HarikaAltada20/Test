@@ -18,6 +18,7 @@ export const YOUTUBE_DETAILED_ANALYTICS_KEYS = [
   "audience_retention",
   "bot_score",
   "bot_flags",
+  "last_core_update",
   "last_traffic_update",
   "last_demographics_update",
 ] as const;

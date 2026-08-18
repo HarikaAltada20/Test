@@ -2538,23 +2538,21 @@ export default function ContestDetailClient({
     useState(false);
   const [normalViewBulkDownloadProgress, setNormalViewBulkDownloadProgress] =
     useState<BulkVideoDownloadProgressState | null>(null);
-  const [normalViewBulkDownloadDialogOpen, setNormalViewBulkDownloadDialogOpen] =
-    useState(false);
+  const [
+    normalViewBulkDownloadDialogOpen,
+    setNormalViewBulkDownloadDialogOpen,
+  ] = useState(false);
   const [normalViewBulkActiveAction, setNormalViewBulkActiveAction] = useState<
     "verify" | "reject" | "pending" | null
   >(null);
   const [creatorWiseSelectedCreators, setCreatorWiseSelectedCreators] =
     useState<Set<string>>(new Set());
-  type CreatorWiseBulkPaymentActiveKey =
-    | "standard"
-    | "bonus"
-    | "both";
+  type CreatorWiseBulkPaymentActiveKey = "standard" | "bonus" | "both";
   const [creatorWiseBulkPaymentActiveKey, setCreatorWiseBulkPaymentActiveKey] =
     useState<CreatorWiseBulkPaymentActiveKey | null>(null);
   const isCreatorWiseBulkPayBtnLoading = (
     payType: "standard" | "bonus" | "both",
-  ) =>
-    creatorWiseBulkPaymentActiveKey === payType;
+  ) => creatorWiseBulkPaymentActiveKey === payType;
   const isAnyCreatorWiseBulkPaymentBusy =
     creatorWiseBulkPaymentActiveKey !== null;
   const [
@@ -2788,6 +2786,48 @@ export default function ContestDetailClient({
           ? postCampaignLastMetricsUpdated
           : currentContest.last_metrics_updated,
       );
+
+  const getYoutubeDetailedCooldownInfo = (
+    type: "core" | "traffic" | "demographics" | "all" | "all_standard",
+  ) => {
+    const details = currentContest.contest_based_details as
+      | {
+          youtube_metrics_last_updated?: {
+            core?: string;
+            traffic?: string;
+            demographics?: string;
+          };
+          post_campaign_youtube_metrics_last_updated?: {
+            core?: string;
+            traffic?: string;
+            demographics?: string;
+          };
+        }
+      | undefined;
+
+    const ytLast = isPostCampaignLeaderboard
+      ? details?.post_campaign_youtube_metrics_last_updated || {}
+      : details?.youtube_metrics_last_updated || {};
+
+    const timestamp =
+      type === "core"
+        ? ytLast.core
+        : type === "traffic"
+          ? ytLast.traffic
+          : type === "demographics"
+            ? ytLast.demographics
+            : ([ytLast.core, ytLast.traffic, ytLast.demographics].filter(
+                Boolean,
+              ) as string[]).reduce<string | null>(
+                (oldest, current) =>
+                  !oldest || current < oldest ? current : oldest,
+                null,
+              );
+
+    return isAdminView
+      ? getMetricsRefreshCooldownInfoAdmin(timestamp)
+      : getMetricsRefreshCooldownInfoBrand(timestamp);
+  };
 
   const leaderboardSubmissions = useMemo((): Submission[] => {
     if (!isPostCampaignLeaderboard) {
@@ -3425,13 +3465,23 @@ export default function ContestDetailClient({
         throw new Error(result.errors[0] || "Failed to download ZIP archives.");
       }
 
+      const hasPartialFailures =
+        result.successCount > 0 && result.failedCount > 0;
+      const isTotalFailure =
+        result.successCount === 0 && result.failedCount > 0;
+
       toast({
-        title:
-          result.failedCount > 0
-            ? "Download finished with failures"
+        title: isTotalFailure
+          ? "Download failed"
+          : hasPartialFailures
+            ? "Download complete"
             : "Download complete",
         description: `${result.totalVideos} selected · ${result.successCount} succeeded · ${result.failedCount} failed`,
-        variant: result.failedCount > 0 ? "destructive" : "success",
+        variant: isTotalFailure
+          ? "destructive"
+          : hasPartialFailures
+            ? "pending"
+            : "success",
       });
       setNormalViewBulkDownloadDialogOpen(false);
     } catch (error: any) {
@@ -8118,10 +8168,7 @@ export default function ContestDetailClient({
           0,
           Number(group.earnings?.expected) || 0,
         );
-        const grantedCents = Math.max(
-          0,
-          Number(group.earnings?.granted) || 0,
-        );
+        const grantedCents = Math.max(0, Number(group.earnings?.granted) || 0);
         return creatorStatus !== "rejected" && expectedCents > grantedCents;
       }
       return (
@@ -9734,19 +9781,74 @@ export default function ContestDetailClient({
     schedulePostRefreshReload();
   };
 
+  const formatYoutubeAnalyticsRefreshSummary = (
+    type: "core" | "traffic" | "demographics" | "all",
+    counts: {
+      success: number;
+      temporaryFailure: number;
+      permanentFailure: number;
+      skipped: number;
+    },
+    username?: string | null,
+    fallback?: string,
+  ) => {
+    const handle = username?.trim().replace(/^@+/, "");
+    const breakdown = `Scope: ${type} · Success ${counts.success} · Temporary Failure ${counts.temporaryFailure} · Permanent Failure ${counts.permanentFailure} · Skipped ${counts.skipped}`;
+    if (
+      handle &&
+      counts.success <= 0 &&
+      counts.temporaryFailure <= 0 &&
+      counts.permanentFailure <= 0 &&
+      counts.skipped <= 0
+    ) {
+      return `Could not update analytics for @${handle}`;
+    }
+    return fallback && !handle ? fallback : breakdown;
+  };
+
+  const formatYoutubeSubmissionRefreshMessage = (
+    type: "core" | "traffic" | "demographics" | "all",
+    username?: string | null,
+    updatedCount = 0,
+    fallback?: string,
+  ) => {
+    const scopeLabel =
+      type === "core"
+        ? "core analytics"
+        : type === "traffic"
+          ? "traffic sources"
+          : type === "demographics"
+            ? "demographics"
+            : "all metrics";
+    const handle = username?.trim().replace(/^@+/, "");
+    if (handle) {
+      if (updatedCount > 0) {
+        return `Updated ${scopeLabel} for @${handle}`;
+      }
+      return `Could not update ${scopeLabel} for @${handle}`;
+    }
+    return fallback || `Updated ${updatedCount} submission(s)`;
+  };
+
   const handleRefreshDetailedAnalytics = async (
     type: "core" | "traffic" | "demographics" | "all",
-    opts?: { submissionId?: string; creatorId?: string },
+    opts?: {
+      submissionId?: string;
+      creatorId?: string;
+      username?: string | null;
+    },
   ) => {
     const isContestLevel = !opts?.submissionId && !opts?.creatorId;
     const key = opts?.submissionId || opts?.creatorId || "contest";
+    const refreshUsername = opts?.username;
+    const detailedCooldownInfo = getYoutubeDetailedCooldownInfo(type);
 
-    if (!cooldownInfo.canRefresh) {
+    if (!detailedCooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
         description: `You can refresh again in ${
-          cooldownInfo.remainingMinutes
-        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+          detailedCooldownInfo.remainingMinutes
+        } minute${detailedCooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -9909,11 +10011,66 @@ export default function ContestDetailClient({
         throw new Error(result.error || "Failed to refresh analytics");
       }
 
+      const successCount = Number(result.success_count ?? result.updated ?? 0);
+      const temporaryFailureCount = Number(result.temporary_failure_count ?? 0);
+      const permanentFailureCount = Number(result.permanent_failure_count ?? 0);
+      const skippedCount = Number(result.skipped_recent_count ?? 0);
+      const processedCount =
+        successCount +
+        temporaryFailureCount +
+        permanentFailureCount +
+        skippedCount;
+
+      if (!processedCount) {
+        toast({
+          title: "Analytics not updated",
+          description: opts?.creatorId
+            ? formatYoutubeAnalyticsRefreshSummary(
+                type,
+                {
+                  success: 0,
+                  temporaryFailure: 0,
+                  permanentFailure: 0,
+                  skipped: 0,
+                },
+                refreshUsername,
+                result.message || "No YouTube submissions found to refresh.",
+              )
+            : formatYoutubeSubmissionRefreshMessage(
+                type,
+                refreshUsername,
+                0,
+                result.message || "No YouTube submissions found to refresh.",
+              ),
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
-        title: "Analytics Updated",
-        description:
-          result.message || `Updated ${result.updated} submission(s)`,
-        variant: "success",
+        title: refreshUsername
+          ? `Analytics completed for @${refreshUsername.trim().replace(/^@+/, "")}`
+          : "Analytics Updated",
+        description: opts?.creatorId
+          ? formatYoutubeAnalyticsRefreshSummary(
+              type,
+              {
+                success: successCount,
+                temporaryFailure: temporaryFailureCount,
+                permanentFailure: permanentFailureCount,
+                skipped: skippedCount,
+              },
+              refreshUsername,
+              result.message,
+            )
+          : formatYoutubeSubmissionRefreshMessage(
+              type,
+              refreshUsername,
+              successCount,
+              result.message,
+            ),
+        duration: 10000,
+        variant: successCount > 0 ? "success" : "destructive",
       });
 
       if (result.reauth_needed?.length) {
@@ -10464,6 +10621,7 @@ export default function ContestDetailClient({
         bot_flags: youtubeStats.bot_flags || [],
         analytics_needs_reauth: youtubeStats.analytics_needs_reauth || false,
         last_basic_update: youtubeStats.last_basic_update || null,
+        last_core_update: youtubeStats.last_core_update || null,
         last_traffic_update: youtubeStats.last_traffic_update || null,
         last_demographics_update: youtubeStats.last_demographics_update || null,
       };
@@ -17799,20 +17957,35 @@ export default function ContestDetailClient({
                             hasRecentRunningRun ||
                             postRefreshReloadPending;
                           const cooldownDisabled = !cooldownInfo.canRefresh;
-                          const cooldownLabel = `Wait ${cooldownInfo.remainingMinutes}m`;
                           const reloadPendingLabel = "Updating...";
-                          const detailedRefreshDisabled =
+                          const coreCooldownInfo =
+                            getYoutubeDetailedCooldownInfo("core");
+                          const trafficCooldownInfo =
+                            getYoutubeDetailedCooldownInfo("traffic");
+                          const demographicsCooldownInfo =
+                            getYoutubeDetailedCooldownInfo("demographics");
+                          const allCooldownInfo =
+                            getYoutubeDetailedCooldownInfo("all");
+                          const allStandardCooldownInfo =
+                            getYoutubeDetailedCooldownInfo("all_standard");
+                          const detailedBaseDisabled =
                             anyRefreshInProgress ||
                             (!isPostCampaignLeaderboard &&
-                              ytPostContestLocked) ||
-                            cooldownDisabled;
-                          const detailedRefreshTitle =
+                              ytPostContestLocked);
+                          const getDetailedDisabledReason = (
+                            info: {
+                              canRefresh: boolean;
+                              remainingMinutes: number;
+                            },
+                          ) =>
                             !isPostCampaignLeaderboard && ytPostContestLocked
                               ? "Locked after campaign review begins"
                               : postRefreshReloadPending
                                 ? "Reloading with fresh metrics..."
-                                : cooldownDisabled
-                                  ? disabledReason
+                                : !info.canRefresh
+                                  ? `Please wait ${info.remainingMinutes} more minute${
+                                      info.remainingMinutes !== 1 ? "s" : ""
+                                    }`
                                   : isPostCampaignLeaderboard
                                     ? "Updates post-campaign metrics only"
                                     : undefined;
@@ -17927,7 +18100,7 @@ export default function ContestDetailClient({
                                       onClick={handleRefreshAllMetrics}
                                       disabled={
                                         anyRefreshInProgress ||
-                                        !cooldownInfo.canRefresh ||
+                                        !allCooldownInfo.canRefresh ||
                                         (!isPostCampaignLeaderboard &&
                                           ytPostContestLocked)
                                       }
@@ -17935,7 +18108,7 @@ export default function ContestDetailClient({
                                         btnClass,
                                         "bg-[#5A35B8] text-white border-[#5A35B8] hover:bg-[#4a2d99]",
                                         (anyRefreshInProgress ||
-                                          !cooldownInfo.canRefresh ||
+                                          !allCooldownInfo.canRefresh ||
                                           (!isPostCampaignLeaderboard &&
                                             ytPostContestLocked)) &&
                                           "opacity-60 cursor-not-allowed",
@@ -17944,8 +18117,10 @@ export default function ContestDetailClient({
                                         !isPostCampaignLeaderboard &&
                                         ytPostContestLocked
                                           ? "Metrics are locked after campaign review begins"
-                                          : cooldownDisabled
-                                            ? disabledReason
+                                          : !allCooldownInfo.canRefresh
+                                            ? getDetailedDisabledReason(
+                                                allCooldownInfo,
+                                              )
                                             : isPostCampaignLeaderboard
                                               ? "Updates post-campaign metrics only"
                                               : "Basic, core, retention, traffic details, demographics with cities/states, devices"
@@ -17959,8 +18134,8 @@ export default function ContestDetailClient({
                                       {isRefreshingAll ||
                                       postRefreshReloadPending
                                         ? reloadPendingLabel
-                                        : cooldownDisabled
-                                          ? cooldownLabel
+                                        : !allCooldownInfo.canRefresh
+                                          ? `Wait ${allCooldownInfo.remainingMinutes}m`
                                           : "Refresh all metrics"}
                                     </button>
                                     <span className={muteClass}>
@@ -17974,7 +18149,7 @@ export default function ContestDetailClient({
                                       onClick={handleRefreshAllMetricsStandard}
                                       disabled={
                                         anyRefreshInProgress ||
-                                        !cooldownInfo.canRefresh ||
+                                        !allStandardCooldownInfo.canRefresh ||
                                         (!isPostCampaignLeaderboard &&
                                           ytPostContestLocked)
                                       }
@@ -17984,7 +18159,7 @@ export default function ContestDetailClient({
                                         isDark &&
                                           "bg-slate-600 border-slate-500 hover:bg-slate-500",
                                         (anyRefreshInProgress ||
-                                          !cooldownInfo.canRefresh ||
+                                          !allStandardCooldownInfo.canRefresh ||
                                           (!isPostCampaignLeaderboard &&
                                             ytPostContestLocked)) &&
                                           "opacity-60 cursor-not-allowed",
@@ -17993,8 +18168,10 @@ export default function ContestDetailClient({
                                         !isPostCampaignLeaderboard &&
                                         ytPostContestLocked
                                           ? "Metrics are locked after campaign review begins"
-                                          : cooldownDisabled
-                                            ? disabledReason
+                                          : !allStandardCooldownInfo.canRefresh
+                                            ? getDetailedDisabledReason(
+                                                allStandardCooldownInfo,
+                                              )
                                             : isPostCampaignLeaderboard
                                               ? "Updates post-campaign metrics only"
                                               : "Basic, core, traffic sources, age/gender/countries — faster; skips cities, states, devices, retention, and traffic details"
@@ -18008,8 +18185,8 @@ export default function ContestDetailClient({
                                       {isRefreshingAllStandard ||
                                       postRefreshReloadPending
                                         ? reloadPendingLabel
-                                        : cooldownDisabled
-                                          ? cooldownLabel
+                                        : !allStandardCooldownInfo.canRefresh
+                                          ? `Wait ${allStandardCooldownInfo.remainingMinutes}m`
                                           : "Refresh all (standard)"}
                                     </button>
                                     <span className={muteClass}>
@@ -18071,15 +18248,21 @@ export default function ContestDetailClient({
                                       onClick={() =>
                                         handleRefreshDetailedAnalytics("core")
                                       }
-                                      disabled={detailedRefreshDisabled}
+                                      disabled={
+                                        detailedBaseDisabled ||
+                                        !coreCooldownInfo.canRefresh
+                                      }
                                       className={cn(
                                         btnClass,
-                                        detailedRefreshDisabled
+                                        detailedBaseDisabled ||
+                                        !coreCooldownInfo.canRefresh
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
                                           : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
                                       title={
-                                        detailedRefreshTitle ||
+                                        getDetailedDisabledReason(
+                                          coreCooldownInfo,
+                                        ) ||
                                         "Watch time, engagement, retention curve"
                                       }
                                     >
@@ -18091,8 +18274,8 @@ export default function ContestDetailClient({
                                       {isRefreshingCore ||
                                       postRefreshReloadPending
                                         ? reloadPendingLabel
-                                        : cooldownDisabled
-                                          ? cooldownLabel
+                                        : !coreCooldownInfo.canRefresh
+                                          ? `Wait ${coreCooldownInfo.remainingMinutes}m`
                                           : "Refresh Core Analytics"}
                                     </button>
                                     <span className={muteClass}>
@@ -18116,15 +18299,21 @@ export default function ContestDetailClient({
                                           "traffic",
                                         )
                                       }
-                                      disabled={detailedRefreshDisabled}
+                                      disabled={
+                                        detailedBaseDisabled ||
+                                        !trafficCooldownInfo.canRefresh
+                                      }
                                       className={cn(
                                         btnClass,
-                                        detailedRefreshDisabled
+                                        detailedBaseDisabled ||
+                                        !trafficCooldownInfo.canRefresh
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
                                           : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
                                       title={
-                                        detailedRefreshTitle ||
+                                        getDetailedDisabledReason(
+                                          trafficCooldownInfo,
+                                        ) ||
                                         "Sources, search terms, referrers, subscriber split"
                                       }
                                     >
@@ -18136,8 +18325,8 @@ export default function ContestDetailClient({
                                       {isRefreshingTraffic ||
                                       postRefreshReloadPending
                                         ? reloadPendingLabel
-                                        : cooldownDisabled
-                                          ? cooldownLabel
+                                        : !trafficCooldownInfo.canRefresh
+                                          ? `Wait ${trafficCooldownInfo.remainingMinutes}m`
                                           : "Refresh Traffic Sources"}
                                     </button>
                                     <span className={muteClass}>
@@ -18161,15 +18350,21 @@ export default function ContestDetailClient({
                                           "demographics",
                                         )
                                       }
-                                      disabled={detailedRefreshDisabled}
+                                      disabled={
+                                        detailedBaseDisabled ||
+                                        !demographicsCooldownInfo.canRefresh
+                                      }
                                       className={cn(
                                         btnClass,
-                                        detailedRefreshDisabled
+                                        detailedBaseDisabled ||
+                                        !demographicsCooldownInfo.canRefresh
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
                                           : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
                                       title={
-                                        detailedRefreshTitle ||
+                                        getDetailedDisabledReason(
+                                          demographicsCooldownInfo,
+                                        ) ||
                                         "Age, gender, countries, cities, devices"
                                       }
                                     >
@@ -18181,8 +18376,8 @@ export default function ContestDetailClient({
                                       {isRefreshingDemographics ||
                                       postRefreshReloadPending
                                         ? reloadPendingLabel
-                                        : cooldownDisabled
-                                          ? cooldownLabel
+                                        : !demographicsCooldownInfo.canRefresh
+                                          ? `Wait ${demographicsCooldownInfo.remainingMinutes}m`
                                           : "Refresh Demographics data"}
                                     </button>
                                     <span className={muteClass}>
@@ -20290,6 +20485,12 @@ export default function ContestDetailClient({
                               const isLoading =
                                 isLoadingSubmission[submission.id] || false;
                               const rank = globalIndex + 1;
+                              const refreshUsername =
+                                submission.creator_username ||
+                                submission.user_username ||
+                                submission.creator?.username ||
+                                submission.creator_display_name ||
+                                undefined;
                               const isDeleted =
                                 isTwitterTweet &&
                                 twitterSubmissionIsDeletedFromTwitter(
@@ -21061,8 +21262,7 @@ export default function ContestDetailClient({
                                         expectedInfo.postAdjustmentAmountDollars ??
                                         expectedInfo.amount,
                                       label: "Paid",
-                                      className:
-                                        "text-blue-600 font-semibold",
+                                      className: "text-blue-600 font-semibold",
                                     }
                                   : storedGrantedInfo;
                               const isDualRewardContest =
@@ -23787,6 +23987,7 @@ export default function ContestDetailClient({
                                                     {
                                                       submissionId:
                                                         submission.id,
+                                                      username: refreshUsername,
                                                     },
                                                   )
                                                 }
@@ -23805,7 +24006,8 @@ export default function ContestDetailClient({
                                                       ?.youtube ||
                                                     submission.other_stats;
                                                   const ts =
-                                                    ytStats?.last_basic_update;
+                                                    ytStats?.last_core_update ||
+                                                    submission.last_insights_update;
                                                   return ts ? (
                                                     <span className="ml-auto text-xs text-slate-400">
                                                       {formatTimeAgo(ts)}
@@ -23834,6 +24036,7 @@ export default function ContestDetailClient({
                                                     {
                                                       submissionId:
                                                         submission.id,
+                                                      username: refreshUsername,
                                                     },
                                                   )
                                                 }
@@ -23881,6 +24084,7 @@ export default function ContestDetailClient({
                                                     {
                                                       submissionId:
                                                         submission.id,
+                                                      username: refreshUsername,
                                                     },
                                                   )
                                                 }
@@ -23928,6 +24132,7 @@ export default function ContestDetailClient({
                                                     {
                                                       submissionId:
                                                         submission.id,
+                                                      username: refreshUsername,
                                                     },
                                                   )
                                                 }
@@ -23946,7 +24151,8 @@ export default function ContestDetailClient({
                                                       ?.youtube ||
                                                     submission.other_stats;
                                                   const timestamps = [
-                                                    ytStats?.last_basic_update,
+                                                    ytStats?.last_core_update ||
+                                                      submission.last_insights_update,
                                                     ytStats?.last_traffic_update,
                                                     ytStats?.last_demographics_update,
                                                   ].filter(Boolean) as string[];
@@ -26832,6 +27038,9 @@ export default function ContestDetailClient({
                                                                 creatorId:
                                                                   group.creator
                                                                     .id,
+                                                                username:
+                                                                  group.creator
+                                                                    ?.username,
                                                               },
                                                             )
                                                           }
@@ -26854,6 +27063,9 @@ export default function ContestDetailClient({
                                                                 creatorId:
                                                                   group.creator
                                                                     .id,
+                                                                username:
+                                                                  group.creator
+                                                                    ?.username,
                                                               },
                                                             )
                                                           }
@@ -26877,6 +27089,9 @@ export default function ContestDetailClient({
                                                                 creatorId:
                                                                   group.creator
                                                                     .id,
+                                                                username:
+                                                                  group.creator
+                                                                    ?.username,
                                                               },
                                                             )
                                                           }
@@ -26900,6 +27115,9 @@ export default function ContestDetailClient({
                                                                 creatorId:
                                                                   group.creator
                                                                     .id,
+                                                                username:
+                                                                  group.creator
+                                                                    ?.username,
                                                               },
                                                             )
                                                           }

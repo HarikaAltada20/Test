@@ -192,7 +192,7 @@ export function YouTubeAnalyticsPanel({
               : "border-slate-100 text-slate-400",
           )}
         >
-          <span>Core: {timeAgo(metrics.last_basic_update)}</span>
+          <span>Core: {timeAgo(metrics.last_core_update ?? metrics.last_basic_update)}</span>
           <span>Traffic: {timeAgo(metrics.last_traffic_update)}</span>
           <span>Demo: {timeAgo(metrics.last_demographics_update)}</span>
         </div>

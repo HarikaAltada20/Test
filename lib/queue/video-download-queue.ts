@@ -40,6 +40,7 @@ export type VideoDownloadJobStatus = {
   failed: number;
   errors: string[];
   storagePath?: string;
+  localZipPath?: string;
   zipBytes?: number;
   zipFilename?: string;
   createdAt: string;

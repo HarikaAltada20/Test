@@ -453,13 +453,23 @@ export function CreatorSubmissionsModal({
         throw new Error(result.errors[0] || "Failed to download ZIP archives.");
       }
 
+      const hasPartialFailures =
+        result.successCount > 0 && result.failedCount > 0;
+      const isTotalFailure =
+        result.successCount === 0 && result.failedCount > 0;
+
       toast({
-        title:
-          result.failedCount > 0
-            ? "Download finished with failures"
+        title: isTotalFailure
+          ? "Download failed"
+          : hasPartialFailures
+            ? "Download complete"
             : "Download complete",
         description: `${result.totalVideos} selected · ${result.successCount} succeeded · ${result.failedCount} failed`,
-        variant: result.failedCount > 0 ? "destructive" : "success",
+        variant: isTotalFailure
+          ? "destructive"
+          : hasPartialFailures
+            ? "pending"
+            : "success",
       });
       setBulkDownloadDialogOpen(false);
     } catch (error: any) {
@@ -4353,6 +4363,9 @@ export function CreatorSubmissionsModal({
                                           false,
                                         last_basic_update:
                                           youtubeStats.last_basic_update ??
+                                          null,
+                                        last_core_update:
+                                          youtubeStats.last_core_update ??
                                           null,
                                         last_traffic_update:
                                           youtubeStats.last_traffic_update ??

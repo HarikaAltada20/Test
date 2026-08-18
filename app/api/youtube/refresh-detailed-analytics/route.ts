@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
+import { isYouTubeRefreshTarget } from "@/lib/youtube-url";
 import {
   updateYouTubeSubmissionForScope,
   isYouTubeAllLikeScope,
@@ -23,7 +24,10 @@ import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
 export async function POST(request: Request) {
   const { isAdmin } = await verifyAdminAccess();
   if (!isAdmin) {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Admin access required" },
+      { status: 403 },
+    );
   }
 
   const body = await request.json();
@@ -53,37 +57,43 @@ export async function POST(request: Request) {
         error:
           "type must be 'core', 'traffic', 'demographics', 'all', or 'all_standard'",
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   if (!submissionId && !contestId) {
     return NextResponse.json(
       { error: "Provide submissionId, contestId, or creatorId + contestId" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   const supabaseAdmin = createAdminSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
   // --- Fetch target submissions ---
+  // Per-row refresh (normal view) must include rejected videos; contest/creator
+  // refresh still skips them.
   let submissionsQuery = supabaseAdmin
     .from("submissions")
-    .select("id, contest_id, creator_id, content_link, views, other_stats, created_at, platform")
-    .neq("status", "rejected")
+    .select(
+      "id, contest_id, creator_id, content_link, views, other_stats, created_at, platform",
+    )
     .not("content_link", "is", null);
 
   if (submissionId) {
     submissionsQuery = submissionsQuery.eq("id", submissionId);
-  } else if (creatorId && contestId) {
-    submissionsQuery = submissionsQuery
-      .eq("creator_id", creatorId)
-      .eq("contest_id", contestId);
-  } else if (contestId) {
-    submissionsQuery = submissionsQuery.eq("contest_id", contestId);
+  } else {
+    submissionsQuery = submissionsQuery.neq("status", "rejected");
+    if (creatorId && contestId) {
+      submissionsQuery = submissionsQuery
+        .eq("creator_id", creatorId)
+        .eq("contest_id", contestId);
+    } else if (contestId) {
+      submissionsQuery = submissionsQuery.eq("contest_id", contestId);
+    }
   }
 
   const { data: submissions, error: subError } = await submissionsQuery;
@@ -91,18 +101,25 @@ export async function POST(request: Request) {
   if (subError) {
     return NextResponse.json(
       { error: `Failed to fetch submissions: ${subError.message}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
-  const youtubeSubmissions = (submissions || []).filter(
-    (s) =>
-      s.platform?.toLowerCase().includes("youtube") &&
-      s.content_link
+  const youtubeSubmissions = (submissions || []).filter((s) =>
+    isYouTubeRefreshTarget(s.platform, s.content_link),
   );
 
   if (youtubeSubmissions.length === 0) {
-    return NextResponse.json({ message: "No YouTube submissions found", updated: 0 });
+    if (submissionId) {
+      return NextResponse.json(
+        { error: "YouTube submission not found" },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({
+      message: "No YouTube submissions found",
+      updated: 0,
+    });
   }
 
   const targetContestIds = [
@@ -117,7 +134,7 @@ export async function POST(request: Request) {
   if (targetContestIds.length > 0) {
     const { data: contests, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, last_metrics_updated")
+      .select("id, last_metrics_updated, contest_based_details")
       .in("id", targetContestIds);
 
     if (contestError) {
@@ -127,19 +144,55 @@ export async function POST(request: Request) {
       );
     }
 
+    const getDetailedCooldownTimestamp = (
+      contest: {
+        last_metrics_updated?: string | null;
+        contest_based_details?: Record<string, unknown> | null;
+      },
+    ) => {
+      const details =
+        (contest.contest_based_details as
+          | {
+              youtube_metrics_last_updated?: {
+                core?: string;
+                traffic?: string;
+                demographics?: string;
+              };
+            }
+          | undefined) ?? undefined;
+      const ytLast = details?.youtube_metrics_last_updated ?? {};
+      if (type === "core") return ytLast.core ?? null;
+      if (type === "traffic") return ytLast.traffic ?? null;
+      if (type === "demographics") return ytLast.demographics ?? null;
+      const timestamps = [
+        ytLast.core,
+        ytLast.traffic,
+        ytLast.demographics,
+      ].filter(Boolean) as string[];
+      return timestamps.reduce<string | null>(
+        (oldest, current) => (!oldest || current < oldest ? current : oldest),
+        null,
+      );
+    };
+
     const nowMs = Date.now();
     const coolingContest = (contests || []).find((contest) => {
-      if (!contest.last_metrics_updated) return false;
-      const lastUpdateMs = new Date(contest.last_metrics_updated).getTime();
+      const cooldownTimestamp = getDetailedCooldownTimestamp(contest);
+      if (!cooldownTimestamp) return false;
+      const lastUpdateMs = new Date(cooldownTimestamp).getTime();
       return (
         !Number.isNaN(lastUpdateMs) &&
         nowMs - lastUpdateMs < METRICS_REFRESH_COOLDOWN_MS_ADMIN
       );
     });
 
-    if (coolingContest?.last_metrics_updated) {
-      const lastUpdateMs = new Date(coolingContest.last_metrics_updated).getTime();
-      const remainingMs = METRICS_REFRESH_COOLDOWN_MS_ADMIN - (nowMs - lastUpdateMs);
+    const coolingTimestamp =
+      coolingContest && getDetailedCooldownTimestamp(coolingContest);
+
+    if (coolingTimestamp) {
+      const lastUpdateMs = new Date(coolingTimestamp).getTime();
+      const remainingMs =
+        METRICS_REFRESH_COOLDOWN_MS_ADMIN - (nowMs - lastUpdateMs);
       const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
       return NextResponse.json(
         {
@@ -168,7 +221,7 @@ export async function POST(request: Request) {
   if (creatorsError || !creators?.length) {
     return NextResponse.json(
       { error: "No connected YouTube accounts found for these submissions" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -181,7 +234,8 @@ export async function POST(request: Request) {
     if (!account?.access_token) continue;
 
     let token = account.access_token;
-    const isExpired = account.expires_at && new Date(account.expires_at) <= new Date();
+    const isExpired =
+      account.expires_at && new Date(account.expires_at) <= new Date();
 
     if (isExpired && account.refresh_token) {
       try {
@@ -220,8 +274,10 @@ export async function POST(request: Request) {
     tokenMap.set(creator.id, token);
   }
 
-  let updated = 0;
-  let failed = 0;
+  let successCount = 0;
+  let temporaryFailureCount = 0;
+  let permanentFailureCount = 0;
+  let skippedCount = 0;
   const reauthNeeded: string[] = [];
   const now = new Date().toISOString();
 
@@ -240,7 +296,7 @@ export async function POST(request: Request) {
           })
           .eq("id", sub.id);
       }
-      failed++;
+      skippedCount++;
       continue;
     }
 
@@ -254,7 +310,7 @@ export async function POST(request: Request) {
           updated_at: now,
         })
         .eq("id", sub.id);
-      failed++;
+      permanentFailureCount++;
       continue;
     }
 
@@ -266,25 +322,31 @@ export async function POST(request: Request) {
           creator_id: sub.creator_id,
           content_link: sub.content_link,
           views: sub.views,
-          other_stats: (sub.other_stats as Record<string, unknown> | null) ?? null,
+          other_stats:
+            (sub.other_stats as Record<string, unknown> | null) ?? null,
         },
         accessToken,
         type,
-        now
+        now,
       );
 
       if (result.ok) {
-        updated++;
-      } else {
+        successCount++;
+      } else if (
+        result.authError ||
+        result.failureType === "permanent_failure"
+      ) {
         if (result.authError) {
           reauthNeeded.push(sub.id);
         }
-        failed++;
+        permanentFailureCount++;
+      } else {
+        temporaryFailureCount++;
       }
     } catch (err: unknown) {
       console.error(
         `Failed for submission ${sub.id}:`,
-        (err as Error)?.message
+        (err as Error)?.message,
       );
       await supabaseAdmin
         .from("submissions")
@@ -294,7 +356,7 @@ export async function POST(request: Request) {
           updated_at: now,
         })
         .eq("id", sub.id);
-      failed++;
+      temporaryFailureCount++;
     }
   }
 
@@ -306,8 +368,10 @@ export async function POST(request: Request) {
       .eq("id", targetContestIds[0])
       .maybeSingle();
 
-    const existing = (contestRow?.contest_based_details as Record<string, unknown>) || {};
-    const existingYt = (existing.youtube_metrics_last_updated as Record<string, string>) || {};
+    const existing =
+      (contestRow?.contest_based_details as Record<string, unknown>) || {};
+    const existingYt =
+      (existing.youtube_metrics_last_updated as Record<string, string>) || {};
     const now = new Date().toISOString();
     const nextYt = { ...existingYt };
     if (type === "core" || isYouTubeAllLikeScope(type)) nextYt.core = now;
@@ -318,16 +382,25 @@ export async function POST(request: Request) {
       .from("contests")
       .update({
         last_metrics_updated: now,
-        contest_based_details: { ...existing, youtube_metrics_last_updated: nextYt },
+        contest_based_details: {
+          ...existing,
+          youtube_metrics_last_updated: nextYt,
+        },
       })
       .in("id", targetContestIds);
   }
 
+  const failed = temporaryFailureCount + permanentFailureCount;
   return NextResponse.json({
     success: true,
-    updated,
+    updated: successCount,
     failed,
+    success_count: successCount,
+    temporary_failure_count: temporaryFailureCount,
+    permanent_failure_count: permanentFailureCount,
+    skipped_recent_count: skippedCount,
+    scope: type,
     reauth_needed: reauthNeeded.length > 0 ? reauthNeeded : undefined,
-    message: `Updated ${updated} submission(s)${reauthNeeded.length ? `. ${reauthNeeded.length} creator(s) need to reconnect their YouTube account.` : ""}`,
+    message: `Updated ${successCount} submission(s)${reauthNeeded.length ? `. ${reauthNeeded.length} creator(s) need to reconnect their YouTube account.` : ""}`,
   });
 }

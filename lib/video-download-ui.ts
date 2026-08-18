@@ -60,9 +60,6 @@ function triggerUrlDownload(url: string, filename: string): void {
   a.href = url;
   a.download = filename;
   a.rel = "noopener";
-  if (/^https?:/i.test(url)) {
-    a.target = "_blank";
-  }
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -156,32 +153,27 @@ async function waitForQueuedZipJob(
     });
 
     if (statusRes.data.status === "ready") {
-      const fileRes = await fetchJsonWithRetry<{
-        error?: string;
-        url?: string;
-        filename?: string;
-        completed?: number;
-        failed?: number;
-        total?: number;
-      }>(
-        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}`,
+      const fileResponse = await fetch(
+        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}&download=1`,
+        { credentials: "same-origin" },
       );
-      if (!fileRes.ok) {
-        if (fileRes.status === 409) {
+      if (!fileResponse.ok) {
+        if (fileResponse.status === 409) {
           await sleep(QUEUED_DOWNLOAD_POLL_MS);
           continue;
         }
-        throw new Error(fileRes.data.error || "Failed to download queued ZIP.");
+        const payload = (await fileResponse.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(payload.error || "Failed to download queued ZIP.");
       }
-      if (!fileRes.data.url) {
-        throw new Error("ZIP download URL was missing.");
-      }
-      triggerUrlDownload(fileRes.data.url, fileRes.data.filename || fileName);
+      const blob = await fileResponse.blob();
+      triggerBrowserDownload(blob, fileName);
       return {
         downloaded: true,
-        completed: Number(fileRes.data.completed) || last.completed,
-        failed: Number(fileRes.data.failed) || last.failed,
-        total: Number(fileRes.data.total) || last.total,
+        completed: last.completed,
+        failed: last.failed,
+        total: last.total,
       };
     }
 

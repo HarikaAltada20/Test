@@ -96,8 +96,7 @@ export function BulkVideoDownloadDialog({
           <DialogDescription
             className={cn(isDark ? "text-slate-400" : "text-slate-600")}
           >
-            Choose how files are named inside the ZIP. Instagram and YouTube
-            videos are queued in Redis and processed one job at a time via QStash.
+            Choose how files are named inside the ZIP. 
           </DialogDescription>
         </DialogHeader>
 
