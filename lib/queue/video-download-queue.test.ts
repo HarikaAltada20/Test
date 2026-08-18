@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   classifyRecoveredVideoDownloadJob,
   parseVideoDownloadJob,
+  planRecoveredVideoDownloadJobs,
+  requireVideoDownloadContinuationJobId,
   videoDownloadActiveJobLimitError,
   VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL,
   VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER,
@@ -122,6 +124,68 @@ describe("classifyRecoveredVideoDownloadJob", () => {
       "requeue",
     );
     assert.equal(classifyRecoveredVideoDownloadJob(null, now), "requeue");
+  });
+
+  it("plans recovery from a snapshot without removing live jobs", () => {
+    const live = JSON.stringify({
+      jobId: "live",
+      userId: "user-1",
+      items: [
+        { url: "https://instagram.com/reel/x", filename: "a.mp4", isInstagram: true },
+      ],
+    });
+    const stale = JSON.stringify({
+      jobId: "stale",
+      userId: "user-1",
+      items: [
+        { url: "https://instagram.com/reel/y", filename: "b.mp4", isInstagram: true },
+      ],
+    });
+    const ready = JSON.stringify({
+      jobId: "ready",
+      userId: "user-1",
+      items: [
+        { url: "https://instagram.com/reel/z", filename: "c.mp4", isInstagram: true },
+      ],
+    });
+    const statuses = new Map<string, VideoDownloadJobStatus | null>([
+      ["live", status({ jobId: "live", status: "processing", updatedAt: "2026-08-18T10:04:00.000Z" })],
+      [
+        "stale",
+        status({
+          jobId: "stale",
+          status: "processing",
+          updatedAt: new Date(now - VIDEO_DOWNLOAD_STALE_PROCESSING_MS - 1).toISOString(),
+        }),
+      ],
+      ["ready", status({ jobId: "ready", status: "ready" })],
+    ]);
+    const plan = planRecoveredVideoDownloadJobs(
+      [live, stale, ready, "not-json"],
+      (jobId) => statuses.get(jobId) ?? null,
+      now,
+    );
+    assert.deepEqual(
+      plan.map((item) => item.action),
+      ["keep-processing", "requeue", "drop", "drop"],
+    );
+  });
+});
+
+describe("requireVideoDownloadContinuationJobId", () => {
+  it("allows ready when nothing was deferred", () => {
+    requireVideoDownloadContinuationJobId(0, undefined);
+  });
+
+  it("allows ready when leftover videos were enqueued", () => {
+    requireVideoDownloadContinuationJobId(3, "continuation-1");
+  });
+
+  it("refuses to mark ready if leftover videos were not enqueued", () => {
+    assert.throws(
+      () => requireVideoDownloadContinuationJobId(3, undefined),
+      /leftover videos/,
+    );
   });
 });
 

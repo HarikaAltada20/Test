@@ -24,6 +24,16 @@ export const VIDEO_DOWNLOAD_STALE_PROCESSING_MS = 6 * 60 * 1000;
 /** Cap in-flight jobs (queued + processing) so waiters stay inside the 15-minute UI timeout. */
 export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL = 3;
 export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER = 2;
+export const VIDEO_DOWNLOAD_CONTINUATION_ENQUEUE_ATTEMPTS = 5;
+
+/** Atomically move one payload from processing → queue (never leave it in neither list). */
+const REQUEUE_FROM_PROCESSING_LUA = `
+local removed = redis.call('LREM', KEYS[1], 1, ARGV[1])
+if removed > 0 then
+  redis.call('LPUSH', KEYS[2], ARGV[1])
+end
+return removed
+`;
 
 export type VideoDownloadItem = {
   url: string;
@@ -57,10 +67,15 @@ export type VideoDownloadJobStatus = {
 
 export type VideoDownloadRecoveryAction = "keep-processing" | "requeue" | "drop";
 
+export type VideoDownloadRecoveryPlanItem = {
+  raw: string;
+  action: VideoDownloadRecoveryAction;
+};
+
 /**
  * Decide what recovery should do with a job found in the processing list.
- * ready/failed jobs must be dropped (already LREM'd via RPOP) so they are
- * not re-downloaded. Live processing jobs stay put until they go stale.
+ * ready/failed jobs must be dropped so they are not re-downloaded.
+ * Live processing jobs stay put until they go stale.
  */
 export function classifyRecoveredVideoDownloadJob(
   status: VideoDownloadJobStatus | null,
@@ -78,6 +93,36 @@ export function classifyRecoveredVideoDownloadJob(
     return "keep-processing";
   }
   return "requeue";
+}
+
+/**
+ * Inspect a processing-list snapshot without mutating Redis.
+ * Live jobs stay in processing; only stale/finished/invalid rows are acted on.
+ */
+export function planRecoveredVideoDownloadJobs(
+  rawItems: unknown[],
+  getStatus: (jobId: string) => VideoDownloadJobStatus | null,
+  nowMs: number = Date.now(),
+): VideoDownloadRecoveryPlanItem[] {
+  return rawItems.map((raw) => {
+    const str = toRawString(raw);
+    const job = parseVideoDownloadJob(str);
+    if (!job) return { raw: str, action: "drop" };
+    return {
+      raw: str,
+      action: classifyRecoveredVideoDownloadJob(getStatus(job.jobId), nowMs),
+    };
+  });
+}
+
+/** Partial ZIP must not be marked ready unless leftover videos were enqueued. */
+export function requireVideoDownloadContinuationJobId(
+  deferredCount: number,
+  continuationJobId: string | undefined,
+): void {
+  if (deferredCount > 0 && !continuationJobId) {
+    throw new Error("Failed to enqueue leftover videos");
+  }
 }
 
 function statusKey(jobId: string): string {
@@ -287,6 +332,23 @@ export async function enqueueVideoDownloadJob(
   }
 }
 
+/** Enqueue leftover videos as a new job. Callers must not mark the parent ZIP ready on error. */
+export async function enqueueVideoDownloadContinuationJob(
+  job: VideoDownloadJob,
+): Promise<{ error?: string }> {
+  let lastError: string | undefined;
+  for (let attempt = 0; attempt < VIDEO_DOWNLOAD_CONTINUATION_ENQUEUE_ATTEMPTS; attempt++) {
+    const enqueued = await enqueueVideoDownloadJob(
+      { ...job, attempt: 0 },
+      { bypassActiveJobLimit: true },
+    );
+    if (!enqueued.error) return {};
+    lastError = enqueued.error;
+    await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
+  }
+  return { error: lastError || "Failed to enqueue leftover videos" };
+}
+
 export async function popVideoDownloadJob(): Promise<{
   job: VideoDownloadJob;
   raw: string;
@@ -402,6 +464,34 @@ export async function retryOrDeadLetterVideoDownload(options: {
   }
 }
 
+async function requeueVideoDownloadFromProcessing(
+  redis: Redis,
+  rawJobString: string,
+): Promise<boolean> {
+  try {
+    const removed = await redis.eval(
+      REQUEUE_FROM_PROCESSING_LUA,
+      [REDIS_PROCESSING_KEY, REDIS_QUEUE_KEY],
+      [rawJobString],
+    );
+    return Number(removed) > 0;
+  } catch (error) {
+    console.warn(
+      "[video-download-queue] atomic requeue eval failed; copy then remove:",
+      error,
+    );
+    // Duplicate in both lists is recoverable; missing from both is not.
+    await redis.lpush(REDIS_QUEUE_KEY, rawJobString);
+    await redis.lrem(REDIS_PROCESSING_KEY, 1, rawJobString);
+    return true;
+  }
+}
+
+/**
+ * Requeue stale processing jobs without RPOP'ing the live list into memory.
+ * Live workers are left in processing. Finished jobs are LREM'd. Stale jobs
+ * move queue←processing atomically so a crashed recovery cannot drop them.
+ */
 export async function recoverVideoDownloadProcessingToQueue(options?: {
   maxToMove?: number;
 }): Promise<{ moved: number; error?: string }> {
@@ -409,34 +499,34 @@ export async function recoverVideoDownloadProcessingToQueue(options?: {
   if (!redis) return { moved: 0, error: "Redis not configured" };
   const maxToMove = Math.max(1, Math.min(options?.maxToMove ?? 25, 200));
   try {
+    const rawItems = await redis.lrange(REDIS_PROCESSING_KEY, 0, maxToMove - 1);
+    if (!rawItems?.length) return { moved: 0 };
+
+    const statuses = new Map<string, VideoDownloadJobStatus | null>();
+    for (const raw of rawItems) {
+      const job = parseVideoDownloadJob(toRawString(raw));
+      if (!job || statuses.has(job.jobId)) continue;
+      statuses.set(job.jobId, await getVideoDownloadJobStatus(job.jobId));
+    }
+
+    const plan = planRecoveredVideoDownloadJobs(
+      rawItems,
+      (jobId) => statuses.get(jobId) ?? null,
+    );
+
     let moved = 0;
     let dropped = 0;
-    const stillRunningJobs: string[] = [];
-    for (let i = 0; i < maxToMove; i++) {
-      const raw = await redis.rpop(REDIS_PROCESSING_KEY);
-      if (raw === null || raw === undefined) break;
-      const str = toRawString(raw);
-      const job = parseVideoDownloadJob(str);
-      if (!job) {
+    for (const item of plan) {
+      if (item.action === "keep-processing") continue;
+      if (item.action === "drop") {
+        await redis.lrem(REDIS_PROCESSING_KEY, 1, item.raw);
         dropped += 1;
         continue;
       }
-      const status = await getVideoDownloadJobStatus(job.jobId);
-      const action = classifyRecoveredVideoDownloadJob(status);
-      if (action === "keep-processing") {
-        stillRunningJobs.push(str);
-        continue;
-      }
-      if (action === "drop") {
-        dropped += 1;
-        continue;
-      }
-      await redis.lpush(REDIS_QUEUE_KEY, str);
-      moved += 1;
+      const requeued = await requeueVideoDownloadFromProcessing(redis, item.raw);
+      if (requeued) moved += 1;
     }
-    for (let i = stillRunningJobs.length - 1; i >= 0; i--) {
-      await redis.lpush(REDIS_PROCESSING_KEY, stillRunningJobs[i]);
-    }
+
     if (moved > 0 || dropped > 0) {
       console.warn(
         `[video-download-queue] Re-queued ${moved} stale job(s) from processing; dropped ${dropped} finished/invalid job(s)`,

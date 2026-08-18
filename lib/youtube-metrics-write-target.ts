@@ -8,3 +8,10 @@ export function youtubeMetricsWriteTarget(
 ): YouTubeMetricsWriteTarget {
   return isPostCampaign ? "post_campaign_submission_metrics" : "submissions";
 }
+
+/** Options for `updateYouTubeSubmissionForScope` so live payout rows are never the post-campaign target. */
+export function youtubeDetailedRefreshWriteOptions(isPostCampaign: boolean): {
+  metricsTarget: YouTubeMetricsWriteTarget;
+} {
+  return { metricsTarget: youtubeMetricsWriteTarget(isPostCampaign) };
+}

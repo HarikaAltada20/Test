@@ -15,12 +15,13 @@ import {
   ensureProcessVideoDownloadQueueSchedule,
 } from "@/lib/qstash";
 import {
-  enqueueVideoDownloadJob,
+  enqueueVideoDownloadContinuationJob,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   popVideoDownloadJob,
   recoverVideoDownloadProcessingToQueue,
   removeVideoDownloadFromProcessing,
+  requireVideoDownloadContinuationJobId,
   retryOrDeadLetterVideoDownload,
   setVideoDownloadJobStatus,
   videoDownloadStoragePath,
@@ -36,7 +37,6 @@ import {
 import {
   isRetryableDownloadError,
   shouldRetryZeroDownload,
-  sleep,
 } from "@/lib/video-download-queue";
 
 export const dynamic = "force-dynamic";
@@ -213,32 +213,22 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     let continuationJobId: string | undefined;
     if (result.deferredItems.length > 0) {
       const nextJobId = randomUUID();
-      let leftoverError: string | undefined;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const enqueued = await enqueueVideoDownloadJob(
-          {
-            jobId: nextJobId,
-            userId: job.userId,
-            items: result.deferredItems,
-            zipFilename: job.zipFilename,
-            attempt: 0,
-          },
-          { bypassActiveJobLimit: true },
-        );
-        if (!enqueued.error) {
-          leftoverError = undefined;
-          continuationJobId = nextJobId;
-          break;
-        }
-        leftoverError = enqueued.error;
-        await sleep(200 * (attempt + 1));
+      const enqueued = await enqueueVideoDownloadContinuationJob({
+        jobId: nextJobId,
+        userId: job.userId,
+        items: result.deferredItems,
+        zipFilename: job.zipFilename,
+        attempt: 0,
+      });
+      if (enqueued.error) {
+        throw new Error(enqueued.error || "Failed to enqueue leftover videos");
       }
-      if (!continuationJobId) {
-        throw new Error(
-          leftoverError || "Failed to enqueue leftover videos",
-        );
-      }
+      continuationJobId = nextJobId;
     }
+    requireVideoDownloadContinuationJobId(
+      result.deferredItems.length,
+      continuationJobId,
+    );
 
     await setVideoDownloadJobStatus({
       jobId: job.jobId,

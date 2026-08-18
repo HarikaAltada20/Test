@@ -4,7 +4,10 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import { isYouTubeRefreshTarget } from "@/lib/youtube-url";
 import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldown";
-import { youtubeMetricsWriteTarget } from "@/lib/youtube-metrics-write-target";
+import {
+  youtubeDetailedRefreshWriteOptions,
+  youtubeMetricsWriteTarget,
+} from "@/lib/youtube-metrics-write-target";
 import {
   updateYouTubeSubmissionForScope,
   isYouTubeAllLikeScope,
@@ -381,7 +384,7 @@ export async function POST(request: Request) {
         accessToken,
         type,
         now,
-        { metricsTarget: writeTarget },
+        youtubeDetailedRefreshWriteOptions(isPostCampaign),
       );
 
       if (result.ok) {
