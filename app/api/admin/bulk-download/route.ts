@@ -228,7 +228,7 @@ export async function POST(request: Request) {
       if (enqueued.error) {
         return NextResponse.json(
           { error: enqueued.error || "Failed to enqueue download job" },
-          { status: 500 },
+          { status: enqueued.status || 500 },
         );
       }
       await kickProcessVideoDownloadQueue(request);

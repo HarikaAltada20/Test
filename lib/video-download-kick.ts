@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import {
+  ensureProcessVideoDownloadQueueScheduleOnce,
   getQStashPublishBaseUrl,
   isLoopbackUrl,
   isQStashEnabled,
@@ -43,6 +44,7 @@ export async function kickProcessVideoDownloadQueue(
   };
 
   if (isQStashEnabled() && !isLoopbackUrl(qstashUrl)) {
+    ensureProcessVideoDownloadQueueScheduleOnce(qstashUrl);
     const res = await triggerProcessVideoDownloadQueue(qstashUrl, options);
     if (res?.error) runFallbackAfterResponse();
     return;

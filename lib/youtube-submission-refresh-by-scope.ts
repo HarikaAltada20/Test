@@ -302,6 +302,12 @@ export async function updateYouTubeSubmissionForScope(
           ? e.code
           : undefined;
     const message = `${e?.message ?? ""} ${e?.errors?.map((x) => x.reason ?? x.message ?? "").join(" ")}`.toLowerCase();
+    const isRateLimited =
+      (err as { name?: string })?.name === "YoutubeAnalyticsRateLimitError";
+
+    if (isRateLimited || statusNum === 429) {
+      return "temporary_failure";
+    }
 
     if (
       statusNum === 400 ||

@@ -1,12 +1,18 @@
 /**
  * Process Instagram/YouTube bulk video download jobs from Redis.
- * Triggered by QStash after enqueue, Vercel cron recovery (* * * * *),
- * or a local CRON_SECRET POST.
+ *
+ * Triggers:
+ * - QStash one-shot after enqueue / after each job (primary)
+ * - QStash schedule every 5 minutes (stuck-job recovery + ZIP cleanup)
+ * - Vercel Cron once daily (backup if QStash is down) — see vercel.json
+ * - Local CRON_SECRET POST
  */
 
 import { NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import { authorizeProcessVideoDownloadQueue } from "@/lib/qstash";
+import {
+  authorizeProcessVideoDownloadQueue,
+  ensureProcessVideoDownloadQueueSchedule,
+} from "@/lib/qstash";
 import {
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
@@ -15,7 +21,6 @@ import {
   removeVideoDownloadFromProcessing,
   retryOrDeadLetterVideoDownload,
   setVideoDownloadJobStatus,
-  VIDEO_DOWNLOAD_STORAGE_BUCKET,
   videoDownloadStoragePath,
   type VideoDownloadJobStatus,
 } from "@/lib/queue/video-download-queue";
@@ -24,9 +29,9 @@ import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
 import {
   cleanupExpiredVideoDownloadZips,
   ensureVideoDownloadBucket,
+  uploadVideoDownloadZip,
 } from "@/lib/video-download-storage";
 import { isRetryableDownloadError } from "@/lib/video-download-queue";
-import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -49,6 +54,15 @@ export async function POST(request: Request) {
   console.log(
     `[process-video-download-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
   );
+
+  const ensured = await ensureProcessVideoDownloadQueueSchedule();
+  if (ensured.error) {
+    console.warn(
+      "[process-video-download-queue] schedule ensure:",
+      ensured.error,
+    );
+  }
+
   return handleRequest(request);
 }
 
@@ -147,18 +161,14 @@ async function handleRequest(request: Request): Promise<NextResponse> {
 
     // Always persist to shared private storage. /tmp is per-instance on Vercel,
     // so a later /file request on a different lambda would 410 a local ZIP.
-    const supabase = createAdminClient();
     await ensureVideoDownloadBucket();
     const storagePath = videoDownloadStoragePath(job.userId, job.jobId);
-    const zipBytes = await readFile(result.zipPath);
-    const upload = await supabase.storage
-      .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-      .upload(storagePath, zipBytes, {
-        contentType: "application/zip",
-        upsert: true,
-      });
+    const upload = await uploadVideoDownloadZip({
+      storagePath,
+      zipPath: result.zipPath,
+    });
     if (upload.error) {
-      throw new Error(upload.error.message || "Failed to store ZIP archive");
+      throw new Error(upload.error || "Failed to store ZIP archive");
     }
 
     await setVideoDownloadJobStatus({
@@ -217,13 +227,16 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     });
     if (retry.requeued) {
       await kickProcessVideoDownloadQueue(request, { delaySeconds: 5 });
-    } else if (!retry.deadLettered) {
-      await removeVideoDownloadFromProcessing(rawJobString);
-      await patchStatus({
-        status: "failed",
-        errors: [message],
-        failed: job.items.length,
-      });
+    } else {
+      if (!retry.deadLettered) {
+        await removeVideoDownloadFromProcessing(rawJobString);
+        await patchStatus({
+          status: "failed",
+          errors: [message],
+          failed: job.items.length,
+        });
+      }
+      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
     }
     return NextResponse.json({ processed: 1, error: message, retry }, { status: 200 });
   }

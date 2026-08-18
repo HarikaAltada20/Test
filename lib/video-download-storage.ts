@@ -1,3 +1,4 @@
+import { createReadStream } from "fs";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   VIDEO_DOWNLOAD_JOB_TTL_SECONDS,
@@ -31,6 +32,25 @@ export async function ensureVideoDownloadBucket(): Promise<void> {
     throw new Error(error.message || "Could not create video-downloads bucket");
   }
   ensuredPrivateBucket = true;
+}
+
+export async function uploadVideoDownloadZip(options: {
+  storagePath: string;
+  zipPath: string;
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient();
+  const stream = createReadStream(options.zipPath);
+  const { error } = await supabase.storage
+    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+    .upload(options.storagePath, stream, {
+      contentType: "application/zip",
+      upsert: true,
+      duplex: "half",
+    });
+  if (error) {
+    return { error: error.message || "Failed to store ZIP archive" };
+  }
+  return {};
 }
 
 function isExpiredStorageObject(createdAt: string | null | undefined): boolean {

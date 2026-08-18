@@ -14,7 +14,10 @@ import {
 } from "@/lib/youtube-download/ytstream";
 import { MAX_BULK_DOWNLOAD_BYTES } from "@/lib/video-download-auth";
 import {
+  isWorkerTimeBudgetExhausted,
   processSequentialDownloadQueue,
+  VIDEO_DOWNLOAD_WORKER_BUDGET_MS,
+  WORKER_TIME_BUDGET_SKIP_MESSAGE,
   withDownloadRetries,
 } from "@/lib/video-download-queue";
 import type { VideoDownloadItem } from "@/lib/queue/video-download-queue";
@@ -81,9 +84,13 @@ export type ExecuteVideoDownloadResult = {
 export async function executeQueuedVideoDownloads(options: {
   items: VideoDownloadItem[];
   requestId?: string;
+  startedAtMs?: number;
+  budgetMs?: number;
   onProgress?: (info: { completed: number; failed: number }) => Promise<void> | void;
 }): Promise<ExecuteVideoDownloadResult> {
   const requestId = options.requestId || randomUUID().substring(0, 8);
+  const startedAtMs = options.startedAtMs ?? Date.now();
+  const budgetMs = options.budgetMs ?? VIDEO_DOWNLOAD_WORKER_BUDGET_MS;
   const tempDir = join(tmpdir(), `bulk_${randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
 
@@ -107,69 +114,105 @@ export async function executeQueuedVideoDownloads(options: {
   const zippedFiles: { path: string; name: string }[] = [];
   const failedQueue: { url: string; error: string }[] = [];
   let totalBytes = 0;
+  let budgetExhausted = false;
 
   try {
-    await processSequentialDownloadQueue(options.items, async (item, index) => {
-      if (totalBytes >= MAX_BULK_DOWNLOAD_BYTES) {
-        failedQueue.push({
-          url: item.url,
-          error: `Skipped: bulk download size limit (${MAX_BULK_DOWNLOAD_BYTES} bytes) reached.`,
-        });
-        await options.onProgress?.({
-          completed: zippedFiles.length,
-          failed: failedQueue.length,
-        });
-        return;
-      }
+    await processSequentialDownloadQueue(
+      options.items,
+      async (item, index) => {
+        if (
+          budgetExhausted ||
+          isWorkerTimeBudgetExhausted(startedAtMs, Date.now(), budgetMs)
+        ) {
+          budgetExhausted = true;
+          failedQueue.push({
+            url: item.url,
+            error: WORKER_TIME_BUDGET_SKIP_MESSAGE,
+          });
+          await options.onProgress?.({
+            completed: zippedFiles.length,
+            failed: failedQueue.length,
+          });
+          return;
+        }
 
-      const targetPath = join(tempDir, item.filename);
-      try {
-        console.log(
-          `[BULK-${requestId}] Queue ${index + 1}/${options.items.length}: ${item.url}`,
-        );
-        await withDownloadRetries(() =>
-          downloadVideoFile(item.url, targetPath, item.isInstagram),
-        );
+        if (totalBytes >= MAX_BULK_DOWNLOAD_BYTES) {
+          failedQueue.push({
+            url: item.url,
+            error: `Skipped: bulk download size limit (${MAX_BULK_DOWNLOAD_BYTES} bytes) reached.`,
+          });
+          await options.onProgress?.({
+            completed: zippedFiles.length,
+            failed: failedQueue.length,
+          });
+          return;
+        }
 
-        if (existsSync(targetPath)) {
-          const fileStat = await stat(targetPath);
-          if (fileStat.size > 0) {
-            if (totalBytes + fileStat.size > MAX_BULK_DOWNLOAD_BYTES) {
-              await rm(targetPath, { force: true }).catch(() => {});
+        const targetPath = join(tempDir, item.filename);
+        try {
+          console.log(
+            `[BULK-${requestId}] Queue ${index + 1}/${options.items.length}: ${item.url}`,
+          );
+          await withDownloadRetries(
+            () => downloadVideoFile(item.url, targetPath, item.isInstagram),
+            {
+              shouldAbort: () =>
+                isWorkerTimeBudgetExhausted(startedAtMs, Date.now(), budgetMs),
+            },
+          );
+
+          if (existsSync(targetPath)) {
+            const fileStat = await stat(targetPath);
+            if (fileStat.size > 0) {
+              if (totalBytes + fileStat.size > MAX_BULK_DOWNLOAD_BYTES) {
+                await rm(targetPath, { force: true }).catch(() => {});
+                failedQueue.push({
+                  url: item.url,
+                  error: "Skipped: file would exceed bulk download size limit.",
+                });
+              } else {
+                totalBytes += fileStat.size;
+                zippedFiles.push({ path: targetPath, name: item.filename });
+              }
+            } else {
               failedQueue.push({
                 url: item.url,
-                error: "Skipped: file would exceed bulk download size limit.",
+                error: "Download completed but file was empty.",
               });
-            } else {
-              totalBytes += fileStat.size;
-              zippedFiles.push({ path: targetPath, name: item.filename });
             }
           } else {
             failedQueue.push({
               url: item.url,
-              error: "Download completed but file was empty.",
+              error: "Download completed but file was not generated.",
             });
           }
-        } else {
-          failedQueue.push({
-            url: item.url,
-            error: "Download completed but file was not generated.",
-          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (
+            message === WORKER_TIME_BUDGET_SKIP_MESSAGE ||
+            isWorkerTimeBudgetExhausted(startedAtMs, Date.now(), budgetMs)
+          ) {
+            budgetExhausted = true;
+            failedQueue.push({
+              url: item.url,
+              error: WORKER_TIME_BUDGET_SKIP_MESSAGE,
+            });
+          } else {
+            console.error(`[BULK-${requestId}] Failed downloading ${item.url}:`, message);
+            failedQueue.push({
+              url: item.url,
+              error: parseDownloadError(err, item.isInstagram),
+            });
+          }
         }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[BULK-${requestId}] Failed downloading ${item.url}:`, message);
-        failedQueue.push({
-          url: item.url,
-          error: parseDownloadError(err, item.isInstagram),
-        });
-      }
 
-      await options.onProgress?.({
-        completed: zippedFiles.length,
-        failed: failedQueue.length,
-      });
-    });
+        await options.onProgress?.({
+          completed: zippedFiles.length,
+          failed: failedQueue.length,
+        });
+      },
+      { shouldSkipGap: () => budgetExhausted },
+    );
 
     if (zippedFiles.length === 0) {
       return emptyResult(failedQueue);

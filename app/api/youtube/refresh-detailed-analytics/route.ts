@@ -3,6 +3,7 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import { isYouTubeRefreshTarget } from "@/lib/youtube-url";
+import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldown";
 import {
   updateYouTubeSubmissionForScope,
   isYouTubeAllLikeScope,
@@ -161,18 +162,7 @@ export async function POST(request: Request) {
             }
           | undefined) ?? undefined;
       const ytLast = details?.youtube_metrics_last_updated ?? {};
-      if (type === "core") return ytLast.core ?? null;
-      if (type === "traffic") return ytLast.traffic ?? null;
-      if (type === "demographics") return ytLast.demographics ?? null;
-      const timestamps = [
-        ytLast.core,
-        ytLast.traffic,
-        ytLast.demographics,
-      ].filter(Boolean) as string[];
-      return timestamps.reduce<string | null>(
-        (oldest, current) => (!oldest || current < oldest ? current : oldest),
-        null,
-      );
+      return youtubeDetailedCooldownTimestamp(type, ytLast);
     };
 
     const nowMs = Date.now();

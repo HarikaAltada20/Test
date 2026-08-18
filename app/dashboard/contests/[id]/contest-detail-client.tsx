@@ -14,6 +14,7 @@ import {
   getMetricsRefreshCooldownInfoAdmin,
   formatRemainingTime,
 } from "@/lib/constants";
+import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldown";
 import { isMetricsRunStale } from "@/lib/metrics-run-stale";
 import {
   isActiveMetricsRun,
@@ -2809,20 +2810,7 @@ export default function ContestDetailClient({
       ? details?.post_campaign_youtube_metrics_last_updated || {}
       : details?.youtube_metrics_last_updated || {};
 
-    const timestamp =
-      type === "core"
-        ? ytLast.core
-        : type === "traffic"
-          ? ytLast.traffic
-          : type === "demographics"
-            ? ytLast.demographics
-            : ([ytLast.core, ytLast.traffic, ytLast.demographics].filter(
-                Boolean,
-              ) as string[]).reduce<string | null>(
-                (oldest, current) =>
-                  !oldest || current < oldest ? current : oldest,
-                null,
-              );
+    const timestamp = youtubeDetailedCooldownTimestamp(type, ytLast);
 
     return isAdminView
       ? getMetricsRefreshCooldownInfoAdmin(timestamp)

@@ -4,8 +4,25 @@ export const BULK_DOWNLOAD_ITEM_GAP_MS = 550;
 /** Extra retries after the first attempt for transient IG/YT failures. */
 export const BULK_DOWNLOAD_MAX_RETRIES = 2;
 
+/**
+ * Stop starting new videos with ~60s left in a 300s worker so zip+upload can finish.
+ * Remaining items are recorded as skipped instead of killing the whole job.
+ */
+export const VIDEO_DOWNLOAD_WORKER_BUDGET_MS = 240 * 1000;
+
+export const WORKER_TIME_BUDGET_SKIP_MESSAGE =
+  "Skipped: worker time budget reached so remaining videos can be zipped.";
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function isWorkerTimeBudgetExhausted(
+  startedAtMs: number,
+  nowMs: number = Date.now(),
+  budgetMs: number = VIDEO_DOWNLOAD_WORKER_BUDGET_MS,
+): boolean {
+  return nowMs - startedAtMs >= budgetMs;
 }
 
 export function isRetryableDownloadError(error: unknown): boolean {
@@ -55,6 +72,7 @@ export async function withDownloadRetries<T>(
   options?: {
     maxRetries?: number;
     isRetryable?: (error: unknown) => boolean;
+    shouldAbort?: () => boolean;
   },
 ): Promise<T> {
   const maxRetries = options?.maxRetries ?? BULK_DOWNLOAD_MAX_RETRIES;
@@ -62,6 +80,11 @@ export async function withDownloadRetries<T>(
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (options?.shouldAbort?.()) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error(WORKER_TIME_BUDGET_SKIP_MESSAGE);
+    }
     try {
       return await fn();
     } catch (error) {
@@ -82,12 +105,16 @@ export async function withDownloadRetries<T>(
 export async function processSequentialDownloadQueue<T>(
   items: T[],
   worker: (item: T, index: number) => Promise<void>,
-  options?: { gapMs?: number },
+  options?: { gapMs?: number; shouldSkipGap?: () => boolean },
 ): Promise<void> {
   const gapMs = options?.gapMs ?? BULK_DOWNLOAD_ITEM_GAP_MS;
   for (let i = 0; i < items.length; i++) {
     await worker(items[i], i);
-    if (i < items.length - 1 && gapMs > 0) {
+    if (
+      i < items.length - 1 &&
+      gapMs > 0 &&
+      !options?.shouldSkipGap?.()
+    ) {
       await sleep(gapMs);
     }
   }

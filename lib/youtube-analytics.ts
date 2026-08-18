@@ -22,7 +22,8 @@ const GEO_ACTIVITY_METRICS =
 /**
  * Shared rate limiter for YouTube Analytics API calls.
  * Uses Redis when available so all workers/processes share the same 710/min cap.
- * Falls back to local in-memory throttling in environments without Redis.
+ * Fail-fast when the cap is hit — serverless handlers must not sleep until the
+ * next minute.
  */
 const YT_ANALYTICS_RATE_LIMIT = 710;
 const YT_ANALYTICS_RATE_WINDOW_MS = 60_000;
@@ -30,8 +31,17 @@ const YT_ANALYTICS_RATE_REDIS_PREFIX = "youtube_analytics_rate_limit";
 const analyticsCallTimestamps: number[] = [];
 let analyticsRedisClient: Redis | null | undefined;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export class YoutubeAnalyticsRateLimitError extends Error {
+  readonly status = 429;
+  readonly retryAfterMs: number;
+
+  constructor(retryAfterMs: number) {
+    super(
+      `YouTube Analytics rate limit reached; retry after ${Math.max(0, retryAfterMs)}ms`,
+    );
+    this.name = "YoutubeAnalyticsRateLimitError";
+    this.retryAfterMs = retryAfterMs;
+  }
 }
 
 function getAnalyticsRedis(): Redis | null {
@@ -60,56 +70,49 @@ function getAnalyticsRedis(): Redis | null {
   return analyticsRedisClient;
 }
 
-async function waitForLocalAnalyticsRateLimit(): Promise<void> {
-  while (true) {
-    const now = Date.now();
-    while (
-      analyticsCallTimestamps.length > 0 &&
-      analyticsCallTimestamps[0] <= now - YT_ANALYTICS_RATE_WINDOW_MS
-    ) {
-      analyticsCallTimestamps.shift();
-    }
-    if (analyticsCallTimestamps.length < YT_ANALYTICS_RATE_LIMIT) {
-      analyticsCallTimestamps.push(now);
-      return;
-    }
-    const waitMs =
-      analyticsCallTimestamps[0] -
-      (now - YT_ANALYTICS_RATE_WINDOW_MS) +
-      50;
-    await sleep(waitMs);
+function acquireLocalAnalyticsRateLimit(): void {
+  const now = Date.now();
+  while (
+    analyticsCallTimestamps.length > 0 &&
+    analyticsCallTimestamps[0] <= now - YT_ANALYTICS_RATE_WINDOW_MS
+  ) {
+    analyticsCallTimestamps.shift();
   }
+  if (analyticsCallTimestamps.length < YT_ANALYTICS_RATE_LIMIT) {
+    analyticsCallTimestamps.push(now);
+    return;
+  }
+  const retryAfterMs =
+    analyticsCallTimestamps[0] - (now - YT_ANALYTICS_RATE_WINDOW_MS) + 50;
+  throw new YoutubeAnalyticsRateLimitError(retryAfterMs);
 }
 
-async function waitForAnalyticsRateLimit(): Promise<void> {
+async function acquireAnalyticsRateLimit(): Promise<void> {
   const redis = getAnalyticsRedis();
   if (!redis) {
-    await waitForLocalAnalyticsRateLimit();
+    acquireLocalAnalyticsRateLimit();
     return;
   }
 
-  while (true) {
-    const now = Date.now();
-    const bucket = Math.floor(now / YT_ANALYTICS_RATE_WINDOW_MS);
-    const key = `${YT_ANALYTICS_RATE_REDIS_PREFIX}:${bucket}`;
-    const count = await redis.incr(key);
+  const now = Date.now();
+  const bucket = Math.floor(now / YT_ANALYTICS_RATE_WINDOW_MS);
+  const key = `${YT_ANALYTICS_RATE_REDIS_PREFIX}:${bucket}`;
+  const count = await redis.incr(key);
 
-    if (count === 1) {
-      await redis.expire(key, Math.ceil((YT_ANALYTICS_RATE_WINDOW_MS * 2) / 1000));
-    }
-
-    if (count <= YT_ANALYTICS_RATE_LIMIT) {
-      return;
-    }
-
-    await redis.decr(key);
-
-    const waitMs = Math.max(
-      (bucket + 1) * YT_ANALYTICS_RATE_WINDOW_MS - now + 50,
-      50
-    );
-    await sleep(waitMs);
+  if (count === 1) {
+    await redis.expire(key, Math.ceil((YT_ANALYTICS_RATE_WINDOW_MS * 2) / 1000));
   }
+
+  if (count <= YT_ANALYTICS_RATE_LIMIT) {
+    return;
+  }
+
+  await redis.decr(key);
+  const retryAfterMs = Math.max(
+    (bucket + 1) * YT_ANALYTICS_RATE_WINDOW_MS - now + 50,
+    50,
+  );
+  throw new YoutubeAnalyticsRateLimitError(retryAfterMs);
 }
 
 /** Creates an authenticated YouTube Analytics v2 client with per-query rate limiting. */
@@ -120,7 +123,7 @@ function createAnalyticsClient(accessToken: string) {
 
   const originalQuery = client.reports.query.bind(client.reports);
   client.reports.query = (async (...args: Parameters<typeof originalQuery>) => {
-    await waitForAnalyticsRateLimit();
+    await acquireAnalyticsRateLimit();
     return originalQuery(...args);
   }) as unknown as typeof originalQuery;
 

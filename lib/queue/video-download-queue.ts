@@ -19,7 +19,10 @@ export const VIDEO_DOWNLOAD_STORAGE_BUCKET = "video-downloads";
 export const VIDEO_DOWNLOAD_LEGACY_STORAGE_BUCKET = "contest-assets";
 export const VIDEO_DOWNLOAD_LEGACY_STORAGE_PREFIX = "video-downloads";
 /** Don't pull live jobs out of processing while a worker is still updating them. */
-const VIDEO_DOWNLOAD_STALE_PROCESSING_MS = 6 * 60 * 1000;
+export const VIDEO_DOWNLOAD_STALE_PROCESSING_MS = 6 * 60 * 1000;
+/** Cap in-flight jobs (queued + processing) so waiters stay inside the 15-minute UI timeout. */
+export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL = 3;
+export const VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER = 2;
 
 export type VideoDownloadItem = {
   url: string;
@@ -49,6 +52,31 @@ export type VideoDownloadJobStatus = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type VideoDownloadRecoveryAction = "keep-processing" | "requeue" | "drop";
+
+/**
+ * Decide what recovery should do with a job found in the processing list.
+ * ready/failed jobs must be dropped (already LREM'd via RPOP) so they are
+ * not re-downloaded. Live processing jobs stay put until they go stale.
+ */
+export function classifyRecoveredVideoDownloadJob(
+  status: VideoDownloadJobStatus | null,
+  nowMs: number = Date.now(),
+): VideoDownloadRecoveryAction {
+  if (status?.status === "ready" || status?.status === "failed") {
+    return "drop";
+  }
+  const updatedAt = status?.updatedAt ? Date.parse(status.updatedAt) : 0;
+  if (
+    status?.status === "processing" &&
+    Number.isFinite(updatedAt) &&
+    nowMs - updatedAt < VIDEO_DOWNLOAD_STALE_PROCESSING_MS
+  ) {
+    return "keep-processing";
+  }
+  return "requeue";
+}
 
 function statusKey(jobId: string): string {
   return `${REDIS_PREFIX}:status:${jobId}`;
@@ -157,12 +185,52 @@ export async function clearVideoDownloadJobStatus(jobId: string): Promise<void> 
   }
 }
 
+export function videoDownloadActiveJobLimitError(options: {
+  total: number;
+  userCount: number;
+}): { error: string; status: 429 } | null {
+  if (options.total >= VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL) {
+    return {
+      error:
+        "Download queue is busy. Wait for current ZIP jobs to finish, then try again.",
+      status: 429,
+    };
+  }
+  if (options.userCount >= VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER) {
+    return {
+      error:
+        "You already have download jobs in progress. Wait for them to finish before starting another.",
+      status: 429,
+    };
+  }
+  return null;
+}
+
+async function listActiveVideoDownloadJobs(): Promise<VideoDownloadJob[]> {
+  const redis = getRedis();
+  if (!redis) return [];
+  const [queued, processing] = await Promise.all([
+    redis.lrange(REDIS_QUEUE_KEY, 0, 199),
+    redis.lrange(REDIS_PROCESSING_KEY, 0, 199),
+  ]);
+  return [...(queued || []), ...(processing || [])]
+    .map((raw) => parseVideoDownloadJob(toRawString(raw)))
+    .filter((job): job is VideoDownloadJob => job != null);
+}
+
 export async function enqueueVideoDownloadJob(
   job: VideoDownloadJob,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; status?: number }> {
   const redis = getRedis();
   if (!redis) return { error: "Redis not configured" };
   try {
+    const active = await listActiveVideoDownloadJobs();
+    const limitError = videoDownloadActiveJobLimitError({
+      total: active.length,
+      userCount: active.filter((item) => item.userId === job.userId).length,
+    });
+    if (limitError) return limitError;
+
     const normalized: VideoDownloadJob = {
       ...job,
       attempt: Number.isFinite(job.attempt) ? Number(job.attempt) : 0,
@@ -308,20 +376,25 @@ export async function recoverVideoDownloadProcessingToQueue(options?: {
   const maxToMove = Math.max(1, Math.min(options?.maxToMove ?? 25, 200));
   try {
     let moved = 0;
+    let dropped = 0;
     const stillRunningJobs: string[] = [];
     for (let i = 0; i < maxToMove; i++) {
       const raw = await redis.rpop(REDIS_PROCESSING_KEY);
       if (raw === null || raw === undefined) break;
       const str = toRawString(raw);
       const job = parseVideoDownloadJob(str);
-      const status = job ? await getVideoDownloadJobStatus(job.jobId) : null;
-      const updatedAt = status?.updatedAt ? Date.parse(status.updatedAt) : 0;
-      const stillRunning =
-        status?.status === "processing" &&
-        Number.isFinite(updatedAt) &&
-        Date.now() - updatedAt < VIDEO_DOWNLOAD_STALE_PROCESSING_MS;
-      if (stillRunning) {
+      if (!job) {
+        dropped += 1;
+        continue;
+      }
+      const status = await getVideoDownloadJobStatus(job.jobId);
+      const action = classifyRecoveredVideoDownloadJob(status);
+      if (action === "keep-processing") {
         stillRunningJobs.push(str);
+        continue;
+      }
+      if (action === "drop") {
+        dropped += 1;
         continue;
       }
       await redis.lpush(REDIS_QUEUE_KEY, str);
@@ -330,8 +403,10 @@ export async function recoverVideoDownloadProcessingToQueue(options?: {
     for (let i = stillRunningJobs.length - 1; i >= 0; i--) {
       await redis.lpush(REDIS_PROCESSING_KEY, stillRunningJobs[i]);
     }
-    if (moved > 0) {
-      console.warn(`[video-download-queue] Re-queued ${moved} stale job(s) from processing`);
+    if (moved > 0 || dropped > 0) {
+      console.warn(
+        `[video-download-queue] Re-queued ${moved} stale job(s) from processing; dropped ${dropped} finished/invalid job(s)`,
+      );
     }
     return { moved };
   } catch (err) {

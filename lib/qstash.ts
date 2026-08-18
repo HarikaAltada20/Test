@@ -437,6 +437,94 @@ export async function triggerProcessVideoDownloadQueue(
   }
 }
 
+/** Stable QStash schedule id for video-download queue recovery / ZIP cleanup. */
+export const PROCESS_VIDEO_DOWNLOAD_QUEUE_SCHEDULE_ID =
+  "goviral-process-video-download-queue";
+
+/** Every 5 minutes — inside the 15-minute bulk-download UI timeout. */
+export const PROCESS_VIDEO_DOWNLOAD_QUEUE_CRON = "*/5 * * * *";
+
+function getProcessVideoDownloadQueuePublishUrl(baseUrl?: string): string {
+  return `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/process-video-download-queue`;
+}
+
+/**
+ * Upsert the recurring QStash schedule (every 5 min) so stuck jobs and expired
+ * ZIPs are recovered without a frequent Vercel cron. Idempotent via scheduleId.
+ */
+export async function ensureProcessVideoDownloadQueueSchedule(
+  baseUrl?: string,
+): Promise<{ scheduleId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+
+  const destination = getProcessVideoDownloadQueuePublishUrl(baseUrl);
+  if (isLoopbackUrl(destination)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+
+  try {
+    const res = await client.schedules.create({
+      destination,
+      cron: PROCESS_VIDEO_DOWNLOAD_QUEUE_CRON,
+      scheduleId: PROCESS_VIDEO_DOWNLOAD_QUEUE_SCHEDULE_ID,
+      method: "POST",
+      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        ...getQStashAuthHeaders(),
+      },
+      retries: 2,
+      label: "process-video-download-queue",
+    });
+    return { scheduleId: res.scheduleId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] ensureProcessVideoDownloadQueueSchedule failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+let ensureVideoDownloadSchedulePromise: Promise<void> | null = null;
+
+/**
+ * Fire-and-forget: create/update the 5-min recovery schedule once per process.
+ * Call from enqueue/kick so the schedule exists without relying on Vercel Cron.
+ */
+export function ensureProcessVideoDownloadQueueScheduleOnce(
+  baseUrl?: string,
+): void {
+  if (!isQStashEnabled()) return;
+  if (ensureVideoDownloadSchedulePromise) return;
+  ensureVideoDownloadSchedulePromise = ensureProcessVideoDownloadQueueSchedule(
+    baseUrl,
+  )
+    .then((res) => {
+      if (res.scheduleId) {
+        console.log(
+          "[qstash] process-video-download-queue schedule ready:",
+          res.scheduleId,
+        );
+      } else if (res.error) {
+        ensureVideoDownloadSchedulePromise = null;
+        console.warn(
+          "[qstash] process-video-download-queue schedule not ready:",
+          res.error,
+        );
+      }
+    })
+    .catch((err) => {
+      ensureVideoDownloadSchedulePromise = null;
+      console.warn(
+        "[qstash] process-video-download-queue schedule ensure error:",
+        err,
+      );
+    });
+}
+
 function getProcessAdminNotificationDeliveryQueueUrl(): string {
   return `${getQStashPublishBaseUrl()}/api/cron/process-admin-notification-delivery-queue`;
 }
