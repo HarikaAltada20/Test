@@ -6,7 +6,7 @@ import {
 export type { VideoFilenamePattern };
 
 /** Max videos per ZIP job (must match server `MAX_BULK_VIDEO_DOWNLOADS`). */
-export const MAX_BULK_VIDEO_DOWNLOADS = 20;
+export const MAX_BULK_VIDEO_DOWNLOADS = 10;
 
 /** Pause between ZIP downloads so browsers allow multiple automatic downloads. */
 const BULK_CHUNK_DOWNLOAD_GAP_MS = 700;

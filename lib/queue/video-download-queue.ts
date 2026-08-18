@@ -13,7 +13,11 @@ const REDIS_PROCESSING_KEY = `${REDIS_PREFIX}:processing`;
 const REDIS_DEAD_LETTER_KEY = `${REDIS_PREFIX}:dead_letter`;
 const MAX_RETRY_ATTEMPTS = 3;
 export const VIDEO_DOWNLOAD_JOB_TTL_SECONDS = 2 * 60 * 60;
-export const VIDEO_DOWNLOAD_STORAGE_BUCKET = "contest-assets";
+/** Private bucket. Do not store ZIPs in public contest-assets. */
+export const VIDEO_DOWNLOAD_STORAGE_BUCKET = "video-downloads";
+/** Pre-fix path on the public contest-assets bucket; cleanup still removes these. */
+export const VIDEO_DOWNLOAD_LEGACY_STORAGE_BUCKET = "contest-assets";
+export const VIDEO_DOWNLOAD_LEGACY_STORAGE_PREFIX = "video-downloads";
 /** Don't pull live jobs out of processing while a worker is still updating them. */
 const VIDEO_DOWNLOAD_STALE_PROCESSING_MS = 6 * 60 * 1000;
 
@@ -74,14 +78,19 @@ export function isVideoDownloadQueueEnabled(): boolean {
 }
 
 export function videoDownloadStoragePath(userId: string, jobId: string): string {
-  return `video-downloads/${userId}/${jobId}.zip`;
+  return `${userId}/${jobId}.zip`;
 }
 
 export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
-  const parsed =
-    typeof raw === "string"
-      ? (JSON.parse(raw) as VideoDownloadJob)
-      : (raw as VideoDownloadJob);
+  let parsed: VideoDownloadJob;
+  try {
+    parsed =
+      typeof raw === "string"
+        ? (JSON.parse(raw) as VideoDownloadJob)
+        : (raw as VideoDownloadJob);
+  } catch {
+    return null;
+  }
   if (!parsed?.jobId || !parsed?.userId || !Array.isArray(parsed.items)) {
     return null;
   }

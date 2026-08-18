@@ -20,13 +20,7 @@ import {
   type VideoDownloadItem,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
-import {
-  getQStashPublishBaseUrl,
-  isLoopbackUrl,
-  isQStashEnabled,
-  resolveLocalAwareBaseUrl,
-  triggerProcessVideoDownloadQueue,
-} from "@/lib/qstash";
+import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
 
 export const maxDuration = 300;
 
@@ -37,33 +31,6 @@ function isSupportedVideoUrl(
   const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
   if (!isInstagram && !isYouTube) return { ok: false };
   return { ok: true, isInstagram };
-}
-
-function kickProcessor(request: Request) {
-  const qstashUrl = getQStashPublishBaseUrl(request);
-  const localUrl = resolveLocalAwareBaseUrl(request);
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (process.env.CRON_SECRET) {
-    headers.Authorization = `Bearer ${process.env.CRON_SECRET}`;
-  }
-  const fallback = () =>
-    fetch(`${localUrl}/api/cron/process-video-download-queue`, {
-      method: "POST",
-      headers,
-      body: "{}",
-    }).catch((e) =>
-      console.error("[bulk-download] Direct processor trigger failed:", e),
-    );
-
-  if (isQStashEnabled() && !isLoopbackUrl(qstashUrl)) {
-    triggerProcessVideoDownloadQueue(qstashUrl)
-      .then((res) => {
-        if (res?.error) void fallback();
-      })
-      .catch(() => fallback());
-    return;
-  }
-  void fallback();
 }
 
 export async function POST(request: Request) {
@@ -264,7 +231,7 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
-      kickProcessor(request);
+      await kickProcessVideoDownloadQueue(request);
       return NextResponse.json({
         queued: true,
         jobId,

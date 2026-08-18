@@ -66,7 +66,8 @@ export async function GET(request: Request) {
   }
 
   // Leave Redis status and the storage object in place so a dropped browser
-  // download can retry. Status expires via VIDEO_DOWNLOAD_JOB_TTL_SECONDS.
+  // download can retry. Status expires via VIDEO_DOWNLOAD_JOB_TTL_SECONDS;
+  // the ZIP is deleted by the process-video-download-queue cron cleanup.
   return NextResponse.json({
     url: signed.data.signedUrl,
     filename,

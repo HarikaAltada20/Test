@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   parseVideoDownloadJob,
+  VIDEO_DOWNLOAD_STORAGE_BUCKET,
   videoDownloadStoragePath,
 } from "./video-download-queue";
 
@@ -41,10 +42,15 @@ describe("video download redis job payload", () => {
     );
   });
 
-  it("builds a per-user storage path", () => {
+  it("returns null for invalid JSON instead of throwing", () => {
+    assert.equal(parseVideoDownloadJob("{not-json"), null);
+  });
+
+  it("stores ZIPs in the private bucket under a per-user path", () => {
+    assert.equal(VIDEO_DOWNLOAD_STORAGE_BUCKET, "video-downloads");
     assert.equal(
       videoDownloadStoragePath("user-1", "job-9"),
-      "video-downloads/user-1/job-9.zip",
+      "user-1/job-9.zip",
     );
   });
 });

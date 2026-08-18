@@ -1,18 +1,12 @@
 /**
  * Process Instagram/YouTube bulk video download jobs from Redis.
- * Triggered by QStash after enqueue, Vercel cron recovery, or a local CRON_SECRET POST.
+ * Triggered by QStash after enqueue, Vercel cron recovery (* * * * *),
+ * or a local CRON_SECRET POST.
  */
 
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
-import {
-  authorizeProcessVideoDownloadQueue,
-  getQStashPublishBaseUrl,
-  isLoopbackUrl,
-  isQStashEnabled,
-  resolveLocalAwareBaseUrl,
-  triggerProcessVideoDownloadQueue,
-} from "@/lib/qstash";
+import { authorizeProcessVideoDownloadQueue } from "@/lib/qstash";
 import {
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
@@ -26,38 +20,16 @@ import {
   type VideoDownloadJobStatus,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
+import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
+import {
+  cleanupExpiredVideoDownloadZips,
+  ensureVideoDownloadBucket,
+} from "@/lib/video-download-storage";
 import { isRetryableDownloadError } from "@/lib/video-download-queue";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
-
-function kickNext(baseUrl: string, localUrl: string, delaySeconds = 2) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (process.env.CRON_SECRET) {
-    headers.Authorization = `Bearer ${process.env.CRON_SECRET}`;
-  }
-  const fallback = () =>
-    fetch(`${localUrl}/api/cron/process-video-download-queue`, {
-      method: "POST",
-      headers,
-      body: "{}",
-    }).catch((e) =>
-      console.error("[process-video-download-queue] Self-trigger fallback failed:", e),
-    );
-
-  if (isQStashEnabled() && !isLoopbackUrl(baseUrl)) {
-    triggerProcessVideoDownloadQueue(baseUrl, { delaySeconds })
-      .then((res) => {
-        if (res?.error) void fallback();
-      })
-      .catch(() => fallback());
-    return;
-  }
-  void fallback();
-}
 
 export async function GET(request: Request) {
   const authorized = await authorizeProcessVideoDownloadQueue(request, "");
@@ -81,9 +53,6 @@ export async function POST(request: Request) {
 }
 
 async function handleRequest(request: Request): Promise<NextResponse> {
-  const baseUrl = getQStashPublishBaseUrl(request);
-  const localUrl = resolveLocalAwareBaseUrl(request);
-
   if (!isVideoDownloadQueueEnabled()) {
     return NextResponse.json(
       { processed: 0, message: "Video download queue not configured" },
@@ -103,7 +72,12 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     }
   }
   if (!popped) {
-    return NextResponse.json({ processed: 0, message: "Queue empty" });
+    const cleaned = await cleanupExpiredVideoDownloadZips({ maxDeletes: 40 });
+    return NextResponse.json({
+      processed: 0,
+      message: "Queue empty",
+      cleaned: cleaned.deleted,
+    });
   }
 
   const { job, raw: rawJobString } = popped;
@@ -162,7 +136,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       console.log(
         `[process-video-download-queue] Job ${job.jobId} finished with 0 downloads; not retrying`,
       );
-      kickNext(baseUrl, localUrl, 2);
+      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
       return NextResponse.json({
         processed: 1,
         jobId: job.jobId,
@@ -171,9 +145,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       });
     }
 
-    // Always persist to shared storage. /tmp is per-instance on Vercel, so a
-    // later /file request on a different lambda would 410 a local ZIP.
+    // Always persist to shared private storage. /tmp is per-instance on Vercel,
+    // so a later /file request on a different lambda would 410 a local ZIP.
     const supabase = createAdminClient();
+    await ensureVideoDownloadBucket();
     const storagePath = videoDownloadStoragePath(job.userId, job.jobId);
     const zipBytes = await readFile(result.zipPath);
     const upload = await supabase.storage
@@ -203,7 +178,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
 
     await removeVideoDownloadFromProcessing(rawJobString);
     await cleanupTemp();
-    kickNext(baseUrl, localUrl, 2);
+    await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
 
     return NextResponse.json({
       processed: 1,
@@ -228,7 +203,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         completed: 0,
         failed: job.items.length,
       });
-      kickNext(baseUrl, localUrl, 2);
+      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
       return NextResponse.json({
         processed: 1,
         jobId: job.jobId,
@@ -241,7 +216,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       reason: message,
     });
     if (retry.requeued) {
-      kickNext(baseUrl, localUrl, 5);
+      await kickProcessVideoDownloadQueue(request, { delaySeconds: 5 });
     } else if (!retry.deadLettered) {
       await removeVideoDownloadFromProcessing(rawJobString);
       await patchStatus({
