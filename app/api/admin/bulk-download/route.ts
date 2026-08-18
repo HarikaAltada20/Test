@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { readFile } from "fs/promises";
 import {
   isAdminDownloadUser,
   MAX_BULK_VIDEO_DOWNLOADS,
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
     if (submissionIdList.length > MAX_BULK_VIDEO_DOWNLOADS) {
       return NextResponse.json(
         {
-          error: `Too many submissions. Select at most ${MAX_BULK_VIDEO_DOWNLOADS} videos for one ZIP download.`,
+          error: `Too many submissions. Select at most ${MAX_BULK_VIDEO_DOWNLOADS} videos per ZIP download.`,
           max: MAX_BULK_VIDEO_DOWNLOADS,
         },
         { status: 400 },
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
     if (urlList.length > MAX_BULK_VIDEO_DOWNLOADS) {
       return NextResponse.json(
         {
-          error: `Too many URLs. Provide at most ${MAX_BULK_VIDEO_DOWNLOADS} URLs for one ZIP download.`,
+          error: `Too many URLs. Provide at most ${MAX_BULK_VIDEO_DOWNLOADS} URLs per ZIP download.`,
           max: MAX_BULK_VIDEO_DOWNLOADS,
         },
         { status: 400 },
@@ -276,27 +277,32 @@ export async function POST(request: Request) {
       requestId,
     });
 
-    if (result.downloaded === 0) {
-      return NextResponse.json(
-        {
-          error: result.failures[0]?.error || "No files could be downloaded",
-          completed: 0,
-          failed: result.failures.length,
-        },
-        { status: 422 },
-      );
-    }
+    try {
+      if (result.downloaded === 0 || !result.zipPath) {
+        return NextResponse.json(
+          {
+            error: result.failures[0]?.error || "No files could be downloaded",
+            completed: 0,
+            failed: result.failures.length,
+          },
+          { status: 422 },
+        );
+      }
 
-    return new NextResponse(new Uint8Array(result.zipBuffer), {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${zipFilename}"`,
-        "Content-Length": String(result.zipBuffer.byteLength),
-        "Cache-Control": "no-cache",
-        "X-Bulk-Downloaded": String(result.downloaded),
-        "X-Bulk-Failed": String(result.failures.length),
-      },
-    });
+      const zipBuffer = await readFile(result.zipPath);
+      return new NextResponse(new Uint8Array(zipBuffer), {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="${zipFilename}"`,
+          "Content-Length": String(zipBuffer.byteLength),
+          "Cache-Control": "no-cache",
+          "X-Bulk-Downloaded": String(result.downloaded),
+          "X-Bulk-Failed": String(result.failures.length),
+        },
+      });
+    } finally {
+      await result.cleanup();
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to initiate bulk download";
     console.error(`[BULK-${requestId}] Fatal bulk downloader error:`, error);

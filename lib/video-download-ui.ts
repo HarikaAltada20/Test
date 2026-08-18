@@ -5,11 +5,13 @@ import {
 
 export type { VideoFilenamePattern };
 
-/** Max selected videos per bulk ZIP request (must match server `MAX_BULK_VIDEO_DOWNLOADS`). */
-export const MAX_BULK_VIDEO_DOWNLOADS = 200;
+/** Max videos per ZIP job (must match server `MAX_BULK_VIDEO_DOWNLOADS`). */
+export const MAX_BULK_VIDEO_DOWNLOADS = 20;
 
+/** Pause between ZIP downloads so browsers allow multiple automatic downloads. */
+const BULK_CHUNK_DOWNLOAD_GAP_MS = 700;
 const QUEUED_DOWNLOAD_POLL_MS = 2000;
-const QUEUED_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+const QUEUED_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
  * Client/server helper: whether a submission can be downloaded as IG/YT video.
@@ -60,6 +62,7 @@ function triggerUrlDownload(url: string, filename: string): void {
   a.href = url;
   a.download = filename;
   a.rel = "noopener";
+  a.target = "_blank";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -137,6 +140,7 @@ async function waitForQueuedZipJob(
       completed?: number;
       failed?: number;
       total?: number;
+      errors?: string[];
     }>(`/api/admin/bulk-download/status?jobId=${encodeURIComponent(jobId)}`);
     if (!statusRes.ok) {
       throw new Error(statusRes.data.error || "Failed to check download queue status.");
@@ -153,22 +157,24 @@ async function waitForQueuedZipJob(
     });
 
     if (statusRes.data.status === "ready") {
-      const fileResponse = await fetch(
-        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}&download=1`,
-        { credentials: "same-origin" },
+      const fileRes = await fetchJsonWithRetry<{
+        error?: string;
+        url?: string;
+        filename?: string;
+      }>(
+        `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}`,
       );
-      if (!fileResponse.ok) {
-        if (fileResponse.status === 409) {
+      if (!fileRes.ok || !fileRes.data.url) {
+        if (fileRes.status === 409) {
           await sleep(QUEUED_DOWNLOAD_POLL_MS);
           continue;
         }
-        const payload = (await fileResponse.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(payload.error || "Failed to download queued ZIP.");
+        throw new Error(fileRes.data.error || "Failed to download queued ZIP.");
       }
-      const blob = await fileResponse.blob();
-      triggerBrowserDownload(blob, fileName);
+      triggerUrlDownload(
+        fileRes.data.url,
+        fileRes.data.filename || fileName,
+      );
       return {
         downloaded: true,
         completed: last.completed,
@@ -178,7 +184,8 @@ async function waitForQueuedZipJob(
     }
 
     if (statusRes.data.status === "failed") {
-      return { downloaded: false, ...last };
+      const firstError = statusRes.data.errors?.[0];
+      throw new Error(firstError || "Queued video download failed.");
     }
 
     await sleep(QUEUED_DOWNLOAD_POLL_MS);
@@ -186,21 +193,24 @@ async function waitForQueuedZipJob(
   throw new Error("Timed out waiting for queued video download.");
 }
 
-/**
- * Downloads the selected submissions into a single ZIP.
- * When Redis is configured, the job is enqueued and polled until that ZIP is ready.
- */
-export async function downloadSubmissionVideosInChunks(options: {
+async function downloadOneZipChunk(options: {
   submissionIds: string[];
   fileNamePrefix: string;
-  namingPattern?: VideoFilenamePattern;
+  namingPattern: VideoFilenamePattern;
+  chunkIndex: number;
+  totalChunks: number;
+  totalVideos: number;
   onProgress?: (info: BulkDownloadProgressInfo) => void;
-}): Promise<ChunkedBulkDownloadResult> {
-  const namingPattern = parseVideoFilenamePattern(options.namingPattern);
-  const ids = options.submissionIds.filter(Boolean);
+}): Promise<{
+  successCount: number;
+  failedCount: number;
+  downloaded: boolean;
+  errors: string[];
+}> {
   const errors: string[] = [];
+  const chunk = options.submissionIds;
 
-  const emitProgress = (info: {
+  const emit = (info: {
     successCount: number;
     failedCount: number;
     queuedCompleted?: number;
@@ -209,10 +219,10 @@ export async function downloadSubmissionVideosInChunks(options: {
     queueStatus?: string;
   }) => {
     options.onProgress?.({
-      chunkIndex: 1,
-      totalChunks: 1,
-      chunkSize: ids.length,
-      totalVideos: ids.length,
+      chunkIndex: options.chunkIndex,
+      totalChunks: options.totalChunks,
+      chunkSize: chunk.length,
+      totalVideos: options.totalVideos,
       successCount: info.successCount,
       failedCount: info.failedCount,
       queuedCompleted: info.queuedCompleted,
@@ -222,92 +232,141 @@ export async function downloadSubmissionVideosInChunks(options: {
     });
   };
 
-  emitProgress({ successCount: 0, failedCount: 0 });
+  const response = await fetch("/api/admin/bulk-download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      submissionIds: chunk,
+      namingPattern: options.namingPattern,
+      zipFilename: `${options.fileNamePrefix}.zip`,
+    }),
+  });
 
-  try {
-    const response = await fetch("/api/admin/bulk-download", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionIds: ids,
-          namingPattern,
-          zipFilename: `${options.fileNamePrefix}.zip`,
-        }),
-    });
-
-    const contentType = response.headers.get("content-type");
-    if (!response.ok || contentType?.includes("application/json")) {
-      const payload = await response.json().catch(() => ({}));
-      if (response.ok && payload.queued && typeof payload.jobId === "string") {
-        const fileName = `${options.fileNamePrefix}_${Date.now()}.zip`;
-        const queued = await waitForQueuedZipJob(
-          payload.jobId,
-          fileName,
-          (queueInfo) => {
-            emitProgress({
-              queuedCompleted: queueInfo.completed,
-              queuedFailed: queueInfo.failed,
-              queuedTotal: queueInfo.total,
-              queueStatus: queueInfo.status,
-              successCount: queueInfo.completed,
-              failedCount: queueInfo.failed,
-            });
-          },
-        );
-        return {
-          totalVideos: ids.length,
-          totalChunks: 1,
-          succeededChunks: queued.downloaded ? 1 : 0,
-          failedChunks: 0,
-          successCount: queued.completed,
-          failedCount: Math.max(0, ids.length - queued.completed),
-          errors,
-        };
-      }
-      if (typeof payload.failed === "number") {
-        const successCount = Number(payload.completed) || 0;
-        const failedCount = Number(payload.failed) || ids.length;
-        emitProgress({ successCount, failedCount });
-        return {
-          totalVideos: ids.length,
-          totalChunks: 1,
-          succeededChunks: 0,
-          failedChunks: 0,
-          successCount,
-          failedCount: Math.max(failedCount, ids.length - successCount),
-          errors: payload.error ? [String(payload.error)] : errors,
-        };
-      }
-      throw new Error(payload.error || "Failed to download ZIP archive.");
+  const contentType = response.headers.get("content-type");
+  if (!response.ok || contentType?.includes("application/json")) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload.queued && typeof payload.jobId === "string") {
+      const fileName = `${options.fileNamePrefix}_${Date.now()}.zip`;
+      const queued = await waitForQueuedZipJob(
+        payload.jobId,
+        fileName,
+        (queueInfo) => {
+          emit({
+            queuedCompleted: queueInfo.completed,
+            queuedFailed: queueInfo.failed,
+            queuedTotal: queueInfo.total,
+            queueStatus: queueInfo.status,
+            successCount: queueInfo.completed,
+            failedCount: queueInfo.failed,
+          });
+        },
+      );
+      return {
+        successCount: queued.completed,
+        failedCount: Math.max(0, chunk.length - queued.completed),
+        downloaded: queued.downloaded,
+        errors,
+      };
     }
+    if (typeof payload.failed === "number") {
+      const successCount = Number(payload.completed) || 0;
+      const failedCount = Number(payload.failed) || chunk.length;
+      emit({ successCount, failedCount });
+      return {
+        successCount,
+        failedCount: Math.max(failedCount, chunk.length - successCount),
+        downloaded: false,
+        errors: payload.error ? [String(payload.error)] : errors,
+      };
+    }
+    throw new Error(payload.error || "Failed to download ZIP archive.");
+  }
 
-    const blob = await response.blob();
-    const successCount = Number(response.headers.get("X-Bulk-Downloaded")) || ids.length;
-    const failedCount = Number(response.headers.get("X-Bulk-Failed")) || 0;
-    triggerBrowserDownload(blob, `${options.fileNamePrefix}_${Date.now()}.zip`);
-    emitProgress({ successCount, failedCount });
-    return {
+  const blob = await response.blob();
+  const successCount = Number(response.headers.get("X-Bulk-Downloaded")) || chunk.length;
+  const failedCount = Number(response.headers.get("X-Bulk-Failed")) || 0;
+  triggerBrowserDownload(blob, `${options.fileNamePrefix}_${Date.now()}.zip`);
+  emit({ successCount, failedCount });
+  return {
+    successCount,
+    failedCount,
+    downloaded: true,
+    errors,
+  };
+}
+
+/**
+ * Downloads selected submissions as ZIP batches of at most MAX_BULK_VIDEO_DOWNLOADS.
+ * When Redis is configured, each batch is enqueued and the browser is sent a
+ * signed storage URL (the ZIP is not proxied through Next.js).
+ */
+export async function downloadSubmissionVideosInChunks(options: {
+  submissionIds: string[];
+  fileNamePrefix: string;
+  namingPattern?: VideoFilenamePattern;
+  onProgress?: (info: BulkDownloadProgressInfo) => void;
+}): Promise<ChunkedBulkDownloadResult> {
+  const namingPattern = parseVideoFilenamePattern(options.namingPattern);
+  const ids = options.submissionIds.filter(Boolean);
+  const chunks = chunkArray(ids, MAX_BULK_VIDEO_DOWNLOADS);
+  const errors: string[] = [];
+  let succeededChunks = 0;
+  let successCount = 0;
+  let failedCount = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const partSuffix =
+      chunks.length > 1 ? `_part_${i + 1}_of_${chunks.length}` : "";
+
+    options.onProgress?.({
+      chunkIndex: i + 1,
+      totalChunks: chunks.length,
+      chunkSize: chunk.length,
       totalVideos: ids.length,
-      totalChunks: 1,
-      succeededChunks: 1,
-      failedChunks: 0,
       successCount,
       failedCount,
-      errors,
-    };
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Bulk download failed";
-    errors.push(message);
-    emitProgress({ successCount: 0, failedCount: 0 });
-    return {
-      totalVideos: ids.length,
-      totalChunks: 1,
-      succeededChunks: 0,
-      failedChunks: 1,
-      successCount: 0,
-      failedCount: 0,
-      errors,
-    };
+    });
+
+    try {
+      const result = await downloadOneZipChunk({
+        submissionIds: chunk,
+        fileNamePrefix: `${options.fileNamePrefix}${partSuffix}`,
+        namingPattern,
+        chunkIndex: i + 1,
+        totalChunks: chunks.length,
+        totalVideos: ids.length,
+        onProgress: (info) => {
+          options.onProgress?.({
+            ...info,
+            successCount: successCount + info.successCount,
+            failedCount: failedCount + info.failedCount,
+          });
+        },
+      });
+      successCount += result.successCount;
+      failedCount += result.failedCount;
+      errors.push(...result.errors);
+      if (result.downloaded) succeededChunks += 1;
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : `Batch ${i + 1} failed`;
+      errors.push(message);
+      failedCount += chunk.length;
+    }
+
+    if (i < chunks.length - 1) {
+      await sleep(BULK_CHUNK_DOWNLOAD_GAP_MS);
+    }
   }
+
+  return {
+    totalVideos: ids.length,
+    totalChunks: chunks.length,
+    succeededChunks,
+    failedChunks: chunks.length - succeededChunks,
+    successCount,
+    failedCount,
+    errors,
+  };
 }

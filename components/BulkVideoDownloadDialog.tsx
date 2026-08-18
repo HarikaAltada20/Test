@@ -21,6 +21,7 @@ import {
   isVideoFilenamePattern,
   type VideoFilenamePattern,
 } from "@/lib/video-download-filename";
+import { MAX_BULK_VIDEO_DOWNLOADS } from "@/lib/video-download-ui";
 import { BulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgress";
 import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 
@@ -75,6 +76,10 @@ export function BulkVideoDownloadDialog({
   const queueHint = useMemo(() => {
     if (videoCount === 1) {
       return "1 selected video will download into a ZIP folder.";
+    }
+    if (videoCount > MAX_BULK_VIDEO_DOWNLOADS) {
+      const zipCount = Math.ceil(videoCount / MAX_BULK_VIDEO_DOWNLOADS);
+      return `${videoCount} selected videos will download as ${zipCount} ZIP files of up to ${MAX_BULK_VIDEO_DOWNLOADS} videos each.`;
     }
     return `${videoCount} selected videos will download into one ZIP folder.`;
   }, [videoCount]);

@@ -4,9 +4,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { readFile } from "fs/promises";
 import {
   authorizeProcessVideoDownloadQueue,
   getQStashPublishBaseUrl,
@@ -24,6 +22,7 @@ import {
   retryOrDeadLetterVideoDownload,
   setVideoDownloadJobStatus,
   VIDEO_DOWNLOAD_STORAGE_BUCKET,
+  videoDownloadStoragePath,
   type VideoDownloadJobStatus,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
@@ -133,6 +132,8 @@ async function handleRequest(request: Request): Promise<NextResponse> {
 
   await patchStatus({ status: "processing" });
 
+  let cleanupTemp = async () => {};
+
   try {
     const result = await executeQueuedVideoDownloads({
       items: job.items,
@@ -141,8 +142,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         await patchStatus({ status: "processing", completed, failed });
       },
     });
+    cleanupTemp = result.cleanup;
 
-    if (result.downloaded === 0) {
+    if (result.downloaded === 0 || !result.zipPath) {
       await setVideoDownloadJobStatus({
         jobId: job.jobId,
         userId: job.userId,
@@ -156,6 +158,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         updatedAt: now(),
       });
       await removeVideoDownloadFromProcessing(rawJobString);
+      await cleanupTemp();
       console.log(
         `[process-video-download-queue] Job ${job.jobId} finished with 0 downloads; not retrying`,
       );
@@ -168,29 +171,19 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       });
     }
 
-    // Store ZIP locally to avoid Supabase Storage object size limits.
-    // Fall back to Supabase upload only for small files if local write fails.
-    const localDir = join(tmpdir(), "bulk_zip_ready");
-    await mkdir(localDir, { recursive: true });
-    const localZipPath = join(localDir, `${job.jobId}.zip`);
-    let storagePath: string | undefined;
-
-    try {
-      await writeFile(localZipPath, result.zipBuffer);
-    } catch (localErr) {
-      console.error("[process-video-download-queue] Local write failed, trying Supabase:", localErr);
-      const supabase = createAdminClient();
-      const remotePath = `video-downloads/${job.userId}/${job.jobId}.zip`;
-      const upload = await supabase.storage
-        .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-        .upload(remotePath, result.zipBuffer, {
-          contentType: "application/zip",
-          upsert: true,
-        });
-      if (upload.error) {
-        throw new Error(upload.error.message || "Failed to store ZIP archive");
-      }
-      storagePath = remotePath;
+    // Always persist to shared storage. /tmp is per-instance on Vercel, so a
+    // later /file request on a different lambda would 410 a local ZIP.
+    const supabase = createAdminClient();
+    const storagePath = videoDownloadStoragePath(job.userId, job.jobId);
+    const zipBytes = await readFile(result.zipPath);
+    const upload = await supabase.storage
+      .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+      .upload(storagePath, zipBytes, {
+        contentType: "application/zip",
+        upsert: true,
+      });
+    if (upload.error) {
+      throw new Error(upload.error.message || "Failed to store ZIP archive");
     }
 
     await setVideoDownloadJobStatus({
@@ -202,14 +195,14 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       failed: result.failures.length,
       errors: result.failures.map((f) => f.error),
       storagePath,
-      localZipPath: storagePath ? undefined : localZipPath,
-      zipBytes: result.zipBuffer.byteLength,
+      zipBytes: result.zipBytes,
       zipFilename: existing?.zipFilename || job.zipFilename,
       createdAt: existing?.createdAt || now(),
       updatedAt: now(),
     });
 
     await removeVideoDownloadFromProcessing(rawJobString);
+    await cleanupTemp();
     kickNext(baseUrl, localUrl, 2);
 
     return NextResponse.json({
@@ -221,6 +214,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Video download failed";
     console.error(`[process-video-download-queue] Job ${job.jobId} failed:`, message);
+    await cleanupTemp();
     const messageLower = message.toLowerCase();
     const retryable =
       isRetryableDownloadError(message) ||

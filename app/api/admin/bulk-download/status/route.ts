@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAdminOrBrandDownloadAccess } from "@/lib/video-download-auth";
 import {
-  clearVideoDownloadJobStatus,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
 } from "@/lib/queue/video-download-queue";
@@ -43,10 +42,6 @@ export async function GET(request: Request) {
     errors: status.errors.slice(0, 5),
     zipBytes: status.zipBytes ?? null,
   };
-
-  if (status.status === "failed") {
-    await clearVideoDownloadJobStatus(jobId);
-  }
 
   return NextResponse.json(payload);
 }

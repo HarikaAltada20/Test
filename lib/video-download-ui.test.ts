@@ -9,15 +9,15 @@ import {
 
 describe("video-download-ui", () => {
   it("exposes a bounded bulk download limit", () => {
-    assert.equal(MAX_BULK_VIDEO_DOWNLOADS, 200);
+    assert.equal(MAX_BULK_VIDEO_DOWNLOADS, 20);
   });
 
-  it("chunks arrays by a given size", () => {
-    const ids = Array.from({ length: 25 }, (_, i) => `id-${i + 1}`);
-    const chunks = chunkArray(ids, 10);
+  it("chunks large selections into batches of 20", () => {
+    const ids = Array.from({ length: 45 }, (_, i) => `id-${i + 1}`);
+    const chunks = chunkArray(ids, MAX_BULK_VIDEO_DOWNLOADS);
     assert.equal(chunks.length, 3);
-    assert.equal(chunks[0].length, 10);
-    assert.equal(chunks[1].length, 10);
+    assert.equal(chunks[0].length, 20);
+    assert.equal(chunks[1].length, 20);
     assert.equal(chunks[2].length, 5);
   });
 

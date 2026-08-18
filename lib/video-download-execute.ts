@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync } from "fs";
-import { mkdir, readFile, rm, stat } from "fs/promises";
+import { mkdir, rm, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
@@ -71,9 +71,11 @@ async function buildZipFile(
 }
 
 export type ExecuteVideoDownloadResult = {
-  zipBuffer: Buffer;
+  zipPath: string | null;
+  zipBytes: number;
   downloaded: number;
   failures: { url: string; error: string }[];
+  cleanup: () => Promise<void>;
 };
 
 export async function executeQueuedVideoDownloads(options: {
@@ -84,6 +86,23 @@ export async function executeQueuedVideoDownloads(options: {
   const requestId = options.requestId || randomUUID().substring(0, 8);
   const tempDir = join(tmpdir(), `bulk_${randomUUID()}`);
   await mkdir(tempDir, { recursive: true });
+
+  let cleanedUp = false;
+  const cleanup = async () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  };
+
+  const emptyResult = (
+    failures: { url: string; error: string }[],
+  ): ExecuteVideoDownloadResult => ({
+    zipPath: null,
+    zipBytes: 0,
+    downloaded: 0,
+    failures,
+    cleanup,
+  });
 
   const zippedFiles: { path: string; name: string }[] = [];
   const failedQueue: { url: string; error: string }[] = [];
@@ -153,11 +172,7 @@ export async function executeQueuedVideoDownloads(options: {
     });
 
     if (zippedFiles.length === 0) {
-      return {
-        zipBuffer: Buffer.alloc(0),
-        downloaded: 0,
-        failures: failedQueue,
-      };
+      return emptyResult(failedQueue);
     }
 
     const failedReport =
@@ -169,14 +184,21 @@ export async function executeQueuedVideoDownloads(options: {
 
     const zipPath = join(tempDir, `bulk_${requestId}.zip`);
     await buildZipFile(zipPath, zippedFiles, failedReport);
-    const zipBuffer = await readFile(zipPath);
+    // Drop source videos so peak disk is the ZIP, not ZIP + every MP4.
+    await Promise.all(
+      zippedFiles.map((file) => rm(file.path, { force: true }).catch(() => {})),
+    );
+    const zipStat = await stat(zipPath);
 
     return {
-      zipBuffer,
+      zipPath,
+      zipBytes: zipStat.size,
       downloaded: zippedFiles.length,
       failures: failedQueue,
+      cleanup,
     };
-  } finally {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  } catch (error) {
+    await cleanup();
+    throw error;
   }
 }
