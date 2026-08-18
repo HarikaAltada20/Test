@@ -25,6 +25,7 @@ import {
   requireVideoDownloadRemainderRequeued,
   retryOrDeadLetterVideoDownload,
   requeueVideoDownloadRemainder,
+  resolveVideoDownloadTerminalStatus,
   setVideoDownloadJobStatus,
   videoDownloadStoragePath,
   type VideoDownloadJob,
@@ -109,6 +110,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
   const existing = await getVideoDownloadJobStatus(job.jobId);
   const completedBase = job.completedSoFar ?? existing?.completed ?? 0;
   const failedBase = job.failedSoFar ?? existing?.failed ?? 0;
+  const usedBytes = job.zipBytesSoFar ?? existing?.zipBytes ?? 0;
   const originalTotal =
     existing?.total || job.originalTotal || job.items.length;
   const now = () => new Date().toISOString();
@@ -132,6 +134,31 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       updatedAt: now(),
     });
   };
+  const finishTerminal = async (options: {
+    completed: number;
+    failed: number;
+    errors: string[];
+  }): Promise<"ready" | "failed"> => {
+    const terminal = resolveVideoDownloadTerminalStatus({
+      completed: options.completed,
+      failed: options.failed,
+      total: originalTotal,
+      errors: options.errors,
+      partialStoragePath: job.partialStoragePath || existing?.storagePath,
+      zipBytes: job.zipBytesSoFar ?? existing?.zipBytes,
+    });
+    await setVideoDownloadJobStatus({
+      jobId: job.jobId,
+      userId: job.userId,
+      total: originalTotal,
+      zipFilename: existing?.zipFilename || job.zipFilename,
+      createdAt: existing?.createdAt || now(),
+      updatedAt: now(),
+      ...terminal,
+    });
+    await removeVideoDownloadFromProcessing(rawJobString);
+    return terminal.status;
+  };
 
   await patchStatus({ status: "processing", total: originalTotal });
 
@@ -141,6 +168,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     const result = await executeQueuedVideoDownloads({
       items: job.items,
       requestId: job.jobId.slice(0, 8),
+      usedBytes,
       onProgress: async ({ completed, failed }) => {
         await patchStatus({
           status: "processing",
@@ -171,6 +199,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
             completedSoFar: completedBase,
             failedSoFar: accumulatedFailed,
             errorsSoFar: accumulatedErrors,
+            zipBytesSoFar: usedBytes,
           }),
         });
         requireVideoDownloadRemainderRequeued(
@@ -200,12 +229,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
           await kickProcessVideoDownloadQueue(request, { delaySeconds: 5 });
         } else {
           if (!retry.deadLettered) {
-            await removeVideoDownloadFromProcessing(rawJobString);
-            await patchStatus({
-              status: "failed",
+            await finishTerminal({
+              completed: completedBase,
+              failed: accumulatedFailed || originalTotal,
               errors: result.failures.map((f) => f.error).slice(0, 5),
-              completed: 0,
-              failed: result.failures.length || originalTotal,
             });
           }
           await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
@@ -218,28 +245,21 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         });
       }
 
-      await setVideoDownloadJobStatus({
-        jobId: job.jobId,
-        userId: job.userId,
-        status: "failed",
-        total: originalTotal,
-        completed: 0,
-        failed: result.failures.length || originalTotal,
+      const terminalStatus = await finishTerminal({
+        completed: completedBase,
+        failed: accumulatedFailed || originalTotal,
         errors: result.failures.map((f) => f.error).slice(0, 5),
-        zipFilename: existing?.zipFilename || job.zipFilename,
-        createdAt: existing?.createdAt || now(),
-        updatedAt: now(),
       });
-      await removeVideoDownloadFromProcessing(rawJobString);
       console.log(
-        `[process-video-download-queue] Job ${job.jobId} finished with 0 downloads; not retrying`,
+        `[process-video-download-queue] Job ${job.jobId} finished with 0 new downloads; status=${terminalStatus}`,
       );
       await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
       return NextResponse.json({
         processed: 1,
         jobId: job.jobId,
-        downloaded: 0,
-        failed: result.failures.length || originalTotal,
+        downloaded: completedBase,
+        failed: accumulatedFailed || originalTotal,
+        status: terminalStatus,
       });
     }
 
@@ -294,6 +314,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
           completedSoFar: completed,
           failedSoFar: accumulatedFailed,
           errorsSoFar: accumulatedErrors,
+          zipBytesSoFar: zipBytes,
         }),
       });
       requireVideoDownloadRemainderRequeued(
@@ -347,12 +368,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       messageLower.includes("zip archive") ||
       messageLower.includes("leftover");
     if (!retryable) {
-      await removeVideoDownloadFromProcessing(rawJobString);
-      await patchStatus({
-        status: "failed",
+      await finishTerminal({
+        completed: completedBase,
+        failed: Math.max(failedBase, job.items.length),
         errors: [message],
-        completed: 0,
-        failed: job.items.length,
       });
       await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
       return NextResponse.json({
@@ -370,11 +389,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       await kickProcessVideoDownloadQueue(request, { delaySeconds: 5 });
     } else {
       if (!retry.deadLettered) {
-        await removeVideoDownloadFromProcessing(rawJobString);
-        await patchStatus({
-          status: "failed",
+        await finishTerminal({
+          completed: completedBase,
+          failed: Math.max(failedBase, job.items.length),
           errors: [message],
-          failed: job.items.length,
         });
       }
       await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
@@ -391,6 +409,7 @@ function buildRemainderJob(options: {
   completedSoFar: number;
   failedSoFar: number;
   errorsSoFar: string[];
+  zipBytesSoFar: number;
 }): VideoDownloadJob {
   return {
     jobId: options.job.jobId,
@@ -402,5 +421,6 @@ function buildRemainderJob(options: {
     completedSoFar: options.completedSoFar,
     failedSoFar: options.failedSoFar,
     errorsSoFar: options.errorsSoFar,
+    zipBytesSoFar: options.zipBytesSoFar,
   };
 }

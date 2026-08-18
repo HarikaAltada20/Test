@@ -5,6 +5,7 @@ import {
   parseVideoDownloadJob,
   planRecoveredVideoDownloadJobs,
   requireVideoDownloadRemainderRequeued,
+  resolveVideoDownloadTerminalStatus,
   videoDownloadActiveJobLimitError,
   VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_GLOBAL,
   VIDEO_DOWNLOAD_MAX_ACTIVE_JOBS_PER_USER,
@@ -58,6 +59,7 @@ describe("video download redis job payload", () => {
       completedSoFar: 6,
       failedSoFar: 1,
       errorsSoFar: ["skip"],
+      zipBytesSoFar: 90_000_000,
       items: [
         { url: "https://instagram.com/reel/x", filename: "a.mp4", isInstagram: true },
       ],
@@ -67,6 +69,7 @@ describe("video download redis job payload", () => {
     assert.equal(job?.originalTotal, 10);
     assert.equal(job?.completedSoFar, 6);
     assert.equal(job?.failedSoFar, 1);
+    assert.equal(job?.zipBytesSoFar, 90_000_000);
     assert.deepEqual(job?.errorsSoFar, ["skip"]);
   });
 
@@ -196,6 +199,37 @@ describe("requireVideoDownloadRemainderRequeued", () => {
       () => requireVideoDownloadRemainderRequeued(3, false),
       /leftover videos/,
     );
+  });
+});
+
+describe("resolveVideoDownloadTerminalStatus", () => {
+  it("keeps a partial ZIP downloadable when the next wave adds nothing", () => {
+    const result = resolveVideoDownloadTerminalStatus({
+      completed: 6,
+      failed: 4,
+      total: 10,
+      errors: ["This Instagram video is private or restricted."],
+      partialStoragePath: "user-1/job-1.zip",
+      zipBytes: 80_000_000,
+    });
+    assert.equal(result.status, "ready");
+    assert.equal(result.completed, 6);
+    assert.equal(result.failed, 4);
+    assert.equal(result.storagePath, "user-1/job-1.zip");
+    assert.equal(result.zipBytes, 80_000_000);
+  });
+
+  it("does not zero completed when there is no ZIP to serve", () => {
+    const result = resolveVideoDownloadTerminalStatus({
+      completed: 0,
+      failed: 10,
+      total: 10,
+      errors: ["This Instagram video is private or restricted."],
+    });
+    assert.equal(result.status, "failed");
+    assert.equal(result.completed, 0);
+    assert.equal(result.failed, 10);
+    assert.equal(result.storagePath, undefined);
   });
 });
 

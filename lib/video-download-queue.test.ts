@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  bulkDownloadBytesRemaining,
   isRetryableDownloadError,
   isWorkerTimeBudgetExhausted,
   isWorkerTimeBudgetSkip,
@@ -112,5 +113,22 @@ describe("video download queue", () => {
       false,
     );
     assert.equal(shouldRetryZeroDownload([], 2), true);
+    assert.equal(
+      shouldRetryZeroDownload([
+        { error: "Skipped: bulk download size limit (209715200 bytes) reached." },
+      ]),
+      false,
+    );
+  });
+
+  it("counts already-stored ZIP bytes against the job-wide size cap", () => {
+    const maxBytes = 200 * 1024 * 1024;
+    assert.equal(bulkDownloadBytesRemaining(0, maxBytes), maxBytes);
+    assert.equal(bulkDownloadBytesRemaining(maxBytes, maxBytes), 0);
+    assert.equal(bulkDownloadBytesRemaining(maxBytes + 10, maxBytes), 0);
+    assert.equal(
+      bulkDownloadBytesRemaining(50 * 1024 * 1024, maxBytes),
+      maxBytes - 50 * 1024 * 1024,
+    );
   });
 });

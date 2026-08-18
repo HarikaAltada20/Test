@@ -13,6 +13,7 @@ import {
 } from "@/lib/youtube-download/ytstream";
 import { MAX_BULK_DOWNLOAD_BYTES } from "@/lib/video-download-auth";
 import {
+  bulkDownloadBytesRemaining,
   isWorkerTimeBudgetExhausted,
   processSequentialDownloadQueue,
   VIDEO_DOWNLOAD_WORKER_BUDGET_MS,
@@ -65,6 +66,8 @@ export async function executeQueuedVideoDownloads(options: {
   requestId?: string;
   startedAtMs?: number;
   budgetMs?: number;
+  /** Bytes already stored on this job from earlier remainder waves. */
+  usedBytes?: number;
   onProgress?: (info: { completed: number; failed: number }) => Promise<void> | void;
 }): Promise<ExecuteVideoDownloadResult> {
   const requestId = options.requestId || randomUUID().substring(0, 8);
@@ -95,7 +98,10 @@ export async function executeQueuedVideoDownloads(options: {
   const zippedFiles: { path: string; name: string }[] = [];
   const failedQueue: { url: string; error: string }[] = [];
   const deferredItems: VideoDownloadItem[] = [];
-  let totalBytes = 0;
+  const usedBytes =
+    MAX_BULK_DOWNLOAD_BYTES -
+    bulkDownloadBytesRemaining(options.usedBytes, MAX_BULK_DOWNLOAD_BYTES);
+  let totalBytes = usedBytes;
   let budgetExhausted = false;
 
   try {

@@ -38,6 +38,18 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Bytes still allowed on this ZIP job after earlier remainder waves. */
+export function bulkDownloadBytesRemaining(
+  usedBytes: number | null | undefined,
+  maxBytes: number,
+): number {
+  const used =
+    typeof usedBytes === "number" && Number.isFinite(usedBytes)
+      ? Math.max(0, Math.floor(usedBytes))
+      : 0;
+  return Math.max(0, maxBytes - used);
+}
+
 export function isWorkerTimeBudgetExhausted(
   startedAtMs: number,
   nowMs: number = Date.now(),

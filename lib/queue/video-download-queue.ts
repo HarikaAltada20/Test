@@ -53,6 +53,8 @@ export type VideoDownloadJob = {
   completedSoFar?: number;
   failedSoFar?: number;
   errorsSoFar?: string[];
+  /** Bytes already in the stored ZIP; remainder waves must count these toward MAX_BULK_DOWNLOAD_BYTES. */
+  zipBytesSoFar?: number;
 };
 
 export type VideoDownloadJobStatus = {
@@ -130,6 +132,56 @@ export function requireVideoDownloadRemainderRequeued(
   }
 }
 
+/**
+ * When a later wave downloads nothing, keep an already-stored ZIP downloadable.
+ * Never zero out completed/failed from earlier waves.
+ */
+export function resolveVideoDownloadTerminalStatus(options: {
+  completed: number;
+  failed: number;
+  total: number;
+  errors: string[];
+  partialStoragePath?: string | null;
+  zipBytes?: number | null;
+}): {
+  status: "ready" | "failed";
+  completed: number;
+  failed: number;
+  errors: string[];
+  storagePath?: string;
+  zipBytes?: number;
+} {
+  const completed = Math.max(0, Math.floor(options.completed) || 0);
+  const failed = Math.max(0, Math.floor(options.failed) || 0);
+  const partial =
+    typeof options.partialStoragePath === "string"
+      ? options.partialStoragePath.trim()
+      : "";
+  const zipBytes =
+    typeof options.zipBytes === "number" && Number.isFinite(options.zipBytes)
+      ? Math.max(0, Math.floor(options.zipBytes))
+      : undefined;
+  const errors = options.errors.slice(0, 20);
+
+  if (partial) {
+    return {
+      status: "ready",
+      completed,
+      failed,
+      errors,
+      storagePath: partial,
+      zipBytes,
+    };
+  }
+
+  return {
+    status: "failed",
+    completed,
+    failed: failed || options.total,
+    errors,
+  };
+}
+
 function statusKey(jobId: string): string {
   return `${REDIS_PREFIX}:status:${jobId}`;
 }
@@ -205,6 +257,10 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
   const errorsSoFar = Array.isArray(parsed.errorsSoFar)
     ? parsed.errorsSoFar.filter((value): value is string => typeof value === "string")
     : undefined;
+  const zipBytesSoFar =
+    typeof parsed.zipBytesSoFar === "number" && Number.isFinite(parsed.zipBytesSoFar)
+      ? Math.max(0, Math.floor(parsed.zipBytesSoFar))
+      : undefined;
   return {
     jobId: parsed.jobId,
     userId: parsed.userId,
@@ -215,6 +271,7 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
     completedSoFar,
     failedSoFar,
     errorsSoFar,
+    zipBytesSoFar,
     attempt:
       typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
         ? Math.max(0, Math.floor(parsed.attempt))
@@ -389,7 +446,7 @@ export async function requeueVideoDownloadRemainder(options: {
         failed: nextJob.failedSoFar ?? existing?.failed ?? 0,
         errors: nextJob.errorsSoFar ?? existing?.errors ?? [],
         storagePath: nextJob.partialStoragePath || existing?.storagePath,
-        zipBytes: existing?.zipBytes,
+        zipBytes: nextJob.zipBytesSoFar ?? existing?.zipBytes,
         zipFilename: existing?.zipFilename ?? nextJob.zipFilename,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -465,6 +522,8 @@ export async function retryOrDeadLetterVideoDownload(options: {
     const nextAttempts = Math.max(1, (parsed.attempt || 0) + 1);
     const nextJob: VideoDownloadJob = { ...parsed, attempt: nextAttempts };
     const now = new Date().toISOString();
+    const existing = await getVideoDownloadJobStatus(parsed.jobId);
+    const total = existing?.total || parsed.originalTotal || parsed.items.length;
 
     if (nextAttempts >= MAX_RETRY_ATTEMPTS) {
       await redis.lpush(
@@ -477,36 +536,41 @@ export async function retryOrDeadLetterVideoDownload(options: {
       );
       await redis.ltrim(REDIS_DEAD_LETTER_KEY, 0, REDIS_DEAD_LETTER_MAX - 1);
       await removeVideoDownloadFromProcessing(options.rawJobString);
+      const terminal = resolveVideoDownloadTerminalStatus({
+        completed: existing?.completed ?? parsed.completedSoFar ?? 0,
+        failed: existing?.failed ?? parsed.failedSoFar ?? total,
+        total,
+        errors: [options.reason || "Download job failed after retries"],
+        partialStoragePath: parsed.partialStoragePath || existing?.storagePath,
+        zipBytes: parsed.zipBytesSoFar ?? existing?.zipBytes,
+      });
       await setVideoDownloadJobStatus({
         jobId: parsed.jobId,
         userId: parsed.userId,
-        status: "failed",
-        total: parsed.originalTotal || parsed.items.length,
-        completed: 0,
-        failed: parsed.originalTotal || parsed.items.length,
-        errors: [options.reason || "Download job failed after retries"],
-        zipFilename: parsed.zipFilename,
-        createdAt: now,
+        total,
+        zipFilename: existing?.zipFilename ?? parsed.zipFilename,
+        createdAt: existing?.createdAt ?? now,
         updatedAt: now,
+        ...terminal,
       });
       console.error(
-        `[video-download-queue] Dead-lettered jobId=${parsed.jobId} attempts=${nextAttempts}`,
+        `[video-download-queue] Dead-lettered jobId=${parsed.jobId} attempts=${nextAttempts} status=${terminal.status}`,
       );
       return { requeued: false, deadLettered: true, attempts: nextAttempts };
     }
 
     await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(nextJob));
     await removeVideoDownloadFromProcessing(options.rawJobString);
-    const existing = await getVideoDownloadJobStatus(parsed.jobId);
     await setVideoDownloadJobStatus({
       jobId: parsed.jobId,
       userId: parsed.userId,
       status: "queued",
-      total: existing?.total || parsed.originalTotal || parsed.items.length,
+      total,
       completed: existing?.completed ?? parsed.completedSoFar ?? 0,
       failed: existing?.failed ?? parsed.failedSoFar ?? 0,
       errors: existing?.errors ?? parsed.errorsSoFar ?? [],
       storagePath: existing?.storagePath ?? parsed.partialStoragePath,
+      zipBytes: parsed.zipBytesSoFar ?? existing?.zipBytes,
       zipFilename: existing?.zipFilename ?? parsed.zipFilename,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
