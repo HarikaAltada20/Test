@@ -111,9 +111,69 @@ class MemoryCache {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Redis-backed leaderboard cache (shared across all instances / cold starts).
+// Falls back gracefully to in-memory when Upstash is not configured.
+// ---------------------------------------------------------------------------
+let _redis: import("@upstash/redis").Redis | null | undefined;
+function getLeaderboardRedis(): import("@upstash/redis").Redis | null {
+  if (_redis !== undefined) return _redis;
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (!url || !token) {
+    _redis = null;
+    return null;
+  }
+  try {
+    const { Redis } = require("@upstash/redis") as typeof import("@upstash/redis");
+    _redis = new Redis({ url, token });
+    return _redis;
+  } catch {
+    _redis = null;
+    return null;
+  }
+}
+
+const REDIS_LEADERBOARD_PREFIX = "creator_lb:v1:";
+const REDIS_LEADERBOARD_TTL_SEC = 600; // 10 min, matches in-memory TTL
+
+export class RedisBackedCache extends MemoryCache {
+  async getWithRedis<T>(key: string): Promise<T | null> {
+    const mem = this.get<T>(key);
+    if (mem) return mem;
+
+    const redis = getLeaderboardRedis();
+    if (!redis) return null;
+    try {
+      const value = await redis.get<T>(REDIS_LEADERBOARD_PREFIX + key);
+      if (value != null) {
+        this.set(key, value);
+        return value;
+      }
+    } catch (e) {
+      console.warn("[cache-utils] Redis get failed:", e);
+    }
+    return null;
+  }
+
+  async setWithRedis<T>(key: string, value: T, ttl?: number): Promise<void> {
+    this.set(key, value, ttl);
+
+    const redis = getLeaderboardRedis();
+    if (!redis) return;
+    try {
+      await redis.set(REDIS_LEADERBOARD_PREFIX + key, value, {
+        ex: Math.round((ttl || REDIS_LEADERBOARD_TTL_SEC * 1000) / 1000),
+      });
+    } catch (e) {
+      console.warn("[cache-utils] Redis set failed:", e);
+    }
+  }
+}
+
 // Create singleton instances for different cache buckets
-export const leaderboardCache = new MemoryCache(600000); // 10 minutes TTL
-export const adminLeaderboardCache = new MemoryCache(600000); // 10 minutes TTL
+export const leaderboardCache = new RedisBackedCache(600000); // 10 minutes TTL
+export const adminLeaderboardCache = new RedisBackedCache(600000); // 10 minutes TTL
 export const dailyChallengeCache = new MemoryCache(3600000); // 1 hour TTL
 export const contestCache = new MemoryCache(300000); // 5 minutes TTL
 export const contestDetailsCache = new MemoryCache(300000); // 5 minutes TTL

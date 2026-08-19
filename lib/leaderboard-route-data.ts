@@ -62,10 +62,8 @@ async function getLeaderboardGroupedByCreator(
   limit: number,
 ) {
   const from = (page - 1) * limit;
-  const sortedCreators = await getSortedCreatorAggregates(supabase, contestId);
-  const totalEntries = sortedCreators.length;
+  const { rows: pageCreators, totalEntries } = await getSortedCreatorAggregates(supabase, contestId, page, limit);
   const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
-  const pageCreators = sortedCreators.slice(from, from + limit);
   const creatorIds = pageCreators.map((c) => c.creator_id);
 
   if (creatorIds.length === 0) {
@@ -106,8 +104,8 @@ async function getLeaderboardGroupedByCreator(
 
   const displayStatusByCreator = new Map<string, string | null>();
   const rpcSupportsPendingCount =
-    sortedCreators.length > 0 &&
-    sortedCreators[0].pending_submission_count !== undefined;
+    pageCreators.length > 0 &&
+    pageCreators[0].pending_submission_count !== undefined;
   let pendingCountByCreator = new Map<string, number>();
   if (!rpcSupportsPendingCount) {
     pendingCountByCreator = await fetchPendingSubmissionCountsByCreator(
