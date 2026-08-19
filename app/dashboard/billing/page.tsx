@@ -169,17 +169,7 @@ export default async function AdvertiserBillingServerPage({
         remarks: tx.remarks,
     }));
 
-    // Fetch Coin Transactions
-    const { data: coinData, error: coinError } = await supabase
-        .from("coin_transactions")
-        .select("id, created_at, description, coins, status, type")
-        .eq("user_id", authUser.id)
-        .order("created_at", { ascending: false });
-
-    if (coinError) {
-        console.error("Error fetching coin transactions:", coinError);
-    }
-    const initialCoinTransactions: CoinTransaction[] = coinData || [];
+    // Coin transactions now handled by client-side pagination hook
 
     // Fetch Withdrawal Requests
     const { data: withdrawalRequestsData, error: withdrawalRequestsError } = await supabase
@@ -200,7 +190,7 @@ export default async function AdvertiserBillingServerPage({
                 initialProfile={initialProfile}
                 initialUserData={userData}
                 initialCashTransactions={initialCashTransactions}
-                initialCoinTransactions={initialCoinTransactions}
+                initialCoinTransactions={[]}
                 initialPayoutMethods={initialPayoutMethods}
                 initialWithdrawalRequests={initialWithdrawalRequests}
             />

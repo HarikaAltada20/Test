@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { SubmissionWithContest, CpmContestDetails } from "@/types/supabase";
 import {
@@ -83,6 +83,11 @@ const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
 };
 
 
+interface PaginationCursor {
+  cursor: string;
+  cursor_id: string;
+}
+
 interface SubmissionsClientProps {
   initialSubmissions: SubmissionWithContest[];
   fetchError?: string;
@@ -93,6 +98,8 @@ interface SubmissionsClientProps {
     bestQualityScore: number | null;
     totalQualityScore: number | null;
   };
+  initialNextCursor?: PaginationCursor | null;
+  totalCount?: number;
 }
 
 type ContestTypeFilter =
@@ -346,6 +353,8 @@ export default function SubmissionsClient({
   initialSubmissions,
   fetchError,
   creatorStats,
+  initialNextCursor,
+  totalCount,
 }: SubmissionsClientProps) {
   const [allSubmissions, setAllSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
@@ -355,6 +364,50 @@ export default function SubmissionsClient({
   // so selecting a Quality Score in the Submissions table doesn't filter analytics.
   const [analyticsFilteredSubmissions, setAnalyticsFilteredSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [allPagesLoaded, setAllPagesLoaded] = useState(!initialNextCursor);
+  const nextCursorRef = useRef<PaginationCursor | null>(initialNextCursor ?? null);
+
+  const fetchRemainingPages = useCallback(async () => {
+    if (!nextCursorRef.current || isLoadingMore) return;
+    setIsLoadingMore(true);
+    const accumulated: SubmissionWithContest[] = [];
+    let cursor = nextCursorRef.current;
+
+    try {
+      while (cursor) {
+        const params = new URLSearchParams({
+          cursor: cursor.cursor,
+          cursor_id: cursor.cursor_id,
+          limit: "50",
+        });
+        const res = await fetch(`/api/submissions/list?${params}`);
+        if (!res.ok) break;
+        const data = await res.json();
+        accumulated.push(...(data.submissions ?? []));
+        cursor = data.nextCursor ?? null;
+      }
+    } catch (err) {
+      console.error("Error loading remaining submissions:", err);
+    }
+
+    if (accumulated.length > 0) {
+      setAllSubmissions((prev) => {
+        const existingIds = new Set(prev.map((s) => s.id));
+        const unique = accumulated.filter((s) => !existingIds.has(s.id));
+        return [...prev, ...unique];
+      });
+    }
+    nextCursorRef.current = null;
+    setAllPagesLoaded(true);
+    setIsLoadingMore(false);
+  }, [isLoadingMore]);
+
+  useEffect(() => {
+    if (initialNextCursor) {
+      fetchRemainingPages();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [contestTypeFilter, setContestTypeFilter] = useState<string[]>([
     "leaderboard",
@@ -2781,6 +2834,12 @@ export default function SubmissionsClient({
               </>
             )}
           </div>
+
+          {isLoadingMore && (
+            <div className={cn("text-center py-3 text-sm animate-pulse", isDark ? "text-slate-400" : "text-slate-500")}>
+              Loading remaining submissions…
+            </div>
+          )}
 
           {/* Pagination Bar - Moved down as requested */}
           {(viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) > 0 && (
