@@ -65,6 +65,7 @@ import goldSquareLogo from "@/public/images/Group (4).png";
 import logo from "@/public/images/Primary Horizintal.svg";
 import squareLogo from "@/public/images/Group (2).avif";
 import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
+import { BulkModerationProgressProvider } from "@/components/BulkModerationProgressProvider";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -2773,7 +2774,9 @@ function DashboardContent({
                   data-mode={currentMode}
                   data-compact={isCompactMode ? "true" : "false"}
                 >
-                  {children}
+                  <BulkModerationProgressProvider>
+                    {children}
+                  </BulkModerationProgressProvider>
                 </div>
               </Suspense>
 

@@ -114,6 +114,10 @@ import {
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 import {
+  useBulkModerationProgress,
+  type BulkModerationJobStatus,
+} from "@/components/BulkModerationProgressProvider";
+import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
 } from "@/lib/currency-utils";
@@ -733,19 +737,6 @@ type InstagramInsightsRefreshRunSummary = {
   updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
-};
-
-type BulkModerationJobStatus = {
-  id: string;
-  action: "verified" | "pending" | "rejected";
-  status: "queued" | "running" | "completed" | "failed";
-  total_count: number;
-  processed_count: number;
-  success_count: number;
-  failed_count: number;
-  quality_score?: number | null;
-  error_message?: string | null;
-  progressPercent: number;
 };
 
 type TwitterMetricsRefreshRunSummary = {
@@ -1522,16 +1513,11 @@ export default function ContestDetailClient({
   const [isLoadingSubmission, setIsLoadingSubmission] = useState<
     Record<string, boolean>
   >({});
-  const [activeBulkModerationJob, setActiveBulkModerationJob] =
-    useState<BulkModerationJobStatus | null>(null);
-  const bulkModerationPollRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
-  const bulkModerationToastRef = useRef<{
-    id: string;
-    dismiss: () => void;
-    update: (props: Record<string, unknown>) => void;
-  } | null>(null);
+  const {
+    activeJob: activeBulkModerationJob,
+    isBusy: isBulkModerationBusy,
+    startTracking: startBulkModerationTracking,
+  } = useBulkModerationProgress();
   const [currentContest, setCurrentContest] = useState<Contest>(contest);
   const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
     percentage: number | null;
@@ -7270,13 +7256,6 @@ export default function ContestDetailClient({
     }
   };
 
-  const stopBulkModerationPolling = useCallback(() => {
-    if (bulkModerationPollRef.current) {
-      clearInterval(bulkModerationPollRef.current);
-      bulkModerationPollRef.current = null;
-    }
-  }, []);
-
   const clearLoadingStateForSubmissionIds = useCallback((ids: string[]) => {
     setIsLoadingSubmission((prev) => {
       const next = { ...prev };
@@ -7287,247 +7266,53 @@ export default function ContestDetailClient({
     });
   }, []);
 
-  const getBulkModerationProgressCopy = useCallback(
-    (
-      action: "verified" | "pending" | "rejected",
-      job: Pick<
-        BulkModerationJobStatus,
-        | "status"
-        | "processed_count"
-        | "total_count"
-        | "success_count"
-        | "failed_count"
-        | "progressPercent"
-      >,
-    ) => {
-      const total = Math.max(0, Number(job.total_count) || 0);
-      const processed = Math.max(0, Number(job.processed_count) || 0);
-      const success = Math.max(0, Number(job.success_count) || 0);
-      const failed = Math.max(0, Number(job.failed_count) || 0);
-      const pct = Math.max(
-        0,
-        Math.min(
-          100,
-          Math.round(
-            Number.isFinite(job.progressPercent)
-              ? job.progressPercent
-              : total > 0
-                ? (processed / total) * 100
-                : 0,
-          ),
-        ),
-      );
-      const runningTitle =
-        action === "verified"
-          ? "Verifying submissions…"
-          : action === "pending"
-            ? "Moving to pending…"
-            : "Rejecting submissions…";
-      const statusLabel =
-        job.status === "queued" ? "Queued" : "In progress";
-
-      return {
-        runningTitle,
-        runningDescription: (
-          <div className="w-full space-y-1.5">
-            <p>
-              {statusLabel}: {processed} / {total} ({pct}%)
-            </p>
-            <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/15"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={total || 1}
-              aria-valuenow={processed}
-            >
-              <div
-                className="h-full rounded-full bg-current transition-all duration-300"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="text-xs opacity-80">
-              {success} succeeded · {failed} failed
-            </p>
-          </div>
-        ),
-      };
-    },
-    [],
-  );
-
-  const pollBulkModerationJob = useCallback(
-    (
-      jobId: string,
-      submissionIds: string[],
-      action: "verified" | "pending" | "rejected",
-      options?: {
-        qualityScore?: 1 | 2 | 3;
-        closeCreatorModalOnSuccess?: boolean;
-      },
-    ) => {
-      stopBulkModerationPolling();
-      bulkModerationToastRef.current?.dismiss();
-
-      const initialCopy = getBulkModerationProgressCopy(action, {
-        status: "queued",
-        processed_count: 0,
-        total_count: submissionIds.length,
-        success_count: 0,
-        failed_count: 0,
-        progressPercent: 0,
-      });
-      const progressToast = toast({
-        title: initialCopy.runningTitle,
-        description: initialCopy.runningDescription,
-        variant:
-          action === "rejected"
-            ? "destructive"
-            : action === "pending"
-              ? "pending"
-              : "default",
-        duration: Infinity,
-      });
-      bulkModerationToastRef.current = progressToast;
-
-      const pollOnce = async () => {
-        try {
-          const res = await fetch(
-            `/api/admin/bulk-verify/status?jobId=${encodeURIComponent(jobId)}`,
-          );
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            throw new Error(data?.error || "Failed to load bulk moderation status");
-          }
-
-          const job = data as BulkModerationJobStatus;
-          setActiveBulkModerationJob(job);
-
-          if (job.status === "queued" || job.status === "running") {
-            const copy = getBulkModerationProgressCopy(action, job);
-            bulkModerationToastRef.current?.update({
-              title: copy.runningTitle,
-              description: copy.runningDescription,
-              duration: Infinity,
-            });
-            return;
-          }
-
-          stopBulkModerationPolling();
-          clearLoadingStateForSubmissionIds(submissionIds);
-
-          if (job.status === "completed") {
-            setCurrentSubmissions((prev) =>
-              prev.map((sub) => {
-                if (!submissionIds.includes(sub.id) || (sub as any)?.is_twitter_tweet) {
-                  return sub;
-                }
-                return {
-                  ...sub,
-                  status: action,
-                  ...(action === "verified" && options?.qualityScore != null
-                    ? { quality_score: options.qualityScore }
-                    : action === "pending" || action === "rejected"
-                      ? { quality_score: null }
-                      : {}),
-                };
-              }),
-            );
-
-            const actionText =
-              action === "verified"
-                ? "verified"
-                : action === "pending"
-                  ? "moved to pending"
-                  : "rejected";
-            const total = Math.max(0, Number(job.total_count) || 0);
-            const processed = Math.max(
-              0,
-              Number(job.processed_count) || 0,
-            );
-            const success = Math.max(0, Number(job.success_count) || 0);
-            const failed = Math.max(0, Number(job.failed_count) || 0);
-            let description = `${success} submission(s) were ${actionText}. Processed ${processed} · Success ${success} · Failed ${failed}.`;
-            if (
-              action === "verified" &&
-              options?.qualityScore != null &&
-              isVideoContestFormat
-            ) {
-              description += ` Quality score set to ${options.qualityScore}/3.`;
-            }
-            bulkModerationToastRef.current?.update({
-              title:
-                action === "rejected"
-                  ? "Rejected"
-                  : action === "pending"
-                    ? "Pending"
-                    : "Verification complete",
-              description,
-              variant:
-                action === "rejected"
-                  ? "destructive"
-                  : action === "pending"
-                    ? "pending"
-                    : failed > 0
-                      ? "default"
-                      : "success",
-              duration: 5000,
-            });
-            bulkModerationToastRef.current = null;
-            if (options?.closeCreatorModalOnSuccess) {
-              setSelectedCreatorForModal(null);
-            }
-            setTimeout(
-              () => window.dispatchEvent(new Event("contests:refresh")),
-              1000,
-            );
-          } else {
-            bulkModerationToastRef.current?.update({
-              title: "Bulk moderation failed",
-              description:
-                job.error_message || "The background moderation job failed.",
-              variant: "destructive",
-              duration: 5000,
-            });
-            bulkModerationToastRef.current = null;
-          }
-
-          setActiveBulkModerationJob(null);
-        } catch (error: any) {
-          stopBulkModerationPolling();
-          clearLoadingStateForSubmissionIds(submissionIds);
-          setActiveBulkModerationJob(null);
-          bulkModerationToastRef.current?.update({
-            title: "Bulk moderation failed",
-            description:
-              error?.message || "Failed to poll bulk moderation progress.",
-            variant: "destructive",
-            duration: 5000,
-          });
-          bulkModerationToastRef.current = null;
-        }
-      };
-
-      void pollOnce();
-      bulkModerationPollRef.current = setInterval(() => {
-        void pollOnce();
-      }, 3000);
-    },
-    [
-      clearLoadingStateForSubmissionIds,
-      getBulkModerationProgressCopy,
-      isVideoContestFormat,
-      stopBulkModerationPolling,
-      toast,
-    ],
-  );
-
   useEffect(() => {
-    return () => {
-      stopBulkModerationPolling();
-      bulkModerationToastRef.current?.dismiss();
-      bulkModerationToastRef.current = null;
+    const onCompleted = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          job: BulkModerationJobStatus;
+          submissionIds: string[];
+          action: "verified" | "pending" | "rejected";
+          qualityScore?: 1 | 2 | 3;
+          closeCreatorModalOnSuccess?: boolean;
+          contestId?: string;
+        }>
+      ).detail;
+      if (!detail?.submissionIds?.length) return;
+      if (detail.contestId && detail.contestId !== contestId) return;
+
+      clearLoadingStateForSubmissionIds(detail.submissionIds);
+
+      if (detail.job.status === "completed") {
+        setCurrentSubmissions((prev) =>
+          prev.map((sub) => {
+            if (
+              !detail.submissionIds.includes(sub.id) ||
+              (sub as any)?.is_twitter_tweet
+            ) {
+              return sub;
+            }
+            return {
+              ...sub,
+              status: detail.action,
+              ...(detail.action === "verified" && detail.qualityScore != null
+                ? { quality_score: detail.qualityScore }
+                : detail.action === "pending" || detail.action === "rejected"
+                  ? { quality_score: null }
+                  : {}),
+            };
+          }),
+        );
+        if (detail.closeCreatorModalOnSuccess) {
+          setSelectedCreatorForModal(null);
+        }
+      }
     };
-  }, [stopBulkModerationPolling]);
+
+    window.addEventListener("bulk-moderation:completed", onCompleted);
+    return () =>
+      window.removeEventListener("bulk-moderation:completed", onCompleted);
+  }, [clearLoadingStateForSubmissionIds, contestId]);
 
   const handleBulkUpdateSubmissionStatus = async (
     submissionIds: string[],
@@ -7603,11 +7388,7 @@ export default function ContestDetailClient({
               ? "rejected"
               : action;
 
-        if (
-          activeBulkModerationJob &&
-          (activeBulkModerationJob.status === "queued" ||
-            activeBulkModerationJob.status === "running")
-        ) {
+        if (isBulkModerationBusy) {
           throw new Error(
             "Another bulk moderation job is already running. Wait for it to finish before starting a new one.",
           );
@@ -7633,27 +7414,13 @@ export default function ContestDetailClient({
 
         queuedNormalJobId = String(enqueueData.jobId || "");
         queuedNormalAction = normalAction as "verified" | "pending" | "rejected";
-        setActiveBulkModerationJob({
-          ...(enqueueData.job || {}),
-          id: queuedNormalJobId,
+        startBulkModerationTracking({
+          jobId: queuedNormalJobId,
+          submissionIds: normalIds,
           action: queuedNormalAction,
-          status: (enqueueData.job?.status || "queued") as
-            | "queued"
-            | "running"
-            | "completed"
-            | "failed",
-          total_count: Number(enqueueData.job?.total_count) || normalIds.length,
-          processed_count: Number(enqueueData.job?.processed_count) || 0,
-          success_count: Number(enqueueData.job?.success_count) || 0,
-          failed_count: Number(enqueueData.job?.failed_count) || 0,
-          quality_score:
-            enqueueData.job?.quality_score ?? options?.qualityScore ?? null,
-          error_message: enqueueData.job?.error_message ?? null,
-          progressPercent: 0,
-        });
-        pollBulkModerationJob(queuedNormalJobId, normalIds, queuedNormalAction, {
           qualityScore: options?.qualityScore,
           closeCreatorModalOnSuccess: options?.closeCreatorModalOnSuccess,
+          contestId,
         });
       }
 
@@ -31390,47 +31157,6 @@ export default function ContestDetailClient({
         );
       })()}
 
-      {activeBulkModerationJob &&
-        (activeBulkModerationJob.status === "queued" ||
-          activeBulkModerationJob.status === "running") && (
-          <div className="fixed bottom-4 right-4 z-50 w-full max-w-sm">
-            <Card
-              className={cn(
-                "border shadow-xl",
-                isDark ? "bg-slate-900 text-white" : "bg-white",
-              )}
-            >
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">
-                  {activeBulkModerationJob.action === "verified"
-                    ? "Bulk Verify Running"
-                    : activeBulkModerationJob.action === "pending"
-                      ? "Bulk Pending Running"
-                      : "Bulk Reject Running"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-xs opacity-80">
-                  <span>
-                    {activeBulkModerationJob.processed_count} /{" "}
-                    {activeBulkModerationJob.total_count}
-                  </span>
-                  <span>
-                    {Math.round(activeBulkModerationJob.progressPercent)}%
-                  </span>
-                </div>
-                <Progress
-                  value={activeBulkModerationJob.progressPercent}
-                  className="h-2"
-                />
-                <p className="text-xs opacity-80">
-                  The job keeps running even if you close this tab.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
       {/* Reversal confirmation dialog for submissions */}
       <Dialog
         open={!!confirmReversal}
@@ -31782,12 +31508,7 @@ export default function ContestDetailClient({
             >["bonusCapSubmissions"]
           }
           parentBulkActionLoading={
-            creatorModalParentBulkLoading ||
-            !!(
-              activeBulkModerationJob &&
-              (activeBulkModerationJob.status === "queued" ||
-                activeBulkModerationJob.status === "running")
-            )
+            creatorModalParentBulkLoading || isBulkModerationBusy
           }
           bulkModerationJob={activeBulkModerationJob}
           onQualityScoreUpdated={({
