@@ -1,51 +1,45 @@
 /**
- * Bulk submission moderation queue (Upstash Redis).
+ * Bulk payment queue (Upstash Redis).
  * LMOVE queue → processing, LREM after success,
  * bounded retry + dead-letter on failures.
+ *
+ * One Redis job = one creator payout batch (offset into items[]).
  *
  * Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
  */
 
 import { Redis } from "@upstash/redis";
 
-const REDIS_PREFIX = "bulk_submission_moderation";
+const REDIS_PREFIX = "bulk_payment";
 const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
 const REDIS_PROCESSING_KEY = `${REDIS_PREFIX}:processing`;
 const REDIS_DEAD_LETTER_KEY = `${REDIS_PREFIX}:dead_letter`;
 const MAX_RETRY_ATTEMPTS = 5;
 
-export const BULK_MODERATION_BATCH_SIZE = 10;
+/** Creators processed per queue hop (serial to avoid wallet races). */
+export const BULK_PAYMENT_BATCH_SIZE = 1;
 
-export type BulkModerationAction = "verified" | "pending" | "rejected";
+export type BulkPaymentType = "standard" | "bonus" | "both";
+export type BulkPaymentPayoutChannel = "submissions" | "twitter_cpm";
 
-export interface BulkSubmissionModerationQueueJob {
+export interface BulkPaymentQueueItem {
+  creatorId: string;
+  submissionIds: string[];
+}
+
+export interface BulkPaymentQueueJob {
   contestId: string;
   jobId: string;
-  action: BulkModerationAction;
+  paymentType: BulkPaymentType;
+  payoutChannel: BulkPaymentPayoutChannel;
   batchIndex: number;
   batchSize: number;
   totalBatches: number;
-  /** Full submission id list (DB no longer stores submission_ids). */
-  submissionIds: string[];
-  /** Index into submissionIds for this chunk (like YouTube cursor). */
+  /** Full creator pay list (DB does not store items). */
+  items: BulkPaymentQueueItem[];
+  /** Index into items for this chunk. */
   offset: number;
   attempt?: number;
-  /**
-   * After the first queue batch runs one full-selection wallet reversal,
-   * later batches skip re-debit and reuse these skip ids / refund summaries.
-   */
-  walletPreflightDone?: boolean;
-  walletSkipSubmissionIds?: string[];
-  walletRefundSummaries?: Record<
-    string,
-    {
-      reward_refunded_cents: number;
-      bonus_refunded_cents: number;
-      total_refunded_cents: number;
-      cpm_refunded_cents: number;
-      milestone_refunded_cents: number;
-    }
-  >;
 }
 
 function getRedis(): Redis | null {
@@ -53,77 +47,89 @@ function getRedis(): Redis | null {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (!url || !token) {
     if (!url) {
-      console.warn(
-        "[bulk-submission-moderation-queue] UPSTASH_REDIS_REST_URL is missing",
-      );
+      console.warn("[bulk-payment-queue] UPSTASH_REDIS_REST_URL is missing");
     }
     if (!token) {
-      console.warn(
-        "[bulk-submission-moderation-queue] UPSTASH_REDIS_REST_TOKEN is missing",
-      );
+      console.warn("[bulk-payment-queue] UPSTASH_REDIS_REST_TOKEN is missing");
     }
     return null;
   }
   try {
     return Redis.fromEnv();
   } catch (e) {
-    console.error(
-      "[bulk-submission-moderation-queue] Redis client creation failed:",
-      e,
-    );
+    console.error("[bulk-payment-queue] Redis client creation failed:", e);
     return null;
   }
 }
 
-export function isBulkSubmissionModerationQueueEnabled(): boolean {
+export function isBulkPaymentQueueEnabled(): boolean {
   return !!(
     process.env.UPSTASH_REDIS_REST_URL?.trim() &&
     process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
   );
 }
 
-export function computeBulkModerationTotalBatches(
+export function computeBulkPaymentTotalBatches(
   totalCount: number,
-  batchSize: number = BULK_MODERATION_BATCH_SIZE,
+  batchSize: number = BULK_PAYMENT_BATCH_SIZE,
 ): number {
   const size = Math.max(1, batchSize);
   const total = Math.max(0, totalCount);
   return total === 0 ? 0 : Math.ceil(total / size);
 }
 
-export async function enqueueBulkSubmissionModerationJob(
-  job: BulkSubmissionModerationQueueJob,
+function normalizeItems(raw: unknown): BulkPaymentQueueItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const creatorId = String(
+        (item as BulkPaymentQueueItem).creatorId || "",
+      ).trim();
+      const submissionIds = Array.isArray(
+        (item as BulkPaymentQueueItem).submissionIds,
+      )
+        ? (item as BulkPaymentQueueItem).submissionIds
+            .map(String)
+            .map((id) => id.trim())
+            .filter(Boolean)
+        : [];
+      if (!creatorId || submissionIds.length === 0) return null;
+      return { creatorId, submissionIds };
+    })
+    .filter((item): item is BulkPaymentQueueItem => item != null);
+}
+
+export async function enqueueBulkPaymentJob(
+  job: BulkPaymentQueueJob,
 ): Promise<{ error?: string }> {
   const redis = getRedis();
   if (!redis) return { error: "Redis not configured" };
   try {
-    const normalizedJob: BulkSubmissionModerationQueueJob = {
+    const normalizedJob: BulkPaymentQueueJob = {
       ...job,
+      items: normalizeItems(job.items),
       attempt: Number.isFinite(job.attempt) ? Number(job.attempt) : 0,
     };
     await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(normalizedJob));
     console.log(
-      `[bulk-submission-moderation-queue] Enqueued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} action=${normalizedJob.action} attempt=${normalizedJob.attempt}`,
+      `[bulk-payment-queue] Enqueued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} paymentType=${normalizedJob.paymentType} attempt=${normalizedJob.attempt}`,
     );
     return {};
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      "[bulk-submission-moderation-queue] rpush failed:",
-      message,
-    );
+    console.error("[bulk-payment-queue] rpush failed:", message);
     return { error: message };
   }
 }
 
-export async function popBulkSubmissionModerationJob(): Promise<{
-  job: BulkSubmissionModerationQueueJob;
+export async function popBulkPaymentJob(): Promise<{
+  job: BulkPaymentQueueJob;
   raw: string;
 } | null> {
   const redis = getRedis();
   if (!redis) return null;
   try {
-    // FIFO: append with RPUSH, consume from LEFT (same as YouTube).
     const raw = await redis.lmove(
       REDIS_QUEUE_KEY,
       REDIS_PROCESSING_KEY,
@@ -132,14 +138,18 @@ export async function popBulkSubmissionModerationJob(): Promise<{
     );
     if (raw === null || raw === undefined) return null;
     const str = typeof raw === "string" ? raw : JSON.stringify(raw);
-    const parsed = JSON.parse(str) as BulkSubmissionModerationQueueJob;
+    const parsed = JSON.parse(str) as BulkPaymentQueueJob;
     if (parsed?.jobId && parsed?.contestId) {
-      const submissionIds = Array.isArray(parsed.submissionIds)
-        ? parsed.submissionIds.map(String).filter(Boolean)
-        : [];
-      const normalized: BulkSubmissionModerationQueueJob = {
+      const items = normalizeItems(parsed.items);
+      const normalized: BulkPaymentQueueJob = {
         ...parsed,
-        submissionIds,
+        items,
+        paymentType:
+          parsed.paymentType === "bonus" || parsed.paymentType === "both"
+            ? parsed.paymentType
+            : "standard",
+        payoutChannel:
+          parsed.payoutChannel === "twitter_cpm" ? "twitter_cpm" : "submissions",
         batchIndex:
           typeof parsed.batchIndex === "number" &&
           Number.isFinite(parsed.batchIndex)
@@ -149,7 +159,7 @@ export async function popBulkSubmissionModerationJob(): Promise<{
           typeof parsed.batchSize === "number" &&
           Number.isFinite(parsed.batchSize)
             ? Math.max(1, Math.floor(parsed.batchSize))
-            : BULK_MODERATION_BATCH_SIZE,
+            : BULK_PAYMENT_BATCH_SIZE,
         totalBatches:
           typeof parsed.totalBatches === "number" &&
           Number.isFinite(parsed.totalBatches)
@@ -166,34 +176,14 @@ export async function popBulkSubmissionModerationJob(): Promise<{
       };
       return { job: normalized, raw: str };
     }
-    // Legacy payloads that only had { jobId } — cannot process without IDs in Redis.
-    if (parsed?.jobId) {
-      return {
-        job: {
-          contestId: "",
-          jobId: String(parsed.jobId),
-          action: "pending",
-          batchIndex: 0,
-          batchSize: BULK_MODERATION_BATCH_SIZE,
-          totalBatches: 0,
-          submissionIds: [],
-          offset: 0,
-          attempt: 0,
-        },
-        raw: str,
-      };
-    }
     return null;
   } catch (e) {
-    console.error(
-      "[bulk-submission-moderation-queue] popJob (lmove) failed:",
-      e,
-    );
+    console.error("[bulk-payment-queue] popJob (lmove) failed:", e);
     return null;
   }
 }
 
-export async function removeBulkSubmissionModerationFromProcessing(
+export async function removeBulkPaymentFromProcessing(
   rawJobString: string,
 ): Promise<void> {
   const redis = getRedis();
@@ -201,14 +191,11 @@ export async function removeBulkSubmissionModerationFromProcessing(
   try {
     await redis.lrem(REDIS_PROCESSING_KEY, 1, rawJobString);
   } catch (e) {
-    console.error(
-      "[bulk-submission-moderation-queue] removeFromProcessing failed:",
-      e,
-    );
+    console.error("[bulk-payment-queue] removeFromProcessing failed:", e);
   }
 }
 
-export async function retryOrDeadLetterBulkSubmissionModeration(options: {
+export async function retryOrDeadLetterBulkPayment(options: {
   rawJobString: string;
   reason?: string;
 }): Promise<{
@@ -227,17 +214,16 @@ export async function retryOrDeadLetterBulkSubmissionModeration(options: {
     };
   }
   try {
-    const parsed = JSON.parse(
-      options.rawJobString,
-    ) as BulkSubmissionModerationQueueJob;
+    const parsed = JSON.parse(options.rawJobString) as BulkPaymentQueueJob;
     const nextAttempts = Math.max(
       1,
       (typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
         ? Math.floor(parsed.attempt)
         : 0) + 1,
     );
-    const normalizedJob: BulkSubmissionModerationQueueJob = {
+    const normalizedJob: BulkPaymentQueueJob = {
       ...parsed,
+      items: normalizeItems(parsed.items),
       attempt: nextAttempts,
     };
 
@@ -250,25 +236,22 @@ export async function retryOrDeadLetterBulkSubmissionModeration(options: {
           deadLetterReason: options.reason ?? "unknown",
         }),
       );
-      await removeBulkSubmissionModerationFromProcessing(options.rawJobString);
+      await removeBulkPaymentFromProcessing(options.rawJobString);
       console.error(
-        `[bulk-submission-moderation-queue] Dead-lettered jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
+        `[bulk-payment-queue] Dead-lettered jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
       );
       return { requeued: false, deadLettered: true, attempts: nextAttempts };
     }
 
     await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(normalizedJob));
-    await removeBulkSubmissionModerationFromProcessing(options.rawJobString);
+    await removeBulkPaymentFromProcessing(options.rawJobString);
     console.warn(
-      `[bulk-submission-moderation-queue] Re-queued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
+      `[bulk-payment-queue] Re-queued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
     );
     return { requeued: true, deadLettered: false, attempts: nextAttempts };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      "[bulk-submission-moderation-queue] retryOrDeadLetter failed:",
-      message,
-    );
+    console.error("[bulk-payment-queue] retryOrDeadLetter failed:", message);
     return {
       requeued: false,
       deadLettered: false,
@@ -278,7 +261,7 @@ export async function retryOrDeadLetterBulkSubmissionModeration(options: {
   }
 }
 
-export async function recoverBulkSubmissionModerationProcessingToQueue(options?: {
+export async function recoverBulkPaymentProcessingToQueue(options?: {
   maxToMove?: number;
 }): Promise<{ moved: number; error?: string }> {
   const redis = getRedis();
@@ -298,14 +281,14 @@ export async function recoverBulkSubmissionModerationProcessingToQueue(options?:
     }
     if (moved > 0) {
       console.warn(
-        `[bulk-submission-moderation-queue] Re-queued ${moved} job(s) from processing`,
+        `[bulk-payment-queue] Re-queued ${moved} job(s) from processing`,
       );
     }
     return { moved };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
-      "[bulk-submission-moderation-queue] recoverProcessingJobsToQueue failed:",
+      "[bulk-payment-queue] recoverProcessingJobsToQueue failed:",
       message,
     );
     return { moved: 0, error: message };

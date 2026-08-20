@@ -25,6 +25,8 @@ import {
 import { reconcileCreatorTotalViews } from "@/lib/creator-total-views";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import { refreshContestStats } from "@/lib/contest-stats";
+import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -82,6 +84,135 @@ async function markJobFailed(
     })
     .eq("id", jobId)
     .in("status", ["queued", "running"]);
+}
+
+/**
+ * After all status updates finish: one money_transactions refund (+ wallet debit)
+ * per creator for successfully moderated submissions.
+ */
+async function finalizeBulkModerationWalletReversals(options: {
+  jobId: string;
+  contestId: string;
+  action: string;
+  submissionIds: string[];
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  walletRefundSummary?: Record<string, unknown> | null;
+}> {
+  const { jobId, contestId, action, submissionIds } = options;
+  if (
+    action !== "verified" &&
+    action !== "pending" &&
+    action !== "rejected"
+  ) {
+    return { ok: true, walletRefundSummary: null };
+  }
+  if (submissionIds.length === 0) {
+    return { ok: true, walletRefundSummary: null };
+  }
+
+  const supabaseAdmin = createAdminClient();
+
+  // Only reverse rows that actually reached the target status (skip failed chunk items).
+  const { data: statusRows, error: statusErr } = await fetchByIdsInChunks({
+    ids: submissionIds,
+    fetchChunk: async (chunkIds) => {
+      const result = await supabaseAdmin
+        .from("submissions")
+        .select("id, status")
+        .in("id", chunkIds);
+      return { data: result.data, error: result.error };
+    },
+  });
+  if (statusErr) {
+    return { ok: false, error: statusErr.message };
+  }
+
+  const toReverse = (statusRows || [])
+    .filter((row) => String(row.status || "") === action)
+    .map((row) => String(row.id));
+
+  if (toReverse.length === 0) {
+    await supabaseAdmin
+      .from("bulk_submission_moderation_jobs")
+      .update({
+        wallet_refund_summary: {
+          reward_refunded_cents: 0,
+          bonus_refunded_cents: 0,
+          total_refunded_cents: 0,
+          cpm_refunded_cents: 0,
+          milestone_refunded_cents: 0,
+          is_dual_rewards: false,
+        },
+      })
+      .eq("id", jobId);
+    return {
+      ok: true,
+      walletRefundSummary: {
+        reward_refunded_cents: 0,
+        bonus_refunded_cents: 0,
+        total_refunded_cents: 0,
+        cpm_refunded_cents: 0,
+        milestone_refunded_cents: 0,
+        is_dual_rewards: false,
+      },
+    };
+  }
+
+  const walletResult = await applyBulkDualRewardsWalletReversals({
+    supabaseAdmin,
+    submissionIds: toReverse,
+    // Status already left `paid`; still compute dues from earnings + reward ledger.
+    forceWasPaidBeforeReversal: true,
+  });
+
+  if (!walletResult.ok) {
+    return { ok: false, error: walletResult.error };
+  }
+
+  let rewardCents = 0;
+  let bonusCents = 0;
+  let totalCents = 0;
+  let cpmCents = 0;
+  let milestoneCents = 0;
+  for (const rs of walletResult.refundSummaryBySubmissionId.values()) {
+    const rowTotal = Math.max(0, Number(rs.total_refunded_cents) || 0);
+    if (rowTotal <= 0) continue;
+    totalCents += rowTotal;
+    rewardCents += Math.max(0, Number(rs.reward_refunded_cents) || 0);
+    bonusCents += Math.max(0, Number(rs.bonus_refunded_cents) || 0);
+    cpmCents += Math.max(
+      0,
+      Number(rs.cpm_refunded_cents ?? rs.reward_refunded_cents) || 0,
+    );
+    milestoneCents += Math.max(
+      0,
+      Number(rs.milestone_refunded_cents ?? rs.bonus_refunded_cents) || 0,
+    );
+  }
+
+  const { data: contestRow } = await supabaseAdmin
+    .from("contests")
+    .select("contest_type")
+    .eq("id", contestId)
+    .maybeSingle();
+
+  const walletRefundSummary = {
+    reward_refunded_cents: rewardCents,
+    bonus_refunded_cents: bonusCents,
+    total_refunded_cents: totalCents,
+    cpm_refunded_cents: cpmCents,
+    milestone_refunded_cents: milestoneCents,
+    is_dual_rewards: String(contestRow?.contest_type || "") === "dual_rewards",
+  };
+
+  await supabaseAdmin
+    .from("bulk_submission_moderation_jobs")
+    .update({ wallet_refund_summary: walletRefundSummary })
+    .eq("id", jobId);
+
+  return { ok: true, walletRefundSummary };
 }
 
 /**
@@ -246,6 +377,30 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   }
 
   if (offset >= submissionIds.length) {
+    const contestId = job.contestId || String(jobRow.contest_id);
+    const action =
+      (job.action as string) || String(jobRow.action || "");
+    const walletFinalize = await finalizeBulkModerationWalletReversals({
+      jobId: job.jobId,
+      contestId,
+      action,
+      submissionIds,
+    });
+    if (!walletFinalize.ok) {
+      await markJobFailed(
+        job.jobId,
+        walletFinalize.error || "Wallet reversal finalize failed",
+      );
+      await removeBulkSubmissionModerationFromProcessing(rawJobString);
+      return NextResponse.json(
+        {
+          processed: 1,
+          jobId: job.jobId,
+          error: walletFinalize.error || "Wallet reversal finalize failed",
+        },
+        { status: 500 },
+      );
+    }
     await supabaseAdmin
       .from("bulk_submission_moderation_jobs")
       .update({
@@ -255,7 +410,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .eq("id", job.jobId);
     await removeBulkSubmissionModerationFromProcessing(rawJobString);
     await finalizeBulkModerationSideEffects({
-      contestId: job.contestId || String(jobRow.contest_id),
+      contestId,
       submissionIds,
     });
     return NextResponse.json({
@@ -306,7 +461,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         "Job dead-lettered after repeated batch fetch failures",
       );
     } else if (retryResult.requeued) {
-      triggerNextProcessor(baseUrl);
+      await triggerNextProcessor(baseUrl);
     }
     return NextResponse.json(
       {
@@ -340,7 +495,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         `Job dead-lettered after repeated batch failures: ${errorMessage}`,
       );
     } else if (retryResult.requeued) {
-      triggerNextProcessor(baseUrl);
+      await triggerNextProcessor(baseUrl);
     }
     return NextResponse.json(
       {
@@ -404,7 +559,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       );
     } else if (retryResult.requeued) {
       await sleep(CHUNK_PAUSE_MS * 2);
-      triggerNextProcessor(baseUrl);
+      await triggerNextProcessor(baseUrl);
     }
     return NextResponse.json(
       {
@@ -428,7 +583,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         "Queue stall: chunk completed without progress (dead-lettered)",
       );
     } else if (retryResult.requeued) {
-      triggerNextProcessor(baseUrl);
+      await triggerNextProcessor(baseUrl);
     }
     return NextResponse.json(
       {
@@ -461,6 +616,46 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       ? String((responseData as any).errors[0]?.error || "")
       : null;
 
+  const contestId = job.contestId || String(jobRow.contest_id);
+  const action =
+    (job.action as BulkSubmissionModerationQueueJob["action"]) ||
+    (String(jobRow.action) as BulkSubmissionModerationQueueJob["action"]);
+
+  if (done) {
+    const walletFinalize = await finalizeBulkModerationWalletReversals({
+      jobId: job.jobId,
+      contestId,
+      action,
+      submissionIds,
+    });
+    if (!walletFinalize.ok) {
+      await supabaseAdmin
+        .from("bulk_submission_moderation_jobs")
+        .update({
+          processed_count: nextProcessed,
+          success_count: nextSuccess,
+          failed_count: nextFailed,
+          status: "failed",
+          error_message:
+            walletFinalize.error ||
+            firstError ||
+            jobRow.error_message ||
+            "Wallet reversal finalize failed",
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", job.jobId);
+      await removeBulkSubmissionModerationFromProcessing(rawJobString);
+      return NextResponse.json(
+        {
+          processed: 1,
+          jobId: job.jobId,
+          error: walletFinalize.error || "Wallet reversal finalize failed",
+        },
+        { status: 500 },
+      );
+    }
+  }
+
   await supabaseAdmin
     .from("bulk_submission_moderation_jobs")
     .update({
@@ -476,11 +671,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);
     const nextJob: BulkSubmissionModerationQueueJob = {
-      contestId: job.contestId || String(jobRow.contest_id),
+      contestId,
       jobId: job.jobId,
-      action:
-        (job.action as BulkSubmissionModerationQueueJob["action"]) ||
-        (String(jobRow.action) as BulkSubmissionModerationQueueJob["action"]),
+      action,
       batchIndex: (job.batchIndex || 0) + 1,
       batchSize,
       totalBatches:
@@ -511,9 +704,8 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         { status: 500 },
       );
     }
-    // Remove only after the continuation job is safely queued (YouTube pattern).
     await removeBulkSubmissionModerationFromProcessing(rawJobString);
-    triggerNextProcessor(baseUrl);
+    await triggerNextProcessor(baseUrl);
     return NextResponse.json({
       processed: 1,
       jobId: job.jobId,
@@ -526,9 +718,8 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
 
   await removeBulkSubmissionModerationFromProcessing(rawJobString);
 
-  // Once-at-end: reconcile creator views + contest budget/stats (deferred from per-row).
   await finalizeBulkModerationSideEffects({
-    contestId: job.contestId || String(jobRow.contest_id),
+    contestId,
     submissionIds,
   });
 

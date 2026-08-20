@@ -83,3 +83,18 @@ create trigger trg_bulk_submission_moderation_jobs_updated_at
 before update on public.bulk_submission_moderation_jobs
 for each row
 execute function public.set_bulk_submission_moderation_jobs_updated_at();
+
+-- Aggregated wallet reversal totals for completion toast (one txn per creator at job start).
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'bulk_submission_moderation_jobs'
+      and column_name = 'wallet_refund_summary'
+  ) then
+    alter table public.bulk_submission_moderation_jobs
+      add column wallet_refund_summary jsonb null;
+  end if;
+end $$;

@@ -31,9 +31,9 @@ export async function GET(request: Request) {
 
     const supabaseAdmin = createAdminClient();
     const { data: job, error: jobError } = await supabaseAdmin
-      .from("bulk_submission_moderation_jobs")
+      .from("bulk_payment_jobs")
       .select(
-        "id, contest_id, user_id, user_type, action, status, total_count, processed_count, success_count, failed_count, quality_score, reason, error_message, wallet_refund_summary, created_at, started_at, finished_at, updated_at",
+        "id, contest_id, user_id, user_type, payment_type, payout_channel, status, total_count, processed_count, success_count, failed_count, total_amount_cents, total_cpm_cents, total_bonus_cents, total_milestone_cents, error_message, created_at, started_at, finished_at, updated_at",
       )
       .eq("id", jobId)
       .single();
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
       progressPercent,
     });
   } catch (error) {
-    console.error("[bulk-verify status]", error);
+    console.error("[bulk-payment status]", error);
     return NextResponse.json(
       {
         error:

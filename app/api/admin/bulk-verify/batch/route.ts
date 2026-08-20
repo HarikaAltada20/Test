@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { processBulkVerifySubmissions } from "@/app/api/admin/bulk-verify-submissions/route";
+import { assertBulkVerifyWalletContinuationSigningReady } from "@/lib/bulk-verify-wallet-continuation";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+function isPaidReversalBulkAction(action: string): boolean {
+  return action === "verified" || action === "pending" || action === "rejected";
 }
 
 export async function POST(request: Request) {
@@ -82,10 +87,33 @@ export async function POST(request: Request) {
       });
     }
 
+    const action = String(jobRow.action);
+    const deferWalletToEnd = isPaidReversalBulkAction(action);
+
+    // Wallet debit + money_transactions run once at job completion (per creator).
+    // Each chunk only changes status; bypass tokens skip mid-job ledger writes.
+    if (deferWalletToEnd) {
+      try {
+        assertBulkVerifyWalletContinuationSigningReady();
+      } catch (secretErr) {
+        console.error(
+          "[bulk-verify batch] Wallet bypass signing not ready:",
+          secretErr,
+        );
+        return NextResponse.json(
+          {
+            error:
+              "Cannot start wallet reversal: server signing secret is not configured (CRON_SECRET).",
+          },
+          { status: 500 },
+        );
+      }
+    }
+
     const response = await processBulkVerifySubmissions(
       {
         submissionIds: chunkIds,
-        action: String(jobRow.action),
+        action,
         reason: jobRow.reason ?? undefined,
         qualityScore:
           jobRow.action === "verified"
@@ -97,6 +125,9 @@ export async function POST(request: Request) {
         isAdmin: jobRow.user_type === "admin",
         ownershipPrevalidated: true,
         deferHeavySideEffects: true,
+        skipWalletReversal: deferWalletToEnd,
+        // Bypass every id in the chunk; unpaid rows never enter the reversal path.
+        walletSkipSubmissionIds: deferWalletToEnd ? chunkIds : [],
       },
     );
 

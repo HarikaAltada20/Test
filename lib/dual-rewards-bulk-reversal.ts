@@ -268,11 +268,15 @@ export async function logDualRewardsReversalRefund(params: {
 /**
  * One atomic wallet debit per creator+contest for bulk paid → verified/pending/rejected.
  * Per-submission verify calls should pass skipWalletDebit: true for returned ids.
+ *
+ * @param forceWasPaidBeforeReversal — use when status was already moved off `paid`
+ *   (queue defer-to-end path) so dues still use earnings/ledger like a live paid reversal.
  */
 export async function applyBulkDualRewardsWalletReversals(params: {
   supabaseAdmin: SupabaseClient;
   submissionIds: string[];
   contestTitle?: string;
+  forceWasPaidBeforeReversal?: boolean;
 }): Promise<BulkDualWalletReversalResult> {
   const ids = params.submissionIds.map(String).filter(Boolean);
   if (ids.length === 0) {
@@ -402,7 +406,9 @@ export async function applyBulkDualRewardsWalletReversals(params: {
 
     for (const row of groupRows) {
       const wasPaid =
-        String(row.status || "").toLowerCase() === "paid" || row.paid === true;
+        params.forceWasPaidBeforeReversal === true ||
+        String(row.status || "").toLowerCase() === "paid" ||
+        row.paid === true;
       const due = computeDualRewardsSubmissionReversalDue({
         submissionRow: toSpendRow(row),
         submissionId: row.id,

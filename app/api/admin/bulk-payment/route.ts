@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
 import {
   creditCreatorWithdrawableBalance,
@@ -41,33 +42,63 @@ import {
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
 
+function isQueueWorkerRequest(request: NextRequest): boolean {
+  return (
+    request.headers.get("X-From-Queue") === "1" ||
+    request.headers.get("x-from-queue") === "1"
+  );
+}
+
 export async function POST(request: NextRequest) {
-  const supabaseAdmin = await createClient();
   let payoutLease: CreatorContestPayoutLease | null = null;
 
   try {
-    // Authenticate user
-    const {
-      data: { user },
-    } = await supabaseAdmin.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user is admin
-    const { data: userData } = await supabaseAdmin
-      .from("users")
-      .select("user_type")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData || userData.user_type !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const body = await request.json();
     const { submission_ids, payment_type, contest_id, creator_id } = body;
+
+    let adminUserId: string;
+    let supabaseAdmin: Awaited<ReturnType<typeof createClient>> | ReturnType<
+      typeof createAdminClient
+    >;
+
+    if (isQueueWorkerRequest(request)) {
+      const cronSecret = process.env.CRON_SECRET;
+      const auth = request.headers.get("Authorization");
+      if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const queuedAdminId =
+        typeof body.admin_user_id === "string" ? body.admin_user_id.trim() : "";
+      if (!queuedAdminId) {
+        return NextResponse.json(
+          { error: "admin_user_id is required for queued bulk payment" },
+          { status: 400 },
+        );
+      }
+      adminUserId = queuedAdminId;
+      supabaseAdmin = createAdminClient();
+    } else {
+      supabaseAdmin = await createClient();
+      const {
+        data: { user },
+      } = await supabaseAdmin.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("user_type")
+        .eq("id", user.id)
+        .single();
+
+      if (!userData || userData.user_type !== "admin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      adminUserId = user.id;
+    }
 
     if (
       !submission_ids ||
@@ -187,7 +218,7 @@ export async function POST(request: NextRequest) {
     if (contest.contest_type === "dual_rewards") {
       const dualResult = await executeDualRewardsBulkPayment({
         supabaseAdmin,
-        adminUserId: user.id,
+        adminUserId,
         contest,
         contestId: contest_id,
         creatorId: creator_id,

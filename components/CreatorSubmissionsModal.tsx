@@ -88,6 +88,7 @@ import {
   formatDualBulkPaymentToastDescription,
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
+import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
@@ -262,6 +263,10 @@ export function CreatorSubmissionsModal({
   isPostCampaignView = false,
   onQualityScoreUpdated,
 }: CreatorSubmissionsModalProps) {
+  const {
+    isBusy: isBulkPaymentQueueBusy,
+    startTracking: startBulkPaymentTracking,
+  } = useBulkPaymentProgress();
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
   );
@@ -297,7 +302,8 @@ export function CreatorSubmissionsModal({
     payType: "standard" | "bonus" | "both",
     isBulk: boolean,
   ) => bulkPaymentActiveKey === bulkPayKey(payType, isBulk);
-  const isAnyBulkPaymentBusy = bulkPaymentActiveKey !== null;
+  const isAnyBulkPaymentBusy =
+    bulkPaymentActiveKey !== null || isBulkPaymentQueueBusy;
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
@@ -678,41 +684,54 @@ export function CreatorSubmissionsModal({
       if (isDual) {
         if (isBulkTransaction) {
           try {
-            const response = await fetch("/api/admin/bulk-payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                submission_ids: sortedSubs.map((s) => s.id),
-                payment_type: type,
-                contest_id: contest.id,
-                creator_id: creator.id,
-              }),
-            });
-            const result = await response.json();
-            if (!response.ok) {
+            if (isBulkPaymentQueueBusy) {
               toast({
-                title: "Bulk payment failed",
-                description: result.error || "Unknown error",
+                title: "Bulk payment already running",
+                description:
+                  "Wait for the current bulk payment job to finish before starting a new one.",
                 variant: "destructive",
               });
               return;
             }
-            setSelectedSubmissions(new Set());
-            const dualBulkToast = getBulkPaymentToastMeta(
-              result.data?.paid_count ?? 0,
-              result.data?.skipped_count ?? 0,
-            );
-            toast({
-              title: dualBulkToast.title,
-              description: formatDualBulkPaymentToastDescription({
-                successCount: result.data?.paid_count ?? 0,
-                skippedCount: result.data?.skipped_count ?? 0,
-                totalCpmCents: result.data?.total_cpm ?? 0,
-                totalMilestoneCents: result.data?.total_milestone ?? 0,
+            const enqueueRes = await fetch("/api/admin/bulk-payment/enqueue", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contestId: contest.id,
+                paymentType: type,
+                payoutChannel: "submissions",
+                items: [
+                  {
+                    creatorId: creator.id,
+                    submissionIds: sortedSubs.map((s) => s.id),
+                  },
+                ],
               }),
-              variant: dualBulkToast.variant,
             });
-            setTimeout(() => window.location.reload(), 700);
+            const enqueueData = await enqueueRes.json().catch(() => ({}));
+            if (!enqueueRes.ok) {
+              toast({
+                title: "Bulk payment failed",
+                description:
+                  enqueueData?.error ||
+                  `Failed to queue bulk payment (HTTP ${enqueueRes.status})`,
+                variant: "destructive",
+              });
+              return;
+            }
+            startBulkPaymentTracking({
+              jobId: String(enqueueData.jobId || ""),
+              paymentType: type,
+              contestId: contest.id,
+              isDual: true,
+              creatorCount: 1,
+            });
+            setSelectedSubmissions(new Set());
+            toast({
+              title: "Bulk payment queued",
+              description: "Paying selected submissions in the background.",
+              variant: "pending",
+            });
           } catch (error) {
             console.error("Dual bulk payment error:", error);
             toast({
@@ -806,72 +825,58 @@ export function CreatorSubmissionsModal({
 
       if (useInstagramBulkApi || useTwitterCpmBulkApi) {
         try {
-          const response = useTwitterCpmBulkApi
-            ? await fetch(`/api/contests/${contest.id}/bulk-pay-twitter-cpm`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  tweet_ids: sortedSubs.map((s) => s.id),
-                  payment_type: type,
-                  creator_id: creator.id,
-                }),
-              })
-            : await fetch("/api/admin/bulk-payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  submission_ids: sortedSubs.map((s) => s.id),
-                  payment_type: type,
-                  contest_id: contest.id,
-                  creator_id: creator.id,
-                }),
-              });
-
-          const result = await response.json();
-
-          if (!response.ok) {
+          if (isBulkPaymentQueueBusy) {
             toast({
-              title: "Bulk payment failed",
-              description: result.error || "Unknown error",
+              title: "Bulk payment already running",
+              description:
+                "Wait for the current bulk payment job to finish before starting a new one.",
               variant: "destructive",
             });
             return;
           }
 
-          setSelectedSubmissions(new Set());
-
-          const { data } = result;
-          const isMilestoneContest = contest.contest_type === "milestone";
-          const lines = isMilestoneContest
-            ? [
-                `Paid items: ${data.paid_count}`,
-                `Skipped: ${data.skipped_count}`,
-                ``,
-                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
-              ]
-            : [
-                `Paid items: ${data.paid_count}`,
-                `Skipped: ${data.skipped_count}`,
-                ``,
-                `CPM earnings: $${(data.total_cpm / 100).toFixed(2)}`,
-                `Flat fee bonus: $${(data.total_bonus / 100).toFixed(2)}`,
-                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
-              ];
-
-          if (data.cap_reached) {
-            lines.push(
-              ``,
-              `Earnings cap reached. Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
-            );
+          const enqueueRes = await fetch("/api/admin/bulk-payment/enqueue", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contestId: contest.id,
+              paymentType: type,
+              payoutChannel: useTwitterCpmBulkApi
+                ? "twitter_cpm"
+                : "submissions",
+              items: [
+                {
+                  creatorId: creator.id,
+                  submissionIds: sortedSubs.map((s) => s.id),
+                },
+              ],
+            }),
+          });
+          const enqueueData = await enqueueRes.json().catch(() => ({}));
+          if (!enqueueRes.ok) {
+            toast({
+              title: "Bulk payment failed",
+              description:
+                enqueueData?.error ||
+                `Failed to queue bulk payment (HTTP ${enqueueRes.status})`,
+              variant: "destructive",
+            });
+            return;
           }
 
-          toast({
-            title: "Bulk payment successful",
-            description: lines.join("\n"),
-            variant: "payment",
+          startBulkPaymentTracking({
+            jobId: String(enqueueData.jobId || ""),
+            paymentType: type,
+            contestId: contest.id,
+            isDual: false,
+            creatorCount: 1,
           });
-
-          setTimeout(() => window.location.reload(), 700);
+          setSelectedSubmissions(new Set());
+          toast({
+            title: "Bulk payment queued",
+            description: "Paying selected submissions in the background.",
+            variant: "pending",
+          });
         } catch (error) {
           console.error("Bulk payment error:", error);
           toast({

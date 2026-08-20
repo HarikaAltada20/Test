@@ -117,6 +117,7 @@ import {
   useBulkModerationProgress,
   type BulkModerationJobStatus,
 } from "@/components/BulkModerationProgressProvider";
+import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
 import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
@@ -1518,6 +1519,10 @@ export default function ContestDetailClient({
     isBusy: isBulkModerationBusy,
     startTracking: startBulkModerationTracking,
   } = useBulkModerationProgress();
+  const {
+    isBusy: isBulkPaymentBusy,
+    startTracking: startBulkPaymentTracking,
+  } = useBulkPaymentProgress();
   const [currentContest, setCurrentContest] = useState<Contest>(contest);
   const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
     percentage: number | null;
@@ -2565,7 +2570,7 @@ export default function ContestDetailClient({
     payType: "standard" | "bonus" | "both",
   ) => creatorWiseBulkPaymentActiveKey === payType;
   const isAnyCreatorWiseBulkPaymentBusy =
-    creatorWiseBulkPaymentActiveKey !== null;
+    creatorWiseBulkPaymentActiveKey !== null || isBulkPaymentBusy;
   const [
     creatorWiseBulkModerationActiveAction,
     setCreatorWiseBulkModerationActiveAction,
@@ -2573,6 +2578,7 @@ export default function ContestDetailClient({
   const creatorWiseBulkStatusActionsBusy =
     creatorWiseBulkModerationActiveAction !== null ||
     isAnyCreatorWiseBulkPaymentBusy ||
+    isBulkModerationBusy ||
     creatorModalParentBulkLoading;
   const creatorWiseBulkModerationLoadingText = (
     action: "verify" | "reject" | "pending",
@@ -7314,6 +7320,21 @@ export default function ContestDetailClient({
       window.removeEventListener("bulk-moderation:completed", onCompleted);
   }, [clearLoadingStateForSubmissionIds, contestId]);
 
+  useEffect(() => {
+    const onPaymentCompleted = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          contestId?: string;
+        }>
+      ).detail;
+      if (detail?.contestId && detail.contestId !== contestId) return;
+      setTimeout(() => window.location.reload(), 800);
+    };
+    window.addEventListener("bulk-payment:completed", onPaymentCompleted);
+    return () =>
+      window.removeEventListener("bulk-payment:completed", onPaymentCompleted);
+  }, [contestId]);
+
   const handleBulkUpdateSubmissionStatus = async (
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
@@ -8253,6 +8274,16 @@ export default function ContestDetailClient({
 
     setCreatorWiseBulkPaymentActiveKey(paymentType);
     try {
+      if (isBulkPaymentBusy) {
+        toast({
+          title: "Bulk payment already running",
+          description:
+            "Wait for the current bulk payment job to finish before starting a new one.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       let paidCreators = 0;
       let skippedCreators = 0;
       let totalPaidCents = 0;
@@ -8265,6 +8296,81 @@ export default function ContestDetailClient({
       // Serial creator pays avoid contest-wallet shortfall races under parallel credits.
       // Ranking is always fetched fresh per request (no cross-request prize cache).
       const CREATOR_WISE_PAY_CONCURRENCY = 1;
+
+      // Non-leaderboard / non-creator-CPM paths: queue one Redis+QStash job for all creators.
+      const canQueueBulkPayment =
+        !isTwitterLeaderboardCreatorWise &&
+        !(isTwitterCpmCreatorWise && paymentType !== "bonus");
+
+      if (canQueueBulkPayment) {
+        const queueItems: { creatorId: string; submissionIds: string[] }[] =
+          [];
+        for (const group of selectedGroups) {
+          const creatorId = String(group.creator?.id || "");
+          if (!creatorId) continue;
+          const payableSubs = filterCreatorWisePayableSubmissions(
+            group.submissions || [],
+            paymentType,
+            isTwitterCpmCreatorWise,
+          ).sort(
+            (a: any, b: any) =>
+              new Date(a.created_at || 0).getTime() -
+              new Date(b.created_at || 0).getTime(),
+          );
+          const submissionIds = payableSubs
+            .map((submission: any) => String(submission?.id || ""))
+            .filter(Boolean);
+          if (submissionIds.length === 0) continue;
+          queueItems.push({ creatorId, submissionIds });
+        }
+
+        if (queueItems.length === 0) {
+          toast({
+            title: "Cannot pay",
+            description:
+              paymentType === "bonus"
+                ? "No selected creators have unpaid bonus."
+                : "No selected creators have verified unpaid submissions.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const enqueueRes = await fetch("/api/admin/bulk-payment/enqueue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contestId,
+            paymentType,
+            payoutChannel: isTwitterCpmCreatorWise
+              ? "twitter_cpm"
+              : "submissions",
+            items: queueItems,
+          }),
+        });
+        const enqueueData = await enqueueRes.json().catch(() => ({}));
+        if (!enqueueRes.ok) {
+          throw new Error(
+            enqueueData?.error ||
+              `Failed to queue bulk payment (HTTP ${enqueueRes.status})`,
+          );
+        }
+
+        startBulkPaymentTracking({
+          jobId: String(enqueueData.jobId || ""),
+          paymentType,
+          contestId,
+          isDual: isDualRewardsContest,
+          creatorCount: queueItems.length,
+        });
+        setCreatorWiseSelectedCreators(new Set());
+        toast({
+          title: "Bulk payment queued",
+          description: `Paying ${queueItems.length} creator(s) in the background.`,
+          variant: "pending",
+        });
+        return;
+      }
 
       const payOneCreator = async (group: any) => {
         const creatorId = String(group.creator?.id || "");
@@ -8427,90 +8533,6 @@ export default function ContestDetailClient({
           return { kind: "skipped" as const };
         }
 
-        const payableSubs = filterCreatorWisePayableSubmissions(
-          group.submissions || [],
-          paymentType,
-          isTwitterCpmCreatorWise,
-        ).sort(
-          (a: any, b: any) =>
-            new Date(a.created_at || 0).getTime() -
-            new Date(b.created_at || 0).getTime(),
-        );
-
-        if (payableSubs.length === 0) {
-          return { kind: "skipped" as const };
-        }
-
-        const payCreatorSubmissionIds = async (submissionIds: string[]) => {
-          const response = isTwitterCpmCreatorWise
-            ? await fetch(`/api/contests/${contestId}/bulk-pay-twitter-cpm`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  tweet_ids: submissionIds,
-                  payment_type: paymentType,
-                  creator_id: creatorId,
-                }),
-              })
-            : await fetch("/api/admin/bulk-payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  submission_ids: submissionIds,
-                  payment_type: paymentType,
-                  contest_id: contestId,
-                  creator_id: creatorId,
-                }),
-              });
-
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            throw new Error(result?.error || "Failed to process bulk payment");
-          }
-          return result;
-        };
-
-        const toPaidResult = (data: Record<string, unknown>) => {
-          const creatorPaidNow = Number(data.total_amount) || 0;
-          if (creatorPaidNow <= 0) return null;
-          return {
-            kind: "paid" as const,
-            creatorPaidNow,
-            creatorRewardCents: isDualRewardsContest
-              ? 0
-              : Number(
-                  data.total_cpm ??
-                    data.total_reward ??
-                    data.total_standard ??
-                    data.total_amount,
-                ) || 0,
-            creatorBonusCents: Number(data.total_bonus) || 0,
-            totalCpmCents: Number(data.total_cpm) || 0,
-            totalMilestoneCents: Number(data.total_milestone) || 0,
-            isDual: isDualRewardsContest,
-            estimated: false,
-          };
-        };
-
-        // One wallet credit for all payable submissions of this creator.
-        const submissionIds = payableSubs
-          .map((submission: any) => String(submission?.id || ""))
-          .filter(Boolean);
-
-        const result = await payCreatorSubmissionIds(submissionIds);
-        const data = (result?.data || {}) as Record<string, unknown>;
-        const paid = toPaidResult(data);
-        if (paid) {
-          return paid;
-        }
-        // API succeeded with $0 — treat as skipped (already paid / no prize rank)
-        const skipReason =
-          typeof result?.error === "string"
-            ? result.error
-            : "No payable amount for this creator (already paid, outside prize ranks, or cap reached)";
-        creatorPayErrors.push(
-          `${group.creator?.username || creatorId}: ${skipReason}`,
-        );
         return { kind: "skipped" as const };
       };
 

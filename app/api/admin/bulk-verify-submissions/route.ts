@@ -191,6 +191,28 @@ export interface BulkSubmissionModerationActorOverride {
   isAdmin: boolean;
   ownershipPrevalidated?: boolean;
   deferHeavySideEffects?: boolean;
+  /**
+   * Queue path: wallet already reversed for the full selection (or will be
+   * handled by the batch route). Do not create per-chunk money_transactions.
+   */
+  skipWalletReversal?: boolean;
+  /** Submission ids whose wallet debit was already applied in the preflight. */
+  walletSkipSubmissionIds?: string[];
+  walletRefundSummaryBySubmissionId?: Record<
+    string,
+    {
+      reward_refunded_cents: number;
+      bonus_refunded_cents: number;
+      total_refunded_cents: number;
+      cpm_refunded_cents: number;
+      milestone_refunded_cents: number;
+    }
+  >;
+  /**
+   * Queue first batch: reverse this full selection once (not just the chunk).
+   * Ignored when skipWalletReversal is true.
+   */
+  walletReversalSubmissionIds?: string[];
 }
 
 export interface BulkSubmissionModerationPayload {
@@ -361,56 +383,91 @@ export async function processBulkVerifySubmissions(
 
     if (isPaidReversalBulkAction(action)) {
       const supabaseAdmin = createAdminClient();
-      const reversalIds = submissionIds.map(String);
 
-      // Every per-item call needs an unforgeable, short-lived authorization to
-      // skip the debit already completed by this bounded preflight.
-      try {
-        assertBulkVerifyWalletContinuationSigningReady();
-      } catch (secretErr) {
-        console.error(
-          "[bulk-verify-submissions] Wallet bypass signing not ready:",
-          secretErr,
-        );
-        return NextResponse.json(
-          {
-            error:
-              "Cannot start wallet reversal: server signing secret is not configured (CRON_SECRET).",
-          },
-          { status: 500 },
-        );
+      // Queue path may skip chunk wallet work (already done for the full selection)
+      // or reverse a larger id set than this bounded chunk.
+      if (actorOverride?.skipWalletReversal === true) {
+        for (const id of actorOverride.walletSkipSubmissionIds || []) {
+          skipWalletDebitIds.add(String(id));
+        }
+        const summaries = actorOverride.walletRefundSummaryBySubmissionId || {};
+        for (const [id, summary] of Object.entries(summaries)) {
+          bulkRefundSummaryById.set(String(id), summary);
+        }
+      } else {
+        const reversalIds = (
+          Array.isArray(actorOverride?.walletReversalSubmissionIds) &&
+          actorOverride.walletReversalSubmissionIds.length > 0
+            ? actorOverride.walletReversalSubmissionIds
+            : submissionIds
+        ).map(String);
+
+        // Every per-item call needs an unforgeable, short-lived authorization to
+        // skip the debit already completed by this bounded preflight.
+        try {
+          assertBulkVerifyWalletContinuationSigningReady();
+        } catch (secretErr) {
+          console.error(
+            "[bulk-verify-submissions] Wallet bypass signing not ready:",
+            secretErr,
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Cannot start wallet reversal: server signing secret is not configured (CRON_SECRET).",
+            },
+            { status: 500 },
+          );
+        }
+
+        const walletResult = await applyBulkDualRewardsWalletReversals({
+          supabaseAdmin,
+          submissionIds: reversalIds,
+        });
+        if (!walletResult.ok) {
+          console.error(
+            "[bulk-verify-submissions] Wallet reversal preflight failed:",
+            walletResult.error,
+            {
+              submissionCount: reversalIds.length,
+              failedCount: walletResult.failedSubmissionIds?.length,
+            },
+          );
+          return NextResponse.json(
+            {
+              error: walletResult.error,
+              failed:
+                walletResult.failedSubmissionIds?.length ?? reversalIds.length,
+              failedSubmissionIds: walletResult.failedSubmissionIds,
+            },
+            { status: 500 },
+          );
+        }
+        for (const id of walletResult.skipWalletDebitIds) {
+          skipWalletDebitIds.add(id);
+        }
+        walletResult.refundSummaryBySubmissionId.forEach((summary, id) => {
+          bulkRefundSummaryById.set(id, summary);
+        });
       }
 
-      const walletResult = await applyBulkDualRewardsWalletReversals({
-        supabaseAdmin,
-        submissionIds: reversalIds,
-      });
-      if (!walletResult.ok) {
-        console.error(
-          "[bulk-verify-submissions] Wallet reversal preflight failed:",
-          walletResult.error,
-          {
-            submissionCount: reversalIds.length,
-            failedCount: walletResult.failedSubmissionIds?.length,
-          },
-        );
-        return NextResponse.json(
-          {
-            error: walletResult.error,
-            failed:
-              walletResult.failedSubmissionIds?.length ?? reversalIds.length,
-            failedSubmissionIds: walletResult.failedSubmissionIds,
-          },
-          { status: 500 },
-        );
+      if (skipWalletDebitIds.size > 0) {
+        try {
+          assertBulkVerifyWalletContinuationSigningReady();
+        } catch (secretErr) {
+          console.error(
+            "[bulk-verify-submissions] Wallet bypass signing not ready:",
+            secretErr,
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Cannot start wallet reversal: server signing secret is not configured (CRON_SECRET).",
+            },
+            { status: 500 },
+          );
+        }
       }
-      for (const id of walletResult.skipWalletDebitIds) {
-        skipWalletDebitIds.add(id);
-      }
-      walletResult.refundSummaryBySubmissionId.forEach((summary, id) => {
-        bulkRefundSummaryById.set(id, summary);
-      });
-
     }
 
     const results: { id: string; data: unknown }[] = [];
@@ -440,6 +497,10 @@ export async function processBulkVerifySubmissions(
                         actorId,
                         action: String(action),
                         submissionId: String(id),
+                        // Queue jobs can span many chunks; keep bypass valid for the run.
+                        ttlMs: actorOverride?.deferHeavySideEffects
+                          ? 30 * 60 * 1000
+                          : undefined,
                       }),
                   }
                 : {}),
