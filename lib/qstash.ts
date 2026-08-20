@@ -238,6 +238,11 @@ function getProcessVideoDownloadQueueUrl(): string {
   return `${getBaseUrl()}/api/cron/process-video-download-queue`;
 }
 
+/** Canonical URL for the bulk submission moderation queue processor. */
+function getProcessBulkVerifyQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-bulk-verify-queue`;
+}
+
 /**
  * Verify that the request is from QStash (Upstash-Signature).
  * Use with the raw body string; call before consuming the body.
@@ -378,6 +383,31 @@ export async function triggerProcessYouTubeMetricsQueue(
       "[qstash] triggerProcessYouTubeMetricsQueue failed:",
       message,
     );
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-bulk-verify-queue endpoint via QStash.
+ */
+export async function triggerProcessBulkVerifyQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-bulk-verify-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessBulkVerifyQueue failed:", message);
     return { error: message };
   }
 }
@@ -935,6 +965,60 @@ export async function authorizeProcessYouTubeMetricsQueue(
 ): Promise<boolean> {
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureYouTube(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) return auth === `Bearer ${cronSecret}`;
+  return true;
+}
+
+async function verifyQStashSignatureBulkVerify(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessBulkVerifyQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-bulk-verify-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-bulk-verify-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-bulk-verify-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessBulkVerifyQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureBulkVerify(request, rawBody);
   }
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");

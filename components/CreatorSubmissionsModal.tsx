@@ -63,6 +63,7 @@ import {
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -204,6 +205,16 @@ interface CreatorSubmissionsModalProps {
   bonusCapSubmissions?: Submission[];
   /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
   parentBulkActionLoading?: boolean;
+  /** Live queue job progress for verify / pending / rejected (shown inside this modal). */
+  bulkModerationJob?: {
+    action: "verified" | "pending" | "rejected";
+    status: "queued" | "running" | "completed" | "failed";
+    total_count: number;
+    processed_count: number;
+    success_count: number;
+    failed_count: number;
+    progressPercent: number;
+  } | null;
   /**
    * Post-campaign overlay: metrics-only — hide verify/reject/pending/paid actions
    * and selection checkboxes (same as PC leaderboard table).
@@ -247,6 +258,7 @@ export function CreatorSubmissionsModal({
   canSeeDemographics = false,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
+  bulkModerationJob = null,
   isPostCampaignView = false,
   onQualityScoreUpdated,
 }: CreatorSubmissionsModalProps) {
@@ -261,7 +273,12 @@ export function CreatorSubmissionsModal({
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
-  const bulkStatusActionsBusy = bulkVerifyLoading || parentBulkActionLoading;
+  const bulkModerationJobActive =
+    !!bulkModerationJob &&
+    (bulkModerationJob.status === "queued" ||
+      bulkModerationJob.status === "running");
+  const bulkStatusActionsBusy =
+    bulkVerifyLoading || parentBulkActionLoading || bulkModerationJobActive;
   type BulkPaymentActiveKey =
     | "standard:0"
     | "standard:1"
@@ -2008,6 +2025,50 @@ export function CreatorSubmissionsModal({
               </div>
             </div>
 
+            {/* Queue progress for verify / pending / rejected */}
+            {bulkModerationJobActive && bulkModerationJob && (
+              <div
+                className={cn(
+                  "border-b px-3 py-3 sm:px-4",
+                  isDark ? "bg-slate-900/80 border-white/10" : "bg-slate-50 border-slate-200",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3 text-sm font-medium">
+                  <span className={isDark ? "text-white" : "text-slate-900"}>
+                    {bulkModerationJob.action === "verified"
+                      ? "Verifying submissions…"
+                      : bulkModerationJob.action === "pending"
+                        ? "Moving to pending…"
+                        : "Rejecting submissions…"}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs tabular-nums",
+                      isDark ? "text-slate-300" : "text-slate-600",
+                    )}
+                  >
+                    {bulkModerationJob.processed_count} /{" "}
+                    {bulkModerationJob.total_count} (
+                    {Math.round(bulkModerationJob.progressPercent)}%)
+                  </span>
+                </div>
+                <Progress
+                  value={bulkModerationJob.progressPercent}
+                  className="mt-2 h-2"
+                />
+                <p
+                  className={cn(
+                    "mt-1.5 text-xs",
+                    isDark ? "text-slate-400" : "text-slate-500",
+                  )}
+                >
+                  {bulkModerationJob.success_count} succeeded ·{" "}
+                  {bulkModerationJob.failed_count} failed
+                  {bulkModerationJob.status === "queued" ? " · Queued" : ""}
+                </p>
+              </div>
+            )}
+
             {/* Bulk Actions Bar */}
             {showSelectionCheckboxes && selectedSubmissions.size > 0 && (
               <div
@@ -2096,9 +2157,15 @@ export function CreatorSubmissionsModal({
                               isDark ? "text-blue-200" : "text-blue-700",
                             )}
                           >
-                            {parentBulkActionLoading
-                              ? "Processing submission updates…"
-                              : "Verifying submissions…"}
+                            {bulkModerationJobActive
+                              ? bulkModerationJob?.action === "verified"
+                                ? "Verifying in background…"
+                                : bulkModerationJob?.action === "pending"
+                                  ? "Updating to pending…"
+                                  : "Rejecting in background…"
+                              : parentBulkActionLoading
+                                ? "Processing submission updates…"
+                                : "Verifying submissions…"}
                           </span>
                         )}
                       </>

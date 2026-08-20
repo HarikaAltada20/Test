@@ -105,6 +105,7 @@ export function getDualRewardsSubmissionPaidComponents(
 }
 
 export type MoneyTxnRow = {
+  id?: string | null;
   amount?: number | null;
   remarks?: string | null;
   metadata?: Record<string, unknown> | null;

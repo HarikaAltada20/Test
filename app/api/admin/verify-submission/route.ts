@@ -85,6 +85,33 @@ import {
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
 
+export interface VerifySubmissionPayload {
+  submissionId: string;
+  action:
+    | "verified"
+    | "rejected"
+    | "pending"
+    | "paid"
+    | "mark_bonus_paid"
+    | "mark_both_paid";
+  reason?: string;
+  paymentDetails?: any;
+  skipWalletDebit?: boolean;
+  walletDebitBypassToken?: string;
+  qualityScore?: number | null;
+}
+
+export interface VerifySubmissionActorOverride {
+  actorId: string;
+  isAdmin: boolean;
+  ownershipPrevalidated?: boolean;
+  /**
+   * When true (bulk queue), skip expensive per-row RPCs like
+   * recalculate_creator_total_views. Caller must reconcile once at job end.
+   */
+  deferHeavySideEffects?: boolean;
+}
+
 function isDualRewardsLedgerReward(r: {
   metadata?: Record<string, unknown> | null;
 }): boolean {
@@ -103,7 +130,10 @@ function getTransactionPayoutCycle(metadata: any): number {
   return Number.isFinite(parsedCycle) && parsedCycle > 0 ? parsedCycle : 1;
 }
 
-export async function POST(request: Request) {
+export async function processVerifySubmission(
+  payload: VerifySubmissionPayload,
+  actorOverride?: VerifySubmissionActorOverride,
+): Promise<Response> {
   const supabase = await createClient();
   let payoutLease: CreatorContestPayoutLease | null = null;
 
@@ -123,7 +153,7 @@ export async function POST(request: Request) {
       skipWalletDebit,
       walletDebitBypassToken,
       qualityScore,
-    } = await request.json();
+    } = payload;
 
     if (!submissionId || !action) {
       return NextResponse.json(
@@ -161,43 +191,77 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify admin access first
-    const {
-      isAdmin,
-      error: adminError,
-      user: adminUser,
-    } = await verifyAdminAccess();
+    let isAdmin = !!actorOverride?.isAdmin;
+    let currentUserId: string = actorOverride?.actorId || "";
 
-    let currentUserId: string;
-
-    if (!isAdmin) {
-      // If not admin, check if it's an advertiser managing their own contest
+    if (!actorOverride) {
       const {
-        data: { user: authUser },
-        error: userError,
-      } = await supabase.auth.getUser();
+        isAdmin: resolvedIsAdmin,
+        error: adminError,
+        user: adminUser,
+      } = await verifyAdminAccess();
+      isAdmin = resolvedIsAdmin;
 
-      if (userError || !authUser) {
-        return NextResponse.json(
-          { error: "Authentication required" },
-          { status: 401 },
-        );
+      if (isAdmin) {
+        currentUserId = adminUser?.id || "";
       }
 
-      const { data: userData, error: userDataError } = await supabase
-        .from("users")
-        .select("user_type")
-        .eq("id", authUser.id)
-        .single();
+      if (!isAdmin) {
+        // If not admin, check if it's an advertiser managing their own contest
+        const {
+          data: { user: authUser },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (userDataError || !userData || userData.user_type !== "advertiser") {
-        return NextResponse.json(
-          { error: "Insufficient permissions" },
-          { status: 403 },
-        );
+        if (userError || !authUser) {
+          return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+          );
+        }
+
+        const { data: userData, error: userDataError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", authUser.id)
+          .single();
+
+        if (
+          userDataError ||
+          !userData ||
+          userData.user_type !== "advertiser"
+        ) {
+          return NextResponse.json(
+            { error: adminError || "Insufficient permissions" },
+            { status: 403 },
+          );
+        }
+
+        // For advertisers, verify they own the contest associated with this submission
+        const { data: submission, error: submissionError } = await supabase
+          .from("submissions")
+          .select("contest_id, contests!inner(advertiser_id)")
+          .eq("id", submissionId)
+          .single();
+
+        if (submissionError || !submission) {
+          return NextResponse.json(
+            { error: "Submission not found" },
+            { status: 404 },
+          );
+        }
+
+        if ((submission as any).contests.advertiser_id !== authUser.id) {
+          return NextResponse.json(
+            { error: "You can only manage submissions for your own contests" },
+            { status: 403 },
+          );
+        }
+
+        currentUserId = authUser.id;
       }
-
-      // For advertisers, verify they own the contest associated with this submission
+    } else if (!isAdmin && !actorOverride.ownershipPrevalidated) {
+      // If not admin, check if it's an advertiser managing their own contest
       const { data: submission, error: submissionError } = await supabase
         .from("submissions")
         .select("contest_id, contests!inner(advertiser_id)")
@@ -211,16 +275,19 @@ export async function POST(request: Request) {
         );
       }
 
-      if ((submission as any).contests.advertiser_id !== authUser.id) {
+      if ((submission as any).contests.advertiser_id !== currentUserId) {
         return NextResponse.json(
           { error: "You can only manage submissions for your own contests" },
           { status: 403 },
         );
       }
+    }
 
-      currentUserId = authUser.id;
-    } else {
-      currentUserId = adminUser?.id || "";
+    if (!currentUserId) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 },
+      );
     }
 
     const walletDebitWasHandledByBulk =
@@ -518,9 +585,20 @@ export async function POST(request: Request) {
 
     if (updateError) {
       console.error("Error updating submission status:", updateError);
+      const timedOut =
+        updateError.code === "57014" ||
+        /statement timeout|canceling statement/i.test(
+          String(updateError.message || ""),
+        );
       return NextResponse.json(
-        { error: "Failed to update submission status" },
-        { status: 500 },
+        {
+          error: timedOut
+            ? "Failed to update submission status: statement timeout"
+            : "Failed to update submission status",
+          code: updateError.code ?? undefined,
+          retryable: timedOut,
+        },
+        { status: timedOut ? 503 : 500 },
       );
     }
 
@@ -557,7 +635,10 @@ export async function POST(request: Request) {
         );
       if (snapErr) {
         console.error("Failed to snapshot credited views:", snapErr);
-      } else if (submissionFull.creator_id) {
+      } else if (
+        submissionFull.creator_id &&
+        !actorOverride?.deferHeavySideEffects
+      ) {
         try {
           await reconcileCreatorTotalViews(String(submissionFull.creator_id));
         } catch (reconcileErr) {
@@ -598,7 +679,10 @@ export async function POST(request: Request) {
         .eq("submission_id", submissionId);
       if (uncreditErr) {
         console.error("Failed to uncredit views for submission:", uncreditErr);
-      } else if (submissionFull.creator_id) {
+      } else if (
+        submissionFull.creator_id &&
+        !actorOverride?.deferHeavySideEffects
+      ) {
         try {
           await reconcileCreatorTotalViews(String(submissionFull.creator_id));
         } catch (reconcileErr) {
@@ -2109,8 +2193,12 @@ export async function POST(request: Request) {
               contestId: String(submissionFull.contest_id),
               action: String(action),
             },
-            rewardTransactionIds: sortUniqueTransactionIds(rewardTxns),
-            refundTransactionIds: sortUniqueTransactionIds(refundTxns),
+            rewardTransactionIds: sortUniqueTransactionIds(
+              rewardTxns.map((tx) => ({ id: tx.id ?? null })),
+            ),
+            refundTransactionIds: sortUniqueTransactionIds(
+              refundTxns.map((tx) => ({ id: tx.id ?? null })),
+            ),
             debitCents: walletDebitCents,
           });
           const debitRes = await debitCreatorWithdrawableBalance(
@@ -2255,6 +2343,11 @@ export async function POST(request: Request) {
   } finally {
     await releaseCreatorContestPayoutLease(payoutLease);
   }
+}
+
+export async function POST(request: Request) {
+  const payload = (await request.json()) as VerifySubmissionPayload;
+  return processVerifySubmission(payload);
 }
 
 // GET endpoint to fetch submissions for verification based on status filter
