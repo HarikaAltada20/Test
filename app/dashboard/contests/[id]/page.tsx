@@ -3,76 +3,16 @@ import { getSessionUser } from "@/utils/supabase/auth-server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import {
-  fetchContestSubmissionsAllPages,
-  formatSubmissionFetchError,
-} from "@/lib/fetch-contest-submissions";
+  CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE,
+  loadContestDetailSubmissionsPage,
+} from "@/lib/contest-detail-submissions";
 import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
 import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { redirect } from "next/navigation";
-import ContestDetailClient from "./contest-detail-client"; // Import the new client component
+import ContestDetailClient from "./contest-detail-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  isCpmContestType,
-  isMilestoneContestType,
-} from "@/lib/contest-type";
-import {
-  fetchLiveTrustMetricsByCreatorIds,
-  getCreatorTrustScoreFromMetrics,
-  isVideoContestFormat,
-  resolveCreatorTrustMetrics,
-} from "@/lib/trust-score";
-import { fetchLiveQualityMetricsByCreatorIds } from "@/lib/quality-score";
-import { resolveCreatorEligibilityProfileFields, getCreatorProfileQualityScoreSum } from "@/lib/creator-requirements";
-
-/** Load all matching twitter_campaign_tweets in chunks (SSR). Default 50-row cap hid tweets from UI. */
-async function fetchTwitterTweetsAllPages(
-  supabase: any,
-  contestId: string,
-  selectBody: string,
-  chunkSize: number,
-  maxRows: number,
-): Promise<{ data: any[] | null; error: any }> {
-  const listFilter = supabase
-    .from("twitter_campaign_tweets")
-    .select(selectBody, { count: "exact" })
-    .eq("contest_id", contestId)
-    .or(
-      "is_eligible.eq.true,deleted_at.not.is.null,excluded_by_submission_cap.eq.false",
-    )
-    .order("tweet_created_at", { ascending: false });
-
-  const first = await listFilter.range(0, chunkSize - 1);
-  if (first.error) {
-    return { data: null, error: first.error };
-  }
-
-  const rows = [...(first.data || [])];
-  const total = typeof first.count === "number" ? first.count : rows.length;
-  let offset = rows.length;
-
-  while (offset < total && offset < maxRows) {
-    const end = Math.min(offset + chunkSize - 1, maxRows - 1);
-    const next = await supabase
-      .from("twitter_campaign_tweets")
-      .select(selectBody)
-      .eq("contest_id", contestId)
-      .or(
-        "is_eligible.eq.true,deleted_at.not.is.null,excluded_by_submission_cap.eq.false",
-      )
-      .order("tweet_created_at", { ascending: false })
-      .range(offset, end);
-
-    if (next.error) {
-      return { data: rows, error: next.error };
-    }
-    const chunk = next.data || [];
-    if (chunk.length === 0) break;
-    rows.push(...chunk);
-    offset += chunk.length;
-  }
-
-  return { data: rows, error: null };
-}
+import { isMilestoneContestType } from "@/lib/contest-type";
+import { isVideoContestFormat } from "@/lib/trust-score";
 
 export default async function ContestDetailPage({
   params,
@@ -110,10 +50,8 @@ export default async function ContestDetailPage({
     .eq("id", contestId);
 
   if (isAdvertiser) {
-    // Advertisers can only access their own contests
     contestQuery = contestQuery.eq("advertiser_id", user.id);
   }
-  // Admin users can access any contest (no additional filter)
 
   const { data: contestData } = await contestQuery.single();
 
@@ -125,7 +63,6 @@ export default async function ContestDetailPage({
 
   const isVideoContest = isVideoContestFormat(contestData.contest_format);
 
-  // Contest settings live on contests table; contests_with_status view may not include them
   let contestSettings: {
     payout_adjustment_percentage: number | null;
     payout_adjustment_mode: string | null;
@@ -156,7 +93,8 @@ export default async function ContestDetailPage({
     .maybeSingle();
   if (payoutRow) {
     contestSettings = {
-      payout_adjustment_percentage: payoutRow.payout_adjustment_percentage ?? null,
+      payout_adjustment_percentage:
+        payoutRow.payout_adjustment_percentage ?? null,
       payout_adjustment_mode: payoutRow.payout_adjustment_mode ?? null,
       trust_score: payoutRow.trust_score ?? null,
       trust_number: payoutRow.trust_number ?? null,
@@ -179,34 +117,25 @@ export default async function ContestDetailPage({
       pcRow?.post_campaign_last_metrics_updated ?? null;
   }
 
-  // Additional security check: if contest doesn't belong to user and user is not admin, deny access
   if (!isAdmin && contestData.advertiser_id !== user.id) {
     console.log(
-      `Access denied: User ${user.id} attempted to access contest ${contestId} owned by ${contestData.advertiser_id}`
+      `Access denied: User ${user.id} attempted to access contest ${contestId} owned by ${contestData.advertiser_id}`,
     );
     redirect("/dashboard/contests");
   }
 
-  // Remove all legacy parsing and filtering for inspiration_links
   const finalInspirationLinks = Array.isArray(contestData.inspiration_links)
     ? contestData.inspiration_links
     : [];
 
-  // Check if this is a Twitter campaign
-  // Twitter campaigns can be identified by:
-  // 1. platform === "twitter" or "x"
-  // 2. contest_format === "text_image" (for Twitter text/image campaigns)
   const isTwitterCampaign =
     (contestData.platform?.toLowerCase() === "twitter" ||
       contestData.platform?.toLowerCase() === "x") &&
     contestData.contest_format === "text_image";
 
-  // Same gate as PC Submissions toggle in the client — preload so the tab is
-  // instant (mirrors how initialSubmissions hydrates the Submissions tab).
   const shouldPrefetchPostCampaign =
     shouldShowPostCampaignSubmissionsToggle(contestData);
 
-  // Count-only prefetch — rows load paginated on the client to avoid large SSR payloads.
   let initialPostCampaignMetricsCount: number | null = null;
   if (shouldPrefetchPostCampaign) {
     try {
@@ -229,169 +158,6 @@ export default async function ContestDetailPage({
     isTwitterCampaign,
   });
 
-  // Fetch submissions (paginated; PostgREST caps at 1000 rows per request)
-  const SUBMISSIONS_SELECT = `
-      id,
-      created_at,
-      content_link,
-      status,
-      views, 
-      earnings,
-      other_stats,
-      platform,
-      video_id,
-      video_thumbnail_url,
-      video_title,
-      creator_id,
-      paid,
-      paid_at,
-      bonus_paid,
-      bonus_paid_at,
-      bonus_amount,
-      milestone_bonus_paid,
-      dual_rewards_payout,
-      metadata,
-      insights_status,
-      last_insights_update,
-      quality_score
-    `;
-  type ContestSubmissionRow = {
-    creator_id?: string | null;
-    [key: string]: unknown;
-  };
-  const { data: submissionsData, error: submissionsError } =
-    await fetchContestSubmissionsAllPages<ContestSubmissionRow>(
-      supabase,
-      contestId,
-      SUBMISSIONS_SELECT,
-    );
-
-  const submissionsFetchError = submissionsError
-    ? formatSubmissionFetchError(submissionsError)
-    : undefined;
-
-  if (submissionsError) {
-    console.error(
-      `[page.tsx] Supabase error fetching submissions for contest ${contestId}:`,
-      submissionsError
-    );
-  }
-
-  // For Twitter campaigns, fetch tweets from twitter_campaign_tweets (batched; was capped at 50)
-  let twitterTweetsData: any[] = [];
-  const TWITTER_PAGE_CHUNK = 500;
-  const TWITTER_PAGE_MAX = 10_000;
-
-  if (isTwitterCampaign) {
-    let tweetsData: any = null;
-    let tweetsError: any = null;
-
-    const selectFull = `
-        id,
-        tweet_id,
-        tweet_url,
-        tweet_text,
-        tweet_created_at,
-        tweet_type,
-        twitter_username,
-        creator_id,
-        likes,
-        replies,
-        retweets,
-        quote_reposts,
-        impressions,
-        points,
-        is_eligible,
-        moderation_status,
-        manual_points_adjustment,
-        manual_points_reason,
-        earnings,
-        deleted_at,
-        excluded_by_submission_cap,
-        first_fetched_at,
-        last_updated_at,
-        bonus_paid,
-        bonus_paid_at,
-        bonus_amount
-      `;
-
-    const selectBasic = `
-          id,
-          tweet_id,
-          tweet_url,
-          tweet_text,
-          tweet_created_at,
-          tweet_type,
-          twitter_username,
-          creator_id,
-          likes,
-          replies,
-          retweets,
-          quote_reposts,
-          impressions,
-          points,
-          is_eligible,
-          deleted_at,
-          excluded_by_submission_cap,
-          first_fetched_at,
-          last_updated_at
-        `;
-
-    let result = await fetchTwitterTweetsAllPages(
-      supabase,
-      contestId,
-      selectFull,
-      TWITTER_PAGE_CHUNK,
-      TWITTER_PAGE_MAX,
-    );
-    tweetsData = result.data;
-    tweetsError = result.error;
-
-    if (tweetsError && tweetsError.code === "42703") {
-      console.log(`[page.tsx] Some columns don't exist, fetching without them`);
-      result = await fetchTwitterTweetsAllPages(
-        supabase,
-        contestId,
-        selectBasic,
-        TWITTER_PAGE_CHUNK,
-        TWITTER_PAGE_MAX,
-      );
-      tweetsData = result.data;
-      tweetsError = result.error;
-    }
-
-    if (tweetsError) {
-      console.error(
-        `[page.tsx] Supabase error fetching Twitter tweets for contest ${contestId}:`,
-        tweetsError
-      );
-      twitterTweetsData = [];
-    } else {
-      // Set defaults for any missing fields
-      twitterTweetsData = (tweetsData || []).map((tweet: any) => ({
-        ...tweet,
-        moderation_status: tweet.moderation_status || "pending", // Default to pending if NULL or column doesn't exist
-        manual_points_adjustment: tweet.manual_points_adjustment || 0,
-        manual_points_reason: tweet.manual_points_reason || null,
-        created_at:
-          tweet.first_fetched_at ||
-          tweet.last_updated_at ||
-          tweet.tweet_created_at, // Use first_fetched_at as created_at
-      }));
-      console.log(
-        `[page.tsx] Fetched ${twitterTweetsData.length} Twitter tweets for contest ${contestId}`,
-        twitterTweetsData.length > 0
-          ? `Sample tweet: ${JSON.stringify(twitterTweetsData[0], null, 2)}`
-          : "No tweets found"
-      );
-    }
-  } else {
-    console.log(
-      `[page.tsx] Not a Twitter campaign - skipping Twitter tweets fetch`
-    );
-  }
-
-  // For Twitter campaigns, fetch creator-level leaderboard data from twitter_campaign_leaderboard
   let creatorModerationData: Record<
     string,
     {
@@ -417,17 +183,16 @@ export default async function ContestDetailPage({
       const { data: leaderboardData, error: leaderboardError } = await supabase
         .from("twitter_campaign_leaderboard")
         .select(
-          "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid_at, earnings, paid_rank"
+          "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid_at, earnings, paid_rank",
         )
         .eq("contest_id", contestId);
 
       if (leaderboardError) {
         console.error(
           `[page.tsx] Error fetching creator leaderboard data:`,
-          leaderboardError
+          leaderboardError,
         );
       } else if (leaderboardData) {
-        // Create a map of creator_id -> leaderboard data
         leaderboardData.forEach((entry: any) => {
           if (entry.creator_id) {
             creatorModerationData[entry.creator_id] = {
@@ -453,169 +218,52 @@ export default async function ContestDetailPage({
     } catch (error) {
       console.error(
         `[page.tsx] Error fetching creator leaderboard data:`,
-        error
+        error,
       );
     }
   }
 
-  console.log(
-    `[page.tsx] Raw submissionsData for contest ${contestId}:`,
-    JSON.stringify(submissionsData, null, 2)
+  // First page only — remaining rows hydrate via /api/contests/[id]/submissions
+  const firstPage = await loadContestDetailSubmissionsPage(
+    supabase,
+    contestId,
+    contestData,
+    {
+      limit: CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE,
+      offset: 0,
+      creatorModerationData,
+    },
   );
 
-  // Fetch creator profiles and user data for the submissions and Twitter tweets
-  let creatorProfilesData: any[] = [];
-  let usersData: any[] = [];
-  let liveGlobalTrustMetricsByCreatorId: Record<string, any> = {};
-  let liveGlobalQualityMetricsByCreatorId: Record<string, any> = {};
-
-  // Combine creator IDs from both submissions and Twitter tweets
-  const allCreatorIds = new Set<string>();
-  if (submissionsData && submissionsData.length > 0) {
-    submissionsData.forEach((sub) => {
-      const creatorId =
-        typeof sub.creator_id === "string" ? sub.creator_id.trim() : "";
-      if (creatorId) allCreatorIds.add(creatorId);
-    });
-  }
-  if (twitterTweetsData && twitterTweetsData.length > 0) {
-    twitterTweetsData.forEach((tweet) => {
-      if (tweet.creator_id) allCreatorIds.add(tweet.creator_id);
-    });
-  }
-
-  if (allCreatorIds.size > 0) {
-    const creatorIds = Array.from(allCreatorIds);
-
-    if (creatorIds.length > 0) {
-      // Fetch creator profiles (including Twitter accounts for Twitter campaigns)
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("creator_profiles")
-        .select(
-          `
-          id,
-          youtube_account,
-          instagram_account,
-          instagram_archive,
-          twitter_account,
-          trust_score_metrics,
-          avg_quality_score,
-          best_quality_score,
-          quality_score_sum,
-          total_money_won,
-          total_views
-        `
-        )
-        .in("id", creatorIds);
-
-      if (profilesError) {
-        console.error(
-          `[page.tsx] Supabase error fetching creator profiles:`,
-          profilesError
-        );
-      } else {
-        creatorProfilesData = profilesData || [];
-      }
-
-      // Fetch user data for fallbacks
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select(
-          `
-          id,
-          full_name,
-          username,
-          profile_picture_url
-        `
-        )
-        .in("id", creatorIds);
-
-      if (userError) {
-        console.error(`[page.tsx] Supabase error fetching users:`, userError);
-      } else {
-        usersData = userData || [];
-      }
-
-      if (isVideoContest) {
-        const supabaseAdmin = createAdminClient();
-        liveGlobalTrustMetricsByCreatorId =
-          await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
-        liveGlobalQualityMetricsByCreatorId =
-          await fetchLiveQualityMetricsByCreatorIds(supabaseAdmin, creatorIds);
-      }
-    }
-  }
-
-  const getCreatorTrustMetrics = (
-    creatorProfile: any,
-    creatorId?: string | null,
-  ) =>
-    isVideoContest
-      ? resolveCreatorTrustMetrics(
-          creatorProfile,
-          creatorId,
-          liveGlobalTrustMetricsByCreatorId,
-        )
-      : null;
-
-  const getCreatorTrustScore = (
-    creatorProfile: any,
-    creatorId?: string | null,
-  ): number | null =>
-    isVideoContest
-      ? getCreatorTrustScoreFromMetrics(
-          creatorProfile,
-          creatorId,
-          liveGlobalTrustMetricsByCreatorId,
-        )
-      : null;
-
-  const getCreatorEligibilityFields = (
-    creatorProfile: any,
-    creatorId?: string | null,
-  ) => {
-    if (!isVideoContest || !creatorId) {
-      return {
-        avg_quality_score: null,
-        best_quality_score: null,
-        quality_score_sum: null,
-        total_money_won: 0,
-        total_views: 0,
-        quality_score_counts: { score1: 0, score2: 0, score3: 0 },
-      };
-    }
-    const resolved = resolveCreatorEligibilityProfileFields(
-      creatorProfile,
-      liveGlobalQualityMetricsByCreatorId[creatorId] ?? null,
+  const submissionsFetchError = firstPage.errorMessage;
+  if (submissionsFetchError) {
+    console.error(
+      `[page.tsx] Error fetching submissions for contest ${contestId}:`,
+      submissionsFetchError,
     );
-    const liveQuality = liveGlobalQualityMetricsByCreatorId[creatorId];
-    return {
-      avg_quality_score: resolved.avgQualityScore,
-      best_quality_score: resolved.bestQualityScore,
-      quality_score_sum: getCreatorProfileQualityScoreSum(creatorProfile),
-      total_money_won: resolved.totalPlatformEarningsCents,
-      total_views: resolved.totalViews,
-      quality_score_counts: liveQuality?.quality_score_counts ?? {
-        score1: 0,
-        score2: 0,
-        score3: 0,
-      },
-    };
-  };
+  }
 
-  const isLive = contestData.status === "active";
+  const allSubmissions = firstPage.submissions;
+  const submissionCounts = firstPage.counts;
+  const initialSubmissionTotal = Math.max(
+    submissionCounts.total,
+    firstPage.total,
+  );
+
+  console.log(
+    `[page.tsx] SSR submissions page for ${contestId}: ${allSubmissions.length}/${initialSubmissionTotal}`,
+  );
 
   const calculateDurationDays = (
     start: string | null,
-    end: string | null
+    end: string | null,
   ): number | null => {
     if (!start || !end) return null;
     try {
       const startDate = new Date(start);
       const endDate = new Date(end);
       const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays;
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     } catch (error) {
       console.error("Error calculating duration:", error);
       return null;
@@ -624,11 +272,9 @@ export default async function ContestDetailPage({
 
   const durationDays = calculateDurationDays(
     contestData.start_date,
-    contestData.end_date
+    contestData.end_date,
   );
 
-  // Ensure contestData and submissionsData are compatible with the client component props
-  // The client component expects specific shapes for contest and submissions
   const contest = {
     id: contestData.id,
     title: contestData.title,
@@ -648,27 +294,21 @@ export default async function ContestDetailPage({
     contest_based_details: contestData.contest_based_details,
     last_metrics_updated: contestData.last_metrics_updated,
     post_campaign_last_metrics_updated: postCampaignLastMetricsUpdated,
-    // Add other moderation fields for completeness
     submitted_for_approval_at: contestData.submitted_for_approval_at,
     approved_at: contestData.approved_at,
     approved_by: contestData.approved_by,
     published_at: contestData.published_at,
     rejection_reason: contestData.rejection_reason,
-    // New features (2025-10-01)
     multiple_submissions_enabled: contestData.multiple_submissions_enabled,
     max_submissions_per_creator: contestData.max_submissions_per_creator,
     content_type: contestData.content_type,
     bonus_details: contestData.bonus_details,
     max_earnings_per_creator: contestData.max_earnings_per_creator,
-    // Categories, subcategories, and interests
     categories: contestData.categories,
     subcategories: contestData.subcategories,
     interests: contestData.interests,
-    // Region data
     region: contestData.region,
-    // Twitter-specific fields (all stored in contest_based_details.twitter_campaign)
     contest_format: contestData.contest_format,
-    // Payout adjustment (admin) – from contests table so they survive refresh
     payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
     payout_adjustment_mode: contestSettings.payout_adjustment_mode,
     trust_score: isVideoContest
@@ -704,130 +344,6 @@ export default async function ContestDetailPage({
       : null,
   };
 
-  // For Twitter campaigns: fetch bonus-paid status from money_transactions so Bonus Granted column is correct
-  let twitterBonusByTweetId: Map<string, { amount: number; paid_at: string }> =
-    new Map();
-  if (isTwitterCampaign && twitterTweetsData && twitterTweetsData.length > 0) {
-    try {
-      const supabaseAdmin = createAdminClient();
-      const [{ data: bonusRewards }, { data: bonusRefunds }] =
-        await Promise.all([
-          supabaseAdmin
-            .from("money_transactions")
-            .select("amount, created_at, metadata, user_id")
-            .eq("type", "reward")
-            .contains("metadata", {
-              contest_id: contestId,
-              bonus_type: "flat_fee",
-            }),
-          supabaseAdmin
-            .from("money_transactions")
-            .select("amount, metadata, remarks, user_id")
-            .eq("type", "refund")
-            .contains("metadata", {
-              contest_id: contestId,
-              bonus_type: "flat_fee",
-            }),
-        ]);
-      const rewardSumByTweet = new Map<
-        string,
-        { sum: number; latestAt: string }
-      >();
-      const refundSumByTweet = new Map<string, number>();
-      const creatorLevelRefund = new Map<string, number>();
-      (bonusRewards || []).forEach((r: any) => {
-        const rawTweetId = r.metadata?.tweet_id;
-        const tweetId = rawTweetId != null ? String(rawTweetId) : null;
-        if (tweetId) {
-          const amt = Number(r.amount) || 0;
-          const at = r.created_at || "";
-          const cur = rewardSumByTweet.get(tweetId);
-          rewardSumByTweet.set(tweetId, {
-            sum: (cur?.sum ?? 0) + amt,
-            latestAt:
-              !cur || (at && at > (cur.latestAt || "")) ? at : cur.latestAt,
-          });
-        }
-      });
-      (bonusRefunds || [])
-        .filter(
-          (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
-        )
-        .forEach((r: any) => {
-          const rawTweetId = r.metadata?.tweet_id;
-          const tweetId = rawTweetId != null ? String(rawTweetId) : null;
-          const amt = Number(r.amount) || 0;
-          if (tweetId) {
-            refundSumByTweet.set(
-              tweetId,
-              (refundSumByTweet.get(tweetId) ?? 0) + amt
-            );
-          } else {
-            const creatorId = r.user_id;
-            if (creatorId) {
-              creatorLevelRefund.set(
-                creatorId,
-                (creatorLevelRefund.get(creatorId) ?? 0) + amt
-              );
-            }
-          }
-        });
-      const creatorTotalReward = new Map<string, number>();
-      rewardSumByTweet.forEach((reward, tweetId) => {
-        const creatorId = twitterTweetsData?.find(
-          (t: any) => t.id === tweetId || String(t.id) === tweetId
-        )?.creator_id;
-        if (creatorId) {
-          creatorTotalReward.set(
-            creatorId,
-            (creatorTotalReward.get(creatorId) ?? 0) + reward.sum
-          );
-        }
-      });
-      const creatorsWithFullBonusReversal = new Set<string>();
-      creatorLevelRefund.forEach((refundSum, creatorId) => {
-        const totalReward = creatorTotalReward.get(creatorId) ?? 0;
-        if (refundSum >= totalReward) {
-          creatorsWithFullBonusReversal.add(creatorId);
-        }
-      });
-      refundSumByTweet.forEach((refundSum, tweetId) => {
-        const reward = rewardSumByTweet.get(tweetId);
-        if (reward && reward.sum > refundSum) {
-          const creatorId = twitterTweetsData?.find(
-            (t: any) => t.id === tweetId || String(t.id) === tweetId
-          )?.creator_id;
-          if (!creatorId || !creatorsWithFullBonusReversal.has(creatorId)) {
-            twitterBonusByTweetId.set(tweetId, {
-              amount: reward.sum - refundSum,
-              paid_at: reward.latestAt,
-            });
-          }
-        }
-      });
-      rewardSumByTweet.forEach((reward, tweetId) => {
-        if (!twitterBonusByTweetId.has(tweetId)) {
-          const refundSum = refundSumByTweet.get(tweetId) ?? 0;
-          if (reward.sum > refundSum) {
-            const creatorId = twitterTweetsData?.find(
-              (t: any) => t.id === tweetId || String(t.id) === tweetId
-            )?.creator_id;
-            if (!creatorId || !creatorsWithFullBonusReversal.has(creatorId)) {
-              twitterBonusByTweetId.set(tweetId, {
-                amount: reward.sum - refundSum,
-                paid_at: reward.latestAt,
-              });
-            }
-          }
-        }
-      });
-    } catch (err) {
-      console.error("[page.tsx] Error fetching Twitter bonus-paid data:", err);
-    }
-  }
-
-  // For milestone contests: fetch creator-level bonus paid split by track (views/reels)
-  // so creator-wise "Bonus Granted" columns remain accurate regardless of payout order.
   let milestoneBonusPaidByCreator: Record<
     string,
     { viewsPaidCents: number; reelsPaidCents: number }
@@ -853,7 +369,7 @@ export default async function ContestDetailPage({
       const addByTrack = (
         row: any,
         sign: 1 | -1,
-        acc: Map<string, { views: number; reels: number }>
+        acc: Map<string, { views: number; reels: number }>,
       ) => {
         const creatorId = String(row?.user_id || "").trim();
         if (!creatorId) return;
@@ -875,10 +391,12 @@ export default async function ContestDetailPage({
       };
 
       const paidByTrack = new Map<string, { views: number; reels: number }>();
-      (milestoneRewards || []).forEach((r: any) => addByTrack(r, 1, paidByTrack));
+      (milestoneRewards || []).forEach((r: any) =>
+        addByTrack(r, 1, paidByTrack),
+      );
       (milestoneRefunds || [])
         .filter(
-          (r: any) => !r?.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
+          (r: any) => !r?.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
         )
         .forEach((r: any) => addByTrack(r, -1, paidByTrack));
 
@@ -891,357 +409,20 @@ export default async function ContestDetailPage({
     } catch (err) {
       console.error(
         "[page.tsx] Error fetching milestone bonus paid split by track:",
-        err
+        err,
       );
     }
   }
-
-  // Transform Twitter tweets into submission-like format for display
-  const twitterSubmissions = twitterTweetsData
-    ? twitterTweetsData.map((tweet: any) => {
-      let creatorDisplayName: string | null = null;
-      let creatorUsername: string | null = null;
-      let creatorAvatarUrl: string | null = null;
-      const actualCreatorProfileId: string | null = tweet.creator_id;
-
-      // Find the creator profile and user for this tweet
-      const creatorProfile = creatorProfilesData.find(
-        (profile) => profile.id === tweet.creator_id
-      );
-      const user = usersData.find((u) => u.id === tweet.creator_id);
-
-      // Try to get Twitter account info
-      if (creatorProfile?.twitter_account) {
-        try {
-          const twitterAccount =
-            typeof creatorProfile.twitter_account === "string"
-              ? JSON.parse(creatorProfile.twitter_account)
-              : creatorProfile.twitter_account;
-          creatorDisplayName =
-            twitterAccount?.name || twitterAccount?.username;
-          creatorUsername =
-            twitterAccount?.username || tweet.twitter_username;
-          creatorAvatarUrl = twitterAccount?.profile_picture_url;
-        } catch (e) {
-          console.error("[page.tsx] Error parsing Twitter account JSON:", e);
-        }
-      }
-
-      // Fallback to tweet data
-      if (!creatorUsername) {
-        creatorUsername = tweet.twitter_username || "Unknown User";
-      }
-
-      // Fallback to user data
-      if (!creatorDisplayName && user?.full_name) {
-        creatorDisplayName = user.full_name;
-      }
-      if (!creatorUsername && user?.username) {
-        creatorUsername = user.username;
-      }
-      if (!creatorAvatarUrl && user?.profile_picture_url) {
-        creatorAvatarUrl = user.profile_picture_url;
-      }
-
-      // Final fallbacks
-      if (!creatorDisplayName) {
-        creatorDisplayName =
-          user?.full_name || user?.username || "Unknown Creator";
-      }
-      if (!creatorUsername) {
-        creatorUsername =
-          user?.username || tweet.twitter_username || "Unknown User";
-      }
-
-      // Calculate base points for raid campaigns
-      // For raid campaigns, points field contains base + bonus, so we need to calculate base from tweet_type
-      // For regular campaigns, points is just the base points
-      let basePoints = 0;
-      if (tweet.target_tweet_id) {
-        // This is a raid engagement - calculate base points from tweet_type
-        const tweetType = tweet.tweet_type;
-        if (tweetType === "reply" || tweetType === "comment") {
-          basePoints = 1; // comment_base_points
-        } else if (tweetType === "retweet") {
-          basePoints = 5; // retweet_base_points
-        } else if (tweetType === "quote" || tweetType === "quote_repost") {
-          basePoints = 10; // quote_repost_base_points
-        } else {
-          // Fallback: if we can't determine type, use points as base (for backwards compatibility)
-          basePoints = tweet.points || 0;
-        }
-      } else {
-        // Regular campaign - points is just base points
-        basePoints = tweet.points || 0;
-      }
-      const manualAdjustment = tweet.manual_points_adjustment || 0;
-      const totalPoints = (tweet.points || 0) + manualAdjustment;
-
-      // Get moderation_status (default to "pending" if column doesn't exist)
-      const moderationStatus = (tweet as any).moderation_status || "pending";
-      const isCpm = isCpmContestType(contestData.contest_type);
-      const cpmRate =
-        (contestData.contest_based_details as any)?.cpm_contest
-          ?.cpm_rate_usd || 0;
-      // CPM per-tweet: only this tweet's reward when this tweet is paid; leaderboard: creator-level paid/earnings
-      const creatorLeaderboard = actualCreatorProfileId
-        ? creatorModerationData[actualCreatorProfileId]
-        : undefined;
-      const creatorPaid =
-        creatorLeaderboard?.moderation_status === "paid";
-      const creatorEarnings = creatorLeaderboard?.earnings ?? null;
-      const creatorPaidAt = creatorLeaderboard?.paid_at ?? null;
-      const tweetPaid = moderationStatus === "paid";
-      // Include manual_points_adjustment so Reward Granted matches expected reward
-      const tweetTotalPoints =
-        (tweet.points || 0) + (tweet.manual_points_adjustment || 0);
-      const storedTweetEarnings =
-        typeof (tweet as any).earnings === "number" && (tweet as any).earnings > 0
-          ? (tweet as any).earnings
-          : null;
-      const tweetEarningsCents =
-        storedTweetEarnings != null
-          ? storedTweetEarnings
-          : isCpm && tweetPaid && cpmRate > 0
-            ? Math.round(((tweetTotalPoints * cpmRate) / 1000) * 100)
-            : null;
-      const paid = isCpm ? tweetPaid : creatorPaid;
-      const earnings =
-        isCpm && tweetPaid
-          ? tweetEarningsCents
-          : creatorPaid && creatorEarnings != null
-            ? creatorEarnings
-            : null;
-      const paidAt = isCpm ? null : creatorPaidAt;
-
-      return {
-        id: tweet.id,
-        created_at: tweet.tweet_created_at || tweet.created_at,
-        content_link: tweet.tweet_url,
-        status: moderationStatus, // Use moderation_status as status
-        views: tweet.impressions || 0,
-        earnings: earnings,
-        other_stats: {
-          likes: tweet.likes || 0,
-          replies: tweet.replies || 0,
-          retweets: tweet.retweets || 0,
-          quote_reposts: tweet.quote_reposts || 0,
-          impressions: tweet.impressions || 0,
-          points: totalPoints,
-          base_points: basePoints,
-          manual_points_adjustment: manualAdjustment,
-          manual_points_reason: tweet.manual_points_reason,
-          tweet_type: tweet.tweet_type,
-          tweet_text: tweet.tweet_text,
-        },
-        platform: "twitter",
-        video_thumbnail_url: null,
-        video_title: tweet.tweet_text?.substring(0, 100) || null,
-        paid,
-        paid_at: paidAt,
-        // Source of truth: twitter_campaign_tweets.bonus_paid / bonus_amount /
-        // bonus_paid_at (set by per-tweet and bulk payout routes). Fall back to
-        // the money_transactions-derived map only if the columns are missing
-        // (legacy DBs without the bonus_columns migration).
-        bonus_paid:
-          (tweet as any).bonus_paid === true
-            ? true
-            : (tweet as any).bonus_paid === false
-              ? false
-              : twitterBonusByTweetId.has(String(tweet.id)) ||
-                twitterBonusByTweetId.has(tweet.id),
-        bonus_paid_at:
-          (tweet as any).bonus_paid_at ??
-          twitterBonusByTweetId.get(String(tweet.id))?.paid_at ??
-          twitterBonusByTweetId.get(tweet.id)?.paid_at ??
-          null,
-        bonus_amount:
-          (tweet as any).bonus_amount != null
-            ? (tweet as any).bonus_amount
-            : twitterBonusByTweetId.get(String(tweet.id))?.amount ??
-              twitterBonusByTweetId.get(tweet.id)?.amount ??
-              null,
-        creator_display_name: creatorDisplayName,
-        creator_username: creatorUsername,
-        // Explicit username from users table for creator-wise view
-        user_username: user?.username || null,
-        creator_avatar_url: creatorAvatarUrl,
-        creator_id: actualCreatorProfileId,
-        trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
-        trust_score_metrics: getCreatorTrustMetrics(
-          creatorProfile,
-          actualCreatorProfileId
-        ),
-        // Mark as Twitter tweet for UI handling
-        is_twitter_tweet: true,
-        tweet_id: tweet.tweet_id,
-        moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
-        manual_points_adjustment: manualAdjustment,
-        manual_points_reason: tweet.manual_points_reason,
-        is_eligible: (tweet as any).is_eligible === true,
-        deleted_at: (tweet as any).deleted_at ?? null,
-        excluded_by_submission_cap:
-          (tweet as any).excluded_by_submission_cap ?? false,
-        // Add nested creator object for compatibility
-        creator: {
-          id: actualCreatorProfileId,
-          username: creatorUsername,
-          profile_picture_url: creatorAvatarUrl,
-          full_name: creatorDisplayName,
-          trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
-          trust_score_metrics: getCreatorTrustMetrics(
-            creatorProfile,
-            actualCreatorProfileId
-          ),
-          ...getCreatorEligibilityFields(
-            creatorProfile,
-            actualCreatorProfileId,
-          ),
-        },
-      };
-    })
-    : [];
-
-  const submissions = submissionsData
-    ? submissionsData.map((sub: any) => {
-      let creatorDisplayName: string | null = null;
-      let creatorUsername: string | null = null;
-      let creatorAvatarUrl: string | null = null;
-      const actualCreatorProfileId: string | null = sub.creator_id;
-
-      // Find the creator profile and user for this submission
-      const creatorProfile = creatorProfilesData.find(
-        (profile) => profile.id === sub.creator_id
-      );
-      const user = usersData.find((u) => u.id === sub.creator_id);
-
-      // Prioritize user's profile_picture_url over YouTube/Instagram profile pictures
-      creatorAvatarUrl = user?.profile_picture_url || null;
-
-      if (creatorProfile) {
-        const platform = sub.platform?.toLowerCase();
-
-        try {
-          if (
-            platform?.includes("youtube") &&
-            creatorProfile.youtube_account
-          ) {
-            const ytAccount =
-              typeof creatorProfile.youtube_account === "string"
-                ? JSON.parse(creatorProfile.youtube_account)
-                : creatorProfile.youtube_account;
-            creatorDisplayName = ytAccount?.channel_title;
-            creatorUsername =
-              ytAccount?.channel_custom_url || ytAccount?.channel_id;
-          } else if (
-            platform?.includes("instagram") &&
-            creatorProfile.instagram_account
-          ) {
-            const igAccount =
-              typeof creatorProfile.instagram_account === "string"
-                ? JSON.parse(creatorProfile.instagram_account)
-                : creatorProfile.instagram_account;
-            creatorDisplayName =
-              igAccount?.name_of_account ||
-              igAccount?.full_name ||
-              igAccount?.display_name;
-            creatorUsername = igAccount?.username;
-          }
-        } catch (e) {
-          console.error("[page.tsx] Error parsing social account JSON:", e);
-          // Keep username/avatar as null if parsing fails
-        }
-
-        // Fallback if platform-specific data extraction failed or platform is different
-        if (!creatorDisplayName && user?.full_name)
-          creatorDisplayName = user.full_name; // Use user full_name as fallback
-        if (!creatorUsername && user?.username)
-          creatorUsername = user.username; // Use user username as fallback
-
-        // Final fallbacks using user data if available
-        if (!creatorDisplayName)
-          creatorDisplayName =
-            user?.full_name || user?.username || "Unknown Creator";
-        if (!creatorUsername)
-          creatorUsername = user?.username || "Unknown User";
-        // Ensure we have a profile picture (already set above, but keep as fallback)
-        if (!creatorAvatarUrl)
-          creatorAvatarUrl = user?.profile_picture_url || null;
-      } else {
-        // No creator profile found, use user data as fallback
-        creatorDisplayName =
-          user?.full_name || user?.username || "Unknown Creator";
-        creatorUsername = user?.username || "Unknown User";
-        creatorAvatarUrl = user?.profile_picture_url || null;
-      }
-
-      return {
-        id: sub.id,
-        created_at: sub.created_at,
-        content_link: sub.content_link,
-        status: sub.status,
-        views: sub.views,
-        earnings: sub.earnings,
-        other_stats: sub.other_stats,
-        platform: sub.platform,
-        video_id: sub.video_id ?? null,
-        video_thumbnail_url: sub.video_thumbnail_url,
-        video_title: sub.video_title,
-        paid: sub.paid,
-        paid_at: sub.paid_at,
-        bonus_paid: sub.bonus_paid,
-        bonus_paid_at: sub.bonus_paid_at,
-        bonus_amount: sub.bonus_amount ?? null,
-        milestone_bonus_paid: sub.milestone_bonus_paid ?? null,
-        creator_display_name: creatorDisplayName,
-        creator_username: creatorUsername,
-        // Explicit username from users table for creator-wise view
-        user_username: user?.username || null,
-        creator_avatar_url: creatorAvatarUrl,
-        creator_id: actualCreatorProfileId,
-        trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
-        trust_score_metrics: getCreatorTrustMetrics(
-          creatorProfile,
-          actualCreatorProfileId
-        ),
-        // Add nested creator object for creator-wise grouping compatibility
-        creator: {
-          id: actualCreatorProfileId,
-          username: creatorUsername,
-          profile_picture_url: creatorAvatarUrl,
-          full_name: creatorDisplayName,
-          instagram_archive: creatorProfile?.instagram_archive ?? null,
-          trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
-          trust_score_metrics: getCreatorTrustMetrics(
-            creatorProfile,
-            actualCreatorProfileId
-          ),
-          ...getCreatorEligibilityFields(
-            creatorProfile,
-            actualCreatorProfileId,
-          ),
-        },
-        creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
-        metadata: sub.metadata ?? null,
-        insights_status: sub.insights_status ?? null,
-        last_insights_update: sub.last_insights_update ?? null,
-        quality_score: sub.quality_score ?? null,
-      };
-    })
-    : [];
-
-  // Combine regular submissions and Twitter tweets
-  const allSubmissions: any[] = [...submissions, ...twitterSubmissions];
 
   let brandProfile: { company_name: string | null; website_url: string | null } =
     { company_name: null, website_url: null };
   if (contestData.advertiser_id) {
     const { data: advertiserProfile, error: advertiserProfileError } =
       await supabase
-      .from("advertiser_profiles")
-      .select("company_name, website_url")
-      .eq("id", contestData.advertiser_id)
-      .maybeSingle();
+        .from("advertiser_profiles")
+        .select("company_name, website_url")
+        .eq("id", contestData.advertiser_id)
+        .maybeSingle();
     if (advertiserProfileError) {
       console.warn(
         `[ContestDetailPage] Failed to load advertiser profile for contest ${contestId} (advertiser ${contestData.advertiser_id}):`,
@@ -1272,6 +453,8 @@ export default async function ContestDetailPage({
       <ContestDetailClient
         contest={contest}
         initialSubmissions={allSubmissions}
+        initialSubmissionTotal={initialSubmissionTotal}
+        initialSubmissionCounts={submissionCounts}
         initialPostCampaignMetricsCount={initialPostCampaignMetricsCount}
         durationDays={durationDays}
         contestId={contestId}

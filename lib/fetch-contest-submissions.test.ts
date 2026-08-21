@@ -2,10 +2,15 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   fetchContestSubmissionsAllPages,
+  fetchContestSubmissionsPage,
   formatSubmissionFetchError,
 } from "./fetch-contest-submissions";
 
-type MockPage = { data?: Record<string, unknown>[]; error?: { message: string } | null };
+type MockPage = {
+  data?: Record<string, unknown>[];
+  error?: { message: string } | null;
+  count?: number | null;
+};
 
 function createMockSupabase(pages: MockPage[]) {
   let pageIndex = 0;
@@ -13,7 +18,7 @@ function createMockSupabase(pages: MockPage[]) {
 
   const terminal = {
     range: async (_from: number, _to: number) => {
-      const page = pages[pageIndex++] ?? { data: [], error: null };
+      const page = pages[pageIndex++] ?? { data: [], error: null, count: 0 };
       return page;
     },
   };
@@ -49,6 +54,36 @@ describe("formatSubmissionFetchError", () => {
   });
 });
 
+describe("fetchContestSubmissionsPage", () => {
+  it("returns one page with total and hasMore", async () => {
+    const rows = Array.from({ length: 75 }, (_, i) => ({ id: `r-${i}` }));
+    const { supabase } = createMockSupabase([
+      { data: rows, error: null, count: 200 },
+    ]);
+    const result = await fetchContestSubmissionsPage(supabase, "c1", "id", {
+      limit: 75,
+      offset: 0,
+    });
+    assert.equal(result.error, null);
+    assert.equal(result.data.length, 75);
+    assert.equal(result.total, 200);
+    assert.equal(result.hasMore, true);
+  });
+
+  it("sets hasMore false on last page", async () => {
+    const rows = [{ id: "last" }];
+    const { supabase } = createMockSupabase([
+      { data: rows, error: null, count: 76 },
+    ]);
+    const result = await fetchContestSubmissionsPage(supabase, "c1", "id", {
+      limit: 75,
+      offset: 75,
+    });
+    assert.equal(result.hasMore, false);
+    assert.equal(result.total, 76);
+  });
+});
+
 describe("fetchContestSubmissionsAllPages", () => {
   it("returns empty data for zero rows", async () => {
     const { supabase } = createMockSupabase([{ data: [] }]);
@@ -68,9 +103,14 @@ describe("fetchContestSubmissionsAllPages", () => {
       { data: page2 },
     ]);
 
-    const result = await fetchContestSubmissionsAllPages(supabase, "contest-1", "id", {
-      chunkSize: 1000,
-    });
+    const result = await fetchContestSubmissionsAllPages(
+      supabase,
+      "contest-1",
+      "id",
+      {
+        chunkSize: 1000,
+      },
+    );
 
     assert.equal(result.error, null);
     assert.equal(result.data.length, 1001);
@@ -85,15 +125,17 @@ describe("fetchContestSubmissionsAllPages", () => {
       { data: [], error: { message: "page 2 failed" } },
     ]);
 
-    const result = await fetchContestSubmissionsAllPages(supabase, "contest-1", "id", {
-      chunkSize: 1000,
-    });
+    const result = await fetchContestSubmissionsAllPages(
+      supabase,
+      "contest-1",
+      "id",
+      {
+        chunkSize: 1000,
+      },
+    );
 
     assert.equal(result.data.length, 0);
-    assert.equal(
-      formatSubmissionFetchError(result.error),
-      "page 2 failed",
-    );
+    assert.equal(formatSubmissionFetchError(result.error), "page 2 failed");
     assert.equal(result.truncated, false);
   });
 
@@ -101,17 +143,24 @@ describe("fetchContestSubmissionsAllPages", () => {
     const fullPage = Array.from({ length: 10 }, (_, i) => ({ id: `c-${i}` }));
     const { supabase } = createMockSupabase([{ data: fullPage }]);
 
-    const result = await fetchContestSubmissionsAllPages(supabase, "contest-1", "id", {
-      chunkSize: 10,
-      maxRows: 10,
-    });
+    const result = await fetchContestSubmissionsAllPages(
+      supabase,
+      "contest-1",
+      "id",
+      {
+        chunkSize: 10,
+        maxRows: 10,
+      },
+    );
 
     assert.equal(result.data.length, 10);
     assert.equal(result.truncated, true);
   });
 
   it("appends id tie-break sort when caller omits it", async () => {
-    const { supabase, orderColumns } = createMockSupabase([{ data: [{ id: "1" }] }]);
+    const { supabase, orderColumns } = createMockSupabase([
+      { data: [{ id: "1" }] },
+    ]);
     await fetchContestSubmissionsAllPages(supabase, "contest-1", "id", {
       order: { column: "created_at", ascending: false },
     });

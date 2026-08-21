@@ -798,6 +798,18 @@ type YouTubeMetricsRefreshRunSummary = {
 interface ContestDetailClientProps {
   contest: Contest;
   initialSubmissions: Submission[] | null;
+  /** Exact total from SSR count (may exceed initialSubmissions.length). */
+  initialSubmissionTotal?: number;
+  /** Status badge counts from contest_stats / head counts (not derived from page rows). */
+  initialSubmissionCounts?: {
+    total: number;
+    pending: number;
+    rejected: number;
+    verified: number;
+    paid: number;
+    verified_or_paid: number;
+    not_rejected: number;
+  } | null;
   /** SSR count probe (null = not prefetched; client loads rows paginated). */
   initialPostCampaignMetricsCount?: number | null;
   durationDays: number | null;
@@ -861,14 +873,20 @@ function TwitterContestSubmissionStatusTabs({
   activeStatusTab,
   onValueChange,
   isDark,
-  currentSubmissions,
-  getStatus,
+  counts,
 }: {
   activeStatusTab: string;
   onValueChange: (value: string) => void;
   isDark: boolean;
-  currentSubmissions: any[];
-  getStatus: (s: any) => string;
+  counts: {
+    total: number;
+    pending: number;
+    rejected: number;
+    verified: number;
+    paid: number;
+    verified_or_paid: number;
+    not_rejected: number;
+  };
 }) {
   return (
     <div className="mb-4 px-4">
@@ -898,7 +916,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-[#7F39EC] bg-purple-200",
               )}
             >
-              {currentSubmissions.length}
+              {counts.total}
             </Badge>
           </TabsTrigger>
           <TabsTrigger
@@ -921,10 +939,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-[#7F39EC] bg-purple-200",
               )}
             >
-              {
-                currentSubmissions.filter((s) => getStatus(s) !== "rejected")
-                  .length
-              }
+              {counts.not_rejected}
             </Badge>
           </TabsTrigger>
           <TabsTrigger
@@ -948,12 +963,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-[#7F39EC] bg-purple-200",
               )}
             >
-              {
-                currentSubmissions.filter((s) => {
-                  const st = getStatus(s);
-                  return st === "verified" || st === "paid";
-                }).length
-              }
+              {counts.verified_or_paid}
             </Badge>
           </TabsTrigger>
           <TabsTrigger
@@ -976,10 +986,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-[#7F39EC] bg-purple-200",
               )}
             >
-              {
-                currentSubmissions.filter((s) => getStatus(s) === "pending")
-                  .length
-              }
+              {counts.pending}
             </Badge>
           </TabsTrigger>
           <TabsTrigger
@@ -1002,10 +1009,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-red-600 bg-red-200",
               )}
             >
-              {
-                currentSubmissions.filter((s) => getStatus(s) === "rejected")
-                  .length
-              }
+              {counts.rejected}
             </Badge>
           </TabsTrigger>
           <TabsTrigger
@@ -1028,10 +1032,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-[#7F39EC] bg-purple-200",
               )}
             >
-              {
-                currentSubmissions.filter((s) => getStatus(s) === "verified")
-                  .length
-              }
+              {counts.verified}
             </Badge>
           </TabsTrigger>
           <TabsTrigger
@@ -1054,7 +1055,7 @@ function TwitterContestSubmissionStatusTabs({
                   : "text-[#7F39EC] bg-purple-200",
               )}
             >
-              {currentSubmissions.filter((s) => getStatus(s) === "paid").length}
+              {counts.paid}
             </Badge>
           </TabsTrigger>
         </TabsList>
@@ -1446,6 +1447,8 @@ function twitterCpmBonusGrantedDisplay(
 export default function ContestDetailClient({
   contest,
   initialSubmissions,
+  initialSubmissionTotal = null,
+  initialSubmissionCounts = null,
   initialPostCampaignMetricsCount = null,
   durationDays,
   contestId,
@@ -1460,6 +1463,27 @@ export default function ContestDetailClient({
   const { toast, toasts } = useToast();
   const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
     initialSubmissions || [],
+  );
+  const [submissionTotalCount, setSubmissionTotalCount] = useState<number>(
+    typeof initialSubmissionTotal === "number"
+      ? initialSubmissionTotal
+      : initialSubmissions?.length ?? 0,
+  );
+  const [submissionStatusCounts, setSubmissionStatusCounts] = useState(() => ({
+    total: initialSubmissionCounts?.total ?? initialSubmissions?.length ?? 0,
+    pending: initialSubmissionCounts?.pending ?? 0,
+    rejected: initialSubmissionCounts?.rejected ?? 0,
+    verified: initialSubmissionCounts?.verified ?? 0,
+    paid: initialSubmissionCounts?.paid ?? 0,
+    verified_or_paid: initialSubmissionCounts?.verified_or_paid ?? 0,
+    not_rejected: initialSubmissionCounts?.not_rejected ?? 0,
+  }));
+  const [submissionsFullyHydrated, setSubmissionsFullyHydrated] = useState(
+    () =>
+      (initialSubmissions?.length ?? 0) >=
+      (typeof initialSubmissionTotal === "number"
+        ? initialSubmissionTotal
+        : initialSubmissions?.length ?? 0),
   );
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
@@ -1496,7 +1520,10 @@ export default function ContestDetailClient({
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "submissions", label: `Submissions (${currentSubmissions.length})` },
+    {
+      id: "submissions",
+      label: `Submissions (${submissionTotalCount})`,
+    },
     ...(contest?.platform?.toLowerCase() === "twitter"
       ? [{ id: "twitter-feed", label: "Twitter Feed" }]
       : []),
@@ -3044,14 +3071,14 @@ export default function ContestDetailClient({
       { id: "overview", label: "Overview" },
       {
         id: "submissions",
-        label: `Submissions (${qualityFilteredSubmissions.length})`,
+        label: `Submissions (${submissionTotalCount})`,
       },
       ...(contest?.platform?.toLowerCase() === "twitter"
         ? [{ id: "twitter-feed", label: "Twitter Feed" }]
         : []),
       { id: "analytics", label: "Analytics" },
     ],
-    [qualityFilteredSubmissions.length, contest?.platform],
+    [submissionTotalCount, contest?.platform],
   );
 
   // Filter submissions based on active status tab
@@ -6105,7 +6132,102 @@ export default function ContestDetailClient({
 
   useEffect(() => {
     setCurrentSubmissions(initialSubmissions || []);
-  }, [initialSubmissions]);
+    setSubmissionTotalCount(
+      typeof initialSubmissionTotal === "number"
+        ? initialSubmissionTotal
+        : initialSubmissions?.length ?? 0,
+    );
+    if (initialSubmissionCounts) {
+      setSubmissionStatusCounts({
+        total: initialSubmissionCounts.total,
+        pending: initialSubmissionCounts.pending,
+        rejected: initialSubmissionCounts.rejected,
+        verified: initialSubmissionCounts.verified,
+        paid: initialSubmissionCounts.paid,
+        verified_or_paid: initialSubmissionCounts.verified_or_paid,
+        not_rejected: initialSubmissionCounts.not_rejected,
+      });
+    }
+    setSubmissionsFullyHydrated(
+      (initialSubmissions?.length ?? 0) >=
+        (typeof initialSubmissionTotal === "number"
+          ? initialSubmissionTotal
+          : initialSubmissions?.length ?? 0),
+    );
+  }, [initialSubmissions, initialSubmissionTotal, initialSubmissionCounts]);
+
+  // Background-hydrate remaining submission pages so leaderboard/creator-wise
+  // keep working, without shipping every row in the SSR HTML payload.
+  useEffect(() => {
+    if (submissionsFullyHydrated) return;
+    if (typeof initialSubmissionTotal !== "number") return;
+    if ((initialSubmissions?.length ?? 0) >= initialSubmissionTotal) {
+      setSubmissionsFullyHydrated(true);
+      return;
+    }
+
+    let cancelled = false;
+    const abort = new AbortController();
+    const pageSize = 75;
+
+    (async () => {
+      try {
+        let offset = initialSubmissions?.length ?? 0;
+        let hasMore = offset < initialSubmissionTotal;
+        const merged = [...(initialSubmissions || [])];
+
+        while (!cancelled && hasMore) {
+          const res = await fetch(
+            `/api/contests/${contestId}/submissions?limit=${pageSize}&offset=${offset}`,
+            { signal: abort.signal },
+          );
+          if (!res.ok) {
+            console.error(
+              "[contest-detail] Failed to hydrate submissions page",
+              await res.text(),
+            );
+            break;
+          }
+          const data = await res.json();
+          const rows = Array.isArray(data.submissions) ? data.submissions : [];
+          if (data.counts) {
+            setSubmissionStatusCounts({
+              total: Number(data.counts.total) || 0,
+              pending: Number(data.counts.pending) || 0,
+              rejected: Number(data.counts.rejected) || 0,
+              verified: Number(data.counts.verified) || 0,
+              paid: Number(data.counts.paid) || 0,
+              verified_or_paid: Number(data.counts.verified_or_paid) || 0,
+              not_rejected: Number(data.counts.not_rejected) || 0,
+            });
+            if (typeof data.total === "number") {
+              setSubmissionTotalCount(data.total);
+            }
+          }
+          for (const row of rows) {
+            if (!merged.some((m) => m.id === row.id)) {
+              merged.push(row);
+            }
+          }
+          if (!cancelled) setCurrentSubmissions([...merged]);
+          hasMore = Boolean(data.hasMore) && rows.length > 0;
+          offset += pageSize;
+        }
+      } catch (err) {
+        if ((err as { name?: string })?.name === "AbortError") return;
+        console.error("[contest-detail] submissions hydrate error:", err);
+      } finally {
+        if (!cancelled) setSubmissionsFullyHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      abort.abort();
+    };
+    // Only re-run when contest / SSR seed changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contestId, initialSubmissions, initialSubmissionTotal]);
 
   useEffect(() => {
     setCurrentContest(contest);
@@ -13344,7 +13466,7 @@ export default function ContestDetailClient({
                         : "text-gray-900",
                     )}
                   >
-                    {currentSubmissions.length}
+                    {submissionTotalCount}
                   </p>
                 </div>
               </div>
@@ -18966,7 +19088,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {qualityFilteredSubmissions.length}
+                              {submissionStatusCounts.total}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -18993,11 +19115,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {
-                                qualityFilteredSubmissions.filter(
-                                  (s) => getStatus(s) !== "rejected",
-                                ).length
-                              }
+                              {submissionStatusCounts.not_rejected}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19025,14 +19143,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {
-                                qualityFilteredSubmissions.filter((s) => {
-                                  const status = getStatus(s);
-                                  return (
-                                    status === "verified" || status === "paid"
-                                  );
-                                }).length
-                              }
+                              {submissionStatusCounts.verified_or_paid}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19059,12 +19170,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {
-                                qualityFilteredSubmissions.filter((s) => {
-                                  const status = getStatus(s);
-                                  return status === "pending";
-                                }).length
-                              }
+                              {submissionStatusCounts.pending}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19091,12 +19197,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {
-                                qualityFilteredSubmissions.filter((s) => {
-                                  const status = getStatus(s);
-                                  return status === "verified";
-                                }).length
-                              }
+                              {submissionStatusCounts.verified}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19123,11 +19224,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {
-                                qualityFilteredSubmissions.filter(
-                                  (s) => getStatus(s) === "rejected",
-                                ).length
-                              }
+                              {submissionStatusCounts.rejected}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19154,12 +19251,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {
-                                qualityFilteredSubmissions.filter((s) => {
-                                  const status = getStatus(s);
-                                  return status === "paid";
-                                }).length
-                              }
+                              {submissionStatusCounts.paid}
                             </Badge>
                           </TabsTrigger>
                         </TabsList>
@@ -19928,8 +20020,7 @@ export default function ContestDetailClient({
                             setCurrentPage(1);
                           }}
                           isDark={isDark}
-                          currentSubmissions={currentSubmissions}
-                          getStatus={getStatus}
+                          counts={submissionStatusCounts}
                         />
                       )}
                       {isSubmissionTableView &&
@@ -24311,8 +24402,7 @@ export default function ContestDetailClient({
                                   setCreatorWisePage(1);
                                 }}
                                 isDark={isDark}
-                                currentSubmissions={currentSubmissions}
-                                getStatus={getStatus}
+                                counts={submissionStatusCounts}
                               />
                             )}
                             {showCreatorWiseSelectionUi &&
