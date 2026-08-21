@@ -290,7 +290,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     Number((responseData as { skipped?: number })?.skipped) || 0;
   const failedDelta =
     Number((responseData as { failed?: number })?.failed) || 0;
-  const processedDelta = paidDelta + skippedDelta + failedDelta;
+  const submissionProcessedDelta =
+    Number((responseData as { processed?: number })?.processed) ||
+    paidDelta + skippedDelta + failedDelta;
+  const creatorsProcessedDelta =
+    Number((responseData as { creatorsProcessed?: number })?.creatorsProcessed) ||
+    0;
 
   const batchErrors = Array.isArray(
     (responseData as { errors?: unknown })?.errors,
@@ -298,7 +303,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     ? ((responseData as { errors: { error?: string }[] }).errors)
     : [];
   const allFailuresLookTransient =
-    processedDelta > 0 &&
+    submissionProcessedDelta > 0 &&
     paidDelta === 0 &&
     failedDelta > 0 &&
     skippedDelta === 0 &&
@@ -341,7 +346,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     );
   }
 
-  if (processedDelta <= 0) {
+  if (submissionProcessedDelta <= 0 && creatorsProcessedDelta <= 0) {
     const retryResult = await retryOrDeadLetterBulkPayment({
       rawJobString,
       reason: "Queue stall: chunk completed without progress",
@@ -371,11 +376,10 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           0,
           Math.floor((responseData as { nextOffset: number }).nextOffset),
         )
-      : offset + processedDelta;
-  const nextProcessed = Math.max(
-    Number(jobRow.processed_count) || 0,
-    nextOffset,
-  );
+      : offset + Math.max(1, creatorsProcessedDelta);
+  // Submission-wise progress (not creator offset).
+  const nextProcessed =
+    (Number(jobRow.processed_count) || 0) + submissionProcessedDelta;
   const nextSuccess = (Number(jobRow.success_count) || 0) + paidDelta;
   const nextFailed = (Number(jobRow.failed_count) || 0) + failedDelta;
   const nextAmount =
@@ -463,7 +467,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       batchIndex: job.batchIndex,
       hasMore: true,
       processedCount: nextProcessed,
-      totalCount: items.length,
+      totalCount: Number(jobRow.total_count) || 0,
     });
   }
 
@@ -476,6 +480,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     done: true,
     hasMore: false,
     processedCount: nextProcessed,
-    totalCount: items.length,
+    totalCount: Number(jobRow.total_count) || 0,
   });
 }

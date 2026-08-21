@@ -14,7 +14,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast as showToast } from "@/hooks/use-toast";
 
-const STORAGE_KEY = "bulk_payment_active_job_v1";
+const STORAGE_KEY = "bulk_payment_active_job_v2";
 const POLL_MS = 3000;
 
 export type BulkPaymentType = "standard" | "bonus" | "both";
@@ -40,7 +40,10 @@ type TrackedJob = {
   paymentType: BulkPaymentType;
   contestId?: string;
   isDual?: boolean;
-  creatorCount: number;
+  /** Total submissions in this job (progress denominator). */
+  submissionCount: number;
+  /** @deprecated kept for older localStorage snapshots */
+  creatorCount?: number;
   snapshot?: Omit<BulkPaymentJobStatus, "payment_type"> & {
     payment_type?: BulkPaymentType;
   };
@@ -74,6 +77,10 @@ function readStoredJob(): TrackedJob | null {
     if (!parsed?.jobId || !parsed?.paymentType) return null;
     return {
       ...parsed,
+      submissionCount:
+        Number(parsed.submissionCount) ||
+        Number(parsed.creatorCount) ||
+        0,
       creatorCount: Number(parsed.creatorCount) || 0,
     };
   } catch {
@@ -103,7 +110,11 @@ function formatMoney(cents: number) {
 
 function jobFromTracked(tracked: TrackedJob): BulkPaymentJobStatus {
   const snap = tracked.snapshot;
-  const total = Number(snap?.total_count) || tracked.creatorCount || 0;
+  const total =
+    Number(snap?.total_count) ||
+    tracked.submissionCount ||
+    tracked.creatorCount ||
+    0;
   const processed = Number(snap?.processed_count) || 0;
   return {
     id: tracked.jobId,
@@ -226,7 +237,7 @@ export function BulkPaymentProgressProvider({
             : "paid";
 
       if (job.status === "completed") {
-        let description = `${success} of ${total} creator(s) were ${paymentLabel}. Processed ${processed} · Success ${success} · Failed ${failed}.`;
+        let description = `${success} of ${total} submission(s) were ${paymentLabel}. Processed ${processed} · Success ${success} · Failed ${failed}.`;
         if (skipped > 0) {
           description += ` Skipped ${skipped}.`;
         }
@@ -353,13 +364,16 @@ export function BulkPaymentProgressProvider({
   }, [clearTracking, finishWithToast, persistSnapshot]);
 
   const startTracking = useCallback((params: TrackedJob) => {
+    const submissionCount =
+      Number(params.submissionCount) || Number(params.creatorCount) || 0;
     const next: TrackedJob = {
       ...params,
+      submissionCount,
       creatorCount: Number(params.creatorCount) || 0,
       snapshot: {
         id: params.jobId,
         status: "queued",
-        total_count: Number(params.creatorCount) || 0,
+        total_count: submissionCount,
         processed_count: 0,
         success_count: 0,
         failed_count: 0,
@@ -454,7 +468,7 @@ export function BulkPaymentProgressProvider({
           <div className="mt-2 space-y-1.5">
             <p className="text-sm">
               {activeJob.status === "queued" ? "Queued" : "In progress"}:{" "}
-              {processed} / {total} creators ({pct}%)
+              {processed} / {total} ({pct}%)
             </p>
             <div
               className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/15"

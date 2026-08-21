@@ -8361,12 +8361,15 @@ export default function ContestDetailClient({
           paymentType,
           contestId,
           isDual: isDualRewardsContest,
-          creatorCount: queueItems.length,
+          submissionCount: queueItems.reduce(
+            (sum, item) => sum + item.submissionIds.length,
+            0,
+          ),
         });
         setCreatorWiseSelectedCreators(new Set());
         toast({
           title: "Bulk payment queued",
-          description: `Paying ${queueItems.length} creator(s) in the background.`,
+          description: `Paying ${queueItems.reduce((sum, item) => sum + item.submissionIds.length, 0)} submission(s) across ${queueItems.length} creator(s) in the background.`,
           variant: "pending",
         });
         return;

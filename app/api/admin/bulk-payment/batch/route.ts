@@ -11,15 +11,32 @@ function unauthorized() {
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
-    const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-    const xfProto =
-      request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const xfHost = request.headers
+      .get("x-forwarded-host")
+      ?.split(",")[0]
+      ?.trim();
+    const xfProto = request.headers
+      .get("x-forwarded-proto")
+      ?.split(",")[0]
+      ?.trim();
     if (xfHost && xfProto) return `${xfProto}://${xfHost}`;
     return new URL(request.url).origin;
   } catch {
-    const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+    const url =
+      process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
     return url.replace(/\/$/, "");
   }
+}
+
+function countFromPayload(
+  payload: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    const value = Number(payload[key]);
+    if (Number.isFinite(value) && value >= 0) return Math.floor(value);
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
@@ -28,8 +45,7 @@ export async function POST(request: Request) {
     if (!cronSecret) {
       return NextResponse.json(
         {
-          error:
-            "Bulk payment batch auth misconfigured: CRON_SECRET missing",
+          error: "Bulk payment batch auth misconfigured: CRON_SECRET missing",
         },
         { status: 503 },
       );
@@ -86,6 +102,7 @@ export async function POST(request: Request) {
         failed: 0,
         paid: 0,
         skipped: 0,
+        creatorsProcessed: 0,
         total_amount: 0,
         total_cpm: 0,
         total_bonus: 0,
@@ -104,6 +121,7 @@ export async function POST(request: Request) {
     const adminUserId = String(jobRow.user_id);
     const baseUrl = getBaseUrlFromRequest(request).replace(/\/$/, "");
 
+    // Submission-wise counters (progress bar / toast), same shape as bulk verify.
     let paid = 0;
     let skipped = 0;
     let failed = 0;
@@ -111,6 +129,7 @@ export async function POST(request: Request) {
     let totalCpm = 0;
     let totalBonus = 0;
     let totalMilestone = 0;
+    let creatorsProcessed = 0;
     const errors: { creatorId: string; error: string }[] = [];
 
     for (const rawItem of chunk) {
@@ -124,9 +143,11 @@ export async function POST(request: Request) {
             .map(String)
             .filter(Boolean)
         : [];
+      const submissionCount = submissionIds.length;
 
-      if (!creatorId || submissionIds.length === 0) {
-        failed += 1;
+      if (!creatorId || submissionCount === 0) {
+        failed += Math.max(1, submissionCount);
+        creatorsProcessed += 1;
         errors.push({
           creatorId: creatorId || "unknown",
           error: "Invalid creator pay item",
@@ -166,12 +187,12 @@ export async function POST(request: Request) {
           body: JSON.stringify(payBody),
         });
         const data = await response.json().catch(() => ({}));
+        creatorsProcessed += 1;
 
         if (!response.ok) {
           const message =
             (data as { error?: string })?.error ||
             `Bulk payment failed with HTTP ${response.status}`;
-          // Treat "nothing to pay" style outcomes as skipped when possible.
           const lower = message.toLowerCase();
           if (
             lower.includes("no eligible") ||
@@ -179,9 +200,9 @@ export async function POST(request: Request) {
             lower.includes("no unpaid") ||
             lower.includes("nothing to pay")
           ) {
-            skipped += 1;
+            skipped += submissionCount;
           } else {
-            failed += 1;
+            failed += submissionCount;
             errors.push({ creatorId, error: message });
           }
           continue;
@@ -190,18 +211,42 @@ export async function POST(request: Request) {
         const payload = ((data as { data?: Record<string, unknown> })?.data ||
           data) as Record<string, unknown>;
         const amount = Number(payload.total_amount) || 0;
-        if (amount > 0) {
-          paid += 1;
-          totalAmount += amount;
-          totalCpm +=
-            Number(payload.total_cpm ?? payload.total_reward ?? 0) || 0;
-          totalBonus += Number(payload.total_bonus) || 0;
-          totalMilestone += Number(payload.total_milestone) || 0;
+        const paidFromApi = countFromPayload(payload, [
+          "paid_count",
+          "applied_count",
+        ]);
+        const skippedFromApi = countFromPayload(payload, ["skipped_count"]);
+
+        if (paidFromApi != null || skippedFromApi != null) {
+          const paidSubs = Math.max(0, paidFromApi ?? 0);
+          const skippedSubs = Math.max(
+            0,
+            skippedFromApi ?? Math.max(0, submissionCount - paidSubs),
+          );
+          // Clamp so this creator never overshoots its submission list.
+          const clampedPaid = Math.min(submissionCount, paidSubs);
+          const clampedSkipped = Math.min(
+            submissionCount - clampedPaid,
+            skippedSubs,
+          );
+          const remainder =
+            submissionCount - clampedPaid - clampedSkipped;
+          paid += clampedPaid;
+          skipped += clampedSkipped + Math.max(0, remainder);
+        } else if (amount > 0) {
+          paid += submissionCount;
         } else {
-          skipped += 1;
+          skipped += submissionCount;
         }
+
+        totalAmount += amount;
+        totalCpm +=
+          Number(payload.total_cpm ?? payload.total_reward ?? 0) || 0;
+        totalBonus += Number(payload.total_bonus) || 0;
+        totalMilestone += Number(payload.total_milestone) || 0;
       } catch (err) {
-        failed += 1;
+        creatorsProcessed += 1;
+        failed += submissionCount;
         errors.push({
           creatorId,
           error: err instanceof Error ? err.message : "Unknown payment error",
@@ -211,10 +256,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: failed === 0,
+      // Submission-wise (UI progress / toast)
       processed: paid + skipped + failed,
       paid,
       skipped,
       failed,
+      // Creator hops completed this batch (queue offset advances by this)
+      creatorsProcessed,
       total_amount: totalAmount,
       total_cpm: totalCpm,
       total_bonus: totalBonus,

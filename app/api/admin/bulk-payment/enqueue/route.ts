@@ -195,6 +195,11 @@ export async function POST(request: Request) {
       }
     }
 
+    const totalSubmissionCount = items.reduce(
+      (sum, item) => sum + item.submissionIds.length,
+      0,
+    );
+
     const now = new Date().toISOString();
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("bulk_payment_jobs")
@@ -205,7 +210,7 @@ export async function POST(request: Request) {
         payment_type: paymentType,
         payout_channel: payoutChannel,
         status: "queued",
-        total_count: items.length,
+        total_count: totalSubmissionCount,
         processed_count: 0,
         success_count: 0,
         failed_count: 0,

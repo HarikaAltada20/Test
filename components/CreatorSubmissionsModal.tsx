@@ -724,7 +724,7 @@ export function CreatorSubmissionsModal({
               paymentType: type,
               contestId: contest.id,
               isDual: true,
-              creatorCount: 1,
+              submissionCount: sortedSubs.length,
             });
             setSelectedSubmissions(new Set());
             toast({
@@ -869,7 +869,7 @@ export function CreatorSubmissionsModal({
             paymentType: type,
             contestId: contest.id,
             isDual: false,
-            creatorCount: 1,
+            submissionCount: sortedSubs.length,
           });
           setSelectedSubmissions(new Set());
           toast({
