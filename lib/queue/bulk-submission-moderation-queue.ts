@@ -9,6 +9,7 @@
 import { Redis } from "@upstash/redis";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { recoverStaleBulkProcessingJobs } from "@/lib/queue/bulk-job-recovery";
+import { BULK_MODERATION_MAX_ACTIVE_JOBS_GLOBAL } from "@/lib/queue/bulk-job-limits";
 
 const REDIS_PREFIX = "bulk_submission_moderation";
 const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
@@ -114,6 +115,35 @@ export function computeBulkModerationTotalBatches(
   return total === 0 ? 0 : Math.ceil(total / size);
 }
 
+async function countActiveBulkModerationJobIds(): Promise<Set<string>> {
+  const redis = getRedis();
+  if (!redis) return new Set();
+  const [queuedLen, processingLen] = await Promise.all([
+    redis.llen(REDIS_QUEUE_KEY),
+    redis.llen(REDIS_PROCESSING_KEY),
+  ]);
+  const scanLimit = Math.max(
+    Number(queuedLen) || 0,
+    Number(processingLen) || 0,
+    1,
+  );
+  const [queued, processing] = await Promise.all([
+    redis.lrange(REDIS_QUEUE_KEY, 0, scanLimit - 1),
+    redis.lrange(REDIS_PROCESSING_KEY, 0, scanLimit - 1),
+  ]);
+  const jobIds = new Set<string>();
+  for (const raw of [...(queued || []), ...(processing || [])]) {
+    try {
+      const str = typeof raw === "string" ? raw : JSON.stringify(raw);
+      const parsed = JSON.parse(str) as { jobId?: string };
+      if (parsed?.jobId) jobIds.add(String(parsed.jobId));
+    } catch {
+      // ignore malformed queue entries
+    }
+  }
+  return jobIds;
+}
+
 export async function enqueueBulkSubmissionModerationJob(
   job: BulkSubmissionModerationQueueJobRef &
     Partial<
@@ -127,6 +157,18 @@ export async function enqueueBulkSubmissionModerationJob(
       ...job,
       attempt: Number.isFinite(job.attempt) ? Number(job.attempt) : 0,
     });
+    if (slim.batchIndex === 0) {
+      const activeJobIds = await countActiveBulkModerationJobIds();
+      if (
+        activeJobIds.size >= BULK_MODERATION_MAX_ACTIVE_JOBS_GLOBAL &&
+        !activeJobIds.has(slim.jobId)
+      ) {
+        return {
+          error:
+            "Too many bulk moderation jobs are in progress. Wait for current jobs to finish, then try again.",
+        };
+      }
+    }
     await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(slim));
     console.log(
       `[bulk-submission-moderation-queue] Enqueued jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempt=${slim.attempt}`,

@@ -31,7 +31,8 @@ CREATE OR REPLACE FUNCTION public.apply_bulk_payment_job_batch_progress(
   p_bonus_delta bigint,
   p_milestone_delta bigint,
   p_mark_completed boolean,
-  p_error_message text DEFAULT NULL
+  p_error_message text DEFAULT NULL,
+  p_queue_offset integer DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -48,6 +49,10 @@ BEGIN
     total_cpm_cents = total_cpm_cents + COALESCE(p_cpm_delta, 0),
     total_bonus_cents = total_bonus_cents + COALESCE(p_bonus_delta, 0),
     total_milestone_cents = total_milestone_cents + COALESCE(p_milestone_delta, 0),
+    queue_offset = CASE
+      WHEN p_queue_offset IS NOT NULL THEN GREATEST(0, p_queue_offset)
+      ELSE queue_offset
+    END,
     status = CASE WHEN p_mark_completed THEN 'completed' ELSE 'running' END,
     error_message = COALESCE(p_error_message, error_message),
     finished_at = CASE WHEN p_mark_completed THEN now() ELSE finished_at END,
@@ -78,7 +83,8 @@ CREATE OR REPLACE FUNCTION public.apply_bulk_submission_moderation_job_batch_pro
   p_success_delta integer,
   p_failed_delta integer,
   p_mark_completed boolean,
-  p_error_message text DEFAULT NULL
+  p_error_message text DEFAULT NULL,
+  p_queue_offset integer DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -91,6 +97,10 @@ BEGIN
     processed_count = processed_count + GREATEST(0, COALESCE(p_processed_delta, 0)),
     success_count = success_count + GREATEST(0, COALESCE(p_success_delta, 0)),
     failed_count = failed_count + GREATEST(0, COALESCE(p_failed_delta, 0)),
+    queue_offset = CASE
+      WHEN p_queue_offset IS NOT NULL THEN GREATEST(0, p_queue_offset)
+      ELSE queue_offset
+    END,
     status = CASE WHEN p_mark_completed THEN 'completed' ELSE 'running' END,
     error_message = COALESCE(p_error_message, error_message),
     finished_at = CASE WHEN p_mark_completed THEN now() ELSE finished_at END,
@@ -101,14 +111,14 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.touch_bulk_payment_job_running(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.apply_bulk_payment_job_batch_progress(uuid, integer, integer, integer, bigint, bigint, bigint, bigint, boolean, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.apply_bulk_payment_job_batch_progress(uuid, integer, integer, integer, bigint, bigint, bigint, bigint, boolean, text, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.touch_bulk_submission_moderation_job_running(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.apply_bulk_submission_moderation_job_batch_progress(uuid, integer, integer, integer, boolean, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.apply_bulk_submission_moderation_job_batch_progress(uuid, integer, integer, integer, boolean, text, integer) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.touch_bulk_payment_job_running(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.apply_bulk_payment_job_batch_progress(uuid, integer, integer, integer, bigint, bigint, bigint, bigint, boolean, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.apply_bulk_payment_job_batch_progress(uuid, integer, integer, integer, bigint, bigint, bigint, bigint, boolean, text, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.touch_bulk_submission_moderation_job_running(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.apply_bulk_submission_moderation_job_batch_progress(uuid, integer, integer, integer, boolean, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.apply_bulk_submission_moderation_job_batch_progress(uuid, integer, integer, integer, boolean, text, integer) TO service_role;
 
 -- =============================================================================
 -- 2. Restrict bulk job tables to service role (API uses createAdminClient)

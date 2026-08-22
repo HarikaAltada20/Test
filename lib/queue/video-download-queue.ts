@@ -342,9 +342,18 @@ export function videoDownloadActiveJobLimitError(options: {
 async function listActiveVideoDownloadJobs(): Promise<VideoDownloadJob[]> {
   const redis = getRedis();
   if (!redis) return [];
+  const [queuedLen, processingLen] = await Promise.all([
+    redis.llen(REDIS_QUEUE_KEY),
+    redis.llen(REDIS_PROCESSING_KEY),
+  ]);
+  const scanLimit = Math.max(
+    0,
+    Math.max(Number(queuedLen) || 0, Number(processingLen) || 0),
+  );
+  const endIndex = scanLimit > 0 ? scanLimit - 1 : 199;
   const [queued, processing] = await Promise.all([
-    redis.lrange(REDIS_QUEUE_KEY, 0, 199),
-    redis.lrange(REDIS_PROCESSING_KEY, 0, 199),
+    redis.lrange(REDIS_QUEUE_KEY, 0, endIndex),
+    redis.lrange(REDIS_PROCESSING_KEY, 0, endIndex),
   ]);
   return [...(queued || []), ...(processing || [])]
     .map((raw) => parseVideoDownloadJob(toRawString(raw)))

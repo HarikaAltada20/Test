@@ -30,6 +30,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CHUNK_PAUSE_MS = 250;
+const ENQUEUE_NEXT_MAX_ATTEMPTS = 3;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -82,6 +83,43 @@ async function markJobFailed(
     })
     .eq("id", jobId)
     .in("status", ["queued", "running"]);
+}
+
+/** Keep job resumable when Redis enqueue fails after a successful chunk. */
+async function markJobEnqueueStalled(
+  jobId: string,
+  errorMessage: string,
+): Promise<void> {
+  const supabaseAdmin = createAdminClient();
+  await supabaseAdmin
+    .from("bulk_payment_jobs")
+    .update({
+      status: "running",
+      error_message: errorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", jobId)
+    .in("status", ["queued", "running"]);
+}
+
+async function enqueueNextPaymentBatchWithRetry(options: {
+  contestId: string;
+  jobId: string;
+  batchIndex: number;
+}): Promise<{ error?: string }> {
+  let lastError = "Failed to enqueue next batch";
+  for (let attempt = 0; attempt < ENQUEUE_NEXT_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(300 * attempt);
+    const result = await enqueueBulkPaymentJob({
+      contestId: options.contestId,
+      jobId: options.jobId,
+      batchIndex: options.batchIndex,
+      attempt: 0,
+    });
+    if (!result.error) return {};
+    lastError = result.error;
+  }
+  return { error: lastError };
 }
 
 export async function GET(request: Request) {
@@ -404,45 +442,45 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       0,
     p_mark_completed: done,
     p_error_message: firstError || jobRow.error_message || null,
+    p_queue_offset: nextOffset,
   });
-
-  await supabaseAdmin
-    .from("bulk_payment_jobs")
-    .update({ queue_offset: nextOffset })
-    .eq("id", job.jobId);
 
   const nextProcessed =
     (Number(jobRow.processed_count) || 0) + submissionProcessedDelta;
 
-  await removeBulkPaymentFromProcessing(rawJobString);
-
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);
-    const enqueueNext = await enqueueBulkPaymentJob({
+    const enqueueNext = await enqueueNextPaymentBatchWithRetry({
       contestId: job.contestId || String(jobRow.contest_id),
       jobId: job.jobId,
       batchIndex: (job.batchIndex || 0) + 1,
-      attempt: 0,
     });
     if (enqueueNext.error) {
       console.error(
         "[process-bulk-payment-queue] Failed to enqueue next batch",
         { jobId: job.jobId, error: enqueueNext.error },
       );
-      await markJobFailed(
+      await markJobEnqueueStalled(
         job.jobId,
-        `Failed to enqueue next batch: ${enqueueNext.error}`,
+        `Failed to enqueue next batch (will retry via recovery): ${enqueueNext.error}`,
       );
+      triggerNextProcessor(baseUrl);
       return NextResponse.json(
         {
           processed: 1,
           jobId: job.jobId,
-          error: "Failed to enqueue next batch",
+          error: "Failed to enqueue next batch; job kept running for recovery",
           details: enqueueNext.error,
+          stalled: true,
         },
-        { status: 500 },
+        { status: 503 },
       );
     }
+  }
+
+  await removeBulkPaymentFromProcessing(rawJobString);
+
+  if (hasMore) {
     triggerNextProcessor(baseUrl);
     return NextResponse.json({
       processed: 1,

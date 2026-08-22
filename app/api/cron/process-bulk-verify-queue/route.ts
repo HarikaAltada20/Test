@@ -37,6 +37,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const CHUNK_PAUSE_MS = 250;
+const WALLET_FINALIZE_MAX_ATTEMPTS = 3;
+const ENQUEUE_NEXT_MAX_ATTEMPTS = 3;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,6 +91,43 @@ async function markJobFailed(
     })
     .eq("id", jobId)
     .in("status", ["queued", "running"]);
+}
+
+/** Keep job resumable when Redis enqueue fails after a successful chunk. */
+async function markJobEnqueueStalled(
+  jobId: string,
+  errorMessage: string,
+): Promise<void> {
+  const supabaseAdmin = createAdminClient();
+  await supabaseAdmin
+    .from("bulk_submission_moderation_jobs")
+    .update({
+      status: "running",
+      error_message: errorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", jobId)
+    .in("status", ["queued", "running"]);
+}
+
+async function enqueueNextModerationBatchWithRetry(options: {
+  contestId: string;
+  jobId: string;
+  batchIndex: number;
+}): Promise<{ error?: string }> {
+  let lastError = "Failed to enqueue next batch";
+  for (let attempt = 0; attempt < ENQUEUE_NEXT_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(300 * attempt);
+    const result = await enqueueBulkSubmissionModerationJob({
+      contestId: options.contestId,
+      jobId: options.jobId,
+      batchIndex: options.batchIndex,
+      attempt: 0,
+    });
+    if (!result.error) return {};
+    lastError = result.error;
+  }
+  return { error: lastError };
 }
 
 /**
@@ -218,6 +257,59 @@ async function finalizeBulkModerationWalletReversals(options: {
     .eq("id", jobId);
 
   return { ok: true, walletRefundSummary };
+}
+
+async function finalizeBulkModerationWalletReversalsWithRetry(options: {
+  jobId: string;
+  contestId: string;
+  action: string;
+  submissionIds: string[];
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  walletRefundSummary?: Record<string, unknown> | null;
+}> {
+  let lastError: string | undefined;
+  for (let attempt = 0; attempt < WALLET_FINALIZE_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(500 * attempt);
+    const result = await finalizeBulkModerationWalletReversals(options);
+    if (result.ok) return result;
+    lastError = result.error;
+  }
+  return { ok: false, error: lastError || "Wallet reversal finalize failed" };
+}
+
+/**
+ * Reconcile wallet debits for submissions already moderated, then mark the job failed.
+ * Ensures paid submissions are not left in a new status without ledger reversal.
+ */
+async function failModerationJobWithWalletReconciliation(options: {
+  jobId: string;
+  contestId: string;
+  action: string;
+  submissionIds: string[];
+  errorMessage: string;
+  runSideEffects?: boolean;
+}): Promise<void> {
+  const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({
+    jobId: options.jobId,
+    contestId: options.contestId,
+    action: options.action,
+    submissionIds: options.submissionIds,
+  });
+
+  const finalMessage = walletFinalize.ok
+    ? options.errorMessage
+    : `${options.errorMessage}; wallet reconciliation failed: ${walletFinalize.error}`;
+
+  await markJobFailed(options.jobId, finalMessage);
+
+  if (walletFinalize.ok && options.runSideEffects) {
+    await finalizeBulkModerationSideEffects({
+      contestId: options.contestId,
+      submissionIds: options.submissionIds,
+    });
+  }
 }
 
 /**
@@ -393,7 +485,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     const contestId = job.contestId || String(jobRow.contest_id);
     const action =
       (job.action as string) || String(jobRow.action || "");
-    const walletFinalize = await finalizeBulkModerationWalletReversals({
+    const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({
       jobId: job.jobId,
       contestId,
       action,
@@ -462,10 +554,16 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       reason,
     });
     if (retryResult.deadLettered) {
-      await markJobFailed(
-        job.jobId,
-        "Job dead-lettered after repeated batch fetch failures",
-      );
+      await failModerationJobWithWalletReconciliation({
+        jobId: job.jobId,
+        contestId: job.contestId || String(jobRow.contest_id),
+        action:
+          (job.action as string) || String(jobRow.action || ""),
+        submissionIds,
+        errorMessage:
+          "Job dead-lettered after repeated batch fetch failures",
+        runSideEffects: true,
+      });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
     }
@@ -496,10 +594,15 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       reason: `batch status ${response.status}: ${errorMessage}`,
     });
     if (retryResult.deadLettered) {
-      await markJobFailed(
-        job.jobId,
-        `Job dead-lettered after repeated batch failures: ${errorMessage}`,
-      );
+      await failModerationJobWithWalletReconciliation({
+        jobId: job.jobId,
+        contestId: job.contestId || String(jobRow.contest_id),
+        action:
+          (job.action as string) || String(jobRow.action || ""),
+        submissionIds,
+        errorMessage: `Job dead-lettered after repeated batch failures: ${errorMessage}`,
+        runSideEffects: true,
+      });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
     }
@@ -559,10 +662,15 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       reason: `transient batch failures: ${batchErrors[0]?.error || "timeout"}`,
     });
     if (retryResult.deadLettered) {
-      await markJobFailed(
-        job.jobId,
-        `Job dead-lettered after repeated transient batch failures: ${batchErrors[0]?.error || "timeout"}`,
-      );
+      await failModerationJobWithWalletReconciliation({
+        jobId: job.jobId,
+        contestId: job.contestId || String(jobRow.contest_id),
+        action:
+          (job.action as string) || String(jobRow.action || ""),
+        submissionIds,
+        errorMessage: `Job dead-lettered after repeated transient batch failures: ${batchErrors[0]?.error || "timeout"}`,
+        runSideEffects: true,
+      });
     } else if (retryResult.requeued) {
       await sleep(CHUNK_PAUSE_MS * 2);
       await triggerNextProcessor(baseUrl);
@@ -584,10 +692,16 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       reason: "Queue stall: chunk completed without progress",
     });
     if (retryResult.deadLettered) {
-      await markJobFailed(
-        job.jobId,
-        "Queue stall: chunk completed without progress (dead-lettered)",
-      );
+      await failModerationJobWithWalletReconciliation({
+        jobId: job.jobId,
+        contestId: job.contestId || String(jobRow.contest_id),
+        action:
+          (job.action as string) || String(jobRow.action || ""),
+        submissionIds,
+        errorMessage:
+          "Queue stall: chunk completed without progress (dead-lettered)",
+        runSideEffects: true,
+      });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
     }
@@ -606,12 +720,8 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     typeof (responseData as any)?.nextOffset === "number"
       ? Math.max(0, Math.floor((responseData as any).nextOffset))
       : offset + attemptedDelta;
-  const nextProcessed = Math.max(
-    Number(jobRow.processed_count) || 0,
-    nextOffset,
-  );
-  const nextSuccess = (Number(jobRow.success_count) || 0) + processedDelta;
-  const nextFailed = (Number(jobRow.failed_count) || 0) + failedDelta;
+  const nextProcessed =
+    (Number(jobRow.processed_count) || 0) + attemptedDelta;
   const hasMore =
     (responseData as any)?.hasMore === true ||
     nextOffset < submissionIds.length;
@@ -628,28 +738,43 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     (String(jobRow.action) as BulkSubmissionModerationQueueJob["action"]);
 
   if (done) {
-    const walletFinalize = await finalizeBulkModerationWalletReversals({
+    const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({
       jobId: job.jobId,
       contestId,
       action,
       submissionIds,
     });
     if (!walletFinalize.ok) {
-      await supabaseAdmin
-        .from("bulk_submission_moderation_jobs")
-        .update({
-          processed_count: nextProcessed,
-          success_count: nextSuccess,
-          failed_count: nextFailed,
-          status: "failed",
-          error_message:
+      await supabaseAdmin.rpc(
+        "apply_bulk_submission_moderation_job_batch_progress",
+        {
+          p_job_id: job.jobId,
+          p_processed_delta: Math.max(
+            0,
+            nextProcessed - (Number(jobRow.processed_count) || 0),
+          ),
+          p_success_delta: processedDelta,
+          p_failed_delta: failedDelta,
+          p_mark_completed: false,
+          p_error_message:
             walletFinalize.error ||
             firstError ||
             jobRow.error_message ||
             "Wallet reversal finalize failed",
-          finished_at: new Date().toISOString(),
-        })
-        .eq("id", job.jobId);
+          p_queue_offset: nextOffset,
+        },
+      );
+      await markJobFailed(
+        job.jobId,
+        walletFinalize.error ||
+          firstError ||
+          jobRow.error_message ||
+          "Wallet reversal finalize failed",
+      );
+      await finalizeBulkModerationSideEffects({
+        contestId,
+        submissionIds,
+      });
       await removeBulkSubmissionModerationFromProcessing(rawJobString);
       return NextResponse.json(
         {
@@ -674,42 +799,42 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     p_failed_delta: failedDelta,
     p_mark_completed: done,
     p_error_message: firstError || jobRow.error_message || null,
+    p_queue_offset: nextOffset,
   });
-
-  await supabaseAdmin
-    .from("bulk_submission_moderation_jobs")
-    .update({ queue_offset: nextOffset })
-    .eq("id", job.jobId);
-
-  await removeBulkSubmissionModerationFromProcessing(rawJobString);
 
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);
-    const enqueueNext = await enqueueBulkSubmissionModerationJob({
+    const enqueueNext = await enqueueNextModerationBatchWithRetry({
       contestId,
       jobId: job.jobId,
       batchIndex: (job.batchIndex || 0) + 1,
-      attempt: 0,
     });
     if (enqueueNext.error) {
       console.error(
         "[process-bulk-verify-queue] Failed to enqueue next batch",
         { jobId: job.jobId, error: enqueueNext.error },
       );
-      await markJobFailed(
+      await markJobEnqueueStalled(
         job.jobId,
-        `Failed to enqueue next batch: ${enqueueNext.error}`,
+        `Failed to enqueue next batch (will retry via recovery): ${enqueueNext.error}`,
       );
+      triggerNextProcessor(baseUrl);
       return NextResponse.json(
         {
           processed: 1,
           jobId: job.jobId,
-          error: "Failed to enqueue next batch",
+          error: "Failed to enqueue next batch; job kept running for recovery",
           details: enqueueNext.error,
+          stalled: true,
         },
-        { status: 500 },
+        { status: 503 },
       );
     }
+  }
+
+  await removeBulkSubmissionModerationFromProcessing(rawJobString);
+
+  if (hasMore) {
     await triggerNextProcessor(baseUrl);
     return NextResponse.json({
       processed: 1,
