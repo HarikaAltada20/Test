@@ -1470,8 +1470,22 @@ export async function logTransactionAsAdmin(
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
-    return !error;
-  } catch {
+    if (error) {
+      console.error("[logTransactionAsAdmin] money_transactions insert failed:", {
+        type,
+        status,
+        amountInCents,
+        userId,
+        error: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[logTransactionAsAdmin] money_transactions insert threw:", err);
     return false;
   }
 }

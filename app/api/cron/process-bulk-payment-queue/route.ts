@@ -426,24 +426,54 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   const firstError =
     batchErrors.length > 0 ? String(batchErrors[0]?.error || "") : null;
 
-  await supabaseAdmin.rpc("apply_bulk_payment_job_batch_progress", {
-    p_job_id: job.jobId,
-    p_processed_delta: submissionProcessedDelta,
-    p_success_delta: paidDelta,
-    p_failed_delta: failedDelta,
-    p_amount_delta:
-      Number((responseData as { total_amount?: number })?.total_amount) || 0,
-    p_cpm_delta:
-      Number((responseData as { total_cpm?: number })?.total_cpm) || 0,
-    p_bonus_delta:
-      Number((responseData as { total_bonus?: number })?.total_bonus) || 0,
-    p_milestone_delta:
-      Number((responseData as { total_milestone?: number })?.total_milestone) ||
-      0,
-    p_mark_completed: done,
-    p_error_message: firstError || jobRow.error_message || null,
-    p_queue_offset: nextOffset,
-  });
+  const { error: progressError } = await supabaseAdmin.rpc(
+    "apply_bulk_payment_job_batch_progress",
+    {
+      p_job_id: job.jobId,
+      p_processed_delta: submissionProcessedDelta,
+      p_success_delta: paidDelta,
+      p_failed_delta: failedDelta,
+      p_amount_delta:
+        Number((responseData as { total_amount?: number })?.total_amount) || 0,
+      p_cpm_delta:
+        Number((responseData as { total_cpm?: number })?.total_cpm) || 0,
+      p_bonus_delta:
+        Number((responseData as { total_bonus?: number })?.total_bonus) || 0,
+      p_milestone_delta:
+        Number((responseData as { total_milestone?: number })?.total_milestone) ||
+        0,
+      p_mark_completed: done,
+      p_error_message: firstError || jobRow.error_message || null,
+      p_queue_offset: nextOffset,
+    },
+  );
+  if (progressError) {
+    console.error(
+      "[process-bulk-payment-queue] apply_bulk_payment_job_batch_progress failed:",
+      progressError.message,
+    );
+    const retryResult = await retryOrDeadLetterBulkPayment({
+      rawJobString,
+      reason: `progress rpc failed: ${progressError.message}`,
+    });
+    if (retryResult.deadLettered) {
+      await markJobFailed(
+        job.jobId,
+        `Job dead-lettered after repeated progress RPC failures: ${progressError.message}`,
+      );
+    } else if (retryResult.requeued) {
+      triggerNextProcessor(baseUrl);
+    }
+    return NextResponse.json(
+      {
+        processed: 1,
+        jobId: job.jobId,
+        error: `Failed to persist batch progress: ${progressError.message}`,
+        retry: retryResult,
+      },
+      { status: 500 },
+    );
+  }
 
   const nextProcessed =
     (Number(jobRow.processed_count) || 0) + submissionProcessedDelta;

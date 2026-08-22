@@ -101,6 +101,54 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
     assert.ok(total < 8172);
   });
 
+  it("uses paid-row earnings when wallet ledger did not attribute a bulk reward", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-paid",
+        paid: true,
+        earnings: 1522,
+        bonus_paid: false,
+        dual_rewards_payout: { cpm_cents: 1522, milestone_cents: 0 },
+      },
+      submissionId: "sub-paid",
+      rewardTxns: [
+        {
+          amount: 8776,
+          metadata: {
+            contest_id: "c1",
+            payment_type: "standard",
+            breakdown: [{ submission_id: "other-sub", cpm_amount: 8776 }],
+          },
+        },
+      ],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 1522);
+    assert.equal(due.mainCents + due.bonusCents, 1522);
+  });
+
+  it("does not reverse expected earnings for unpaid verified rows even if wasPaid is forced", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-verified",
+        paid: false,
+        earnings: 4790,
+        bonus_paid: false,
+        dual_rewards_payout: { cpm_cents: 4790, milestone_cents: 0 },
+      },
+      submissionId: "sub-verified",
+      rewardTxns: [],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 0);
+    assert.equal(due.mainCents, 0);
+    assert.equal(due.bonusCents, 0);
+  });
+
   it("returns zero due for verified-only rows with expected earnings but no wallet credit", () => {
     const due = computeDualRewardsSubmissionReversalDue({
       submissionRow: {

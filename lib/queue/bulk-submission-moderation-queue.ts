@@ -214,7 +214,8 @@ export async function popBulkSubmissionModerationJob(): Promise<{
           parsed.action === "pending" ||
           parsed.action === "rejected"
             ? parsed.action
-            : "pending",
+            : // Slim Redis refs omit action; processor reads it from the DB job row.
+              "pending",
         batchIndex:
           typeof parsed.batchIndex === "number" &&
           Number.isFinite(parsed.batchIndex)

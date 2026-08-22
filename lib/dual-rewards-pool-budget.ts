@@ -559,11 +559,22 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     wasPaidBeforeReversal &&
     grossReversalRefundCents <= 0
   ) {
-    dualDueCents = Math.min(
-      paidTotal > 0 ? paidTotal : 0,
-      grossRewardCents,
-      Math.max(mainReversalAmount + bonusReversalAmount, earningsCents + storedBonusCents),
+    const recordedFallback = Math.max(
+      paidTotal,
+      mainReversalAmount + bonusReversalAmount,
+      earningsCents + storedBonusCents,
     );
+    // Unattributed bulk reward rows (contest_id only, no per-submission match)
+    // would otherwise min with grossRewardCents=0 and skip the refund entirely.
+    // Only use the row grant when the submission was actually paid.
+    if (grossRewardCents > 0) {
+      dualDueCents = Math.min(recordedFallback, grossRewardCents);
+    } else if (
+      submissionRow.paid === true ||
+      submissionRow.bonus_paid === true
+    ) {
+      dualDueCents = recordedFallback;
+    }
   }
 
   if (grossRewardCents > 0) {

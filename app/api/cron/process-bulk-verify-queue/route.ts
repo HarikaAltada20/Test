@@ -15,7 +15,6 @@ import {
   removeBulkSubmissionModerationFromProcessing,
   retryOrDeadLetterBulkSubmissionModeration,
   isBulkSubmissionModerationQueueEnabled,
-  type BulkSubmissionModerationQueueJob,
 } from "@/lib/queue/bulk-submission-moderation-queue";
 import {
   authorizeProcessBulkVerifyQueue,
@@ -39,6 +38,24 @@ export const maxDuration = 300;
 const CHUNK_PAUSE_MS = 250;
 const WALLET_FINALIZE_MAX_ATTEMPTS = 3;
 const ENQUEUE_NEXT_MAX_ATTEMPTS = 3;
+
+const MODERATION_ACTIONS = new Set(["verified", "pending", "rejected"]);
+
+/**
+ * Redis queue refs are slim (jobId/contestId/batchIndex only) and pop()
+ * defaults a missing action to "pending". Wallet finalize must use the
+ * Postgres job row, or verified/rejected refunds never match status.
+ */
+function resolveModerationJobAction(
+  jobRowAction: unknown,
+  redisAction?: string,
+): string {
+  const fromDb = String(jobRowAction || "").trim();
+  if (MODERATION_ACTIONS.has(fromDb)) return fromDb;
+  const fromRedis = String(redisAction || "").trim();
+  if (MODERATION_ACTIONS.has(fromRedis)) return fromRedis;
+  return fromDb || fromRedis;
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -483,8 +500,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
 
   if (offset >= submissionIds.length) {
     const contestId = job.contestId || String(jobRow.contest_id);
-    const action =
-      (job.action as string) || String(jobRow.action || "");
+    const action = resolveModerationJobAction(jobRow.action, job.action);
     const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({
       jobId: job.jobId,
       contestId,
@@ -557,8 +573,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       await failModerationJobWithWalletReconciliation({
         jobId: job.jobId,
         contestId: job.contestId || String(jobRow.contest_id),
-        action:
-          (job.action as string) || String(jobRow.action || ""),
+        action: resolveModerationJobAction(jobRow.action, job.action),
         submissionIds,
         errorMessage:
           "Job dead-lettered after repeated batch fetch failures",
@@ -597,8 +612,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       await failModerationJobWithWalletReconciliation({
         jobId: job.jobId,
         contestId: job.contestId || String(jobRow.contest_id),
-        action:
-          (job.action as string) || String(jobRow.action || ""),
+        action: resolveModerationJobAction(jobRow.action, job.action),
         submissionIds,
         errorMessage: `Job dead-lettered after repeated batch failures: ${errorMessage}`,
         runSideEffects: true,
@@ -665,8 +679,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       await failModerationJobWithWalletReconciliation({
         jobId: job.jobId,
         contestId: job.contestId || String(jobRow.contest_id),
-        action:
-          (job.action as string) || String(jobRow.action || ""),
+        action: resolveModerationJobAction(jobRow.action, job.action),
         submissionIds,
         errorMessage: `Job dead-lettered after repeated transient batch failures: ${batchErrors[0]?.error || "timeout"}`,
         runSideEffects: true,
@@ -695,8 +708,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       await failModerationJobWithWalletReconciliation({
         jobId: job.jobId,
         contestId: job.contestId || String(jobRow.contest_id),
-        action:
-          (job.action as string) || String(jobRow.action || ""),
+        action: resolveModerationJobAction(jobRow.action, job.action),
         submissionIds,
         errorMessage:
           "Queue stall: chunk completed without progress (dead-lettered)",
@@ -733,9 +745,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       : null;
 
   const contestId = job.contestId || String(jobRow.contest_id);
-  const action =
-    (job.action as BulkSubmissionModerationQueueJob["action"]) ||
-    (String(jobRow.action) as BulkSubmissionModerationQueueJob["action"]);
+  const action = resolveModerationJobAction(jobRow.action, job.action);
 
   if (done) {
     const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({

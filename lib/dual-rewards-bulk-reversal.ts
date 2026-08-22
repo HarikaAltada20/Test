@@ -15,6 +15,7 @@ import {
   type DualRewardsSubmissionReversalDue,
 } from "@/lib/dual-rewards-pool-budget";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { buildSubmissionPaidReversalUpdate } from "@/lib/dual-rewards-payout";
 
 export type BulkDualReversalRefundSummary = {
   reward_refunded_cents: number;
@@ -39,8 +40,12 @@ type SubmissionRow = {
   status: string | null;
   earnings: number | null;
   paid: boolean | null;
+  paid_at: string | null;
   bonus_paid: boolean | null;
+  bonus_paid_at: string | null;
   bonus_amount: number | null;
+  milestone_bonus_paid: unknown;
+  metadata: { milestone_bonus_paid?: unknown } | null;
   dual_rewards_payout: unknown;
 };
 
@@ -118,11 +123,11 @@ export async function logMilestoneBulkReversalRefund(params: {
     milestone_cents: number;
     bonus_cents: number;
   }>;
-}): Promise<void> {
+}): Promise<boolean> {
   const totalCents = Math.max(0, Math.round(params.totalCents));
-  if (totalCents <= 0) return;
+  if (totalCents <= 0) return true;
 
-  await logTransactionAsAdmin(
+  return logTransactionAsAdmin(
     params.creatorId,
     "refund",
     totalCents,
@@ -162,11 +167,11 @@ export async function logStandardBulkReversalRefund(params: {
     cpm_amount: number;
     bonus_amount: number;
   }>;
-}): Promise<void> {
+}): Promise<boolean> {
   const totalCents = Math.max(0, Math.round(params.totalCents));
-  if (totalCents <= 0) return;
+  if (totalCents <= 0) return true;
 
-  await logTransactionAsAdmin(
+  return logTransactionAsAdmin(
     params.creatorId,
     "refund",
     totalCents,
@@ -201,11 +206,11 @@ export async function logDualRewardsBulkReversalRefund(params: {
     cpm_cents: number;
     milestone_cents: number;
   }>;
-}): Promise<void> {
+}): Promise<boolean> {
   const totalCents = Math.max(0, Math.round(params.totalCents));
-  if (totalCents <= 0) return;
+  if (totalCents <= 0) return true;
 
-  await logTransactionAsAdmin(
+  return logTransactionAsAdmin(
     params.creatorId,
     "refund",
     totalCents,
@@ -238,13 +243,13 @@ export async function logDualRewardsReversalRefund(params: {
   cpmCents: number;
   milestoneCents: number;
   bulkReversal?: boolean;
-}): Promise<void> {
+}): Promise<boolean> {
   const cpmCents = Math.max(0, Math.round(params.cpmCents));
   const milestoneCents = Math.max(0, Math.round(params.milestoneCents));
   const totalCents = cpmCents + milestoneCents;
-  if (totalCents <= 0) return;
+  if (totalCents <= 0) return true;
 
-  await logTransactionAsAdmin(
+  return logTransactionAsAdmin(
     params.creatorId,
     "refund",
     totalCents,
@@ -263,6 +268,52 @@ export async function logDualRewardsReversalRefund(params: {
       },
     },
   );
+}
+
+async function clearPaidFlagsAfterReversal(
+  supabaseAdmin: SupabaseClient,
+  groupRows: SubmissionRow[],
+  perSubDue: Map<string, DualRewardsSubmissionReversalDue>,
+): Promise<void> {
+  for (const row of groupRows) {
+    if (row.paid !== true && row.bonus_paid !== true) continue;
+    const due = perSubDue.get(row.id) ?? {
+      totalCents: 0,
+      mainCents: 0,
+      bonusCents: 0,
+      bonusReversals: [],
+    };
+    const { error: clearPaidErr } = await supabaseAdmin
+      .from("submissions")
+      .update(
+        buildSubmissionPaidReversalUpdate(
+          {
+            earnings: row.earnings,
+            paid: row.paid,
+            paid_at: row.paid_at,
+            bonus_paid: row.bonus_paid,
+            bonus_paid_at: row.bonus_paid_at,
+            bonus_amount: row.bonus_amount,
+            milestone_bonus_paid: row.milestone_bonus_paid as never,
+            metadata: row.metadata as never,
+            dual_rewards_payout: row.dual_rewards_payout,
+          },
+          {
+            mainCents: due.mainCents,
+            bonusCents: due.bonusCents,
+            bonusReversals: due.bonusReversals,
+          },
+        ),
+      )
+      .eq("id", row.id);
+    if (clearPaidErr) {
+      console.error(
+        "[dual-rewards-bulk-reversal] Failed to clear paid flags after refund:",
+        row.id,
+        clearPaidErr,
+      );
+    }
+  }
 }
 
 /**
@@ -289,7 +340,7 @@ export async function applyBulkDualRewardsWalletReversals(params: {
       const result = await params.supabaseAdmin
         .from("submissions")
         .select(
-          "id, contest_id, creator_id, status, earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, contests!inner(contest_type, title)",
+          "id, contest_id, creator_id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid, metadata, dual_rewards_payout, contests!inner(contest_type, title)",
         )
         .in("id", chunkIds);
       return {
@@ -367,7 +418,18 @@ export async function applyBulkDualRewardsWalletReversals(params: {
         contestId,
         contestSubErr,
       );
-      continue;
+      return {
+        ok: false,
+        error: `Failed to load contest submissions for reversal: ${
+          contestSubErr instanceof Error
+            ? contestSubErr.message
+            : String(
+                (contestSubErr as { message?: string })?.message ||
+                  contestSubErr,
+              )
+        }`,
+        failedSubmissionIds: groupRows.map((r) => r.id),
+      };
     }
 
     const contestSubmissionIds = new Set(
@@ -427,6 +489,11 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     }
 
     if (totalDueCents <= 0) {
+      await clearPaidFlagsAfterReversal(
+        params.supabaseAdmin,
+        groupRows,
+        perSubDue,
+      );
       continue;
     }
 
@@ -554,8 +621,9 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     }
 
     if (refundSubmissionCount > 0) {
+      let refundLogged = true;
       if (isDualRewards && refundBreakdownDual.length > 0) {
-        await logDualRewardsBulkReversalRefund({
+        refundLogged = await logDualRewardsBulkReversalRefund({
           creatorId,
           contestId,
           contestTitle,
@@ -566,7 +634,7 @@ export async function applyBulkDualRewardsWalletReversals(params: {
           breakdown: refundBreakdownDual,
         });
       } else if (isMilestone && refundBreakdownMilestone.length > 0) {
-        await logMilestoneBulkReversalRefund({
+        refundLogged = await logMilestoneBulkReversalRefund({
           creatorId,
           contestId,
           contestTitle,
@@ -577,7 +645,7 @@ export async function applyBulkDualRewardsWalletReversals(params: {
           breakdown: refundBreakdownMilestone,
         });
       } else if (refundBreakdownStandard.length > 0) {
-        await logStandardBulkReversalRefund({
+        refundLogged = await logStandardBulkReversalRefund({
           creatorId,
           contestId,
           contestTitle,
@@ -588,7 +656,21 @@ export async function applyBulkDualRewardsWalletReversals(params: {
           breakdown: refundBreakdownStandard,
         });
       }
+      if (!refundLogged) {
+        return {
+          ok: false,
+          error:
+            "Wallet debit succeeded but failed to log refund in money_transactions. Retry the same moderation action.",
+          failedSubmissionIds: groupRows.map((r) => r.id),
+        };
+      }
     }
+
+    await clearPaidFlagsAfterReversal(
+      params.supabaseAdmin,
+      groupRows,
+      perSubDue,
+    );
   }
 
   return {

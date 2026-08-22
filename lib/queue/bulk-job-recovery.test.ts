@@ -4,6 +4,7 @@ import {
   BULK_JOB_STALE_PROCESSING_MS,
   classifyRecoveredBulkJob,
   planRecoveredBulkJobs,
+  recoverStaleBulkProcessingJobs,
 } from "./bulk-job-recovery";
 
 describe("classifyRecoveredBulkJob", () => {
@@ -85,5 +86,36 @@ describe("planRecoveredBulkJobs", () => {
       plan.map((item) => item.action),
       ["drop", "keep-processing", "requeue", "drop"],
     );
+  });
+});
+
+describe("recoverStaleBulkProcessingJobs", () => {
+  it("uses the passed redis client instead of a global redis binding", async () => {
+    const calls: string[] = [];
+    const redis = {
+      lrange: async () => {
+        calls.push("lrange");
+        return [];
+      },
+      lrem: async () => {
+        calls.push("lrem");
+        return 0;
+      },
+      eval: async () => 1,
+      lpush: async () => 1,
+    };
+
+    const result = await recoverStaleBulkProcessingJobs({
+      redis: redis as never,
+      processingKey: "processing",
+      queueKey: "queue",
+      parseJobId: () => "job-1",
+      getHeartbeat: async () => null,
+      logPrefix: "test-queue",
+    });
+
+    assert.equal(result.error, undefined);
+    assert.equal(result.moved, 0);
+    assert.deepEqual(calls, ["lrange"]);
   });
 });

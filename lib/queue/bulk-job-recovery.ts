@@ -101,29 +101,33 @@ export async function recoverStaleBulkProcessingJobs(options: {
   getHeartbeat: (jobId: string) => Promise<BulkJobDbHeartbeat | null>;
   logPrefix: string;
 }): Promise<{ moved: number; dropped: number; error?: string }> {
+  const {
+    redis,
+    processingKey,
+    queueKey,
+    parseJobId,
+    getHeartbeat,
+    logPrefix,
+  } = options;
   const maxToInspect = Math.max(
     1,
     Math.min(options.maxToInspect ?? 25, 200),
   );
   try {
-    const rawItems = await redis.lrange(
-      options.processingKey,
-      0,
-      maxToInspect - 1,
-    );
+    const rawItems = await redis.lrange(processingKey, 0, maxToInspect - 1);
     if (!rawItems?.length) return { moved: 0, dropped: 0 };
 
     const heartbeats = new Map<string, BulkJobDbHeartbeat | null>();
     for (const raw of rawItems) {
-      const jobId = options.parseJobId(raw);
+      const jobId = parseJobId(raw);
       if (!jobId || heartbeats.has(jobId)) continue;
-      heartbeats.set(jobId, await options.getHeartbeat(jobId));
+      heartbeats.set(jobId, await getHeartbeat(jobId));
     }
 
     const plan = planRecoveredBulkJobs(
       rawItems,
       (jobId) => heartbeats.get(jobId) ?? null,
-      options.parseJobId,
+      parseJobId,
     );
 
     let moved = 0;
@@ -131,14 +135,14 @@ export async function recoverStaleBulkProcessingJobs(options: {
     for (const item of plan) {
       if (item.action === "keep-processing") continue;
       if (item.action === "drop") {
-        await redis.lrem(options.processingKey, 1, item.raw);
+        await redis.lrem(processingKey, 1, item.raw);
         dropped += 1;
         continue;
       }
       const requeued = await requeueFromProcessingList(
-        options.redis,
-        options.processingKey,
-        options.queueKey,
+        redis,
+        processingKey,
+        queueKey,
         item.raw,
       );
       if (requeued) moved += 1;
@@ -146,13 +150,13 @@ export async function recoverStaleBulkProcessingJobs(options: {
 
     if (moved > 0 || dropped > 0) {
       console.warn(
-        `[${options.logPrefix}] Re-queued ${moved} stale job(s) from processing; dropped ${dropped} finished/invalid job(s)`,
+        `[${logPrefix}] Re-queued ${moved} stale job(s) from processing; dropped ${dropped} finished/invalid job(s)`,
       );
     }
     return { moved, dropped };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[${options.logPrefix}] recoverProcessingJobsToQueue failed:`, message);
+    console.error(`[${logPrefix}] recoverProcessingJobsToQueue failed:`, message);
     return { moved: 0, dropped: 0, error: message };
   }
 }

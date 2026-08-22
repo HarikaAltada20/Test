@@ -2216,7 +2216,7 @@ export async function processVerifySubmission(
 
         if (reversalAmount > 0) {
           if (contest.contest_type === "dual_rewards") {
-            await logDualRewardsReversalRefund({
+            const refundLogged = await logDualRewardsReversalRefund({
               creatorId: submissionFull.creator_id,
               submissionId,
               contestId: submissionFull.contest_id,
@@ -2224,9 +2224,18 @@ export async function processVerifySubmission(
               cpmCents: mainReversalAmount,
               milestoneCents: bonusReversalAmount,
             });
+            if (!refundLogged) {
+              return NextResponse.json(
+                {
+                  error:
+                    "Reversal debit succeeded but failed to log refund in money_transactions. Retry the same moderation action.",
+                },
+                { status: 500 },
+              );
+            }
           } else {
             if (mainReversalAmount > 0) {
-              await logTransactionAsAdmin(
+              const refundLogged = await logTransactionAsAdmin(
                 submissionFull.creator_id,
                 "refund",
                 mainReversalAmount,
@@ -2243,10 +2252,19 @@ export async function processVerifySubmission(
                   },
                 },
               );
+              if (!refundLogged) {
+                return NextResponse.json(
+                  {
+                    error:
+                      "Reversal debit succeeded but failed to log reward refund in money_transactions. Retry the same moderation action.",
+                  },
+                  { status: 500 },
+                );
+              }
             }
             for (const bonus of bonusReversals) {
               if (bonus.amount <= 0) continue;
-              await logTransactionAsAdmin(
+              const refundLogged = await logTransactionAsAdmin(
                 submissionFull.creator_id,
                 "refund",
                 bonus.amount,
@@ -2263,6 +2281,15 @@ export async function processVerifySubmission(
                   },
                 },
               );
+              if (!refundLogged) {
+                return NextResponse.json(
+                  {
+                    error:
+                      "Reversal debit succeeded but failed to log bonus refund in money_transactions. Retry the same moderation action.",
+                  },
+                  { status: 500 },
+                );
+              }
             }
           }
         }
@@ -2279,18 +2306,21 @@ export async function processVerifySubmission(
         console.error("Metrics update (revert paid) failed:", e);
       }
 
-      // Clear paid / ladder bonus state; preserve most-verified views/reels bonus
-      // unless those tracks were explicitly reversed above.
-      await supabaseAdmin
-        .from("submissions")
-        .update(
-          buildSubmissionPaidReversalUpdate(submissionFull, {
-            mainCents: mainReversalAmount,
-            bonusCents: bonusReversalAmount,
-            bonusReversals,
-          }),
-        )
-        .eq("id", submissionId);
+      // Queue bulk path: keep paid flags until job-end wallet finalize writes
+      // money_transactions refunds. Clearing them here made verified/rejected
+      // refunds compute as $0 after status left `paid`.
+      if (!walletDebitWasHandledByBulk) {
+        await supabaseAdmin
+          .from("submissions")
+          .update(
+            buildSubmissionPaidReversalUpdate(submissionFull, {
+              mainCents: mainReversalAmount,
+              bonusCents: bonusReversalAmount,
+              bonusReversals,
+            }),
+          )
+          .eq("id", submissionId);
+      }
     }
 
     // Note: With the new system, verified and pending submissions show in leaderboard immediately

@@ -212,12 +212,17 @@ export async function POST(request: Request) {
             lower.includes("no eligible") ||
             lower.includes("no verified") ||
             lower.includes("no unpaid") ||
-            lower.includes("nothing to pay")
+            lower.includes("nothing to pay") ||
+            lower.includes("no payments to process") ||
+            lower.includes("already paid")
           ) {
             skipped += submissionCount;
           } else {
             failed += submissionCount;
             errors.push({ creatorId, error: message });
+            console.warn(
+              `[bulk-payment batch] creator ${creatorId} HTTP ${response.status}: ${message}`,
+            );
           }
           continue;
         }
