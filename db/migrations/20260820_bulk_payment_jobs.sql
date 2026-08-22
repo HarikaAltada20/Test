@@ -16,6 +16,8 @@ create table if not exists public.bulk_payment_jobs (
   total_cpm_cents bigint not null default 0,
   total_bonus_cents bigint not null default 0,
   total_milestone_cents bigint not null default 0,
+  payload jsonb null,
+  queue_offset integer not null default 0,
   error_message text null,
   created_at timestamptz not null default now(),
   started_at timestamptz null,

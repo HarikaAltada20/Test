@@ -28,6 +28,20 @@ function getCronSecret(): string {
   return sanitizeEnvValue(process.env.CRON_SECRET);
 }
 
+/**
+ * Authorize cron endpoints when no QStash signature is present.
+ * Production requires Bearer CRON_SECRET; local dev may run without it.
+ * Does not trust forgeable x-vercel-cron alone (use CRON_SECRET on Vercel Cron).
+ */
+export function authorizeCronBearerFallback(request: Request): boolean {
+  const cronSecret = getCronSecret();
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) {
+    return auth === `Bearer ${cronSecret}`;
+  }
+  return process.env.NODE_ENV === "development";
+}
+
 function getQStashAuthHeaders(): Record<string, string> | undefined {
   const cronSecret = getCronSecret();
   if (!cronSecret) return undefined;
@@ -302,13 +316,7 @@ export async function authorizeProcessMetricsQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignature(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) {
-    return auth === `Bearer ${cronSecret}`;
-  }
-  // No CRON_SECRET and no QStash: allow for local dev (same as current behavior when secret unset)
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 /**
@@ -1035,10 +1043,7 @@ export async function authorizeProcessInstagramInsightsQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureInstagram(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 /**
@@ -1092,10 +1097,7 @@ export async function authorizeProcessTikTokMetricsQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureTikTok(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 async function verifyQStashSignatureYouTube(
@@ -1146,10 +1148,7 @@ export async function authorizeProcessYouTubeMetricsQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureYouTube(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 async function verifyQStashSignatureBulkVerify(
@@ -1200,10 +1199,7 @@ export async function authorizeProcessBulkVerifyQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureBulkVerify(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 async function verifyQStashSignatureBulkPayment(
@@ -1254,10 +1250,7 @@ export async function authorizeProcessBulkPaymentQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureBulkPayment(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 /**
@@ -1300,10 +1293,7 @@ export async function authorizeProcessTokenRefreshQueue(
       return false;
     }
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 async function verifyQStashSignatureVideoDownload(
@@ -1352,10 +1342,7 @@ export async function authorizeProcessVideoDownloadQueue(
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureVideoDownload(request, rawBody);
   }
-  const cronSecret = process.env.CRON_SECRET;
-  const auth = request.headers.get("Authorization");
-  if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return authorizeCronBearerFallback(request);
 }
 
 /** Canonical URL for the scheduled admin notifications processor. */

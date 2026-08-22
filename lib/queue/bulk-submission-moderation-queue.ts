@@ -27,15 +27,11 @@ export interface BulkSubmissionModerationQueueJob {
   batchIndex: number;
   batchSize: number;
   totalBatches: number;
-  /** Full submission id list (DB no longer stores submission_ids). */
-  submissionIds: string[];
-  /** Index into submissionIds for this chunk (like YouTube cursor). */
-  offset: number;
+  /** Persisted in Postgres; optional on Redis slim refs. */
+  submissionIds?: string[];
+  /** Prefer DB queue_offset when processing. */
+  offset?: number;
   attempt?: number;
-  /**
-   * After the first queue batch runs one full-selection wallet reversal,
-   * later batches skip re-debit and reuse these skip ids / refund summaries.
-   */
   walletPreflightDone?: boolean;
   walletSkipSubmissionIds?: string[];
   walletRefundSummaries?: Record<
@@ -48,6 +44,31 @@ export interface BulkSubmissionModerationQueueJob {
       milestone_refunded_cents: number;
     }
   >;
+}
+
+export type BulkSubmissionModerationQueueJobRef = Pick<
+  BulkSubmissionModerationQueueJob,
+  "contestId" | "jobId" | "batchIndex" | "attempt"
+>;
+
+function toSlimBulkModerationQueueRef(
+  job: Pick<
+    BulkSubmissionModerationQueueJob,
+    "contestId" | "jobId" | "batchIndex" | "attempt"
+  >,
+): BulkSubmissionModerationQueueJobRef {
+  return {
+    contestId: job.contestId,
+    jobId: job.jobId,
+    batchIndex:
+      typeof job.batchIndex === "number" && Number.isFinite(job.batchIndex)
+        ? Math.max(0, Math.floor(job.batchIndex))
+        : 0,
+    attempt:
+      typeof job.attempt === "number" && Number.isFinite(job.attempt)
+        ? Math.max(0, Math.floor(job.attempt))
+        : 0,
+  };
 }
 
 function getRedis(): Redis | null {
@@ -94,18 +115,21 @@ export function computeBulkModerationTotalBatches(
 }
 
 export async function enqueueBulkSubmissionModerationJob(
-  job: BulkSubmissionModerationQueueJob,
+  job: BulkSubmissionModerationQueueJobRef &
+    Partial<
+      Omit<BulkSubmissionModerationQueueJob, keyof BulkSubmissionModerationQueueJobRef>
+    >,
 ): Promise<{ error?: string }> {
   const redis = getRedis();
   if (!redis) return { error: "Redis not configured" };
   try {
-    const normalizedJob: BulkSubmissionModerationQueueJob = {
+    const slim = toSlimBulkModerationQueueRef({
       ...job,
       attempt: Number.isFinite(job.attempt) ? Number(job.attempt) : 0,
-    };
-    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(normalizedJob));
+    });
+    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(slim));
     console.log(
-      `[bulk-submission-moderation-queue] Enqueued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} action=${normalizedJob.action} attempt=${normalizedJob.attempt}`,
+      `[bulk-submission-moderation-queue] Enqueued jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempt=${slim.attempt}`,
     );
     return {};
   } catch (err) {
@@ -134,14 +158,21 @@ export async function popBulkSubmissionModerationJob(): Promise<{
     );
     if (raw === null || raw === undefined) return null;
     const str = typeof raw === "string" ? raw : JSON.stringify(raw);
-    const parsed = JSON.parse(str) as BulkSubmissionModerationQueueJob;
+    const parsed = JSON.parse(str) as BulkSubmissionModerationQueueJobRef &
+      BulkSubmissionModerationQueueJob;
     if (parsed?.jobId && parsed?.contestId) {
-      const submissionIds = Array.isArray(parsed.submissionIds)
+      const legacyIds = Array.isArray(parsed.submissionIds)
         ? parsed.submissionIds.map(String).filter(Boolean)
         : [];
       const normalized: BulkSubmissionModerationQueueJob = {
-        ...parsed,
-        submissionIds,
+        contestId: String(parsed.contestId),
+        jobId: String(parsed.jobId),
+        action:
+          parsed.action === "verified" ||
+          parsed.action === "pending" ||
+          parsed.action === "rejected"
+            ? parsed.action
+            : "pending",
         batchIndex:
           typeof parsed.batchIndex === "number" &&
           Number.isFinite(parsed.batchIndex)
@@ -157,14 +188,18 @@ export async function popBulkSubmissionModerationJob(): Promise<{
           Number.isFinite(parsed.totalBatches)
             ? Math.max(0, Math.floor(parsed.totalBatches))
             : 0,
+        submissionIds: legacyIds.length > 0 ? legacyIds : undefined,
         offset:
           typeof parsed.offset === "number" && Number.isFinite(parsed.offset)
             ? Math.max(0, Math.floor(parsed.offset))
-            : 0,
+            : undefined,
         attempt:
           typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
             ? Math.max(0, Math.floor(parsed.attempt))
             : 0,
+        walletPreflightDone: parsed.walletPreflightDone,
+        walletSkipSubmissionIds: parsed.walletSkipSubmissionIds,
+        walletRefundSummaries: parsed.walletRefundSummaries,
       };
       return { job: normalized, raw: str };
     }
@@ -231,38 +266,45 @@ export async function retryOrDeadLetterBulkSubmissionModeration(options: {
   try {
     const parsed = JSON.parse(
       options.rawJobString,
-    ) as BulkSubmissionModerationQueueJob;
+    ) as BulkSubmissionModerationQueueJobRef &
+      BulkSubmissionModerationQueueJob;
     const nextAttempts = Math.max(
       1,
       (typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
         ? Math.floor(parsed.attempt)
         : 0) + 1,
     );
-    const normalizedJob: BulkSubmissionModerationQueueJob = {
-      ...parsed,
+    const slim = toSlimBulkModerationQueueRef({
+      contestId: String(parsed.contestId),
+      jobId: String(parsed.jobId),
+      batchIndex:
+        typeof parsed.batchIndex === "number" &&
+        Number.isFinite(parsed.batchIndex)
+          ? Math.max(0, Math.floor(parsed.batchIndex))
+          : 0,
       attempt: nextAttempts,
-    };
+    });
 
     if (nextAttempts >= MAX_RETRY_ATTEMPTS) {
       await redis.lpush(
         REDIS_DEAD_LETTER_KEY,
         JSON.stringify({
-          ...normalizedJob,
+          ...slim,
           deadLetteredAt: new Date().toISOString(),
           deadLetterReason: options.reason ?? "unknown",
         }),
       );
       await removeBulkSubmissionModerationFromProcessing(options.rawJobString);
       console.error(
-        `[bulk-submission-moderation-queue] Dead-lettered jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
+        `[bulk-submission-moderation-queue] Dead-lettered jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempts=${nextAttempts}`,
       );
       return { requeued: false, deadLettered: true, attempts: nextAttempts };
     }
 
-    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(normalizedJob));
+    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(slim));
     await removeBulkSubmissionModerationFromProcessing(options.rawJobString);
     console.warn(
-      `[bulk-submission-moderation-queue] Re-queued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
+      `[bulk-submission-moderation-queue] Re-queued jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempts=${nextAttempts}`,
     );
     return { requeued: true, deadLettered: false, attempts: nextAttempts };
   } catch (err) {

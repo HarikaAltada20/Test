@@ -16,6 +16,10 @@ import {
   ensureProcessBulkPaymentQueueScheduleOnce,
   triggerProcessBulkPaymentQueue,
 } from "@/lib/qstash";
+import {
+  MAX_BULK_PAYMENT_CREATORS,
+  MAX_BULK_PAYMENT_SUBMISSIONS,
+} from "@/lib/queue/bulk-job-limits";
 
 const ALLOWED_PAYMENT_TYPES = new Set(["standard", "bonus", "both"]);
 const ALLOWED_CHANNELS = new Set(["submissions", "twitter_cpm"]);
@@ -110,6 +114,29 @@ export async function POST(request: Request) {
         {
           error:
             "items must be a non-empty array of { creatorId, submissionIds }",
+        },
+        { status: 400 },
+      );
+    }
+
+    const totalSubmissionCountPreview = items.reduce(
+      (sum, item) => sum + item.submissionIds.length,
+      0,
+    );
+    if (items.length > MAX_BULK_PAYMENT_CREATORS) {
+      return NextResponse.json(
+        {
+          error: `Too many creators. Bulk payment supports at most ${MAX_BULK_PAYMENT_CREATORS} creators per job.`,
+          max: MAX_BULK_PAYMENT_CREATORS,
+        },
+        { status: 400 },
+      );
+    }
+    if (totalSubmissionCountPreview > MAX_BULK_PAYMENT_SUBMISSIONS) {
+      return NextResponse.json(
+        {
+          error: `Too many submissions. Bulk payment supports at most ${MAX_BULK_PAYMENT_SUBMISSIONS} submissions per job.`,
+          max: MAX_BULK_PAYMENT_SUBMISSIONS,
         },
         { status: 400 },
       );
@@ -241,6 +268,8 @@ export async function POST(request: Request) {
         total_cpm_cents: 0,
         total_bonus_cents: 0,
         total_milestone_cents: 0,
+        payload: { items },
+        queue_offset: 0,
         created_at: now,
         updated_at: now,
       })

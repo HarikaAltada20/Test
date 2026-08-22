@@ -23,6 +23,10 @@ import {
   isQStashEnabled,
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
+import {
+  parseBulkModerationJobPayload,
+  readQueueOffset,
+} from "@/lib/queue/bulk-job-payload";
 import { reconcileCreatorTotalViews } from "@/lib/creator-total-views";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import { refreshContestStats } from "@/lib/contest-stats";
@@ -360,19 +364,22 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     });
   }
 
-  const submissionIds = Array.isArray(job.submissionIds)
+  const submissionIdsFromPayload = parseBulkModerationJobPayload(
+    jobRow.payload,
+  )?.submissionIds;
+  const legacyIds = Array.isArray(job.submissionIds)
     ? job.submissionIds.map(String).filter(Boolean)
     : [];
-  // Prefer Redis offset (YouTube-style); fall back to DB processed_count for legacy jobs.
+  const submissionIds = submissionIdsFromPayload ?? legacyIds;
   const offset =
     typeof job.offset === "number" && Number.isFinite(job.offset)
       ? Math.max(0, Math.floor(job.offset))
-      : Math.max(0, Number(jobRow.processed_count) || 0);
+      : readQueueOffset(jobRow, 0);
 
   if (submissionIds.length === 0) {
     await markJobFailed(
       job.jobId,
-      "Queue job missing submissionIds (required after removing DB column)",
+      "Queue job missing submissionIds in DB payload",
     );
     await removeBulkSubmissionModerationFromProcessing(rawJobString);
     return NextResponse.json({
@@ -445,9 +452,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         jobId: job.jobId,
         offset,
         batchSize,
-        batchIndex: job.batchIndex,
-        totalBatches: job.totalBatches,
-        submissionIds,
       }),
     });
   } catch (err) {
@@ -672,22 +676,21 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     p_error_message: firstError || jobRow.error_message || null,
   });
 
+  await supabaseAdmin
+    .from("bulk_submission_moderation_jobs")
+    .update({ queue_offset: nextOffset })
+    .eq("id", job.jobId);
+
+  await removeBulkSubmissionModerationFromProcessing(rawJobString);
+
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);
-    const nextJob: BulkSubmissionModerationQueueJob = {
+    const enqueueNext = await enqueueBulkSubmissionModerationJob({
       contestId,
       jobId: job.jobId,
-      action,
       batchIndex: (job.batchIndex || 0) + 1,
-      batchSize,
-      totalBatches:
-        job.totalBatches ||
-        Math.ceil(submissionIds.length / batchSize),
-      submissionIds,
-      offset: nextOffset,
       attempt: 0,
-    };
-    const enqueueNext = await enqueueBulkSubmissionModerationJob(nextJob);
+    });
     if (enqueueNext.error) {
       console.error(
         "[process-bulk-verify-queue] Failed to enqueue next batch",
@@ -697,7 +700,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         job.jobId,
         `Failed to enqueue next batch: ${enqueueNext.error}`,
       );
-      await removeBulkSubmissionModerationFromProcessing(rawJobString);
       return NextResponse.json(
         {
           processed: 1,
@@ -708,7 +710,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         { status: 500 },
       );
     }
-    await removeBulkSubmissionModerationFromProcessing(rawJobString);
     await triggerNextProcessor(baseUrl);
     return NextResponse.json({
       processed: 1,
@@ -719,8 +720,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       totalCount: submissionIds.length,
     });
   }
-
-  await removeBulkSubmissionModerationFromProcessing(rawJobString);
 
   await finalizeBulkModerationSideEffects({
     contestId,

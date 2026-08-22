@@ -14,7 +14,6 @@ import {
   removeBulkPaymentFromProcessing,
   retryOrDeadLetterBulkPayment,
   isBulkPaymentQueueEnabled,
-  type BulkPaymentQueueJob,
 } from "@/lib/queue/bulk-payment-queue";
 import {
   authorizeProcessBulkPaymentQueue,
@@ -22,6 +21,10 @@ import {
   isQStashEnabled,
   triggerProcessBulkPaymentQueue,
 } from "@/lib/qstash";
+import {
+  parseBulkPaymentJobPayload,
+  readQueueOffset,
+} from "@/lib/queue/bulk-job-payload";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -155,11 +158,13 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     });
   }
 
-  const items = Array.isArray(job.items) ? job.items : [];
+  const payloadFromDb = parseBulkPaymentJobPayload(jobRow.payload);
+  const legacyItems = Array.isArray(job.items) ? job.items : [];
+  const items = payloadFromDb?.items ?? legacyItems;
   const offset =
     typeof job.offset === "number" && Number.isFinite(job.offset)
       ? Math.max(0, Math.floor(job.offset))
-      : Math.max(0, Number(jobRow.processed_count) || 0);
+      : readQueueOffset(jobRow, 0);
 
   if (items.length === 0) {
     await markJobFailed(job.jobId, "Queue job missing payment items");
@@ -209,9 +214,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         jobId: job.jobId,
         offset,
         batchSize,
-        batchIndex: job.batchIndex,
-        totalBatches: job.totalBatches,
-        items,
       }),
     });
   } catch (err) {
@@ -404,30 +406,24 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     p_error_message: firstError || jobRow.error_message || null,
   });
 
+  await supabaseAdmin
+    .from("bulk_payment_jobs")
+    .update({ queue_offset: nextOffset })
+    .eq("id", job.jobId);
+
   const nextProcessed =
     (Number(jobRow.processed_count) || 0) + submissionProcessedDelta;
 
+  await removeBulkPaymentFromProcessing(rawJobString);
+
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);
-    const nextJob: BulkPaymentQueueJob = {
+    const enqueueNext = await enqueueBulkPaymentJob({
       contestId: job.contestId || String(jobRow.contest_id),
       jobId: job.jobId,
-      paymentType:
-        job.paymentType ||
-        (String(jobRow.payment_type) as BulkPaymentQueueJob["paymentType"]),
-      payoutChannel:
-        job.payoutChannel ||
-        (String(
-          jobRow.payout_channel,
-        ) as BulkPaymentQueueJob["payoutChannel"]),
       batchIndex: (job.batchIndex || 0) + 1,
-      batchSize,
-      totalBatches: job.totalBatches || Math.ceil(items.length / batchSize),
-      items,
-      offset: nextOffset,
       attempt: 0,
-    };
-    const enqueueNext = await enqueueBulkPaymentJob(nextJob);
+    });
     if (enqueueNext.error) {
       console.error(
         "[process-bulk-payment-queue] Failed to enqueue next batch",
@@ -437,7 +433,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         job.jobId,
         `Failed to enqueue next batch: ${enqueueNext.error}`,
       );
-      await removeBulkPaymentFromProcessing(rawJobString);
       return NextResponse.json(
         {
           processed: 1,
@@ -448,7 +443,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         { status: 500 },
       );
     }
-    await removeBulkPaymentFromProcessing(rawJobString);
     triggerNextProcessor(baseUrl);
     return NextResponse.json({
       processed: 1,
@@ -459,8 +453,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       totalCount: Number(jobRow.total_count) || 0,
     });
   }
-
-  await removeBulkPaymentFromProcessing(rawJobString);
 
   return NextResponse.json({
     processed: 1,

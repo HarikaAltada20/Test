@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { processBulkVerifySubmissions } from "@/app/api/admin/bulk-verify-submissions/route";
 import { assertBulkVerifyWalletContinuationSigningReady } from "@/lib/bulk-verify-wallet-continuation";
+import {
+  parseBulkModerationJobPayload,
+  readQueueOffset,
+} from "@/lib/queue/bulk-job-payload";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,27 +35,13 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const jobId = typeof body.jobId === "string" ? body.jobId : "";
-    const offset =
-      typeof body.offset === "number" && Number.isFinite(body.offset)
-        ? Math.max(0, Math.floor(body.offset))
-        : 0;
     const batchSize =
       typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
         ? Math.max(1, Math.min(25, Math.floor(body.batchSize)))
         : 10;
-    const submissionIds = Array.isArray(body.submissionIds)
-      ? body.submissionIds.map(String).filter(Boolean)
-      : [];
 
     if (!jobId) {
       return NextResponse.json({ error: "jobId is required" }, { status: 400 });
-    }
-
-    if (submissionIds.length === 0) {
-      return NextResponse.json(
-        { error: "submissionIds are required on the queue batch payload" },
-        { status: 400 },
-      );
     }
 
     const supabaseAdmin = createAdminClient();
@@ -63,6 +53,23 @@ export async function POST(request: Request) {
 
     if (jobError || !jobRow) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    const payloadFromDb = parseBulkModerationJobPayload(jobRow.payload);
+    const legacyIds = Array.isArray(body.submissionIds)
+      ? body.submissionIds.map(String).filter(Boolean)
+      : [];
+    const submissionIds = payloadFromDb?.submissionIds ?? legacyIds;
+    const offset =
+      typeof body.offset === "number" && Number.isFinite(body.offset)
+        ? Math.max(0, Math.floor(body.offset))
+        : readQueueOffset(jobRow, 0);
+
+    if (submissionIds.length === 0) {
+      return NextResponse.json(
+        { error: "Job payload missing submissionIds" },
+        { status: 500 },
+      );
     }
 
     if (jobRow.status !== "running" && jobRow.status !== "queued") {

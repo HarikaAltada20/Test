@@ -7476,6 +7476,15 @@ export default function ContestDetailClient({
       action === "reject" ||
       action === "rejected" ||
       action === "pending";
+    if (isModerationBulkAction && !submissionsFullyHydrated) {
+      toast({
+        title: "Still loading submissions",
+        description:
+          "Wait until all contest submissions finish loading before bulk moderation.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (isModerationBulkAction && !assertSubmissionModerationAllowed()) {
       return;
     }
@@ -8315,6 +8324,16 @@ export default function ContestDetailClient({
   const handleCreatorWiseBulkPayment = async (
     paymentType: "standard" | "bonus" | "both",
   ) => {
+    if (!submissionsFullyHydrated) {
+      toast({
+        title: "Still loading submissions",
+        description:
+          "Wait until all contest submissions finish loading before bulk payment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const selectedGroups = filteredCreatorGroups.filter((group: any) =>
       creatorWiseSelectedCreators.has(String(group.creator?.id || "")),
     );

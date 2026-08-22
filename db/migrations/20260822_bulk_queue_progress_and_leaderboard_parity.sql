@@ -122,6 +122,25 @@ REVOKE ALL ON TABLE public.bulk_submission_moderation_jobs FROM anon, authentica
 GRANT ALL ON TABLE public.bulk_payment_jobs TO service_role;
 GRANT ALL ON TABLE public.bulk_submission_moderation_jobs TO service_role;
 
+-- Upgrade path: durable job payloads + queue cursor (slim Redis queue refs).
+ALTER TABLE public.bulk_payment_jobs
+  ADD COLUMN IF NOT EXISTS payload jsonb NULL,
+  ADD COLUMN IF NOT EXISTS queue_offset integer NOT NULL DEFAULT 0;
+
+ALTER TABLE public.bulk_submission_moderation_jobs
+  ADD COLUMN IF NOT EXISTS payload jsonb NULL,
+  ADD COLUMN IF NOT EXISTS queue_offset integer NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN public.bulk_payment_jobs.payload IS
+  'Durable job data: { "items": [{ "creatorId", "submissionIds" }] }';
+COMMENT ON COLUMN public.bulk_payment_jobs.queue_offset IS
+  'Creator index for the next queue batch (0-based into payload.items).';
+
+COMMENT ON COLUMN public.bulk_submission_moderation_jobs.payload IS
+  'Durable job data: { "submissionIds": [...], optional wallet preflight fields }';
+COMMENT ON COLUMN public.bulk_submission_moderation_jobs.queue_offset IS
+  'Submission index for the next queue batch (0-based into payload.submissionIds).';
+
 -- =============================================================================
 -- 3. Leaderboard: merge Twitter into all-platform rankings + summary
 -- =============================================================================

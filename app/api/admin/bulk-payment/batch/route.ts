@@ -4,6 +4,10 @@ import type {
   BulkPaymentPayoutChannel,
   BulkPaymentType,
 } from "@/lib/queue/bulk-payment-queue";
+import {
+  parseBulkPaymentJobPayload,
+  readQueueOffset,
+} from "@/lib/queue/bulk-job-payload";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,15 +65,10 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const jobId = typeof body.jobId === "string" ? body.jobId : "";
-    const offset =
-      typeof body.offset === "number" && Number.isFinite(body.offset)
-        ? Math.max(0, Math.floor(body.offset))
-        : 0;
     const batchSize =
       typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
         ? Math.max(1, Math.min(5, Math.floor(body.batchSize)))
         : 1;
-    const items = Array.isArray(body.items) ? body.items : [];
 
     if (!jobId) {
       return NextResponse.json({ error: "jobId is required" }, { status: 400 });
@@ -84,6 +83,21 @@ export async function POST(request: Request) {
 
     if (jobError || !jobRow) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    const payloadFromDb = parseBulkPaymentJobPayload(jobRow.payload);
+    const legacyItems = Array.isArray(body.items) ? body.items : [];
+    const items = payloadFromDb?.items ?? legacyItems;
+    const offset =
+      typeof body.offset === "number" && Number.isFinite(body.offset)
+        ? Math.max(0, Math.floor(body.offset))
+        : readQueueOffset(jobRow, 0);
+
+    if (items.length === 0) {
+      return NextResponse.json(
+        { error: "Job payload missing payment items" },
+        { status: 500 },
+      );
     }
 
     if (jobRow.status !== "running" && jobRow.status !== "queued") {

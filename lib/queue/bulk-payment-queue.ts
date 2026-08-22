@@ -37,11 +37,34 @@ export interface BulkPaymentQueueJob {
   batchIndex: number;
   batchSize: number;
   totalBatches: number;
-  /** Full creator pay list (DB does not store items). */
-  items: BulkPaymentQueueItem[];
-  /** Index into items for this chunk. */
-  offset: number;
+  /** Full creator pay list — persisted in Postgres; optional on Redis slim refs. */
+  items?: BulkPaymentQueueItem[];
+  /** Index into items for this chunk. Prefer DB queue_offset when processing. */
+  offset?: number;
   attempt?: number;
+}
+
+/** Minimal Redis queue entry (payload lives in bulk_payment_jobs.payload). */
+export type BulkPaymentQueueJobRef = Pick<
+  BulkPaymentQueueJob,
+  "contestId" | "jobId" | "batchIndex" | "attempt"
+>;
+
+function toSlimBulkPaymentQueueRef(
+  job: Pick<BulkPaymentQueueJob, "contestId" | "jobId" | "batchIndex" | "attempt">,
+): BulkPaymentQueueJobRef {
+  return {
+    contestId: job.contestId,
+    jobId: job.jobId,
+    batchIndex:
+      typeof job.batchIndex === "number" && Number.isFinite(job.batchIndex)
+        ? Math.max(0, Math.floor(job.batchIndex))
+        : 0,
+    attempt:
+      typeof job.attempt === "number" && Number.isFinite(job.attempt)
+        ? Math.max(0, Math.floor(job.attempt))
+        : 0,
+  };
 }
 
 function getRedis(): Redis | null {
@@ -103,19 +126,19 @@ function normalizeItems(raw: unknown): BulkPaymentQueueItem[] {
 }
 
 export async function enqueueBulkPaymentJob(
-  job: BulkPaymentQueueJob,
+  job: BulkPaymentQueueJobRef &
+    Partial<Omit<BulkPaymentQueueJob, keyof BulkPaymentQueueJobRef>>,
 ): Promise<{ error?: string }> {
   const redis = getRedis();
   if (!redis) return { error: "Redis not configured" };
   try {
-    const normalizedJob: BulkPaymentQueueJob = {
+    const slim = toSlimBulkPaymentQueueRef({
       ...job,
-      items: normalizeItems(job.items),
       attempt: Number.isFinite(job.attempt) ? Number(job.attempt) : 0,
-    };
-    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(normalizedJob));
+    });
+    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(slim));
     console.log(
-      `[bulk-payment-queue] Enqueued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} paymentType=${normalizedJob.paymentType} attempt=${normalizedJob.attempt}`,
+      `[bulk-payment-queue] Enqueued jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempt=${slim.attempt}`,
     );
     return {};
   } catch (err) {
@@ -140,12 +163,12 @@ export async function popBulkPaymentJob(): Promise<{
     );
     if (raw === null || raw === undefined) return null;
     const str = typeof raw === "string" ? raw : JSON.stringify(raw);
-    const parsed = JSON.parse(str) as BulkPaymentQueueJob;
+    const parsed = JSON.parse(str) as BulkPaymentQueueJobRef & BulkPaymentQueueJob;
     if (parsed?.jobId && parsed?.contestId) {
-      const items = normalizeItems(parsed.items);
+      const legacyItems = normalizeItems(parsed.items);
       const normalized: BulkPaymentQueueJob = {
-        ...parsed,
-        items,
+        contestId: String(parsed.contestId),
+        jobId: String(parsed.jobId),
         paymentType:
           parsed.paymentType === "bonus" || parsed.paymentType === "both"
             ? parsed.paymentType
@@ -167,10 +190,11 @@ export async function popBulkPaymentJob(): Promise<{
           Number.isFinite(parsed.totalBatches)
             ? Math.max(0, Math.floor(parsed.totalBatches))
             : 0,
+        items: legacyItems.length > 0 ? legacyItems : undefined,
         offset:
           typeof parsed.offset === "number" && Number.isFinite(parsed.offset)
             ? Math.max(0, Math.floor(parsed.offset))
-            : 0,
+            : undefined,
         attempt:
           typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
             ? Math.max(0, Math.floor(parsed.attempt))
@@ -216,39 +240,45 @@ export async function retryOrDeadLetterBulkPayment(options: {
     };
   }
   try {
-    const parsed = JSON.parse(options.rawJobString) as BulkPaymentQueueJob;
+    const parsed = JSON.parse(options.rawJobString) as BulkPaymentQueueJobRef &
+      BulkPaymentQueueJob;
     const nextAttempts = Math.max(
       1,
       (typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
         ? Math.floor(parsed.attempt)
         : 0) + 1,
     );
-    const normalizedJob: BulkPaymentQueueJob = {
-      ...parsed,
-      items: normalizeItems(parsed.items),
+    const slim = toSlimBulkPaymentQueueRef({
+      contestId: String(parsed.contestId),
+      jobId: String(parsed.jobId),
+      batchIndex:
+        typeof parsed.batchIndex === "number" &&
+        Number.isFinite(parsed.batchIndex)
+          ? Math.max(0, Math.floor(parsed.batchIndex))
+          : 0,
       attempt: nextAttempts,
-    };
+    });
 
     if (nextAttempts >= MAX_RETRY_ATTEMPTS) {
       await redis.lpush(
         REDIS_DEAD_LETTER_KEY,
         JSON.stringify({
-          ...normalizedJob,
+          ...slim,
           deadLetteredAt: new Date().toISOString(),
           deadLetterReason: options.reason ?? "unknown",
         }),
       );
       await removeBulkPaymentFromProcessing(options.rawJobString);
       console.error(
-        `[bulk-payment-queue] Dead-lettered jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
+        `[bulk-payment-queue] Dead-lettered jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempts=${nextAttempts}`,
       );
       return { requeued: false, deadLettered: true, attempts: nextAttempts };
     }
 
-    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(normalizedJob));
+    await redis.rpush(REDIS_QUEUE_KEY, JSON.stringify(slim));
     await removeBulkPaymentFromProcessing(options.rawJobString);
     console.warn(
-      `[bulk-payment-queue] Re-queued jobId=${normalizedJob.jobId} batchIndex=${normalizedJob.batchIndex} attempts=${nextAttempts}`,
+      `[bulk-payment-queue] Re-queued jobId=${slim.jobId} batchIndex=${slim.batchIndex} attempts=${nextAttempts}`,
     );
     return { requeued: true, deadLettered: false, attempts: nextAttempts };
   } catch (err) {

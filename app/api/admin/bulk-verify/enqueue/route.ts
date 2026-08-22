@@ -14,6 +14,7 @@ import {
   ensureProcessBulkVerifyQueueScheduleOnce,
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
+import { MAX_BULK_MODERATION_SUBMISSIONS } from "@/lib/queue/bulk-job-limits";
 
 const ALLOWED_ACTIONS = new Set(["verified", "pending", "rejected"]);
 const OWNERSHIP_ID_CHUNK_SIZE = 200;
@@ -67,6 +68,16 @@ export async function POST(request: Request) {
     if (submissionIds.length === 0) {
       return NextResponse.json(
         { error: "submissionIds must be a non-empty array" },
+        { status: 400 },
+      );
+    }
+
+    if (submissionIds.length > MAX_BULK_MODERATION_SUBMISSIONS) {
+      return NextResponse.json(
+        {
+          error: `Too many submissions. Bulk moderation supports at most ${MAX_BULK_MODERATION_SUBMISSIONS} per job.`,
+          max: MAX_BULK_MODERATION_SUBMISSIONS,
+        },
         { status: 400 },
       );
     }
@@ -196,6 +207,8 @@ export async function POST(request: Request) {
         failed_count: 0,
         quality_score: action === "verified" ? qualityScore : null,
         reason,
+        payload: { submissionIds },
+        queue_offset: 0,
         created_at: now,
         updated_at: now,
       })

@@ -11,6 +11,8 @@ create table if not exists public.bulk_submission_moderation_jobs (
   failed_count integer not null default 0,
   quality_score integer null check (quality_score in (1, 2, 3)),
   reason text null,
+  payload jsonb null,
+  queue_offset integer not null default 0,
   error_message text null,
   created_at timestamptz not null default now(),
   started_at timestamptz null,
