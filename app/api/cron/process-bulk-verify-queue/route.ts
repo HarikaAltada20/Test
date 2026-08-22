@@ -19,6 +19,7 @@ import {
 } from "@/lib/queue/bulk-submission-moderation-queue";
 import {
   authorizeProcessBulkVerifyQueue,
+  ensureProcessBulkVerifyQueueScheduleOnce,
   isQStashEnabled,
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
@@ -304,6 +305,7 @@ export async function POST(request: Request) {
   console.log(
     `[process-bulk-verify-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
   );
+  ensureProcessBulkVerifyQueueScheduleOnce(getBaseUrlFromRequest(request));
   return handleRequest(getBaseUrlFromRequest(request));
 }
 
@@ -313,6 +315,10 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       { processed: 0, message: "Bulk moderation queue not configured" },
       { status: 200 },
     );
+  }
+
+  if (Math.random() < 0.15) {
+    await recoverBulkSubmissionModerationProcessingToQueue({ maxToMove: 25 });
   }
 
   let popped = await popBulkSubmissionModerationJob();
@@ -420,13 +426,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     });
   }
 
-  await supabaseAdmin
-    .from("bulk_submission_moderation_jobs")
-    .update({
-      status: "running",
-      started_at: jobRow.started_at ?? new Date().toISOString(),
-    })
-    .eq("id", job.jobId);
+  await supabaseAdmin.rpc("touch_bulk_submission_moderation_job_running", {
+    p_job_id: job.jobId,
+  });
 
   let response: Response;
   try {
@@ -656,17 +658,19 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     }
   }
 
-  await supabaseAdmin
-    .from("bulk_submission_moderation_jobs")
-    .update({
-      processed_count: nextProcessed,
-      success_count: nextSuccess,
-      failed_count: nextFailed,
-      status: done ? "completed" : "running",
-      error_message: firstError || jobRow.error_message || null,
-      finished_at: done ? new Date().toISOString() : null,
-    })
-    .eq("id", job.jobId);
+  const processedCountDelta = Math.max(
+    0,
+    nextProcessed - (Number(jobRow.processed_count) || 0),
+  );
+
+  await supabaseAdmin.rpc("apply_bulk_submission_moderation_job_batch_progress", {
+    p_job_id: job.jobId,
+    p_processed_delta: processedCountDelta,
+    p_success_delta: processedDelta,
+    p_failed_delta: failedDelta,
+    p_mark_completed: done,
+    p_error_message: firstError || jobRow.error_message || null,
+  });
 
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);

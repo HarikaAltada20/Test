@@ -7,6 +7,8 @@
  */
 
 import { Redis } from "@upstash/redis";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { recoverStaleBulkProcessingJobs } from "@/lib/queue/bulk-job-recovery";
 
 const REDIS_PREFIX = "bulk_submission_moderation";
 const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
@@ -278,36 +280,41 @@ export async function retryOrDeadLetterBulkSubmissionModeration(options: {
   }
 }
 
+function parseBulkModerationJobId(raw: unknown): string | null {
+  try {
+    const str = typeof raw === "string" ? raw : JSON.stringify(raw);
+    const parsed = JSON.parse(str) as BulkSubmissionModerationQueueJob;
+    return parsed?.jobId ? String(parsed.jobId) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function recoverBulkSubmissionModerationProcessingToQueue(options?: {
   maxToMove?: number;
 }): Promise<{ moved: number; error?: string }> {
   const redis = getRedis();
   if (!redis) return { moved: 0, error: "Redis not configured" };
-  const maxToMove = Math.max(1, Math.min(options?.maxToMove ?? 25, 200));
-  try {
-    let moved = 0;
-    for (let i = 0; i < maxToMove; i++) {
-      const raw = await redis.lmove(
-        REDIS_PROCESSING_KEY,
-        REDIS_QUEUE_KEY,
-        "right",
-        "left",
-      );
-      if (raw === null || raw === undefined) break;
-      moved += 1;
-    }
-    if (moved > 0) {
-      console.warn(
-        `[bulk-submission-moderation-queue] Re-queued ${moved} job(s) from processing`,
-      );
-    }
-    return { moved };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      "[bulk-submission-moderation-queue] recoverProcessingJobsToQueue failed:",
-      message,
-    );
-    return { moved: 0, error: message };
-  }
+  const supabaseAdmin = createAdminClient();
+  const result = await recoverStaleBulkProcessingJobs({
+    redis,
+    processingKey: REDIS_PROCESSING_KEY,
+    queueKey: REDIS_QUEUE_KEY,
+    maxToInspect: options?.maxToMove,
+    parseJobId: parseBulkModerationJobId,
+    logPrefix: "bulk-submission-moderation-queue",
+    getHeartbeat: async (jobId) => {
+      const { data } = await supabaseAdmin
+        .from("bulk_submission_moderation_jobs")
+        .select("status, updated_at")
+        .eq("id", jobId)
+        .maybeSingle();
+      if (!data) return null;
+      return {
+        status: data.status as string,
+        updatedAt: data.updated_at as string | null,
+      };
+    },
+  });
+  return { moved: result.moved, error: result.error };
 }

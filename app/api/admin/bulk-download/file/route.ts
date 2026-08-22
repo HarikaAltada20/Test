@@ -67,6 +67,21 @@ export async function GET(request: Request) {
   }
 
   if (proxy) {
+    const maxProxyBytes = 100 * 1024 * 1024;
+    if (
+      process.env.NODE_ENV === "production" ||
+      (typeof status.zipBytes === "number" && status.zipBytes > maxProxyBytes)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Use the signed download URL for this archive (proxy disabled for large or production ZIPs).",
+          url: signed.data.signedUrl,
+          filename,
+        },
+        { status: 400 },
+      );
+    }
     const upstream = await fetch(signed.data.signedUrl);
     if (!upstream.ok || !upstream.body) {
       return NextResponse.json(

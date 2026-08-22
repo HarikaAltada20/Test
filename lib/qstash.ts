@@ -585,6 +585,156 @@ export function ensureProcessVideoDownloadQueueScheduleOnce(
     });
 }
 
+/** Stable QStash schedule ids for bulk queue recovery (stuck-job safety net). */
+export const PROCESS_BULK_PAYMENT_QUEUE_SCHEDULE_ID =
+  "goviral-process-bulk-payment-queue";
+export const PROCESS_BULK_VERIFY_QUEUE_SCHEDULE_ID =
+  "goviral-process-bulk-verify-queue";
+
+/** Every 5 minutes — recover stale processing jobs if self-chain stalls. */
+export const PROCESS_BULK_QUEUE_CRON = "*/5 * * * *";
+
+function getProcessBulkPaymentQueuePublishUrl(baseUrl?: string): string {
+  return `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/process-bulk-payment-queue`;
+}
+
+function getProcessBulkVerifyQueuePublishUrl(baseUrl?: string): string {
+  return `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/process-bulk-verify-queue`;
+}
+
+export async function ensureProcessBulkPaymentQueueSchedule(
+  baseUrl?: string,
+): Promise<{ scheduleId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const destination = getProcessBulkPaymentQueuePublishUrl(baseUrl);
+  if (isLoopbackUrl(destination)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+  try {
+    const res = await client.schedules.create({
+      destination,
+      cron: PROCESS_BULK_QUEUE_CRON,
+      scheduleId: PROCESS_BULK_PAYMENT_QUEUE_SCHEDULE_ID,
+      method: "POST",
+      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        ...getQStashAuthHeaders(),
+      },
+      retries: 2,
+      label: "process-bulk-payment-queue",
+    });
+    return { scheduleId: res.scheduleId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] ensureProcessBulkPaymentQueueSchedule failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+export async function ensureProcessBulkVerifyQueueSchedule(
+  baseUrl?: string,
+): Promise<{ scheduleId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const destination = getProcessBulkVerifyQueuePublishUrl(baseUrl);
+  if (isLoopbackUrl(destination)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+  try {
+    const res = await client.schedules.create({
+      destination,
+      cron: PROCESS_BULK_QUEUE_CRON,
+      scheduleId: PROCESS_BULK_VERIFY_QUEUE_SCHEDULE_ID,
+      method: "POST",
+      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        ...getQStashAuthHeaders(),
+      },
+      retries: 2,
+      label: "process-bulk-verify-queue",
+    });
+    return { scheduleId: res.scheduleId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] ensureProcessBulkVerifyQueueSchedule failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+let ensureBulkPaymentSchedulePromise: Promise<void> | null = null;
+let ensureBulkVerifySchedulePromise: Promise<void> | null = null;
+
+export function ensureProcessBulkPaymentQueueScheduleOnce(
+  baseUrl?: string,
+): void {
+  if (!isQStashEnabled()) return;
+  if (ensureBulkPaymentSchedulePromise) return;
+  ensureBulkPaymentSchedulePromise = ensureProcessBulkPaymentQueueSchedule(
+    baseUrl,
+  )
+    .then((res) => {
+      if (res.scheduleId) {
+        console.log(
+          "[qstash] process-bulk-payment-queue schedule ready:",
+          res.scheduleId,
+        );
+      } else if (res.error) {
+        ensureBulkPaymentSchedulePromise = null;
+        console.warn(
+          "[qstash] process-bulk-payment-queue schedule not ready:",
+          res.error,
+        );
+      }
+    })
+    .catch((err) => {
+      ensureBulkPaymentSchedulePromise = null;
+      console.warn(
+        "[qstash] process-bulk-payment-queue schedule ensure error:",
+        err,
+      );
+    });
+}
+
+export function ensureProcessBulkVerifyQueueScheduleOnce(
+  baseUrl?: string,
+): void {
+  if (!isQStashEnabled()) return;
+  if (ensureBulkVerifySchedulePromise) return;
+  ensureBulkVerifySchedulePromise = ensureProcessBulkVerifyQueueSchedule(
+    baseUrl,
+  )
+    .then((res) => {
+      if (res.scheduleId) {
+        console.log(
+          "[qstash] process-bulk-verify-queue schedule ready:",
+          res.scheduleId,
+        );
+      } else if (res.error) {
+        ensureBulkVerifySchedulePromise = null;
+        console.warn(
+          "[qstash] process-bulk-verify-queue schedule not ready:",
+          res.error,
+        );
+      }
+    })
+    .catch((err) => {
+      ensureBulkVerifySchedulePromise = null;
+      console.warn(
+        "[qstash] process-bulk-verify-queue schedule ensure error:",
+        err,
+      );
+    });
+}
+
 function getProcessAdminNotificationDeliveryQueueUrl(): string {
   return `${getQStashPublishBaseUrl()}/api/cron/process-admin-notification-delivery-queue`;
 }

@@ -13,6 +13,7 @@ import {
 } from "@/lib/queue/bulk-payment-queue";
 import {
   isQStashEnabled,
+  ensureProcessBulkPaymentQueueScheduleOnce,
   triggerProcessBulkPaymentQueue,
 } from "@/lib/qstash";
 
@@ -146,6 +147,7 @@ export async function POST(request: Request) {
 
     // Ownership / contest membership check for all submission (or tweet) ids.
     const allIds = items.flatMap((item) => item.submissionIds);
+    const idToCreator = new Map<string, string>();
     if (payoutChannel === "twitter_cpm") {
       for (let i = 0; i < allIds.length; i += OWNERSHIP_ID_CHUNK_SIZE) {
         const chunk = allIds.slice(i, i + OWNERSHIP_ID_CHUNK_SIZE);
@@ -166,6 +168,9 @@ export async function POST(request: Request) {
             { error: "One or more tweets were not found for this contest" },
             { status: 404 },
           );
+        }
+        for (const row of data ?? []) {
+          idToCreator.set(String(row.id), String(row.creator_id));
         }
       }
     } else {
@@ -190,6 +195,24 @@ export async function POST(request: Request) {
                 "One or more submissions were not found for this contest",
             },
             { status: 404 },
+          );
+        }
+        for (const row of data ?? []) {
+          idToCreator.set(String(row.id), String(row.creator_id));
+        }
+      }
+    }
+
+    for (const item of items) {
+      for (const submissionId of item.submissionIds) {
+        const ownerId = idToCreator.get(submissionId);
+        if (!ownerId || ownerId !== item.creatorId) {
+          return NextResponse.json(
+            {
+              error:
+                "One or more submissionIds do not belong to the specified creatorId",
+            },
+            { status: 400 },
           );
         }
       }
@@ -268,6 +291,7 @@ export async function POST(request: Request) {
     }
 
     const baseUrl = getBaseUrlFromRequest(request).replace(/\/$/, "");
+    ensureProcessBulkPaymentQueueScheduleOnce(baseUrl);
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-bulk-payment-queue`, {
         method: "POST",

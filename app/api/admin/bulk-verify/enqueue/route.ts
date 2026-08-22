@@ -11,6 +11,7 @@ import {
 } from "@/lib/queue/bulk-submission-moderation-queue";
 import {
   isQStashEnabled,
+  ensureProcessBulkVerifyQueueScheduleOnce,
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
 
@@ -241,6 +242,7 @@ export async function POST(request: Request) {
     }
 
     const baseUrl = getBaseUrlFromRequest(request).replace(/\/$/, "");
+    ensureProcessBulkVerifyQueueScheduleOnce(baseUrl);
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-bulk-verify-queue`, {
         method: "POST",

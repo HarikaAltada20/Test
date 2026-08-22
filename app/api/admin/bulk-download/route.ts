@@ -242,6 +242,16 @@ export async function POST(request: Request) {
       });
     }
 
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        {
+          error:
+            "Video download queue is not configured. Bulk ZIP downloads require Redis in production.",
+        },
+        { status: 503 },
+      );
+    }
+
     const result = await executeQueuedVideoDownloads({
       items: downloadQueue,
       requestId,

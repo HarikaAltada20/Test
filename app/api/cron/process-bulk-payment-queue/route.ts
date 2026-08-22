@@ -18,6 +18,7 @@ import {
 } from "@/lib/queue/bulk-payment-queue";
 import {
   authorizeProcessBulkPaymentQueue,
+  ensureProcessBulkPaymentQueueScheduleOnce,
   isQStashEnabled,
   triggerProcessBulkPaymentQueue,
 } from "@/lib/qstash";
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
   console.log(
     `[process-bulk-payment-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
   );
+  ensureProcessBulkPaymentQueueScheduleOnce(getBaseUrlFromRequest(request));
   return handleRequest(getBaseUrlFromRequest(request));
 }
 
@@ -108,6 +110,10 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       { processed: 0, message: "Bulk payment queue not configured" },
       { status: 200 },
     );
+  }
+
+  if (Math.random() < 0.15) {
+    await recoverBulkPaymentProcessingToQueue({ maxToMove: 25 });
   }
 
   let popped = await popBulkPaymentJob();
@@ -184,13 +190,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     });
   }
 
-  await supabaseAdmin
-    .from("bulk_payment_jobs")
-    .update({
-      status: "running",
-      started_at: jobRow.started_at ?? new Date().toISOString(),
-    })
-    .eq("id", job.jobId);
+  await supabaseAdmin.rpc("touch_bulk_payment_job_running", {
+    p_job_id: job.jobId,
+  });
 
   let response: Response;
   try {
@@ -377,24 +379,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           Math.floor((responseData as { nextOffset: number }).nextOffset),
         )
       : offset + Math.max(1, creatorsProcessedDelta);
-  // Submission-wise progress (not creator offset).
-  const nextProcessed =
-    (Number(jobRow.processed_count) || 0) + submissionProcessedDelta;
-  const nextSuccess = (Number(jobRow.success_count) || 0) + paidDelta;
-  const nextFailed = (Number(jobRow.failed_count) || 0) + failedDelta;
-  const nextAmount =
-    (Number(jobRow.total_amount_cents) || 0) +
-    (Number((responseData as { total_amount?: number })?.total_amount) || 0);
-  const nextCpm =
-    (Number(jobRow.total_cpm_cents) || 0) +
-    (Number((responseData as { total_cpm?: number })?.total_cpm) || 0);
-  const nextBonus =
-    (Number(jobRow.total_bonus_cents) || 0) +
-    (Number((responseData as { total_bonus?: number })?.total_bonus) || 0);
-  const nextMilestone =
-    (Number(jobRow.total_milestone_cents) || 0) +
-    (Number((responseData as { total_milestone?: number })?.total_milestone) ||
-      0);
   const hasMore =
     (responseData as { hasMore?: boolean })?.hasMore === true ||
     nextOffset < items.length;
@@ -402,21 +386,26 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   const firstError =
     batchErrors.length > 0 ? String(batchErrors[0]?.error || "") : null;
 
-  await supabaseAdmin
-    .from("bulk_payment_jobs")
-    .update({
-      processed_count: nextProcessed,
-      success_count: nextSuccess,
-      failed_count: nextFailed,
-      total_amount_cents: nextAmount,
-      total_cpm_cents: nextCpm,
-      total_bonus_cents: nextBonus,
-      total_milestone_cents: nextMilestone,
-      status: done ? "completed" : "running",
-      error_message: firstError || jobRow.error_message || null,
-      finished_at: done ? new Date().toISOString() : null,
-    })
-    .eq("id", job.jobId);
+  await supabaseAdmin.rpc("apply_bulk_payment_job_batch_progress", {
+    p_job_id: job.jobId,
+    p_processed_delta: submissionProcessedDelta,
+    p_success_delta: paidDelta,
+    p_failed_delta: failedDelta,
+    p_amount_delta:
+      Number((responseData as { total_amount?: number })?.total_amount) || 0,
+    p_cpm_delta:
+      Number((responseData as { total_cpm?: number })?.total_cpm) || 0,
+    p_bonus_delta:
+      Number((responseData as { total_bonus?: number })?.total_bonus) || 0,
+    p_milestone_delta:
+      Number((responseData as { total_milestone?: number })?.total_milestone) ||
+      0,
+    p_mark_completed: done,
+    p_error_message: firstError || jobRow.error_message || null,
+  });
+
+  const nextProcessed =
+    (Number(jobRow.processed_count) || 0) + submissionProcessedDelta;
 
   if (hasMore) {
     await sleep(CHUNK_PAUSE_MS);
