@@ -13,7 +13,7 @@ import {
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast as showToast } from "@/hooks/use-toast";
-import { formatRefundReversalToastLine } from "@/lib/bulk-payment-toast";
+import { formatBulkModerationRefundToast } from "@/lib/bulk-payment-toast";
 
 const STORAGE_KEY = "bulk_moderation_active_job_v2";
 const LEGACY_STORAGE_KEY = "bulk_moderation_active_job_v1";
@@ -27,6 +27,8 @@ export type BulkModerationWalletRefundSummary = {
   total_refunded_cents?: number;
   cpm_refunded_cents?: number;
   milestone_refunded_cents?: number;
+  refunded_count?: number;
+  skipped_count?: number;
   is_dual_rewards?: boolean;
 };
 
@@ -43,10 +45,6 @@ export type BulkModerationJobStatus = {
   progressPercent: number;
   wallet_refund_summary?: BulkModerationWalletRefundSummary | null;
 };
-
-function formatMoneyCents(cents: number): string {
-  return `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
-}
 
 type TrackedJob = {
   jobId: string;
@@ -243,9 +241,9 @@ export function BulkModerationProgressProvider({
 
   const finishWithToast = useCallback(
     (job: BulkModerationJobStatus, meta: TrackedJob) => {
-      const total = Math.max(0, Number(job.total_count) || 0);
       const success = Math.max(0, Number(job.success_count) || 0);
       const failed = Math.max(0, Number(job.failed_count) || 0);
+      const total = Math.max(0, Number(job.total_count) || 0);
       const countForMessage = success > 0 ? success : total;
       const actionText =
         meta.action === "verified"
@@ -255,35 +253,37 @@ export function BulkModerationProgressProvider({
             : "Rejected";
 
       if (job.status === "completed") {
-        // Match pre-queue bulk verify toast (not "Processed · Success · Failed").
-        let description = `Successfully ${actionText} ${countForMessage} submission(s).`;
-        if (
+        const refund = job.wallet_refund_summary;
+        const totalRefundedCents = Math.max(
+          0,
+          Number(refund?.total_refunded_cents) || 0,
+        );
+        const qualityScoreLine =
           meta.action === "verified" &&
           meta.qualityScore != null &&
-          !(
-            Number(job.wallet_refund_summary?.total_refunded_cents) > 0
-          )
-        ) {
-          description += ` Quality score set to ${meta.qualityScore}/3.`;
-        }
-        if (failed > 0) {
-          description += ` ${failed} failed.`;
-        }
-        const refund = job.wallet_refund_summary;
-        if (refund && Number(refund.total_refunded_cents) > 0) {
-          description += ` ${formatRefundReversalToastLine(
-            {
-              reward_refunded_cents: Number(refund.reward_refunded_cents) || 0,
-              bonus_refunded_cents: Number(refund.bonus_refunded_cents) || 0,
-              total_refunded_cents: Number(refund.total_refunded_cents) || 0,
-              cpm_refunded_cents: Number(refund.cpm_refunded_cents) || 0,
-              milestone_refunded_cents:
-                Number(refund.milestone_refunded_cents) || 0,
-            },
-            formatMoneyCents,
-            { isDualRewards: refund.is_dual_rewards === true },
-          )}`;
-        }
+          totalRefundedCents <= 0
+            ? `Quality score set to ${meta.qualityScore}/3.`
+            : null;
+        const description = formatBulkModerationRefundToast({
+          actionText,
+          successCount: countForMessage,
+          failedCount: failed,
+          qualityScoreLine,
+          refundedCount:
+            refund?.refunded_count == null
+              ? null
+              : Number(refund.refunded_count) || 0,
+          skippedCount:
+            refund?.skipped_count == null
+              ? null
+              : Number(refund.skipped_count) || 0,
+          rewardCents: Number(refund?.reward_refunded_cents) || 0,
+          bonusCents: Number(refund?.bonus_refunded_cents) || 0,
+          totalCents: totalRefundedCents,
+          cpmCents: Number(refund?.cpm_refunded_cents) || 0,
+          milestoneCents: Number(refund?.milestone_refunded_cents) || 0,
+          isDualRewards: refund?.is_dual_rewards === true,
+        });
         showToast({
           title:
             meta.action === "rejected"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { processBulkVerifySubmissions } from "@/app/api/admin/bulk-verify-submissions/route";
+import { POST as bulkModerateTwitterSubmissions } from "@/app/api/contests/[id]/bulk-moderate-submissions/route";
 import { assertBulkVerifyWalletContinuationSigningReady } from "@/lib/bulk-verify-wallet-continuation";
 import {
   parseBulkModerationJobPayload,
@@ -95,6 +96,62 @@ export async function POST(request: Request) {
     }
 
     const action = String(jobRow.action);
+    const channel =
+      payloadFromDb?.channel === "twitter_tweets"
+        ? "twitter_tweets"
+        : "submissions";
+    const contestId = String(jobRow.contest_id);
+
+    if (channel === "twitter_tweets") {
+      const twitterAction =
+        action === "verified"
+          ? "approve"
+          : action === "rejected"
+            ? "reject"
+            : action;
+      const cronSecret = process.env.CRON_SECRET || "";
+      const response = await bulkModerateTwitterSubmissions(
+        new Request(
+          `http://127.0.0.1/api/contests/${contestId}/bulk-moderate-submissions`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-From-Queue": "1",
+              Authorization: `Bearer ${cronSecret}`,
+            },
+            body: JSON.stringify({
+              tweetIds: chunkIds,
+              action: twitterAction,
+              reason: jobRow.reason ?? undefined,
+              admin_user_id: String(jobRow.user_id),
+              skipWalletReversal: isPaidReversalBulkAction(action),
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: contestId }) },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return NextResponse.json(
+          {
+            error:
+              (data as { error?: string })?.error ||
+              `Twitter bulk moderation batch failed with HTTP ${response.status}`,
+            details: data,
+            chunkIds,
+          },
+          { status: response.status },
+        );
+      }
+      return NextResponse.json({
+        ...(data as Record<string, unknown>),
+        chunkIds,
+        hasMore: offset + chunkIds.length < submissionIds.length,
+        nextOffset: offset + chunkIds.length,
+      });
+    }
+
     const deferWalletToEnd = isPaidReversalBulkAction(action);
 
     // Wallet debit + money_transactions run once at job completion (per creator).

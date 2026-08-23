@@ -12,8 +12,11 @@ export type BulkModerationWalletRefundSummary = {
   milestone_refunded_cents: number;
 };
 
+export type BulkModerationChannel = "submissions" | "twitter_tweets";
+
 export type BulkModerationJobPayload = {
   submissionIds: string[];
+  channel?: BulkModerationChannel;
   walletPreflightDone?: boolean;
   walletSkipSubmissionIds?: string[];
   walletRefundSummaries?: Record<string, BulkModerationWalletRefundSummary>;
@@ -67,8 +70,14 @@ export function parseBulkModerationJobPayload(
   )
     ? (raw as BulkModerationJobPayload).walletSkipSubmissionIds!.map(String)
     : undefined;
+  const channelRaw = String(
+    (raw as BulkModerationJobPayload).channel || "submissions",
+  );
+  const channel: BulkModerationChannel =
+    channelRaw === "twitter_tweets" ? "twitter_tweets" : "submissions";
   return {
     submissionIds,
+    channel,
     walletPreflightDone: Boolean(
       (raw as BulkModerationJobPayload).walletPreflightDone,
     ),

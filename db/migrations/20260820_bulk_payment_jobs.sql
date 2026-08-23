@@ -5,7 +5,7 @@ create table if not exists public.bulk_payment_jobs (
   user_type text not null check (user_type in ('admin', 'advertiser')),
   payment_type text not null check (payment_type in ('standard', 'bonus', 'both')),
   payout_channel text not null default 'submissions'
-    check (payout_channel in ('submissions', 'twitter_cpm')),
+    check (payout_channel in ('submissions', 'twitter_cpm', 'twitter_creator')),
   status text not null default 'queued'
     check (status in ('queued', 'running', 'completed', 'failed')),
   total_count integer not null default 0,

@@ -6,7 +6,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { tweetIds, action, reason } = await request.json();
+    const { tweetIds, action, reason, admin_user_id, skipWalletReversal } =
+      await request.json();
 
     if (!Array.isArray(tweetIds)) {
       return NextResponse.json(
@@ -34,6 +35,10 @@ export async function POST(
             tweetId: id,
             action,
             reason,
+            ...(skipWalletReversal === true ? { skipWalletReversal: true } : {}),
+            ...(typeof admin_user_id === "string" && admin_user_id.trim()
+              ? { admin_user_id: admin_user_id.trim() }
+              : {}),
           }),
         });
 
@@ -60,9 +65,15 @@ export async function POST(
         if (res.status === "fulfilled") {
           results.push({ id: batch[idx], data: res.value });
         } else {
+          const errorMessage = res.reason?.message || String(res.reason);
+          console.warn(
+            "[bulk-moderate-submissions] tweet failed:",
+            batch[idx],
+            errorMessage,
+          );
           errors.push({
             id: batch[idx],
-            error: res.reason?.message || String(res.reason),
+            error: errorMessage,
           });
         }
       });

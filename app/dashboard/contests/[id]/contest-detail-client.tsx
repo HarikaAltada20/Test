@@ -237,6 +237,10 @@ import {
   twitterSubmissionIsDeletedFromTwitter,
 } from "@/lib/twitter/twitter-tweet-visibility";
 import {
+  computeContestDetailSubmissionStatusCounts,
+  getContestDetailRowStatus,
+} from "@/lib/contest-detail-submission-status-counts";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -1400,25 +1404,6 @@ function accumulateTwitterModerationRefund(
   }
 }
 
-function formatTwitterRefundToastDescription(
-  rewardCents: number,
-  bonusCents: number,
-  formatCents: (cents: number) => string,
-): string {
-  const lines: string[] = [];
-  if (rewardCents > 0) {
-    lines.push(`Reward: ${formatCents(rewardCents)}`);
-  }
-  if (bonusCents > 0) {
-    lines.push(`Bonus: ${formatCents(bonusCents)}`);
-  }
-  const total = rewardCents + bonusCents;
-  if (total > 0) {
-    lines.push(`Total: ${formatCents(total)}`);
-  }
-  return lines.join("\n");
-}
-
 /** Twitter CPM: show bonus granted only when the tweet is moderation paid (avoids inconsistent bonus_paid flags). */
 function twitterCpmBonusGrantedDisplay(
   submission: {
@@ -2575,6 +2560,9 @@ export default function ContestDetailClient({
   /** Loading shown in Creator Submissions modal while parent completes verify/bulk after paid-reversal confirm */
   const [creatorModalParentBulkLoading, setCreatorModalParentBulkLoading] =
     useState(false);
+  /** Keep the processing overlay up for paid→status refunds until the queued job finishes. */
+  const [creatorModalRefundProcessing, setCreatorModalRefundProcessing] =
+    useState(false);
   const [normalViewSelectedSubmissions, setNormalViewSelectedSubmissions] =
     useState<Set<string>>(new Set());
   const [normalViewBulkDownloading, setNormalViewBulkDownloading] =
@@ -2992,12 +2980,22 @@ export default function ContestDetailClient({
   }, []);
 
   // Helper function to get status for both Twitter tweets and regular submissions
-  const getStatus = (submission: Submission) => {
-    const isTwitterTweet = (submission as any).is_twitter_tweet === true;
-    return isTwitterTweet
-      ? (submission as any).moderation_status || "pending"
-      : submission.status;
-  };
+  const getStatus = (submission: Submission) =>
+    getContestDetailRowStatus(submission as any);
+
+  const liveSubmissionStatusCounts = useMemo(() => {
+    const loadedAll =
+      submissionsFullyHydrated ||
+      (submissionTotalCount > 0 &&
+        currentSubmissions.length >= submissionTotalCount);
+    if (!loadedAll) return submissionStatusCounts;
+    return computeContestDetailSubmissionStatusCounts(currentSubmissions);
+  }, [
+    submissionsFullyHydrated,
+    submissionTotalCount,
+    currentSubmissions,
+    submissionStatusCounts,
+  ]);
 
   function getExplicitSubmissionQualityScoreForFiltering(
     submission: Submission,
@@ -7198,6 +7196,12 @@ export default function ContestDetailClient({
           }),
         );
       }
+      if (
+        refundSummary &&
+        Number(refundSummary.total_refunded_cents) > 0
+      ) {
+        setTimeout(() => window.location.reload(), 800);
+      }
     } catch (error: any) {
       console.error("Error updating submission status:", error);
 
@@ -7410,15 +7414,25 @@ export default function ContestDetailClient({
       if (detail.contestId && detail.contestId !== contestId) return;
 
       clearLoadingStateForSubmissionIds(detail.submissionIds);
+      setCreatorModalRefundProcessing(false);
+      setCreatorModalParentBulkLoading(false);
 
       if (detail.job.status === "completed") {
         setCurrentSubmissions((prev) =>
           prev.map((sub) => {
-            if (
-              !detail.submissionIds.includes(sub.id) ||
-              (sub as any)?.is_twitter_tweet
-            ) {
+            if (!detail.submissionIds.includes(sub.id)) {
               return sub;
+            }
+            if ((sub as any)?.is_twitter_tweet) {
+              return {
+                ...sub,
+                moderation_status: detail.action,
+                ...(detail.action === "rejected"
+                  ? {}
+                  : detail.action === "pending"
+                    ? { quality_score: null }
+                    : {}),
+              };
             }
             return {
               ...sub,
@@ -7435,6 +7449,16 @@ export default function ContestDetailClient({
           setSelectedCreatorForModal(null);
         }
       }
+      const refundedCents = Math.max(
+        0,
+        Number(detail.job?.wallet_refund_summary?.total_refunded_cents) || 0,
+      );
+      if (refundedCents <= 0) return;
+      void fetch("/api/contests/clear-cache?scope=self", {
+        method: "POST",
+        credentials: "same-origin",
+      }).catch(() => {});
+      setTimeout(() => window.location.reload(), 800);
     };
 
     window.addEventListener("bulk-moderation:completed", onCompleted);
@@ -7526,32 +7550,28 @@ export default function ContestDetailClient({
       return newLoadingState;
     });
 
-    let queuedNormalJobId: string | null = null;
+    let queuedJobId: string | null = null;
     try {
-      const results: any[] = [];
-      let queuedNormalAction: "verified" | "pending" | "rejected" | null = null;
-      /** Keep each bulk-verify request small enough for Supabase filters + serverless time. */
-      const BULK_VERIFY_CLIENT_CHUNK_SIZE = 10;
-      if (normalIds.length > 0) {
-        const normalAction =
-          action === "approve"
-            ? "verified"
-            : action === "reject"
-              ? "rejected"
-              : action;
-
+      if (isModerationBulkAction) {
         if (isBulkModerationBusy) {
           throw new Error(
             "Another bulk moderation job is already running. Wait for it to finish before starting a new one.",
           );
         }
 
+        const enqueueAction =
+          action === "approve"
+            ? "verified"
+            : action === "reject"
+              ? "rejected"
+              : action;
+
         const enqueueRes = await fetch("/api/admin/bulk-verify/enqueue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            submissionIds: normalIds,
-            action: normalAction,
+            submissionIds,
+            action: enqueueAction,
             reason,
             qualityScore: options?.qualityScore,
           }),
@@ -7564,17 +7584,21 @@ export default function ContestDetailClient({
           );
         }
 
-        queuedNormalJobId = String(enqueueData.jobId || "");
-        queuedNormalAction = normalAction as "verified" | "pending" | "rejected";
+        queuedJobId = String(enqueueData.jobId || "");
         startBulkModerationTracking({
-          jobId: queuedNormalJobId,
-          submissionIds: normalIds,
-          action: queuedNormalAction,
+          jobId: queuedJobId,
+          submissionIds,
+          action: enqueueAction as "verified" | "pending" | "rejected",
           qualityScore: options?.qualityScore,
           closeCreatorModalOnSuccess: options?.closeCreatorModalOnSuccess,
           contestId,
         });
+        return;
       }
+
+      const results: any[] = [];
+      /** Keep each fallback request small enough for Supabase filters + serverless time. */
+      const BULK_VERIFY_CLIENT_CHUNK_SIZE = 10;
 
       if (twitterIds.length > 0) {
         // Map action for Twitter submissions
@@ -7853,9 +7877,12 @@ export default function ContestDetailClient({
           )}`;
         }
         if (twitterRefundTotal > 0) {
-          bulkDescription += ` ${formatTwitterRefundToastDescription(
-            refundAggregate.rewardCents,
-            refundAggregate.bonusCents,
+          bulkDescription += ` ${formatRefundReversalToastLine(
+            {
+              reward_refunded_cents: refundAggregate.rewardCents,
+              bonus_refunded_cents: refundAggregate.bonusCents,
+              total_refunded_cents: twitterRefundTotal,
+            },
             formatMoney,
           )}`;
         }
@@ -7892,8 +7919,12 @@ export default function ContestDetailClient({
         () => window.dispatchEvent(new Event("contests:refresh")),
         1000,
       );
+      if (hasRefundReversal) {
+        setTimeout(() => window.location.reload(), 800);
+      }
     } catch (error: any) {
       console.error("Bulk update failed:", error);
+      setCreatorModalRefundProcessing(false);
       toast({
         title: "Error",
         description: error?.message || "Bulk update failed",
@@ -7903,7 +7934,7 @@ export default function ContestDetailClient({
       setIsLoadingSubmission((prev) => {
         const resetState = { ...prev };
         submissionIds.forEach((id) => {
-          if (queuedNormalJobId && normalIds.includes(id)) return;
+          if (queuedJobId) return;
           delete resetState[id];
         });
         return resetState;
@@ -7931,6 +7962,7 @@ export default function ContestDetailClient({
 
     if (closeModal) {
       setCreatorModalParentBulkLoading(true);
+      setCreatorModalRefundProcessing(true);
     } else {
       setNormalViewBulkActiveAction("reject");
     }
@@ -8438,17 +8470,81 @@ export default function ContestDetailClient({
       // Ranking is always fetched fresh per request (no cross-request prize cache).
       const CREATOR_WISE_PAY_CONCURRENCY = 1;
 
-      // Non-leaderboard / non-creator-CPM paths: queue one Redis+QStash job for all creators.
-      const canQueueBulkPayment =
-        !isTwitterLeaderboardCreatorWise &&
-        !(isTwitterCpmCreatorWise && paymentType !== "bonus");
+      // Queue one Redis+QStash job for all creators, including Twitter CPM/leaderboard.
+      const useTwitterCreatorQueue =
+        isTwitterLeaderboardCreatorWise ||
+        (isTwitterCpmCreatorWise && paymentType !== "bonus");
+      const useTwitterCpmQueue =
+        isTwitterCpmCreatorWise && paymentType === "bonus";
 
-      if (canQueueBulkPayment) {
+      {
         const queueItems: { creatorId: string; submissionIds: string[] }[] =
           [];
         for (const group of selectedGroups) {
           const creatorId = String(group.creator?.id || "");
           if (!creatorId) continue;
+
+          if (useTwitterCreatorQueue) {
+            const tweetIds = (group.submissions || [])
+              .filter((submission: any) => submission?.is_twitter_tweet === true)
+              .map((submission: any) => String(submission?.id || ""))
+              .filter(Boolean);
+            if (tweetIds.length === 0) continue;
+
+            if (isTwitterLeaderboardCreatorWise) {
+              const canPayReward =
+                paymentType !== "bonus" &&
+                !group.paid &&
+                group.creator_moderation_status !== "rejected";
+              const canPayBonus =
+                paymentType !== "standard" &&
+                hasFlatFeeBonus &&
+                (group.submissions || []).some(
+                  (submission: any) =>
+                    submission?.is_twitter_tweet === true &&
+                    !submission?.bonus_paid &&
+                    ["verified", "approved", "paid"].includes(
+                      getCreatorWiseSubmissionPayStatus(submission),
+                    ),
+                );
+              if (!canPayReward && !canPayBonus) continue;
+              const bonusIds =
+                paymentType === "bonus"
+                  ? (group.submissions || [])
+                      .filter(
+                        (submission: any) =>
+                          submission?.is_twitter_tweet === true &&
+                          !submission?.bonus_paid &&
+                          ["verified", "approved", "paid"].includes(
+                            getCreatorWiseSubmissionPayStatus(submission),
+                          ),
+                      )
+                      .map((submission: any) => String(submission?.id || ""))
+                      .filter(Boolean)
+                  : tweetIds;
+              if (bonusIds.length === 0) continue;
+              queueItems.push({ creatorId, submissionIds: bonusIds });
+              continue;
+            }
+
+            const creatorStatus = String(
+              group.creator_moderation_status || "",
+            ).toLowerCase();
+            const expectedCents = Math.max(
+              0,
+              Number(group.earnings?.expected) || 0,
+            );
+            const grantedCents = Math.max(
+              0,
+              Number(group.earnings?.granted) || 0,
+            );
+            if (creatorStatus === "rejected" || expectedCents <= grantedCents) {
+              continue;
+            }
+            queueItems.push({ creatorId, submissionIds: tweetIds });
+            continue;
+          }
+
           const payableSubs = filterCreatorWisePayableSubmissions(
             group.submissions || [],
             paymentType,
@@ -8483,9 +8579,11 @@ export default function ContestDetailClient({
           body: JSON.stringify({
             contestId,
             paymentType,
-            payoutChannel: isTwitterCpmCreatorWise
-              ? "twitter_cpm"
-              : "submissions",
+            payoutChannel: useTwitterCreatorQueue
+              ? "twitter_creator"
+              : useTwitterCpmQueue
+                ? "twitter_cpm"
+                : "submissions",
             items: queueItems,
           }),
         });
@@ -8996,6 +9094,7 @@ export default function ContestDetailClient({
         : closeOpts;
     if (closeCreatorModalOnSuccess) {
       setCreatorModalParentBulkLoading(true);
+      setCreatorModalRefundProcessing(true);
     } else {
       setNormalViewBulkActiveAction(
         target === "verified"
@@ -9025,6 +9124,9 @@ export default function ContestDetailClient({
     } finally {
       if (closeCreatorModalOnSuccess) {
         setCreatorModalParentBulkLoading(false);
+        if (submissionIds.length === 1) {
+          setCreatorModalRefundProcessing(false);
+        }
       } else {
         setNormalViewBulkActiveAction(null);
       }
@@ -11788,9 +11890,12 @@ export default function ContestDetailClient({
       if (submissionRefund && submissionRefund.totalCents > 0) {
         toast({
           title: "Refund processed",
-          description: formatTwitterRefundToastDescription(
-            submissionRefund.cpmCents,
-            submissionRefund.bonusCents,
+          description: formatRefundReversalToastLine(
+            {
+              reward_refunded_cents: submissionRefund.cpmCents,
+              bonus_refunded_cents: submissionRefund.bonusCents,
+              total_refunded_cents: submissionRefund.totalCents,
+            },
             formatMoney,
           ),
           variant: "default",
@@ -11815,11 +11920,9 @@ export default function ContestDetailClient({
         );
       }
       window.dispatchEvent(new CustomEvent("contests:refresh"));
-
-      // Page-level state is already updated via setCurrentSubmissions above.
-      // We rely on that local state update plus the "contests:refresh" event
-      // and cache clear below instead of forcing a full page reload here,
-      // so the UI reflects changes instantly without a hard refresh.
+      if (submissionRefund && submissionRefund.totalCents > 0) {
+        setTimeout(() => window.location.reload(), 800);
+      }
     } catch (error: any) {
       console.error("Error moderating tweet:", error);
       toast({
@@ -11862,6 +11965,7 @@ export default function ContestDetailClient({
     }));
 
     try {
+      let creatorRefundCents = 0;
       // CPM: reverse each paid tweet and then set action per tweet via moderate-submission
       const isCpmTwitter =
         isCpmContestType(currentContest?.contest_type) &&
@@ -11950,6 +12054,7 @@ export default function ContestDetailClient({
           refundAcc,
           lbData.refund as TwitterModerateCreatorRefund | undefined,
         );
+        creatorRefundCents = refundAcc.rewardCents + refundAcc.bonusCents;
         toast({
           title: "Success",
           description: `Creator ${
@@ -11959,9 +12064,13 @@ export default function ContestDetailClient({
         if (refundAcc.rewardCents + refundAcc.bonusCents > 0) {
           toast({
             title: "Refund processed",
-            description: formatTwitterRefundToastDescription(
-              refundAcc.rewardCents,
-              refundAcc.bonusCents,
+            description: formatRefundReversalToastLine(
+              {
+                reward_refunded_cents: refundAcc.rewardCents,
+                bonus_refunded_cents: refundAcc.bonusCents,
+                total_refunded_cents:
+                  refundAcc.rewardCents + refundAcc.bonusCents,
+              },
               formatMoney,
             ),
             variant: "default",
@@ -11997,11 +12106,15 @@ export default function ContestDetailClient({
         });
         const cr = mcData.refund as TwitterModerateCreatorRefund | undefined;
         if (cr && cr.totalCents > 0) {
+          creatorRefundCents = cr.totalCents;
           toast({
             title: "Refund processed",
-            description: formatTwitterRefundToastDescription(
-              cr.mainCents,
-              cr.bonusCents,
+            description: formatRefundReversalToastLine(
+              {
+                reward_refunded_cents: cr.mainCents,
+                bonus_refunded_cents: cr.bonusCents,
+                total_refunded_cents: cr.totalCents,
+              },
               formatMoney,
             ),
             variant: "default",
@@ -12009,9 +12122,11 @@ export default function ContestDetailClient({
         }
       }
 
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      if (creatorRefundCents > 0) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
     } catch (error: any) {
       console.error(
         `Error ${action === "approve" ? "approving" : "rejecting"} creator:`,
@@ -12050,6 +12165,7 @@ export default function ContestDetailClient({
       }));
 
       try {
+        let rejectRefundCents = 0;
         // CPM: reject (and reverse) each tweet via moderate-submission, then update creator/leaderboard via moderate-creator
         if (
           isCpmContestType(currentContest?.contest_type) &&
@@ -12113,11 +12229,17 @@ export default function ContestDetailClient({
             } and all tweets have been rejected (payments reversed where applicable).`,
           });
           if (rejectRefundAcc.rewardCents + rejectRefundAcc.bonusCents > 0) {
+            rejectRefundCents =
+              rejectRefundAcc.rewardCents + rejectRefundAcc.bonusCents;
             toast({
               title: "Refund processed",
-              description: formatTwitterRefundToastDescription(
-                rejectRefundAcc.rewardCents,
-                rejectRefundAcc.bonusCents,
+              description: formatRefundReversalToastLine(
+                {
+                  reward_refunded_cents: rejectRefundAcc.rewardCents,
+                  bonus_refunded_cents: rejectRefundAcc.bonusCents,
+                  total_refunded_cents:
+                    rejectRefundAcc.rewardCents + rejectRefundAcc.bonusCents,
+                },
                 formatMoney,
               ),
               variant: "default",
@@ -12153,11 +12275,15 @@ export default function ContestDetailClient({
             | TwitterModerateCreatorRefund
             | undefined;
           if (lr && lr.totalCents > 0) {
+            rejectRefundCents = lr.totalCents;
             toast({
               title: "Refund processed",
-              description: formatTwitterRefundToastDescription(
-                lr.mainCents,
-                lr.bonusCents,
+              description: formatRefundReversalToastLine(
+                {
+                  reward_refunded_cents: lr.mainCents,
+                  bonus_refunded_cents: lr.bonusCents,
+                  total_refunded_cents: lr.totalCents,
+                },
                 formatMoney,
               ),
               variant: "default",
@@ -12165,9 +12291,11 @@ export default function ContestDetailClient({
           }
         }
 
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        if (rejectRefundCents > 0) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
       } catch (error: any) {
         console.error("Error rejecting creator:", error);
         toast({
@@ -19107,7 +19235,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.total}
+                              {liveSubmissionStatusCounts.total}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19134,7 +19262,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.not_rejected}
+                              {liveSubmissionStatusCounts.not_rejected}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19162,7 +19290,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.verified_or_paid}
+                              {liveSubmissionStatusCounts.verified_or_paid}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19189,7 +19317,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.pending}
+                              {liveSubmissionStatusCounts.pending}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19216,7 +19344,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.verified}
+                              {liveSubmissionStatusCounts.verified}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19243,7 +19371,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.rejected}
+                              {liveSubmissionStatusCounts.rejected}
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -19270,7 +19398,7 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {submissionStatusCounts.paid}
+                              {liveSubmissionStatusCounts.paid}
                             </Badge>
                           </TabsTrigger>
                         </TabsList>
@@ -20039,7 +20167,7 @@ export default function ContestDetailClient({
                             setCurrentPage(1);
                           }}
                           isDark={isDark}
-                          counts={submissionStatusCounts}
+                          counts={liveSubmissionStatusCounts}
                         />
                       )}
                       {isSubmissionTableView &&
@@ -24421,7 +24549,7 @@ export default function ContestDetailClient({
                                   setCreatorWisePage(1);
                                 }}
                                 isDark={isDark}
-                                counts={submissionStatusCounts}
+                                counts={liveSubmissionStatusCounts}
                               />
                             )}
                             {showCreatorWiseSelectionUi &&
@@ -31642,7 +31770,7 @@ export default function ContestDetailClient({
             >["bonusCapSubmissions"]
           }
           parentBulkActionLoading={
-            creatorModalParentBulkLoading || isBulkModerationBusy
+            creatorModalParentBulkLoading || creatorModalRefundProcessing
           }
           bulkModerationJob={activeBulkModerationJob}
           onQualityScoreUpdated={({

@@ -23,7 +23,10 @@ const MAX_RETRY_ATTEMPTS = 5;
 export const BULK_PAYMENT_BATCH_SIZE = 1;
 
 export type BulkPaymentType = "standard" | "bonus" | "both";
-export type BulkPaymentPayoutChannel = "submissions" | "twitter_cpm";
+export type BulkPaymentPayoutChannel =
+  | "submissions"
+  | "twitter_cpm"
+  | "twitter_creator";
 
 export interface BulkPaymentQueueItem {
   creatorId: string;
@@ -216,7 +219,11 @@ export async function popBulkPaymentJob(): Promise<{
             ? parsed.paymentType
             : "standard",
         payoutChannel:
-          parsed.payoutChannel === "twitter_cpm" ? "twitter_cpm" : "submissions",
+          parsed.payoutChannel === "twitter_cpm"
+            ? "twitter_cpm"
+            : parsed.payoutChannel === "twitter_creator"
+              ? "twitter_creator"
+              : "submissions",
         batchIndex:
           typeof parsed.batchIndex === "number" &&
           Number.isFinite(parsed.batchIndex)

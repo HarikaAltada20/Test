@@ -15,6 +15,7 @@ import {
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
 import { MAX_BULK_MODERATION_SUBMISSIONS } from "@/lib/queue/bulk-job-limits";
+import type { BulkModerationChannel } from "@/lib/queue/bulk-job-payload";
 
 const ALLOWED_ACTIONS = new Set(["verified", "pending", "rejected"]);
 const OWNERSHIP_ID_CHUNK_SIZE = 200;
@@ -89,17 +90,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      action === "verified" &&
-      (!Number.isInteger(qualityScore) ||
-        ![1, 2, 3].includes(qualityScore as number))
-    ) {
-      return NextResponse.json(
-        { error: "qualityScore is required and must be 1, 2, or 3" },
-        { status: 400 },
-      );
-    }
-
     const { isAdmin, user: adminUser, error: adminError } =
       await verifyAdminAccess();
     const supabase = await createClient();
@@ -143,7 +133,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const rows: {
+    const supabaseAdmin = createAdminClient();
+
+    const submissionRows: {
       id: string;
       contest_id: string;
       contests: { advertiser_id: string } | { advertiser_id: string }[];
@@ -160,30 +152,108 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
-      rows.push(...((data ?? []) as typeof rows));
+      submissionRows.push(...((data ?? []) as typeof submissionRows));
     }
 
-    const foundIds = new Set(rows.map((row) => row.id));
-    if (foundIds.size !== submissionIds.length) {
-      return NextResponse.json(
-        { error: "One or more submissions were not found" },
-        { status: 404 },
-      );
-    }
+    const foundSubmissionIds = new Set(submissionRows.map((row) => row.id));
+    const missingAfterSubmissions = submissionIds.filter(
+      (id) => !foundSubmissionIds.has(id),
+    );
 
-    const contestIds = [...new Set(rows.map((row) => String(row.contest_id)))];
-    if (contestIds.length !== 1) {
+    let channel: BulkModerationChannel = "submissions";
+    let contestId = "";
+
+    if (missingAfterSubmissions.length === 0) {
+      const contestIds = [
+        ...new Set(submissionRows.map((row) => String(row.contest_id))),
+      ];
+      if (contestIds.length !== 1) {
+        return NextResponse.json(
+          { error: "All queued submissions must belong to the same contest" },
+          { status: 400 },
+        );
+      }
+      contestId = contestIds[0];
+      if (actorRole === "advertiser") {
+        const unauthorized = submissionRows.some(
+          (row) => getContestAdvertiserId(row.contests) !== actorId,
+        );
+        if (unauthorized) {
+          return NextResponse.json(
+            { error: "You can only manage submissions for your own contests" },
+            { status: 403 },
+          );
+        }
+      }
+    } else if (foundSubmissionIds.size > 0) {
       return NextResponse.json(
-        { error: "All queued submissions must belong to the same contest" },
+        {
+          error:
+            "Cannot mix video submissions and Twitter tweets in one bulk moderation job",
+        },
         { status: 400 },
       );
-    }
+    } else {
+      const tweetRows: { id: string; contest_id: string }[] = [];
+      for (
+        let i = 0;
+        i < missingAfterSubmissions.length;
+        i += OWNERSHIP_ID_CHUNK_SIZE
+      ) {
+        const chunk = missingAfterSubmissions.slice(
+          i,
+          i + OWNERSHIP_ID_CHUNK_SIZE,
+        );
+        const { data, error } = await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .select("id, contest_id")
+          .in("id", chunk);
+        if (error) {
+          return NextResponse.json(
+            { error: "Failed to validate tweets" },
+            { status: 500 },
+          );
+        }
+        tweetRows.push(...((data ?? []) as typeof tweetRows));
+      }
 
-    if (actorRole === "advertiser") {
-      const unauthorized = rows.some(
-        (row) => getContestAdvertiserId(row.contests) !== actorId,
-      );
-      if (unauthorized) {
+      const foundTweetIds = new Set(tweetRows.map((row) => String(row.id)));
+      const uniqueMissing = [...new Set(missingAfterSubmissions)];
+      if (foundTweetIds.size !== uniqueMissing.length) {
+        return NextResponse.json(
+          { error: "One or more submissions were not found" },
+          { status: 404 },
+        );
+      }
+
+      const contestIds = [
+        ...new Set(tweetRows.map((row) => String(row.contest_id))),
+      ];
+      if (contestIds.length !== 1) {
+        return NextResponse.json(
+          { error: "All queued tweets must belong to the same contest" },
+          { status: 400 },
+        );
+      }
+      contestId = contestIds[0];
+      channel = "twitter_tweets";
+
+      const { data: contest, error: contestError } = await supabaseAdmin
+        .from("contests")
+        .select("id, advertiser_id, platform")
+        .eq("id", contestId)
+        .maybeSingle();
+      if (contestError || !contest) {
+        return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+      }
+      const platform = String(contest.platform || "").toLowerCase();
+      if (platform !== "twitter" && platform !== "x") {
+        return NextResponse.json(
+          { error: "Tweet IDs must belong to a Twitter/X contest" },
+          { status: 400 },
+        );
+      }
+      if (actorRole === "advertiser" && contest.advertiser_id !== actorId) {
         return NextResponse.json(
           { error: "You can only manage submissions for your own contests" },
           { status: 403 },
@@ -191,12 +261,22 @@ export async function POST(request: Request) {
       }
     }
 
-    const supabaseAdmin = createAdminClient();
+    if (
+      channel === "submissions" &&
+      action === "verified" &&
+      (!Number.isInteger(qualityScore) ||
+        ![1, 2, 3].includes(qualityScore as number))
+    ) {
+      return NextResponse.json(
+        { error: "qualityScore is required and must be 1, 2, or 3" },
+        { status: 400 },
+      );
+    }
     const now = new Date().toISOString();
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("bulk_submission_moderation_jobs")
       .insert({
-        contest_id: contestIds[0],
+        contest_id: contestId,
         user_id: actorId,
         user_type: actorRole,
         action,
@@ -205,9 +285,12 @@ export async function POST(request: Request) {
         processed_count: 0,
         success_count: 0,
         failed_count: 0,
-        quality_score: action === "verified" ? qualityScore : null,
+        quality_score:
+          action === "verified" && channel === "submissions"
+            ? qualityScore
+            : null,
         reason,
-        payload: { submissionIds },
+        payload: { submissionIds, channel },
         queue_offset: 0,
         created_at: now,
         updated_at: now,
@@ -229,7 +312,7 @@ export async function POST(request: Request) {
       BULK_MODERATION_BATCH_SIZE,
     );
     const enqueueResult = await enqueueBulkSubmissionModerationJob({
-      contestId: contestIds[0],
+      contestId,
       jobId: inserted.id,
       action: action as BulkModerationAction,
       batchIndex: 0,

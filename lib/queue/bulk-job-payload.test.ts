@@ -29,6 +29,16 @@ describe("parseBulkModerationJobPayload", () => {
     });
     assert.ok(payload);
     assert.deepEqual(payload!.submissionIds, ["a", "b"]);
+    assert.equal(payload!.channel, "submissions");
+  });
+
+  it("parses twitter_tweets channel", () => {
+    const payload = parseBulkModerationJobPayload({
+      submissionIds: ["t1"],
+      channel: "twitter_tweets",
+    });
+    assert.ok(payload);
+    assert.equal(payload!.channel, "twitter_tweets");
   });
 });
 

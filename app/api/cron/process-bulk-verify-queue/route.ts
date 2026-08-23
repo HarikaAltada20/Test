@@ -30,6 +30,7 @@ import { reconcileCreatorTotalViews } from "@/lib/creator-total-views";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import { refreshContestStats } from "@/lib/contest-stats";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+import { reverseTwitterTweetPayment } from "@/lib/twitter-tweet-payment-reversal";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 export const dynamic = "force-dynamic";
@@ -156,12 +157,13 @@ async function finalizeBulkModerationWalletReversals(options: {
   contestId: string;
   action: string;
   submissionIds: string[];
+  channel?: string;
 }): Promise<{
   ok: boolean;
   error?: string;
   walletRefundSummary?: Record<string, unknown> | null;
 }> {
-  const { jobId, contestId, action, submissionIds } = options;
+  const { jobId, contestId, action, submissionIds, channel } = options;
   if (
     action !== "verified" &&
     action !== "pending" &&
@@ -174,6 +176,149 @@ async function finalizeBulkModerationWalletReversals(options: {
   }
 
   const supabaseAdmin = createAdminClient();
+
+  let resolvedChannel = channel;
+  if (resolvedChannel !== "twitter_tweets") {
+    const { data: submissionProbe } = await fetchByIdsInChunks({
+      ids: submissionIds.slice(0, 25),
+      fetchChunk: async (chunkIds) => {
+        const result = await supabaseAdmin
+          .from("submissions")
+          .select("id")
+          .eq("contest_id", contestId)
+          .in("id", chunkIds);
+        return { data: result.data, error: result.error };
+      },
+    });
+    if ((submissionProbe || []).length === 0) {
+      const { data: tweetProbe } = await fetchByIdsInChunks({
+        ids: submissionIds.slice(0, 25),
+        fetchChunk: async (chunkIds) => {
+          const result = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .select("id")
+            .eq("contest_id", contestId)
+            .in("id", chunkIds);
+          return { data: result.data, error: result.error };
+        },
+      });
+      if ((tweetProbe || []).length > 0) {
+        resolvedChannel = "twitter_tweets";
+      }
+    }
+  }
+
+  if (resolvedChannel === "twitter_tweets") {
+    const { data: contestRow } = await supabaseAdmin
+      .from("contests")
+      .select("title")
+      .eq("id", contestId)
+      .maybeSingle();
+    const contestTitle = contestRow?.title || "Contest";
+
+    const { data: tweetRows, error: tweetErr } = await fetchByIdsInChunks({
+      ids: submissionIds,
+      fetchChunk: async (chunkIds) => {
+        const result = await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .select(
+            "id, creator_id, moderation_status, earnings, bonus_paid, bonus_amount",
+          )
+          .eq("contest_id", contestId)
+          .in("id", chunkIds);
+        return { data: result.data, error: result.error };
+      },
+    });
+    if (tweetErr) {
+      return { ok: false, error: tweetErr.message };
+    }
+
+    const toReverse = (tweetRows || []).filter(
+      (row) => String(row.moderation_status || "") === action,
+    );
+    const siblingTweetIds = toReverse.map((row) => String(row.id));
+
+    let rewardCents = 0;
+    let bonusCents = 0;
+    let totalCents = 0;
+    let refundedCount = 0;
+    let skippedCount = 0;
+    const reversalErrors: string[] = [];
+    for (const tweet of toReverse) {
+      const wasPaidCandidate =
+        Math.round(Number(tweet.earnings) || 0) > 0 ||
+        tweet.bonus_paid === true ||
+        Math.round(Number(tweet.bonus_amount) || 0) > 0;
+      if (!tweet.creator_id) {
+        if (wasPaidCandidate) skippedCount += 1;
+        continue;
+      }
+      const reversed = await reverseTwitterTweetPayment({
+        supabaseAdmin,
+        contestId,
+        contestTitle,
+        tweetId: String(tweet.id),
+        creatorId: String(tweet.creator_id),
+        storedCpmCents: tweet.earnings,
+        storedBonusCents: tweet.bonus_amount,
+        bonusPaid: tweet.bonus_paid,
+        siblingTweetIds,
+      });
+      if (!reversed.ok) {
+        console.error(
+          "[process-bulk-verify-queue] Twitter wallet reversal failed:",
+          tweet.id,
+          reversed.error,
+        );
+        reversalErrors.push(`${tweet.id}: ${reversed.error}`);
+        if (wasPaidCandidate) skippedCount += 1;
+        continue;
+      }
+      if (reversed.refund.totalCents > 0) {
+        refundedCount += 1;
+      } else if (wasPaidCandidate) {
+        skippedCount += 1;
+      }
+      rewardCents += reversed.refund.cpmCents;
+      bonusCents += reversed.refund.bonusCents;
+      totalCents += reversed.refund.totalCents;
+      if (
+        reversed.refund.totalCents > 0 ||
+        tweet.earnings != null ||
+        tweet.bonus_paid === true
+      ) {
+        await supabaseAdmin
+          .from("twitter_campaign_tweets")
+          .update({
+            earnings: null,
+            bonus_paid: false,
+            bonus_paid_at: null,
+            bonus_amount: null,
+          })
+          .eq("id", tweet.id)
+          .eq("contest_id", contestId);
+      }
+    }
+
+    const walletRefundSummary = {
+      reward_refunded_cents: rewardCents,
+      bonus_refunded_cents: bonusCents,
+      total_refunded_cents: totalCents,
+      cpm_refunded_cents: rewardCents,
+      milestone_refunded_cents: bonusCents,
+      refunded_count: refundedCount,
+      skipped_count: skippedCount,
+      is_dual_rewards: false,
+      ...(reversalErrors.length > 0
+        ? { reversal_errors: reversalErrors.slice(0, 10) }
+        : {}),
+    };
+    await supabaseAdmin
+      .from("bulk_submission_moderation_jobs")
+      .update({ wallet_refund_summary: walletRefundSummary })
+      .eq("id", jobId);
+    return { ok: true, walletRefundSummary };
+  }
 
   // Only reverse rows that actually reached the target status (skip failed chunk items).
   const { data: statusRows, error: statusErr } = await fetchByIdsInChunks({
@@ -204,6 +349,8 @@ async function finalizeBulkModerationWalletReversals(options: {
           total_refunded_cents: 0,
           cpm_refunded_cents: 0,
           milestone_refunded_cents: 0,
+          refunded_count: 0,
+          skipped_count: 0,
           is_dual_rewards: false,
         },
       })
@@ -216,6 +363,8 @@ async function finalizeBulkModerationWalletReversals(options: {
         total_refunded_cents: 0,
         cpm_refunded_cents: 0,
         milestone_refunded_cents: 0,
+        refunded_count: 0,
+        skipped_count: 0,
         is_dual_rewards: false,
       },
     };
@@ -237,9 +386,11 @@ async function finalizeBulkModerationWalletReversals(options: {
   let totalCents = 0;
   let cpmCents = 0;
   let milestoneCents = 0;
+  let refundedCount = 0;
   for (const rs of walletResult.refundSummaryBySubmissionId.values()) {
     const rowTotal = Math.max(0, Number(rs.total_refunded_cents) || 0);
     if (rowTotal <= 0) continue;
+    refundedCount += 1;
     totalCents += rowTotal;
     rewardCents += Math.max(0, Number(rs.reward_refunded_cents) || 0);
     bonusCents += Math.max(0, Number(rs.bonus_refunded_cents) || 0);
@@ -252,6 +403,7 @@ async function finalizeBulkModerationWalletReversals(options: {
       Number(rs.milestone_refunded_cents ?? rs.bonus_refunded_cents) || 0,
     );
   }
+  const skippedCount = 0;
 
   const { data: contestRow } = await supabaseAdmin
     .from("contests")
@@ -265,6 +417,8 @@ async function finalizeBulkModerationWalletReversals(options: {
     total_refunded_cents: totalCents,
     cpm_refunded_cents: cpmCents,
     milestone_refunded_cents: milestoneCents,
+    refunded_count: refundedCount,
+    skipped_count: skippedCount,
     is_dual_rewards: String(contestRow?.contest_type || "") === "dual_rewards",
   };
 
@@ -281,6 +435,7 @@ async function finalizeBulkModerationWalletReversalsWithRetry(options: {
   contestId: string;
   action: string;
   submissionIds: string[];
+  channel?: string;
 }): Promise<{
   ok: boolean;
   error?: string;
@@ -307,12 +462,14 @@ async function failModerationJobWithWalletReconciliation(options: {
   submissionIds: string[];
   errorMessage: string;
   runSideEffects?: boolean;
+  channel?: string;
 }): Promise<void> {
   const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({
     jobId: options.jobId,
     contestId: options.contestId,
     action: options.action,
     submissionIds: options.submissionIds,
+    channel: options.channel,
   });
 
   const finalMessage = walletFinalize.ok
@@ -325,6 +482,7 @@ async function failModerationJobWithWalletReconciliation(options: {
     await finalizeBulkModerationSideEffects({
       contestId: options.contestId,
       submissionIds: options.submissionIds,
+      channel: options.channel,
     });
   }
 }
@@ -336,41 +494,44 @@ async function failModerationJobWithWalletReconciliation(options: {
 async function finalizeBulkModerationSideEffects(options: {
   contestId: string;
   submissionIds: string[];
+  channel?: string;
 }): Promise<void> {
-  const { contestId, submissionIds } = options;
+  const { contestId, submissionIds, channel } = options;
   if (!contestId || submissionIds.length === 0) return;
 
   const supabaseAdmin = createAdminClient();
   try {
-    const creatorIds = new Set<string>();
-    const ID_CHUNK = 200;
-    for (let i = 0; i < submissionIds.length; i += ID_CHUNK) {
-      const chunk = submissionIds.slice(i, i + ID_CHUNK);
-      const { data, error } = await supabaseAdmin
-        .from("submissions")
-        .select("creator_id")
-        .in("id", chunk);
-      if (error) {
-        console.warn(
-          "[process-bulk-verify-queue] finalize: failed loading creator ids:",
-          error.message,
-        );
-        continue;
+    if (channel !== "twitter_tweets") {
+      const creatorIds = new Set<string>();
+      const ID_CHUNK = 200;
+      for (let i = 0; i < submissionIds.length; i += ID_CHUNK) {
+        const chunk = submissionIds.slice(i, i + ID_CHUNK);
+        const { data, error } = await supabaseAdmin
+          .from("submissions")
+          .select("creator_id")
+          .in("id", chunk);
+        if (error) {
+          console.warn(
+            "[process-bulk-verify-queue] finalize: failed loading creator ids:",
+            error.message,
+          );
+          continue;
+        }
+        for (const row of data || []) {
+          if (row.creator_id) creatorIds.add(String(row.creator_id));
+        }
       }
-      for (const row of data || []) {
-        if (row.creator_id) creatorIds.add(String(row.creator_id));
-      }
-    }
 
-    for (const creatorId of creatorIds) {
-      try {
-        await reconcileCreatorTotalViews(creatorId);
-      } catch (err) {
-        console.warn(
-          "[process-bulk-verify-queue] finalize: total_views reconcile failed:",
-          creatorId,
-          err instanceof Error ? err.message : err,
-        );
+      for (const creatorId of creatorIds) {
+        try {
+          await reconcileCreatorTotalViews(creatorId);
+        } catch (err) {
+          console.warn(
+            "[process-bulk-verify-queue] finalize: total_views reconcile failed:",
+            creatorId,
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
     }
 
@@ -473,9 +634,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     });
   }
 
-  const submissionIdsFromPayload = parseBulkModerationJobPayload(
-    jobRow.payload,
-  )?.submissionIds;
+  const payloadFromDb = parseBulkModerationJobPayload(jobRow.payload);
+  const submissionIdsFromPayload = payloadFromDb?.submissionIds;
+  const channel =
+    payloadFromDb?.channel === "twitter_tweets"
+      ? "twitter_tweets"
+      : "submissions";
   const legacyIds = Array.isArray(job.submissionIds)
     ? job.submissionIds.map(String).filter(Boolean)
     : [];
@@ -506,6 +670,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       contestId,
       action,
       submissionIds,
+      channel,
     });
     if (!walletFinalize.ok) {
       await markJobFailed(
@@ -533,6 +698,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     await finalizeBulkModerationSideEffects({
       contestId,
       submissionIds,
+      channel,
     });
     return NextResponse.json({
       processed: 1,
@@ -578,6 +744,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         errorMessage:
           "Job dead-lettered after repeated batch fetch failures",
         runSideEffects: true,
+        channel,
       });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
@@ -616,6 +783,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         submissionIds,
         errorMessage: `Job dead-lettered after repeated batch failures: ${errorMessage}`,
         runSideEffects: true,
+        channel,
       });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
@@ -683,6 +851,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         submissionIds,
         errorMessage: `Job dead-lettered after repeated transient batch failures: ${batchErrors[0]?.error || "timeout"}`,
         runSideEffects: true,
+        channel,
       });
     } else if (retryResult.requeued) {
       await sleep(CHUNK_PAUSE_MS * 2);
@@ -713,6 +882,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         errorMessage:
           "Queue stall: chunk completed without progress (dead-lettered)",
         runSideEffects: true,
+        channel,
       });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
@@ -753,6 +923,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       contestId,
       action,
       submissionIds,
+      channel,
     });
     if (!walletFinalize.ok) {
       await supabaseAdmin.rpc(
@@ -784,6 +955,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       await finalizeBulkModerationSideEffects({
         contestId,
         submissionIds,
+        channel,
       });
       await removeBulkSubmissionModerationFromProcessing(rawJobString);
       return NextResponse.json(
@@ -859,6 +1031,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   await finalizeBulkModerationSideEffects({
     contestId,
     submissionIds,
+    channel,
   });
 
   return NextResponse.json({

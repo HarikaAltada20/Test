@@ -170,6 +170,134 @@ export async function POST(request: Request) {
       }
 
       try {
+        if (payoutChannel === "twitter_creator") {
+          const queueHeaders = {
+            "Content-Type": "application/json",
+            "X-From-Queue": "1",
+            Authorization: `Bearer ${cronSecret}`,
+          };
+          let amount = 0;
+          let cpmAmount = 0;
+          let bonusAmount = 0;
+          let paidSubs = 0;
+          let skippedSubs = 0;
+          let failedSubs = 0;
+
+          const isSoftSkip = (message: string) => {
+            const lower = message.toLowerCase();
+            return (
+              lower.includes("no eligible") ||
+              lower.includes("no verified") ||
+              lower.includes("no unpaid") ||
+              lower.includes("nothing to pay") ||
+              lower.includes("no payments to process") ||
+              lower.includes("already paid") ||
+              lower.includes("already been paid") ||
+              lower.includes("must be paid before paying bonus") ||
+              lower.includes("no flat fee bonus")
+            );
+          };
+
+          if (paymentType !== "bonus") {
+            const rewardResponse = await fetch(
+              `${baseUrl}/api/contests/${contestId}/pay-twitter-creator`,
+              {
+                method: "POST",
+                headers: queueHeaders,
+                body: JSON.stringify({
+                  creatorId,
+                  admin_user_id: adminUserId,
+                }),
+              },
+            );
+            const rewardData = await rewardResponse.json().catch(() => ({}));
+            if (!rewardResponse.ok) {
+              const message =
+                (rewardData as { error?: string })?.error ||
+                `Twitter creator payment failed with HTTP ${rewardResponse.status}`;
+              if (isSoftSkip(message)) {
+                skippedSubs += submissionCount;
+              } else {
+                failedSubs += submissionCount;
+                errors.push({ creatorId, error: message });
+                creatorsProcessed += 1;
+                failed += failedSubs;
+                continue;
+              }
+            } else {
+              const rewardCents = Number((rewardData as { amount?: number })?.amount) || 0;
+              amount += rewardCents;
+              cpmAmount += rewardCents;
+              if (rewardCents > 0) {
+                paidSubs += submissionCount;
+              } else {
+                skippedSubs += submissionCount;
+              }
+            }
+          }
+
+          if (paymentType !== "standard") {
+            for (const tweetId of submissionIds) {
+              const bonusResponse = await fetch(
+                `${baseUrl}/api/contests/${contestId}/pay-twitter-bonus`,
+                {
+                  method: "POST",
+                  headers: queueHeaders,
+                  body: JSON.stringify({
+                    tweetId,
+                    admin_user_id: adminUserId,
+                  }),
+                },
+              );
+              const bonusData = await bonusResponse.json().catch(() => ({}));
+              if (!bonusResponse.ok) {
+                const message =
+                  (bonusData as { error?: string })?.error ||
+                  `Twitter bonus payment failed with HTTP ${bonusResponse.status}`;
+                if (isSoftSkip(message)) {
+                  if (paymentType === "bonus") skippedSubs += 1;
+                  continue;
+                }
+                if (paymentType === "bonus") {
+                  failedSubs += 1;
+                }
+                errors.push({ creatorId, error: `${tweetId}: ${message}` });
+                continue;
+              }
+              const alreadyPaid = Boolean(
+                (bonusData as { alreadyPaid?: boolean })?.alreadyPaid,
+              );
+              const bonusCents = Number((bonusData as { amount?: number })?.amount) || 0;
+              if (alreadyPaid) {
+                if (paymentType === "bonus") skippedSubs += 1;
+                continue;
+              }
+              bonusAmount += bonusCents;
+              amount += bonusCents;
+              if (paymentType === "bonus") {
+                if (bonusCents > 0) paidSubs += 1;
+                else skippedSubs += 1;
+              }
+            }
+          }
+
+          creatorsProcessed += 1;
+          if (paymentType === "bonus") {
+            const remainder = Math.max(
+              0,
+              submissionCount - paidSubs - skippedSubs - failedSubs,
+            );
+            skippedSubs += remainder;
+          }
+          paid += paidSubs;
+          skipped += skippedSubs;
+          failed += failedSubs;
+          totalAmount += amount;
+          totalCpm += cpmAmount;
+          totalBonus += bonusAmount;
+          continue;
+        }
+
         const payUrl =
           payoutChannel === "twitter_cpm"
             ? `${baseUrl}/api/contests/${contestId}/bulk-pay-twitter-cpm`

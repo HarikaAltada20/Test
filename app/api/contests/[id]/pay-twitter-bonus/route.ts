@@ -12,6 +12,10 @@ import {
 } from "@/lib/twitter-bonus-accounting";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
+import {
+  authorizeQueueWorker,
+  readQueuedActorUserId,
+} from "@/lib/queue/queue-worker-auth";
 
 /**
  * POST /api/contests/[id]/pay-twitter-bonus
@@ -27,17 +31,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const queueAuth = authorizeQueueWorker(request);
+    if (queueAuth.fromQueue && !queueAuth.authorized) {
+      return queueAuth.response!;
     }
 
     const { id: contestId } = await params;
-    const { tweetId } = await request.json();
+    const body = await request.json();
+    const { tweetId } = body;
 
     if (!tweetId) {
       return NextResponse.json(
@@ -46,23 +47,70 @@ export async function POST(
       );
     }
 
-    const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin) {
-      return NextResponse.json(
-        { error: adminError || "Admin access required" },
-        { status: 403 }
-      );
+    const supabaseAdmin = createAdminClient();
+    let contest: {
+      id: string;
+      title: string | null;
+      platform: string | null;
+      contest_type: string | null;
+      contest_based_details: unknown;
+      post_contest_status: string | null;
+      payout_adjustment_percentage: number | null;
+      payout_adjustment_mode: string | null;
+    } | null = null;
+
+    if (queueAuth.fromQueue) {
+      const actorId = readQueuedActorUserId(body);
+      if (!actorId) {
+        return NextResponse.json(
+          { error: "admin_user_id is required for queued bulk payment" },
+          { status: 400 },
+        );
+      }
+      const { data, error: contestError } = await supabaseAdmin
+        .from("contests")
+        .select(
+          "id, title, platform, contest_type, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode"
+        )
+        .eq("id", contestId)
+        .single();
+      if (contestError || !data) {
+        return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+      }
+      contest = data;
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const { isAdmin, error: adminError } = await verifyAdminAccess();
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: adminError || "Admin access required" },
+          { status: 403 }
+        );
+      }
+
+      const { data, error: contestError } = await supabase
+        .from("contests")
+        .select(
+          "id, title, platform, contest_type, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode"
+        )
+        .eq("id", contestId)
+        .single();
+
+      if (contestError || !data) {
+        return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+      }
+      contest = data;
     }
 
-    const { data: contest, error: contestError } = await supabase
-      .from("contests")
-      .select(
-        "id, title, platform, contest_type, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode"
-      )
-      .eq("id", contestId)
-      .single();
-
-    if (contestError || !contest) {
+    if (!contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
@@ -103,8 +151,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    const supabaseAdmin = createAdminClient();
 
     const { data: tweet, error: tweetError } = await supabaseAdmin
       .from("twitter_campaign_tweets")

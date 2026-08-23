@@ -15,6 +15,10 @@ import {
   releaseCreatorContestPayoutLease,
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
+import {
+  authorizeQueueWorker,
+  readQueuedActorUserId,
+} from "@/lib/queue/queue-worker-auth";
 
 /** Split total cents across rows by non-negative weights; remainder by largest fractional parts. Equal split when all weights are 0. */
 function distributeCentsByWeights(
@@ -136,16 +140,13 @@ export async function POST(
 ) {
   let payoutLease: CreatorContestPayoutLease | null = null;
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const queueAuth = authorizeQueueWorker(request);
+    if (queueAuth.fromQueue && !queueAuth.authorized) {
+      return queueAuth.response!;
     }
 
     const { id: contestId } = await params;
+    const body = await request.json();
     const {
       creatorId,
       amountInCents,
@@ -153,7 +154,7 @@ export async function POST(
       paymentProofUrl,
       paymentDescription,
       customRemarks,
-    } = await request.json();
+    } = body;
 
     // Validate input
     if (!creatorId) {
@@ -163,25 +164,74 @@ export async function POST(
       );
     }
 
-    // Verify admin access
-    const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin) {
-      return NextResponse.json(
-        { error: adminError || "Admin access required" },
-        { status: 403 },
-      );
+    const supabaseAdmin = createAdminClient();
+    let contest: {
+      id: string;
+      title: string | null;
+      advertiser_id: string;
+      platform: string | null;
+      contest_type: string | null;
+      contest_based_details: unknown;
+      post_contest_status: string | null;
+      max_earnings_per_creator: number | null;
+      payout_adjustment_percentage: number | null;
+      payout_adjustment_mode: string | null;
+    } | null = null;
+
+    if (queueAuth.fromQueue) {
+      const actorId = readQueuedActorUserId(body);
+      if (!actorId) {
+        return NextResponse.json(
+          { error: "admin_user_id is required for queued bulk payment" },
+          { status: 400 },
+        );
+      }
+      const { data, error: contestError } = await supabaseAdmin
+        .from("contests")
+        .select(
+          "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
+        )
+        .eq("id", contestId)
+        .single();
+      if (contestError || !data) {
+        return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+      }
+      contest = data;
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      // Verify admin access
+      const { isAdmin, error: adminError } = await verifyAdminAccess();
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: adminError || "Admin access required" },
+          { status: 403 },
+        );
+      }
+
+      // Get contest to verify it's a Twitter contest (include max_earnings_per_creator for CPM cap)
+      const { data, error: contestError } = await supabase
+        .from("contests")
+        .select(
+          "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
+        )
+        .eq("id", contestId)
+        .single();
+
+      if (contestError || !data) {
+        return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+      }
+      contest = data;
     }
 
-    // Get contest to verify it's a Twitter contest (include max_earnings_per_creator for CPM cap)
-    const { data: contest, error: contestError } = await supabase
-      .from("contests")
-      .select(
-        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
-      )
-      .eq("id", contestId)
-      .single();
-
-    if (contestError || !contest) {
+    if (!contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
@@ -227,8 +277,6 @@ export async function POST(
       );
     }
     payoutLease = leaseResult.lease;
-
-    const supabaseAdmin = createAdminClient();
 
     // Get leaderboard entry for this creator
     const { data: leaderboardEntry, error: leaderboardError } =

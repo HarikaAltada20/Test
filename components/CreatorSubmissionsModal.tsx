@@ -63,7 +63,6 @@ import {
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -204,9 +203,9 @@ interface CreatorSubmissionsModalProps {
    * When omitted, falls back to `submissions` (per-creator only — wrong cap scope).
    */
   bonusCapSubmissions?: Submission[];
-  /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
+  /** True while a refund or mark-as-paid is processing (Creator modal stays open). */
   parentBulkActionLoading?: boolean;
-  /** Live queue job progress for verify / pending / rejected (shown inside this modal). */
+  /** Live queue job for verify / pending / rejected — used to disable actions while the toast tracks progress. */
   bulkModerationJob?: {
     action: "verified" | "pending" | "rejected";
     status: "queued" | "running" | "completed" | "failed";
@@ -304,6 +303,18 @@ export function CreatorSubmissionsModal({
   ) => bulkPaymentActiveKey === bulkPayKey(payType, isBulk);
   const isAnyBulkPaymentBusy =
     bulkPaymentActiveKey !== null || isBulkPaymentQueueBusy;
+  const [rowPaymentProcessing, setRowPaymentProcessing] = useState(false);
+  const showProcessingOverlay =
+    parentBulkActionLoading || isAnyBulkPaymentBusy || rowPaymentProcessing;
+
+  const payWithOverlay = async (fn: () => Promise<unknown>) => {
+    setRowPaymentProcessing(true);
+    try {
+      await fn();
+    } finally {
+      setRowPaymentProcessing(false);
+    }
+  };
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
@@ -679,6 +690,10 @@ export function CreatorSubmissionsModal({
         contest.contest_type === "cpm" &&
         (contest.platform?.toLowerCase() === "twitter" ||
           contest.platform?.toLowerCase() === "x");
+      const isTwitterLeaderboard =
+        contest.contest_type === "leaderboard" &&
+        (contest.platform?.toLowerCase() === "twitter" ||
+          contest.platform?.toLowerCase() === "x");
       const isDual = contest.contest_type === "dual_rewards";
 
       if (isDual) {
@@ -822,8 +837,10 @@ export function CreatorSubmissionsModal({
       const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
       const useTwitterCpmBulkApi =
         isBulkTransaction && hasTwitterTweets && isTwitterCpm;
+      const useTwitterCreatorBulkApi =
+        isBulkTransaction && hasTwitterTweets && isTwitterLeaderboard;
 
-      if (useInstagramBulkApi || useTwitterCpmBulkApi) {
+      if (useInstagramBulkApi || useTwitterCpmBulkApi || useTwitterCreatorBulkApi) {
         try {
           if (isBulkPaymentQueueBusy) {
             toast({
@@ -843,7 +860,9 @@ export function CreatorSubmissionsModal({
               paymentType: type,
               payoutChannel: useTwitterCpmBulkApi
                 ? "twitter_cpm"
-                : "submissions",
+                : useTwitterCreatorBulkApi
+                  ? "twitter_creator"
+                  : "submissions",
               items: [
                 {
                   creatorId: creator.id,
@@ -1797,7 +1816,7 @@ export function CreatorSubmissionsModal({
             {creatorDisplayName}&apos;s Submissions
           </DialogTitle>
           <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden relative">
-            {parentBulkActionLoading && (
+            {showProcessingOverlay && (
               <div
                 className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/45 px-4"
                 aria-live="polite"
@@ -1849,7 +1868,7 @@ export function CreatorSubmissionsModal({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                disabled={parentBulkActionLoading}
+                disabled={showProcessingOverlay}
                 className={cn(
                   isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
                 )}
@@ -2030,50 +2049,6 @@ export function CreatorSubmissionsModal({
               </div>
             </div>
 
-            {/* Queue progress for verify / pending / rejected */}
-            {bulkModerationJobActive && bulkModerationJob && (
-              <div
-                className={cn(
-                  "border-b px-3 py-3 sm:px-4",
-                  isDark ? "bg-slate-900/80 border-white/10" : "bg-slate-50 border-slate-200",
-                )}
-              >
-                <div className="flex items-center justify-between gap-3 text-sm font-medium">
-                  <span className={isDark ? "text-white" : "text-slate-900"}>
-                    {bulkModerationJob.action === "verified"
-                      ? "Verifying submissions…"
-                      : bulkModerationJob.action === "pending"
-                        ? "Moving to pending…"
-                        : "Rejecting submissions…"}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs tabular-nums",
-                      isDark ? "text-slate-300" : "text-slate-600",
-                    )}
-                  >
-                    {bulkModerationJob.processed_count} /{" "}
-                    {bulkModerationJob.total_count} (
-                    {Math.round(bulkModerationJob.progressPercent)}%)
-                  </span>
-                </div>
-                <Progress
-                  value={bulkModerationJob.progressPercent}
-                  className="mt-2 h-2"
-                />
-                <p
-                  className={cn(
-                    "mt-1.5 text-xs",
-                    isDark ? "text-slate-400" : "text-slate-500",
-                  )}
-                >
-                  {bulkModerationJob.success_count} succeeded ·{" "}
-                  {bulkModerationJob.failed_count} failed
-                  {bulkModerationJob.status === "queued" ? " · Queued" : ""}
-                </p>
-              </div>
-            )}
-
             {/* Bulk Actions Bar */}
             {showSelectionCheckboxes && selectedSubmissions.size > 0 && (
               <div
@@ -2155,24 +2130,6 @@ export function CreatorSubmissionsModal({
                           <Clock className="h-4 w-4 mr-1" />
                           Mark as Pending
                         </Button>
-                        {bulkStatusActionsBusy && (
-                          <span
-                            className={cn(
-                              "text-xs self-center whitespace-nowrap",
-                              isDark ? "text-blue-200" : "text-blue-700",
-                            )}
-                          >
-                            {bulkModerationJobActive
-                              ? bulkModerationJob?.action === "verified"
-                                ? "Verifying in background…"
-                                : bulkModerationJob?.action === "pending"
-                                  ? "Updating to pending…"
-                                  : "Rejecting in background…"
-                              : parentBulkActionLoading
-                                ? "Processing submission updates…"
-                                : "Verifying submissions…"}
-                          </span>
-                        )}
                       </>
                     )}
 
@@ -5073,15 +5030,17 @@ export function CreatorSubmissionsModal({
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          isDualRewardsContest
-                                            ? handleDualSubmissionPayment(
-                                                submission,
-                                                "cpm",
-                                              )
-                                            : onPayment(
-                                                submission.id,
-                                                "standard",
-                                              )
+                                          void payWithOverlay(() =>
+                                            isDualRewardsContest
+                                              ? handleDualSubmissionPayment(
+                                                  submission,
+                                                  "cpm",
+                                                )
+                                              : onPayment(
+                                                  submission.id,
+                                                  "standard",
+                                                ),
+                                          )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
@@ -5097,15 +5056,17 @@ export function CreatorSubmissionsModal({
                                               isDualRewardsContest) && (
                                               <DropdownMenuItem
                                                 onClick={() =>
-                                                  isDualRewardsContest
-                                                    ? handleDualSubmissionPayment(
-                                                        submission,
-                                                        "milestone",
-                                                      )
-                                                    : onPayment(
-                                                        submission.id,
-                                                        "bonus",
-                                                      )
+                                                  void payWithOverlay(() =>
+                                                    isDualRewardsContest
+                                                      ? handleDualSubmissionPayment(
+                                                          submission,
+                                                          "milestone",
+                                                        )
+                                                      : onPayment(
+                                                          submission.id,
+                                                          "bonus",
+                                                        ),
+                                                  )
                                                 }
                                               >
                                                 <DollarSign className="h-4 w-4 mr-2" />
@@ -5116,15 +5077,17 @@ export function CreatorSubmissionsModal({
                                             )}
                                             <DropdownMenuItem
                                               onClick={() =>
-                                                isDualRewardsContest
-                                                  ? handleDualSubmissionPayment(
-                                                      submission,
-                                                      "both",
-                                                    )
-                                                  : onPayment(
-                                                      submission.id,
-                                                      "both",
-                                                    )
+                                                void payWithOverlay(() =>
+                                                  isDualRewardsContest
+                                                    ? handleDualSubmissionPayment(
+                                                        submission,
+                                                        "both",
+                                                      )
+                                                    : onPayment(
+                                                        submission.id,
+                                                        "both",
+                                                      ),
+                                                )
                                               }
                                             >
                                               <DollarSign className="h-4 w-4 mr-2" />
@@ -5148,7 +5111,9 @@ export function CreatorSubmissionsModal({
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          onPayment(submission.id, "bonus")
+                                          void payWithOverlay(() =>
+                                            onPayment(submission.id, "bonus"),
+                                          )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
@@ -5171,7 +5136,9 @@ export function CreatorSubmissionsModal({
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          onPayment(submission.id, "bonus")
+                                          void payWithOverlay(() =>
+                                            onPayment(submission.id, "bonus"),
+                                          )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />

@@ -151,6 +151,30 @@ COMMENT ON COLUMN public.bulk_submission_moderation_jobs.payload IS
 COMMENT ON COLUMN public.bulk_submission_moderation_jobs.queue_offset IS
   'Submission index for the next queue batch (0-based into payload.submissionIds).';
 
+-- Allow Twitter creator-level bulk payouts (leaderboard + CPM expected-reward)
+-- through the same Redis bulk-payment queue as submissions / twitter_cpm.
+do $$
+declare
+  cname text;
+begin
+  select con.conname into cname
+  from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+  where nsp.nspname = 'public'
+    and rel.relname = 'bulk_payment_jobs'
+    and con.contype = 'c'
+    and pg_get_constraintdef(con.oid) ilike '%payout_channel%';
+
+  if cname is not null then
+    execute format('alter table public.bulk_payment_jobs drop constraint %I', cname);
+  end if;
+end $$;
+
+alter table public.bulk_payment_jobs
+  add constraint bulk_payment_jobs_payout_channel_check
+  check (payout_channel in ('submissions', 'twitter_cpm', 'twitter_creator'));
+
 -- =============================================================================
 -- 3. Leaderboard: merge Twitter into all-platform rankings + summary
 -- =============================================================================

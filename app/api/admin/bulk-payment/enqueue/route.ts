@@ -22,7 +22,11 @@ import {
 } from "@/lib/queue/bulk-job-limits";
 
 const ALLOWED_PAYMENT_TYPES = new Set(["standard", "bonus", "both"]);
-const ALLOWED_CHANNELS = new Set(["submissions", "twitter_cpm"]);
+const ALLOWED_CHANNELS = new Set([
+  "submissions",
+  "twitter_cpm",
+  "twitter_creator",
+]);
 const OWNERSHIP_ID_CHUNK_SIZE = 200;
 
 function getBaseUrlFromRequest(request: Request): string {
@@ -105,7 +109,7 @@ export async function POST(request: Request) {
     }
     if (!ALLOWED_CHANNELS.has(payoutChannel)) {
       return NextResponse.json(
-        { error: "payoutChannel must be submissions or twitter_cpm" },
+        { error: "payoutChannel must be submissions, twitter_cpm, or twitter_creator" },
         { status: 400 },
       );
     }
@@ -175,7 +179,7 @@ export async function POST(request: Request) {
     // Ownership / contest membership check for all submission (or tweet) ids.
     const allIds = items.flatMap((item) => item.submissionIds);
     const idToCreator = new Map<string, string>();
-    if (payoutChannel === "twitter_cpm") {
+    if (payoutChannel === "twitter_cpm" || payoutChannel === "twitter_creator") {
       for (let i = 0; i < allIds.length; i += OWNERSHIP_ID_CHUNK_SIZE) {
         const chunk = allIds.slice(i, i + OWNERSHIP_ID_CHUNK_SIZE);
         const { data, error } = await supabaseAdmin
