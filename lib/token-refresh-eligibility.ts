@@ -56,6 +56,22 @@ export function isPlatformAccountDueForWeeklyRefresh(
   return now.getTime() >= anchor + TOKEN_REFRESH_INTERVAL_MS;
 }
 
+/**
+ * Token-only refreshes update last_connection_check_at / updated_at and must
+ * not delay the first details sync. If last_details_refresh_at is missing,
+ * the account has never had profile data refreshed — treat as due now.
+ * After a successful sync, the normal 7-day next_details_refresh_at applies.
+ * Used for YouTube, TikTok, and Instagram.
+ */
+export function accountNeedsDetailsRefresh(
+  account: SocialAccountTimestamps,
+  now: Date = new Date(),
+): boolean {
+  if (!account || typeof account !== "object") return false;
+  if (parseIsoMs(account.last_details_refresh_at) == null) return true;
+  return isPlatformAccountDueForWeeklyRefresh(account, now);
+}
+
 export function isCreatorDueForWeeklyTokenRefresh(
   profile: {
     tiktok_account?: SocialAccountTimestamps;
@@ -65,9 +81,9 @@ export function isCreatorDueForWeeklyTokenRefresh(
   now: Date = new Date(),
 ): boolean {
   return (
-    isPlatformAccountDueForWeeklyRefresh(profile.tiktok_account, now) ||
-    isPlatformAccountDueForWeeklyRefresh(profile.instagram_account, now) ||
-    isPlatformAccountDueForWeeklyRefresh(profile.youtube_account, now)
+    accountNeedsDetailsRefresh(profile.tiktok_account, now) ||
+    accountNeedsDetailsRefresh(profile.instagram_account, now) ||
+    accountNeedsDetailsRefresh(profile.youtube_account, now)
   );
 }
 

@@ -7601,13 +7601,6 @@ export default function ContestDetailClient({
       const BULK_VERIFY_CLIENT_CHUNK_SIZE = 10;
 
       if (twitterIds.length > 0) {
-        // Map action for Twitter submissions
-        const twitterAction =
-          action === "verified" || action === "approve"
-            ? "approve"
-            : action === "rejected" || action === "reject"
-              ? "reject"
-              : action;
         for (
           let i = 0;
           i < twitterIds.length;
@@ -7624,7 +7617,7 @@ export default function ContestDetailClient({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 tweetIds: chunkIds,
-                action: twitterAction,
+                action,
                 reason,
               }),
             },
@@ -7728,24 +7721,8 @@ export default function ContestDetailClient({
                 refundAggregate,
                 data.refund as TwitterModerateSubmissionRefund | undefined,
               );
-              // Update twitter statuses based on action
-              const twitterAction =
-                action === "verified" || action === "approve"
-                  ? "approve"
-                  : action === "rejected" || action === "reject"
-                    ? "reject"
-                    : action;
-              const moderationStatus =
-                twitterAction === "approve"
-                  ? "verified"
-                  : twitterAction === "reject"
-                    ? "rejected"
-                    : twitterAction;
               updatedSubmissionsMap.set(item.id, {
-                moderation_status: moderationStatus,
-                ...(twitterAction === "reject"
-                  ? { manual_points_reason: reason }
-                  : {}),
+                moderation_status: action,
               });
               totalProcessed++;
             } else if (
@@ -7754,14 +7731,7 @@ export default function ContestDetailClient({
             ) {
               updatedSubmissionsMap.set(item.id, {
                 id: item.id,
-                status:
-                  action === "pending"
-                    ? "pending"
-                    : action === "rejected" || action === "reject"
-                      ? "rejected"
-                      : action === "verified" || action === "approve"
-                        ? "verified"
-                        : action,
+                status: action,
               });
               totalProcessed++;
             }
@@ -7785,7 +7755,6 @@ export default function ContestDetailClient({
       }
 
       if (updatedSubmissionsMap.size > 0) {
-        const isVerifyBulk = action === "verified" || action === "approve";
         setCurrentSubmissions((prev) =>
           prev.map((sub) => {
             if (updatedSubmissionsMap.has(sub.id)) {
@@ -7804,15 +7773,6 @@ export default function ContestDetailClient({
                   (updates as any)?.creator_avatar_url ??
                   (sub as any).creator_avatar_url,
               };
-              if (
-                isVerifyBulk &&
-                isVideoContestFormat &&
-                options?.qualityScore != null &&
-                normalIds.includes(sub.id)
-              ) {
-                merged.quality_score =
-                  merged.quality_score ?? options.qualityScore;
-              }
               return merged;
             }
             return sub;
@@ -7830,17 +7790,7 @@ export default function ContestDetailClient({
       const finalSucceededCount =
         succeededCount > 0 ? succeededCount : apiProcessedFallback;
 
-      const actionText =
-        action === "verified" || action === "approve"
-          ? "Verified"
-          : action === "rejected" || action === "reject"
-            ? "Rejected"
-            : action === "pending"
-              ? "Set to Pending"
-              : "Updated";
-      const isRejectBulk = action === "rejected" || action === "reject";
-      const isPendingBulk = action === "pending";
-      const isPaidBulk = action === "paid";
+      const actionText = "Updated";
       const twitterRefundTotal =
         refundAggregate.rewardCents + refundAggregate.bonusCents;
       const isDualRefundContest = isDualRewardsContestType(
@@ -7851,15 +7801,6 @@ export default function ContestDetailClient({
 
       if (finalSucceededCount > 0) {
         let bulkDescription = `Successfully ${actionText} ${finalSucceededCount} submission(s).`;
-        if (
-          (action === "verified" || action === "approve") &&
-          isVideoContestFormat &&
-          options?.qualityScore != null &&
-          !options?.skipQualityPrompt &&
-          !hasRefundReversal
-        ) {
-          bulkDescription += ` Quality score set to ${options.qualityScore}/3.`;
-        }
         if (hasError && errorMessage) {
           bulkDescription += ` ${errorMessage}`;
         }
@@ -7887,21 +7828,9 @@ export default function ContestDetailClient({
           )}`;
         }
         toast({
-          title: isRejectBulk
-            ? "Rejected"
-            : isPendingBulk
-              ? "Pending"
-              : isPaidBulk
-                ? "Payment"
-                : "✅ Success",
+          title: "Payment",
           description: bulkDescription,
-          variant: isRejectBulk
-            ? "destructive"
-            : isPendingBulk
-              ? "pending"
-              : isPaidBulk
-                ? "payment"
-                : "success",
+          variant: "payment",
         });
         if (options?.closeCreatorModalOnSuccess) {
           setSelectedCreatorForModal(null);

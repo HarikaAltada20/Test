@@ -7,6 +7,7 @@ import {
   isPlatformAccountDueForWeeklyRefresh,
   resolveConnectedAt,
   withWeeklyRefreshTimestamps,
+  accountNeedsDetailsRefresh,
 } from "./token-refresh-eligibility";
 
 describe("token-refresh-eligibility", () => {
@@ -95,7 +96,11 @@ describe("token-refresh-eligibility", () => {
     assert.equal(
       isCreatorDueForWeeklyTokenRefresh(
         {
-          tiktok_account: { connected_at: connectedAt },
+          tiktok_account: {
+            connected_at: connectedAt,
+            last_details_refresh_at: connectedAt,
+            next_details_refresh_at: "2026-08-08T06:00:00.000Z",
+          },
           instagram_account: null,
           youtube_account: null,
         },
@@ -106,9 +111,14 @@ describe("token-refresh-eligibility", () => {
     assert.equal(
       isCreatorDueForWeeklyTokenRefresh(
         {
-          tiktok_account: { connected_at: connectedAt },
+          tiktok_account: {
+            connected_at: connectedAt,
+            last_details_refresh_at: connectedAt,
+            next_details_refresh_at: "2026-08-08T06:00:00.000Z",
+          },
           instagram_account: {
             connected_at: "2026-07-01T00:00:00.000Z",
+            last_details_refresh_at: "2026-07-01T00:00:00.000Z",
           },
           youtube_account: null,
         },
@@ -116,6 +126,43 @@ describe("token-refresh-eligibility", () => {
       ),
       true,
     );
+  });
+
+  it("treats any platform that never synced details as due now", () => {
+    const neverSynced = {
+      updated_at: "2026-08-23T17:18:42.291Z",
+      last_connection_check_at: "2026-08-24T09:02:35.815Z",
+    };
+    assert.equal(
+      isPlatformAccountDueForWeeklyRefresh(neverSynced, day0),
+      false,
+    );
+    assert.equal(accountNeedsDetailsRefresh(neverSynced, day0), true);
+    assert.equal(
+      isCreatorDueForWeeklyTokenRefresh({ tiktok_account: neverSynced }, day0),
+      true,
+    );
+    assert.equal(
+      isCreatorDueForWeeklyTokenRefresh(
+        { instagram_account: neverSynced },
+        day0,
+      ),
+      true,
+    );
+    assert.equal(
+      isCreatorDueForWeeklyTokenRefresh({ youtube_account: neverSynced }, day0),
+      true,
+    );
+  });
+
+  it("waits 7 days after a successful details sync", () => {
+    const stamped = withWeeklyRefreshTimestamps(
+      { connected_at: connectedAt, view_count: "1200" },
+      day0,
+    );
+    assert.equal(accountNeedsDetailsRefresh(stamped, day0), false);
+    assert.equal(accountNeedsDetailsRefresh(stamped, day6), false);
+    assert.equal(accountNeedsDetailsRefresh(stamped, day7), true);
   });
 
   it("preserves existing connected_at", () => {
