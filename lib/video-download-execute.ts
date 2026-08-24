@@ -11,9 +11,7 @@ import {
   downloadYouTubeVideoToFile,
   YouTubeDownloadError,
 } from "@/lib/youtube-download/ytstream";
-import { MAX_BULK_DOWNLOAD_BYTES } from "@/lib/video-download-auth";
 import {
-  bulkDownloadBytesRemaining,
   isWorkerTimeBudgetExhausted,
   processSequentialDownloadQueue,
   VIDEO_DOWNLOAD_WORKER_BUDGET_MS,
@@ -98,10 +96,6 @@ export async function executeQueuedVideoDownloads(options: {
   const zippedFiles: { path: string; name: string }[] = [];
   const failedQueue: { url: string; error: string }[] = [];
   const deferredItems: VideoDownloadItem[] = [];
-  const usedBytes =
-    MAX_BULK_DOWNLOAD_BYTES -
-    bulkDownloadBytesRemaining(options.usedBytes, MAX_BULK_DOWNLOAD_BYTES);
-  let totalBytes = usedBytes;
   let budgetExhausted = false;
 
   try {
@@ -114,18 +108,6 @@ export async function executeQueuedVideoDownloads(options: {
         ) {
           budgetExhausted = true;
           deferredItems.push(item);
-          await options.onProgress?.({
-            completed: zippedFiles.length,
-            failed: failedQueue.length,
-          });
-          return;
-        }
-
-        if (totalBytes >= MAX_BULK_DOWNLOAD_BYTES) {
-          failedQueue.push({
-            url: item.url,
-            error: `Skipped: bulk download size limit (${MAX_BULK_DOWNLOAD_BYTES} bytes) reached.`,
-          });
           await options.onProgress?.({
             completed: zippedFiles.length,
             failed: failedQueue.length,
@@ -149,16 +131,7 @@ export async function executeQueuedVideoDownloads(options: {
           if (existsSync(targetPath)) {
             const fileStat = await stat(targetPath);
             if (fileStat.size > 0) {
-              if (totalBytes + fileStat.size > MAX_BULK_DOWNLOAD_BYTES) {
-                await rm(targetPath, { force: true }).catch(() => {});
-                failedQueue.push({
-                  url: item.url,
-                  error: "Skipped: file would exceed bulk download size limit.",
-                });
-              } else {
-                totalBytes += fileStat.size;
-                zippedFiles.push({ path: targetPath, name: item.filename });
-              }
+              zippedFiles.push({ path: targetPath, name: item.filename });
             } else {
               failedQueue.push({
                 url: item.url,

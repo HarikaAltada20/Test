@@ -6,10 +6,10 @@ VALUES (
   'video-downloads',
   'video-downloads',
   false,
-  262144000,
+  NULL,
   ARRAY['application/zip', 'application/x-zip-compressed']::text[]
 )
 ON CONFLICT (id) DO UPDATE SET
   public = false,
-  file_size_limit = EXCLUDED.file_size_limit,
+  file_size_limit = NULL,
   allowed_mime_types = EXCLUDED.allowed_mime_types;

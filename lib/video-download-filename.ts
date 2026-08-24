@@ -162,6 +162,107 @@ export function uniqueVideoDownloadFilename(
 }
 
 const BULK_ZIP_FILENAME_MAX = 150;
+const BULK_ZIP_CONTEST_SLUG_MAX = 40;
+
+const BULK_ZIP_SORT_SLUGS: Record<string, string> = {
+  views_desc: "views_high_to_low",
+  views_asc: "views_low_to_high",
+  time_desc: "submitted_newest_first",
+  date_desc: "submitted_newest_first",
+  time_asc: "submitted_oldest_first",
+  date_asc: "submitted_oldest_first",
+  submissions_desc: "submissions_high_to_low",
+  submissions_asc: "submissions_low_to_high",
+  points_desc: "points_high_to_low",
+  points_asc: "points_low_to_high",
+  impressions_desc: "impressions_high_to_low",
+  impressions_asc: "impressions_low_to_high",
+};
+
+const BULK_ZIP_STATUS_SLUGS: Record<string, string> = {
+  all: "all",
+  verified: "verified",
+  rejected: "rejected",
+  pending: "pending",
+  paid: "paid",
+  not_rejected: "nonrejected",
+  nonrejected: "nonrejected",
+  verified_or_paid: "verified_paid",
+  verified_paid: "verified_paid",
+};
+
+export type BulkZipNameContext = {
+  contestTitle?: string | null;
+  sort?: string | null;
+  qualityScores?: Array<number | string> | null;
+  statusTab?: string | null;
+};
+
+function normalizeZipSlugKey(value: string | null | undefined): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_")
+    .replace(/[^a-z0-9_]/g, "")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+/** Sort option → ZIP slug, e.g. views_desc → views_high_to_low. */
+export function slugifyBulkZipSort(sort?: string | null): string {
+  const key = normalizeZipSlugKey(sort);
+  if (!key) return "unsorted";
+  return BULK_ZIP_SORT_SLUGS[key] || key;
+}
+
+/** Status tab → ZIP slug, e.g. not_rejected → nonrejected. */
+export function slugifyBulkZipStatusTab(tab?: string | null): string {
+  const key = normalizeZipSlugKey(tab);
+  if (!key) return "all";
+  return BULK_ZIP_STATUS_SLUGS[key] || key;
+}
+
+/** Quality filters → Q1_Q2_Q3, or all_quality when none are selected. */
+export function formatBulkZipQualityPart(
+  qualityScores?: Array<number | string> | null,
+): string {
+  if (!qualityScores || qualityScores.length === 0) return "all_quality";
+  const parts: string[] = [];
+  const normalized = qualityScores.map((value) =>
+    String(value).trim().toLowerCase(),
+  );
+  for (const score of [1, 2, 3] as const) {
+    if (
+      normalized.some(
+        (value) =>
+          value === String(score) ||
+          value === `q${score}` ||
+          Number(value) === score,
+      )
+    ) {
+      parts.push(`Q${score}`);
+    }
+  }
+  if (normalized.some((value) => value === "unscored")) {
+    parts.push("unscored");
+  }
+  return parts.length > 0 ? parts.join("_") : "all_quality";
+}
+
+/**
+ * ZIP prefix: contest + sort + quality + status tab.
+ * Caller appends `_part_N_of_M` when splitting into multiple archives.
+ */
+export function buildBulkZipFilenamePrefix(context: BulkZipNameContext): string {
+  const contest =
+    (sanitizeFilename(context.contestTitle || "contest") || "contest")
+      .slice(0, BULK_ZIP_CONTEST_SLUG_MAX)
+      .replace(/_+$/g, "") || "contest";
+  const sort = slugifyBulkZipSort(context.sort);
+  const quality = formatBulkZipQualityPart(context.qualityScores);
+  const tab = slugifyBulkZipStatusTab(context.statusTab);
+  return `bulk_submissions_${contest}_${sort}_${quality}_${tab}`;
+}
 
 /** ZIP download name: bulk_submissions_{contest}.zip */
 export function toBulkZipDownloadFilename(raw: unknown): string {
@@ -179,6 +280,7 @@ export function toBulkZipDownloadFilename(raw: unknown): string {
 export function bulkZipFilenameFromContestTitle(
   contestTitle?: string | null,
 ): string {
-  const title = sanitizeFilename(contestTitle || "contest") || "contest";
-  return toBulkZipDownloadFilename(`bulk_submissions_${title}`);
+  return toBulkZipDownloadFilename(
+    buildBulkZipFilenamePrefix({ contestTitle }),
+  );
 }

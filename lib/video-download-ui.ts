@@ -6,10 +6,24 @@ import {
 export type { VideoFilenamePattern };
 
 /** Max videos per ZIP job (must match server `MAX_BULK_VIDEO_DOWNLOADS`). */
-export const MAX_BULK_VIDEO_DOWNLOADS = 10;
+export const MAX_BULK_VIDEO_DOWNLOADS = 100;
+/** Minimum videos per ZIP; 0 is allowed in the input but not used for download. */
+export const MIN_BULK_VIDEO_DOWNLOADS = 1;
+/** Default videos per ZIP when the user has not chosen a batch size. */
+export const DEFAULT_VIDEOS_PER_ZIP = 10;
+
+export function parseVideosPerZip(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return DEFAULT_VIDEOS_PER_ZIP;
+  return Math.min(
+    MAX_BULK_VIDEO_DOWNLOADS,
+    Math.max(MIN_BULK_VIDEO_DOWNLOADS, n),
+  );
+}
 
 /** Pause between ZIP downloads so browsers allow multiple automatic downloads. */
-const BULK_CHUNK_DOWNLOAD_GAP_MS = 700;
+const BULK_CHUNK_DOWNLOAD_GAP_MS = 2500;
+const NATIVE_DOWNLOAD_SETTLE_MS = 2000;
 const QUEUED_DOWNLOAD_POLL_MS = 2000;
 const QUEUED_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -121,10 +135,49 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.style.display = "none";
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  window.setTimeout(() => {
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  }, 120_000);
+}
+
+/**
+ * One hidden iframe. Content-Disposition: attachment saves the file.
+ * Do not also click an <a> — that starts a second download of the same ZIP.
+ */
+function triggerNativeZipDownload(url: string): void {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.display = "none";
+  iframe.src = url;
+  document.body.appendChild(iframe);
+  window.setTimeout(() => iframe.remove(), 120_000);
+}
+
+export function parseBulkZipFileResponse(options: {
+  ok: boolean;
+  status: number;
+  contentType: string;
+  payload?: { error?: string; url?: string; filename?: string };
+}):
+  | { kind: "retry" }
+  | { kind: "blob" }
+  | { kind: "signed-url"; url: string }
+  | { kind: "error"; error: string } {
+  if (options.status === 409) return { kind: "retry" };
+  const json =
+    options.contentType.includes("application/json") || !options.ok;
+  if (!json) return { kind: "blob" };
+  const url =
+    typeof options.payload?.url === "string" ? options.payload.url.trim() : "";
+  if (url) return { kind: "signed-url", url };
+  return {
+    kind: "error",
+    error: options.payload?.error || "Failed to download queued ZIP.",
+  };
 }
 
 function isNetworkFetchError(error: unknown): boolean {
@@ -189,7 +242,13 @@ async function waitForQueuedZipJob(
     total: number;
     status: string;
   }) => void,
-): Promise<{ downloaded: boolean; completed: number; failed: number; total: number }> {
+): Promise<{
+  downloaded: boolean;
+  completed: number;
+  failed: number;
+  total: number;
+  error?: string;
+}> {
   const started = Date.now();
   let last = { completed: 0, failed: 0, total: 0 };
   while (Date.now() - started < QUEUED_DOWNLOAD_TIMEOUT_MS) {
@@ -218,19 +277,9 @@ async function waitForQueuedZipJob(
     });
 
     if (statusRes.data.status === "ready") {
-      const proxyUrl = `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}&proxy=1`;
-      const fileRes = await fetch(proxyUrl);
-      if (fileRes.status === 409) {
-        await sleep(QUEUED_DOWNLOAD_POLL_MS);
-        continue;
-      }
-      const contentType = fileRes.headers.get("content-type") || "";
-      if (!fileRes.ok || contentType.includes("application/json")) {
-        const payload = (await fileRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error || "Failed to download queued ZIP.");
-      }
-      const blob = await fileRes.blob();
-      triggerBrowserDownload(blob, fileName);
+      const fileUrl = `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}&proxy=1`;
+      triggerNativeZipDownload(fileUrl);
+      await sleep(NATIVE_DOWNLOAD_SETTLE_MS);
       return {
         downloaded: true,
         completed: last.completed,
@@ -242,7 +291,13 @@ async function waitForQueuedZipJob(
     if (statusRes.data.status === "failed") {
       clearPendingBulkZipJob();
       const firstError = statusRes.data.errors?.[0];
-      throw new Error(firstError || "Queued video download failed.");
+      return {
+        downloaded: false,
+        completed: last.completed,
+        failed: Math.max(last.failed, last.total || 0),
+        total: last.total,
+        error: firstError || "Queued video download failed.",
+      };
     }
 
     await sleep(QUEUED_DOWNLOAD_POLL_MS);
@@ -312,9 +367,15 @@ async function downloadOneZipChunk(options: {
       },
     );
     clearPendingBulkZipJob();
+    if (queued.error) {
+      errors.push(queued.error);
+    }
     return {
       successCount: queued.completed,
-      failedCount: Math.max(0, chunk.length - queued.completed),
+      failedCount: Math.max(
+        queued.failed,
+        Math.max(0, chunk.length - queued.completed),
+      ),
       downloaded: queued.downloaded,
       errors,
     };
@@ -377,19 +438,21 @@ async function downloadOneZipChunk(options: {
 }
 
 /**
- * Downloads selected submissions as ZIP batches of at most MAX_BULK_VIDEO_DOWNLOADS.
- * When Redis is configured, each batch is enqueued and downloaded as a same-origin
- * blob once the single ZIP is ready (time-budget leftovers stay on the same job).
+ * Downloads selected submissions as ZIP batches of at most `videosPerZip`
+ * (1–MAX_BULK_VIDEO_DOWNLOADS). When Redis is configured, each batch is enqueued
+ * and downloaded as a same-origin blob once the single ZIP is ready
+ * (time-budget leftovers stay on the same job).
  */
 export async function downloadSubmissionVideosInChunks(options: {
   submissionIds: string[];
   fileNamePrefix: string;
   namingPattern?: VideoFilenamePattern;
+  videosPerZip?: number;
   onProgress?: (info: BulkDownloadProgressInfo) => void;
 }): Promise<ChunkedBulkDownloadResult> {
   const namingPattern = parseVideoFilenamePattern(options.namingPattern);
   const ids = options.submissionIds.filter(Boolean);
-  const chunks = chunkArray(ids, MAX_BULK_VIDEO_DOWNLOADS);
+  const chunks = chunkArray(ids, parseVideosPerZip(options.videosPerZip));
   const errors: string[] = [];
   let succeededChunks = 0;
   let successCount = 0;

@@ -1,3 +1,6 @@
+import { createReadStream, existsSync } from "fs";
+import { stat } from "fs/promises";
+import { Readable } from "stream";
 import { NextResponse } from "next/server";
 import { verifyAdminOrBrandDownloadAccess } from "@/lib/video-download-auth";
 import {
@@ -6,12 +9,25 @@ import {
   VIDEO_DOWNLOAD_STORAGE_BUCKET,
 } from "@/lib/queue/video-download-queue";
 import { toBulkZipDownloadFilename } from "@/lib/video-download-filename";
+import { videoDownloadLocalZipPath } from "@/lib/video-download-storage";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const SIGNED_URL_TTL_SECONDS = 10 * 60;
+
+function zipDownloadHeaders(filename: string, contentLength?: number): Headers {
+  const safe = filename.replace(/["\\]/g, "_");
+  const headers = new Headers({
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(safe)}`,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  if (contentLength != null) headers.set("Content-Length", String(contentLength));
+  return headers;
+}
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -52,6 +68,16 @@ export async function GET(request: Request) {
     requestedName || status.zipFilename || `bulk_submissions_contest`,
   );
 
+  const localPath = videoDownloadLocalZipPath(status.storagePath);
+  if (existsSync(localPath)) {
+    const zipStat = await stat(localPath);
+    const nodeStream = createReadStream(localPath);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    return new NextResponse(webStream, {
+      headers: zipDownloadHeaders(filename, zipStat.size),
+    });
+  }
+
   const supabase = createAdminClient();
   const signed = await supabase.storage
     .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
@@ -67,21 +93,6 @@ export async function GET(request: Request) {
   }
 
   if (proxy) {
-    const maxProxyBytes = 100 * 1024 * 1024;
-    if (
-      process.env.NODE_ENV === "production" ||
-      (typeof status.zipBytes === "number" && status.zipBytes > maxProxyBytes)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Use the signed download URL for this archive (proxy disabled for large or production ZIPs).",
-          url: signed.data.signedUrl,
-          filename,
-        },
-        { status: 400 },
-      );
-    }
     const upstream = await fetch(signed.data.signedUrl);
     if (!upstream.ok || !upstream.body) {
       return NextResponse.json(
@@ -89,11 +100,7 @@ export async function GET(request: Request) {
         { status: 502 },
       );
     }
-    const headers = new Headers({
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    });
+    const headers = zipDownloadHeaders(filename);
     const length = upstream.headers.get("content-length");
     if (length) headers.set("Content-Length", length);
     return new NextResponse(upstream.body, { headers });

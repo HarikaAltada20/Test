@@ -54,7 +54,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn, sanitizeFilename } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { buildBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
@@ -458,7 +459,20 @@ export function CreatorSubmissionsModal({
     setBulkDownloadDialogOpen(true);
   };
 
-  const runBulkDownloadReels = async (namingPattern: VideoFilenamePattern) => {
+  const bulkZipFilenamePrefix = useMemo(
+    () =>
+      buildBulkZipFilenamePrefix({
+        contestTitle: contest.title,
+        sort: sortBy,
+        statusTab: statusFilter,
+      }),
+    [contest.title, sortBy, statusFilter],
+  );
+
+  const runBulkDownloadReels = async (
+    namingPattern: VideoFilenamePattern,
+    videosPerZip: number,
+  ) => {
     const submissionIds = Array.from(selectedSubmissions);
     if (submissionIds.length < 2) return;
 
@@ -473,7 +487,8 @@ export function CreatorSubmissionsModal({
       const result = await downloadSubmissionVideosInChunks({
         submissionIds,
         namingPattern,
-        fileNamePrefix: `bulk_submissions_${sanitizeFilename(contest.title || "contest")}`,
+        videosPerZip,
+        fileNamePrefix: bulkZipFilenamePrefix,
         onProgress: ({ successCount, failedCount, totalVideos }) => {
           setBulkDownloadProgress({
             successCount,
@@ -5366,6 +5381,7 @@ export function CreatorSubmissionsModal({
         onOpenChange={setBulkDownloadDialogOpen}
         isDark={isDark}
         videoCount={selectedSubmissions.size}
+        zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={bulkDownloading}
         progress={bulkDownloadProgress}
         onConfirm={runBulkDownloadReels}

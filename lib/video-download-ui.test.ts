@@ -4,21 +4,34 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   chunkArray,
+  DEFAULT_VIDEOS_PER_ZIP,
   MAX_BULK_VIDEO_DOWNLOADS,
+  parseBulkZipFileResponse,
+  parseVideosPerZip,
 } from "./video-download-ui";
 
 describe("video-download-ui", () => {
   it("exposes a bounded bulk download limit", () => {
-    assert.equal(MAX_BULK_VIDEO_DOWNLOADS, 10);
+    assert.equal(MAX_BULK_VIDEO_DOWNLOADS, 100);
+    assert.equal(DEFAULT_VIDEOS_PER_ZIP, 10);
   });
 
-  it("chunks large selections into batches of 10", () => {
+  it("clamps videos-per-ZIP to 1–100", () => {
+    assert.equal(parseVideosPerZip(0), 1);
+    assert.equal(parseVideosPerZip(10), 10);
+    assert.equal(parseVideosPerZip(100), 100);
+    assert.equal(parseVideosPerZip(101), 100);
+    assert.equal(parseVideosPerZip("not-a-number"), DEFAULT_VIDEOS_PER_ZIP);
+  });
+
+  it("chunks large selections by videos-per-ZIP", () => {
     const ids = Array.from({ length: 25 }, (_, i) => `id-${i + 1}`);
-    const chunks = chunkArray(ids, MAX_BULK_VIDEO_DOWNLOADS);
+    const chunks = chunkArray(ids, DEFAULT_VIDEOS_PER_ZIP);
     assert.equal(chunks.length, 3);
     assert.equal(chunks[0].length, 10);
     assert.equal(chunks[1].length, 10);
     assert.equal(chunks[2].length, 5);
+    assert.equal(chunkArray(ids, 100).length, 1);
   });
 
   it("allows instagram and youtube downloads", () => {
@@ -53,5 +66,36 @@ describe("video-download-ui", () => {
     assert.equal(canBulkDownloadContestVideos("instagram"), true);
     assert.equal(canBulkDownloadContestVideos("YouTube Shorts"), true);
     assert.equal(canBulkDownloadContestVideos("twitter"), false);
+  });
+
+  it("uses a signed ZIP URL when the file proxy returns JSON", () => {
+    assert.deepEqual(
+      parseBulkZipFileResponse({
+        ok: false,
+        status: 400,
+        contentType: "application/json",
+        payload: {
+          error: "proxy disabled",
+          url: "https://example.test/file.zip",
+        },
+      }),
+      { kind: "signed-url", url: "https://example.test/file.zip" },
+    );
+    assert.deepEqual(
+      parseBulkZipFileResponse({
+        ok: true,
+        status: 200,
+        contentType: "application/zip",
+      }),
+      { kind: "blob" },
+    );
+    assert.deepEqual(
+      parseBulkZipFileResponse({
+        ok: false,
+        status: 409,
+        contentType: "application/json",
+      }),
+      { kind: "retry" },
+    );
   });
 });

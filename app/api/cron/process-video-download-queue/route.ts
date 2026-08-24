@@ -293,6 +293,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       zipBytes = (await stat(mergedLocal)).size;
     }
 
+    console.log(
+      `[process-video-download-queue] Uploading ZIP job=${job.jobId} bytes=${zipBytes}`,
+    );
     const upload = await uploadVideoDownloadZip({
       storagePath,
       zipPath,

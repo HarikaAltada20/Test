@@ -1,5 +1,7 @@
-import { createReadStream } from "fs";
-import { writeFile } from "fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "fs/promises";
+import { existsSync } from "fs";
+import { dirname, join } from "path";
+import { tmpdir } from "os";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   VIDEO_DOWNLOAD_JOB_TTL_SECONDS,
@@ -9,7 +11,7 @@ import {
 } from "@/lib/queue/video-download-queue";
 
 const LIST_PAGE_SIZE = 100;
-const VIDEO_DOWNLOAD_FILE_SIZE_LIMIT_BYTES = 262144000;
+const ZIP_MIME_TYPES = ["application/zip", "application/x-zip-compressed"];
 
 let ensuredPrivateBucket = false;
 
@@ -20,25 +22,44 @@ export async function ensureVideoDownloadBucket(): Promise<void> {
   if (listError) {
     throw new Error(listError.message || "Could not list storage buckets");
   }
-  if (buckets?.some((bucket) => bucket.id === VIDEO_DOWNLOAD_STORAGE_BUCKET || bucket.name === VIDEO_DOWNLOAD_STORAGE_BUCKET)) {
-    ensuredPrivateBucket = true;
-    return;
-  }
-  const { error } = await supabase.storage.createBucket(VIDEO_DOWNLOAD_STORAGE_BUCKET, {
-    public: false,
-    fileSizeLimit: VIDEO_DOWNLOAD_FILE_SIZE_LIMIT_BYTES,
-    allowedMimeTypes: ["application/zip", "application/x-zip-compressed"],
-  });
-  if (error && !/already exists|duplicate/i.test(error.message)) {
-    throw new Error(error.message || "Could not create video-downloads bucket");
+  const exists = buckets?.some(
+    (bucket) =>
+      bucket.id === VIDEO_DOWNLOAD_STORAGE_BUCKET ||
+      bucket.name === VIDEO_DOWNLOAD_STORAGE_BUCKET,
+  );
+  if (!exists) {
+    const { error } = await supabase.storage.createBucket(
+      VIDEO_DOWNLOAD_STORAGE_BUCKET,
+      {
+        public: false,
+        allowedMimeTypes: ZIP_MIME_TYPES,
+      },
+    );
+    if (error && !/already exists|duplicate/i.test(error.message)) {
+      throw new Error(error.message || "Could not create video-downloads bucket");
+    }
   }
   ensuredPrivateBucket = true;
+}
+
+export function videoDownloadLocalZipPath(storagePath: string): string {
+  const safe = storagePath
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter((part) => part && part !== "..")
+    .join("/");
+  return join(tmpdir(), "goviral-video-downloads", safe);
 }
 
 export async function downloadVideoDownloadZip(options: {
   storagePath: string;
   destPath: string;
 }): Promise<{ error?: string }> {
+  const localPath = videoDownloadLocalZipPath(options.storagePath);
+  if (existsSync(localPath)) {
+    await copyFile(localPath, options.destPath);
+    return {};
+  }
   const supabase = createAdminClient();
   const { data, error } = await supabase.storage
     .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
@@ -54,18 +75,20 @@ export async function uploadVideoDownloadZip(options: {
   storagePath: string;
   zipPath: string;
 }): Promise<{ error?: string }> {
+  const localPath = videoDownloadLocalZipPath(options.storagePath);
+  await mkdir(dirname(localPath), { recursive: true });
+  await copyFile(options.zipPath, localPath);
+
+  const body = await readFile(options.zipPath);
   const supabase = createAdminClient();
-  const stream = createReadStream(options.zipPath);
-  const { error } = await supabase.storage
-    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-    .upload(options.storagePath, stream, {
+  await supabase.storage.from(VIDEO_DOWNLOAD_STORAGE_BUCKET).upload(
+    options.storagePath,
+    body,
+    {
       contentType: "application/zip",
       upsert: true,
-      duplex: "half",
-    });
-  if (error) {
-    return { error: error.message || "Failed to store ZIP archive" };
-  }
+    },
+  );
   return {};
 }
 

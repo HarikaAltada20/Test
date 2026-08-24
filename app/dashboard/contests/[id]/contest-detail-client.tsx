@@ -105,6 +105,7 @@ import {
   cn,
   sanitizeFilename,
 } from "@/lib/utils";
+import { buildBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
@@ -3463,8 +3464,25 @@ export default function ContestDetailClient({
     setNormalViewBulkDownloadDialogOpen(true);
   };
 
+  const bulkZipFilenamePrefix = useMemo(
+    () =>
+      buildBulkZipFilenamePrefix({
+        contestTitle: currentContest?.title,
+        sort: sortOption,
+        qualityScores: submissionQualityScoreFilters,
+        statusTab: activeStatusTab,
+      }),
+    [
+      currentContest?.title,
+      sortOption,
+      submissionQualityScoreFilters,
+      activeStatusTab,
+    ],
+  );
+
   const runNormalViewBulkDownload = async (
     namingPattern: VideoFilenamePattern,
+    videosPerZip: number,
   ) => {
     const submissionIds = Array.from(normalViewSelectedSubmissions);
     if (submissionIds.length < 2) return;
@@ -3480,7 +3498,8 @@ export default function ContestDetailClient({
       const result = await downloadSubmissionVideosInChunks({
         submissionIds,
         namingPattern,
-        fileNamePrefix: `bulk_submissions_${sanitizeFilename(currentContest?.title || "contest")}`,
+        videosPerZip,
+        fileNamePrefix: bulkZipFilenamePrefix,
         onProgress: ({ successCount, failedCount, totalVideos }) => {
           setNormalViewBulkDownloadProgress({
             successCount,
@@ -31118,6 +31137,7 @@ export default function ContestDetailClient({
         onOpenChange={setNormalViewBulkDownloadDialogOpen}
         isDark={isDark}
         videoCount={normalViewSelectedSubmissions.size}
+        zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
         progress={normalViewBulkDownloadProgress}
         onConfirm={runNormalViewBulkDownload}

@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildBulkZipFilenamePrefix,
   buildVideoDownloadFilename,
   buildViewsBasedVideoFilename,
+  formatBulkZipQualityPart,
   formatQualityScorePart,
   joinedRecordAdvertiserId,
   joinedRecordUsername,
   parseVideoFilenamePattern,
+  slugifyBulkZipSort,
+  slugifyBulkZipStatusTab,
   uniqueVideoDownloadFilename,
   toBulkZipDownloadFilename,
   bulkZipFilenameFromContestTitle,
@@ -97,16 +101,35 @@ describe("video download filename patterns", () => {
     assert.equal(joinedRecordAdvertiserId({ advertiser_id: "  " }), null);
   });
 
-  it("names the ZIP after the contest title", () => {
+  it("names the ZIP after the contest title plus default filters", () => {
     assert.equal(
       bulkZipFilenameFromContestTitle(
         "Zahra Jani Premium Clips Challenge Milestone Rewards Original Edits only",
       ),
-      "bulk_submissions_Zahra_Jani_Premium_Clips_Challenge_Milestone_Rewards_Original_Edits_only.zip",
+      "bulk_submissions_Zahra_Jani_Premium_Clips_Challenge_Miles_unsorted_all_quality_all.zip",
     );
     assert.equal(
       toBulkZipDownloadFilename("bulk_download_a14395c9.zip"),
       "bulk_download_a14395c9.zip",
+    );
+  });
+
+  it("slugs sort, quality, and status tab into the ZIP prefix", () => {
+    assert.equal(slugifyBulkZipSort("views_desc"), "views_high_to_low");
+    assert.equal(slugifyBulkZipSort("views-asc"), "views_low_to_high");
+    assert.equal(slugifyBulkZipStatusTab("not_rejected"), "nonrejected");
+    assert.equal(slugifyBulkZipStatusTab("verified"), "verified");
+    assert.equal(formatBulkZipQualityPart([]), "all_quality");
+    assert.equal(formatBulkZipQualityPart([3, 1]), "Q1_Q3");
+    assert.equal(formatBulkZipQualityPart([2, "unscored"]), "Q2_unscored");
+    assert.equal(
+      buildBulkZipFilenamePrefix({
+        contestTitle: "Summer Launch",
+        sort: "views_desc",
+        qualityScores: [1, 2, 3],
+        statusTab: "verified",
+      }),
+      "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_verified",
     );
   });
 });

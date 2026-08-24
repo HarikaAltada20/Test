@@ -53,7 +53,7 @@ export type VideoDownloadJob = {
   completedSoFar?: number;
   failedSoFar?: number;
   errorsSoFar?: string[];
-  /** Bytes already in the stored ZIP; remainder waves must count these toward MAX_BULK_DOWNLOAD_BYTES. */
+  /** Bytes already in the stored ZIP from earlier remainder waves. */
   zipBytesSoFar?: number;
 };
 
