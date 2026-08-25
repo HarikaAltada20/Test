@@ -96,9 +96,18 @@ describe("video-download-ui", () => {
         },
       ],
     });
-    assert.equal(rows.find((row) => row.submissionId === "a")?.status, "failed");
-    assert.equal(rows.find((row) => row.submissionId === "b")?.status, "success");
-    assert.equal(rows.find((row) => row.submissionId === "a")?.username, "creator_a");
+    assert.equal(
+      rows.find((row) => row.submissionId === "a")?.status,
+      "failed",
+    );
+    assert.equal(
+      rows.find((row) => row.submissionId === "b")?.status,
+      "success",
+    );
+    assert.equal(
+      rows.find((row) => row.submissionId === "a")?.username,
+      "creator_a",
+    );
     assert.equal(rows.find((row) => row.submissionId === "b")?.views, 900);
   });
 

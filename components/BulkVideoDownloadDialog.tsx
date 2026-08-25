@@ -31,50 +31,6 @@ import {
   readPendingBulkZipJob,
 } from "@/lib/video-download-ui";
 
-const PATTERN_STORAGE_KEY = "goc-bulk-video-naming-pattern";
-const VIDEOS_PER_ZIP_STORAGE_KEY = "goc-bulk-videos-per-zip";
-
-function readStoredPattern(): VideoFilenamePattern {
-  if (typeof window === "undefined") return DEFAULT_VIDEO_FILENAME_PATTERN;
-  try {
-    return isVideoFilenamePattern(window.localStorage.getItem(PATTERN_STORAGE_KEY))
-      ? (window.localStorage.getItem(PATTERN_STORAGE_KEY) as VideoFilenamePattern)
-      : DEFAULT_VIDEO_FILENAME_PATTERN;
-  } catch {
-    return DEFAULT_VIDEO_FILENAME_PATTERN;
-  }
-}
-
-function persistPattern(pattern: VideoFilenamePattern): void {
-  try {
-    window.localStorage.setItem(PATTERN_STORAGE_KEY, pattern);
-  } catch {
-    // ignore quota / private-mode failures
-  }
-}
-
-function readStoredVideosPerZip(): number {
-  if (typeof window === "undefined") return DEFAULT_VIDEOS_PER_ZIP;
-  try {
-    return parseVideosPerZip(
-      window.localStorage.getItem(VIDEOS_PER_ZIP_STORAGE_KEY),
-    );
-  } catch {
-    return DEFAULT_VIDEOS_PER_ZIP;
-  }
-}
-
-function persistVideosPerZip(videosPerZip: number): void {
-  try {
-    window.localStorage.setItem(
-      VIDEOS_PER_ZIP_STORAGE_KEY,
-      String(videosPerZip),
-    );
-  } catch {
-    // ignore quota / private-mode failures
-  }
-}
-
 function isValidVideosPerZipInput(raw: string): boolean {
   if (!raw.trim()) return false;
   const n = Number(raw);
@@ -115,8 +71,9 @@ export function BulkVideoDownloadDialog({
 
   useEffect(() => {
     if (open) {
-      setPattern(readStoredPattern());
-      setVideosPerZipInput(String(readStoredVideosPerZip()));
+      setPattern(DEFAULT_VIDEO_FILENAME_PATTERN);
+      setVideosPerZipInput(String(DEFAULT_VIDEOS_PER_ZIP));
+      // In-memory pending only (same tab); reload resumes from Supabase.
       setCanResume(!!readPendingBulkZipJob());
     }
   }, [open]);
@@ -340,8 +297,6 @@ export function BulkVideoDownloadDialog({
             loadingText="Starting..."
             disabled={downloading || videoCount < 2 || !videosPerZipValid}
             onClick={() => {
-              persistPattern(pattern);
-              persistVideosPerZip(videosPerZip);
               void onConfirm(pattern, videosPerZip);
             }}
             className="bg-purple-600 text-white hover:bg-purple-700"

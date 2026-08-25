@@ -114,6 +114,7 @@ import {
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
+import { BulkVideoDownloadContestStatus } from "@/components/BulkVideoDownloadContestStatus";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
 import {
   useBulkModerationProgress,
@@ -31120,6 +31121,11 @@ export default function ContestDetailClient({
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
         onConfirm={runNormalViewBulkDownload}
+      />
+
+      <BulkVideoDownloadContestStatus
+        contestId={String(contestId)}
+        isDark={isDark}
       />
 
       {/* Rejection Details Modal (submission-wise: view reason from submission.metadata) */}

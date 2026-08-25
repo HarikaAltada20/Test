@@ -29,6 +29,7 @@ import {
   chunkArray,
   parseVideosPerZip,
 } from "@/lib/video-download-ui";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 
 export const maxDuration = 300;
 
@@ -131,19 +132,34 @@ export async function POST(request: Request) {
 
     if (submissionIdList.length > 0) {
       console.log(`[BULK-${requestId}] Resolving ${submissionIdList.length} submission IDs`);
-      const { data: submissions, error: submissionsError } = await supabase
-        .from("submissions")
-        .select(`
-          id,
-          content_link,
-          platform,
-          views,
-          status,
-          quality_score,
-          contests!inner(id, title, advertiser_id),
-          users!creator_id(username)
-        `)
-        .in("id", submissionIdList);
+      // PostgREST rejects huge `.in(id, …)` filters (Bad Request). Chunk the lookup.
+      const { data: submissions, error: submissionsError } =
+        await fetchByIdsInChunks<{
+          id: string;
+          content_link: string | null;
+          platform: string | null;
+          views: number | null;
+          status: string | null;
+          quality_score: number | null;
+          contests: unknown;
+          users: unknown;
+        }>({
+          ids: submissionIdList,
+          fetchChunk: (chunkIds) =>
+            supabase
+              .from("submissions")
+              .select(`
+                id,
+                content_link,
+                platform,
+                views,
+                status,
+                quality_score,
+                contests!inner(id, title, advertiser_id),
+                users!creator_id(username)
+              `)
+              .in("id", chunkIds),
+        });
 
       if (submissionsError) {
         console.error(`[BULK-${requestId}] Database fetch error:`, submissionsError);

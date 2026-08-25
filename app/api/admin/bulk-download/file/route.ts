@@ -4,6 +4,7 @@ import { Readable } from "stream";
 import { NextResponse } from "next/server";
 import { verifyAdminOrBrandDownloadAccess } from "@/lib/video-download-auth";
 import {
+  clearVideoDownloadJobStatus,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   VIDEO_DOWNLOAD_STORAGE_BUCKET,
@@ -73,6 +74,8 @@ export async function GET(request: Request) {
     const zipStat = await stat(localPath);
     const nodeStream = createReadStream(localPath);
     const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    // ZIP is being delivered — drop Redis status so it does not linger for 2h.
+    void clearVideoDownloadJobStatus(jobId);
     return new NextResponse(webStream, {
       headers: zipDownloadHeaders(filename, zipStat.size),
     });
@@ -103,12 +106,13 @@ export async function GET(request: Request) {
     const headers = zipDownloadHeaders(filename);
     const length = upstream.headers.get("content-length");
     if (length) headers.set("Content-Length", length);
+    void clearVideoDownloadJobStatus(jobId);
     return new NextResponse(upstream.body, { headers });
   }
 
-  // Leave Redis status and the storage object in place so a dropped browser
-  // download can retry. Status expires via VIDEO_DOWNLOAD_JOB_TTL_SECONDS;
-  // the ZIP is deleted by the process-video-download-queue cron cleanup.
+  // Non-proxy: client gets a signed URL; clear Redis so ready keys do not linger.
+  // Storage ZIP is still cleaned by the process-video-download-queue cron.
+  void clearVideoDownloadJobStatus(jobId);
   return NextResponse.json({
     url: signed.data.signedUrl,
     filename,

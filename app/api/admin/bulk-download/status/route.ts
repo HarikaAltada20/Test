@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdminOrBrandDownloadAccess } from "@/lib/video-download-auth";
 import {
+  clearVideoDownloadJobStatus,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
 } from "@/lib/queue/video-download-queue";
@@ -50,6 +51,11 @@ export async function GET(request: Request) {
     itemFailures: (status.itemFailures ?? []).slice(0, 100),
     zipBytes: status.zipBytes ?? null,
   };
+
+  // Failed jobs have no ZIP to fetch — drop Redis status after the client sees it.
+  if (status.status === "failed") {
+    void clearVideoDownloadJobStatus(jobId);
+  }
 
   return NextResponse.json(payload);
 }

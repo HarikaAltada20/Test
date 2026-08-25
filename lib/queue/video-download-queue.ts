@@ -83,7 +83,10 @@ export type VideoDownloadJobStatus = {
   updatedAt: string;
 };
 
-export type VideoDownloadRecoveryAction = "keep-processing" | "requeue" | "drop";
+export type VideoDownloadRecoveryAction =
+  | "keep-processing"
+  | "requeue"
+  | "drop";
 
 export type VideoDownloadRecoveryPlanItem = {
   raw: string;
@@ -201,8 +204,12 @@ function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (!url || !token) {
-    if (!url) console.warn("[video-download-queue] UPSTASH_REDIS_REST_URL is missing");
-    if (!token) console.warn("[video-download-queue] UPSTASH_REDIS_REST_TOKEN is missing");
+    if (!url)
+      console.warn("[video-download-queue] UPSTASH_REDIS_REST_URL is missing");
+    if (!token)
+      console.warn(
+        "[video-download-queue] UPSTASH_REDIS_REST_TOKEN is missing",
+      );
     return null;
   }
   try {
@@ -220,7 +227,10 @@ export function isVideoDownloadQueueEnabled(): boolean {
   );
 }
 
-export function videoDownloadStoragePath(userId: string, jobId: string): string {
+export function videoDownloadStoragePath(
+  userId: string,
+  jobId: string,
+): string {
   return `${userId}/${jobId}.zip`;
 }
 
@@ -262,23 +272,29 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
       ? Math.max(0, Math.floor(parsed.batchTotal))
       : undefined;
   const partialStoragePath =
-    typeof parsed.partialStoragePath === "string" && parsed.partialStoragePath.trim()
+    typeof parsed.partialStoragePath === "string" &&
+    parsed.partialStoragePath.trim()
       ? parsed.partialStoragePath.trim()
       : undefined;
   const originalTotal =
-    typeof parsed.originalTotal === "number" && Number.isFinite(parsed.originalTotal)
+    typeof parsed.originalTotal === "number" &&
+    Number.isFinite(parsed.originalTotal)
       ? Math.max(0, Math.floor(parsed.originalTotal))
       : undefined;
   const completedSoFar =
-    typeof parsed.completedSoFar === "number" && Number.isFinite(parsed.completedSoFar)
+    typeof parsed.completedSoFar === "number" &&
+    Number.isFinite(parsed.completedSoFar)
       ? Math.max(0, Math.floor(parsed.completedSoFar))
       : undefined;
   const failedSoFar =
-    typeof parsed.failedSoFar === "number" && Number.isFinite(parsed.failedSoFar)
+    typeof parsed.failedSoFar === "number" &&
+    Number.isFinite(parsed.failedSoFar)
       ? Math.max(0, Math.floor(parsed.failedSoFar))
       : undefined;
   const errorsSoFar = Array.isArray(parsed.errorsSoFar)
-    ? parsed.errorsSoFar.filter((value): value is string => typeof value === "string")
+    ? parsed.errorsSoFar.filter(
+        (value): value is string => typeof value === "string",
+      )
     : undefined;
   const failuresSoFar = Array.isArray(parsed.failuresSoFar)
     ? parsed.failuresSoFar.filter(
@@ -290,7 +306,8 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
       )
     : undefined;
   const zipBytesSoFar =
-    typeof parsed.zipBytesSoFar === "number" && Number.isFinite(parsed.zipBytesSoFar)
+    typeof parsed.zipBytesSoFar === "number" &&
+    Number.isFinite(parsed.zipBytesSoFar)
       ? Math.max(0, Math.floor(parsed.zipBytesSoFar))
       : undefined;
   return {
@@ -334,7 +351,9 @@ export async function getVideoDownloadJobStatus(
 ): Promise<VideoDownloadJobStatus | null> {
   const redis = getRedis();
   if (!redis) return null;
-  const raw = await redis.get<string | VideoDownloadJobStatus>(statusKey(jobId));
+  const raw = await redis.get<string | VideoDownloadJobStatus>(
+    statusKey(jobId),
+  );
   if (!raw) return null;
   if (typeof raw === "object") return raw as VideoDownloadJobStatus;
   try {
@@ -344,7 +363,9 @@ export async function getVideoDownloadJobStatus(
   }
 }
 
-export async function clearVideoDownloadJobStatus(jobId: string): Promise<void> {
+export async function clearVideoDownloadJobStatus(
+  jobId: string,
+): Promise<void> {
   const redis = getRedis();
   if (!redis || !jobId) return;
   try {
@@ -472,7 +493,11 @@ export async function requeueVideoDownloadRemainder(options: {
   }
 
   let lastError: string | undefined;
-  for (let attempt = 0; attempt < VIDEO_DOWNLOAD_REMAINDER_ENQUEUE_ATTEMPTS; attempt++) {
+  for (
+    let attempt = 0;
+    attempt < VIDEO_DOWNLOAD_REMAINDER_ENQUEUE_ATTEMPTS;
+    attempt++
+  ) {
     try {
       const nextJob: VideoDownloadJob = {
         ...options.job,
@@ -554,10 +579,20 @@ export async function removeVideoDownloadFromProcessing(
 export async function retryOrDeadLetterVideoDownload(options: {
   rawJobString: string;
   reason?: string;
-}): Promise<{ requeued: boolean; deadLettered: boolean; attempts: number; error?: string }> {
+}): Promise<{
+  requeued: boolean;
+  deadLettered: boolean;
+  attempts: number;
+  error?: string;
+}> {
   const redis = getRedis();
   if (!redis) {
-    return { requeued: false, deadLettered: false, attempts: 0, error: "Redis not configured" };
+    return {
+      requeued: false,
+      deadLettered: false,
+      attempts: 0,
+      error: "Redis not configured",
+    };
   }
   try {
     const parsed = parseVideoDownloadJob(options.rawJobString);
@@ -569,7 +604,8 @@ export async function retryOrDeadLetterVideoDownload(options: {
     const nextJob: VideoDownloadJob = { ...parsed, attempt: nextAttempts };
     const now = new Date().toISOString();
     const existing = await getVideoDownloadJobStatus(parsed.jobId);
-    const total = existing?.total || parsed.originalTotal || parsed.items.length;
+    const total =
+      existing?.total || parsed.originalTotal || parsed.items.length;
 
     if (nextAttempts >= MAX_RETRY_ATTEMPTS) {
       await redis.lpush(
@@ -628,7 +664,12 @@ export async function retryOrDeadLetterVideoDownload(options: {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[video-download-queue] retryOrDeadLetter failed:", message);
-    return { requeued: false, deadLettered: false, attempts: 0, error: message };
+    return {
+      requeued: false,
+      deadLettered: false,
+      attempts: 0,
+      error: message,
+    };
   }
 }
 
@@ -691,7 +732,10 @@ export async function recoverVideoDownloadProcessingToQueue(options?: {
         dropped += 1;
         continue;
       }
-      const requeued = await requeueVideoDownloadFromProcessing(redis, item.raw);
+      const requeued = await requeueVideoDownloadFromProcessing(
+        redis,
+        item.raw,
+      );
       if (requeued) moved += 1;
     }
 
@@ -703,7 +747,10 @@ export async function recoverVideoDownloadProcessingToQueue(options?: {
     return { moved };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[video-download-queue] recoverProcessingJobsToQueue failed:", message);
+    console.error(
+      "[video-download-queue] recoverProcessingJobsToQueue failed:",
+      message,
+    );
     return { moved: 0, error: message };
   }
 }
@@ -783,7 +830,8 @@ function parseVideoDownloadBatch(raw: unknown): VideoDownloadBatch | null {
       0,
       Math.min(
         parts.length,
-        typeof parsed.nextIndex === "number" && Number.isFinite(parsed.nextIndex)
+        typeof parsed.nextIndex === "number" &&
+          Number.isFinite(parsed.nextIndex)
           ? Math.floor(parsed.nextIndex)
           : 0,
       ),
@@ -850,7 +898,8 @@ export async function enqueueNextVideoDownloadBatchPart(
     }
     if (!locked) {
       return {
-        error: "Batch enqueue is busy; next ZIP part will retry on the next kick.",
+        error:
+          "Batch enqueue is busy; next ZIP part will retry on the next kick.",
       };
     }
 
@@ -886,7 +935,10 @@ export async function enqueueNextVideoDownloadBatchPart(
     return { enqueuedJobId: part.jobId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[video-download-queue] enqueueNextBatchPart failed:", message);
+    console.error(
+      "[video-download-queue] enqueueNextBatchPart failed:",
+      message,
+    );
     return { error: message };
   } finally {
     if (locked) {
