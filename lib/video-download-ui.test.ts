@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildBulkDownloadMetaMap,
+  buildBulkDownloadResultRows,
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   chunkArray,
@@ -66,6 +68,38 @@ describe("video-download-ui", () => {
     assert.equal(canBulkDownloadContestVideos("instagram"), true);
     assert.equal(canBulkDownloadContestVideos("YouTube Shorts"), true);
     assert.equal(canBulkDownloadContestVideos("twitter"), false);
+  });
+
+  it("builds per-submission success and failure rows from queue failures", () => {
+    const metaById = buildBulkDownloadMetaMap(["a", "b"], (id) =>
+      id === "a"
+        ? {
+            username: "creator_a",
+            videoTitle: "Video A",
+            link: "https://instagram.com/reel/a/",
+            views: 1200,
+          }
+        : {
+            username: "creator_b",
+            videoTitle: "Video B",
+            link: "https://instagram.com/reel/b",
+            views: 900,
+          },
+    );
+    const rows = buildBulkDownloadResultRows({
+      submissionIds: ["a", "b"],
+      metaById,
+      itemFailures: [
+        {
+          url: "https://instagram.com/reel/a/",
+          error: "Video not found",
+        },
+      ],
+    });
+    assert.equal(rows.find((row) => row.submissionId === "a")?.status, "failed");
+    assert.equal(rows.find((row) => row.submissionId === "b")?.status, "success");
+    assert.equal(rows.find((row) => row.submissionId === "a")?.username, "creator_a");
+    assert.equal(rows.find((row) => row.submissionId === "b")?.views, 900);
   });
 
   it("uses a signed ZIP URL when the file proxy returns JSON", () => {

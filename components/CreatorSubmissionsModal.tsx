@@ -59,11 +59,11 @@ import { buildBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
-  downloadSubmissionVideosInChunks,
+  buildBulkDownloadMetaMap,
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
-import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
+import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -267,6 +267,10 @@ export function CreatorSubmissionsModal({
     isBusy: isBulkPaymentQueueBusy,
     startTracking: startBulkPaymentTracking,
   } = useBulkPaymentProgress();
+  const {
+    downloading: bulkDownloading,
+    startDownload: startBulkVideoDownload,
+  } = useBulkVideoDownloadProgress();
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
   );
@@ -308,10 +312,10 @@ export function CreatorSubmissionsModal({
   const showProcessingOverlay =
     parentBulkActionLoading || isAnyBulkPaymentBusy || rowPaymentProcessing;
 
-  const payWithOverlay = async (fn: () => Promise<unknown>) => {
+  const payWithOverlay = async (fn: () => unknown) => {
     setRowPaymentProcessing(true);
     try {
-      await fn();
+      await Promise.resolve(fn());
     } finally {
       setRowPaymentProcessing(false);
     }
@@ -319,9 +323,6 @@ export function CreatorSubmissionsModal({
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
-  const [bulkDownloading, setBulkDownloading] = useState(false);
-  const [bulkDownloadProgress, setBulkDownloadProgress] =
-    useState<BulkVideoDownloadProgressState | null>(null);
   const [bulkDownloadDialogOpen, setBulkDownloadDialogOpen] = useState(false);
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
@@ -475,63 +476,34 @@ export function CreatorSubmissionsModal({
   ) => {
     const submissionIds = Array.from(selectedSubmissions);
     if (submissionIds.length < 2) return;
+    if (!contest?.id) return;
 
-    setBulkDownloading(true);
-    setBulkDownloadProgress({
-      successCount: 0,
-      failedCount: 0,
-      total: submissionIds.length,
+    setBulkDownloadDialogOpen(false);
+
+    const metaById = buildBulkDownloadMetaMap(submissionIds, (id) => {
+      const sub = submissions.find((entry) => entry.id === id);
+      if (!sub) return null;
+      return {
+        username: creator.username,
+        videoTitle: sub.video_title || "Untitled",
+        link: sub.content_link,
+        views: effectiveSubmissionViewsForSort(sub),
+        avatarUrl: creator.profile_picture_url,
+        displayName: creator.full_name,
+        creatorId: creator.id,
+      };
     });
 
-    try {
-      const result = await downloadSubmissionVideosInChunks({
-        submissionIds,
-        namingPattern,
-        videosPerZip,
-        fileNamePrefix: bulkZipFilenamePrefix,
-        onProgress: ({ successCount, failedCount, totalVideos }) => {
-          setBulkDownloadProgress({
-            successCount,
-            failedCount,
-            total: totalVideos,
-          });
-        },
-      });
-
-      if (result.successCount === 0 && result.failedCount === 0) {
-        throw new Error(result.errors[0] || "Failed to download ZIP archives.");
-      }
-
-      const hasPartialFailures =
-        result.successCount > 0 && result.failedCount > 0;
-      const isTotalFailure =
-        result.successCount === 0 && result.failedCount > 0;
-
-      toast({
-        title: isTotalFailure
-          ? "Download failed"
-          : hasPartialFailures
-            ? "Download complete"
-            : "Download complete",
-        description: `${result.totalVideos} selected · ${result.successCount} succeeded · ${result.failedCount} failed`,
-        variant: isTotalFailure
-          ? "destructive"
-          : hasPartialFailures
-            ? "pending"
-            : "success",
-      });
-      setBulkDownloadDialogOpen(false);
-    } catch (error: any) {
-      console.error("Bulk download failed:", error);
-      toast({
-        title: "Bulk Download Failed",
-        description: error.message || "An error occurred while compiling the ZIP folder.",
-        variant: "destructive",
-      });
-    } finally {
-      setBulkDownloading(false);
-      setBulkDownloadProgress(null);
-    }
+    await startBulkVideoDownload({
+      contestId: String(contest.id),
+      scope: "creator",
+      creatorId: creator.id,
+      submissionIds,
+      namingPattern,
+      videosPerZip,
+      fileNamePrefix: bulkZipFilenamePrefix,
+      metaById,
+    });
   };
 
   const handleCheckboxChange = (submissionId: string, checked: boolean) => {
@@ -5383,7 +5355,6 @@ export function CreatorSubmissionsModal({
         videoCount={selectedSubmissions.size}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={bulkDownloading}
-        progress={bulkDownloadProgress}
         onConfirm={runBulkDownloadReels}
       />
 

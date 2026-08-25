@@ -2,8 +2,8 @@
 const DEFAULT_CHUNK_SIZE = 1000;
 const DEFAULT_MAX_ROWS = 50_000;
 
-/** Contest detail SSR / UI page size (keep payloads small). */
-export const CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE = 75;
+/** Contest detail SSR / UI page size. */
+export const CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE = 1000;
 
 const ID_TIEBREAK_ORDER = { column: "id", ascending: true } as const;
 

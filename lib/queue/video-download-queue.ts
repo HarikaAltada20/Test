@@ -47,14 +47,24 @@ export type VideoDownloadJob = {
   items: VideoDownloadItem[];
   attempt?: number;
   zipFilename?: string;
+  /** Multi-ZIP batch: server enqueues the next part after this job finishes. */
+  batchId?: string;
+  batchIndex?: number;
+  batchTotal?: number;
   /** Same-job leftover wave: ZIP already stored, remaining items still to download. */
   partialStoragePath?: string;
   originalTotal?: number;
   completedSoFar?: number;
   failedSoFar?: number;
   errorsSoFar?: string[];
+  failuresSoFar?: VideoDownloadItemFailure[];
   /** Bytes already in the stored ZIP from earlier remainder waves. */
   zipBytesSoFar?: number;
+};
+
+export type VideoDownloadItemFailure = {
+  url: string;
+  error: string;
 };
 
 export type VideoDownloadJobStatus = {
@@ -65,6 +75,7 @@ export type VideoDownloadJobStatus = {
   completed: number;
   failed: number;
   errors: string[];
+  itemFailures?: VideoDownloadItemFailure[];
   storagePath?: string;
   zipBytes?: number;
   zipFilename?: string;
@@ -238,6 +249,18 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
     typeof parsed.zipFilename === "string" && parsed.zipFilename.trim()
       ? parsed.zipFilename.trim()
       : undefined;
+  const batchId =
+    typeof parsed.batchId === "string" && parsed.batchId.trim()
+      ? parsed.batchId.trim()
+      : undefined;
+  const batchIndex =
+    typeof parsed.batchIndex === "number" && Number.isFinite(parsed.batchIndex)
+      ? Math.max(0, Math.floor(parsed.batchIndex))
+      : undefined;
+  const batchTotal =
+    typeof parsed.batchTotal === "number" && Number.isFinite(parsed.batchTotal)
+      ? Math.max(0, Math.floor(parsed.batchTotal))
+      : undefined;
   const partialStoragePath =
     typeof parsed.partialStoragePath === "string" && parsed.partialStoragePath.trim()
       ? parsed.partialStoragePath.trim()
@@ -257,6 +280,15 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
   const errorsSoFar = Array.isArray(parsed.errorsSoFar)
     ? parsed.errorsSoFar.filter((value): value is string => typeof value === "string")
     : undefined;
+  const failuresSoFar = Array.isArray(parsed.failuresSoFar)
+    ? parsed.failuresSoFar.filter(
+        (entry): entry is VideoDownloadItemFailure =>
+          !!entry &&
+          typeof entry === "object" &&
+          typeof (entry as VideoDownloadItemFailure).url === "string" &&
+          typeof (entry as VideoDownloadItemFailure).error === "string",
+      )
+    : undefined;
   const zipBytesSoFar =
     typeof parsed.zipBytesSoFar === "number" && Number.isFinite(parsed.zipBytesSoFar)
       ? Math.max(0, Math.floor(parsed.zipBytesSoFar))
@@ -266,11 +298,15 @@ export function parseVideoDownloadJob(raw: unknown): VideoDownloadJob | null {
     userId: parsed.userId,
     items,
     zipFilename,
+    batchId,
+    batchIndex,
+    batchTotal,
     partialStoragePath,
     originalTotal,
     completedSoFar,
     failedSoFar,
     errorsSoFar,
+    failuresSoFar,
     zipBytesSoFar,
     attempt:
       typeof parsed.attempt === "number" && Number.isFinite(parsed.attempt)
@@ -454,6 +490,7 @@ export async function requeueVideoDownloadRemainder(options: {
         completed: nextJob.completedSoFar ?? existing?.completed ?? 0,
         failed: nextJob.failedSoFar ?? existing?.failed ?? 0,
         errors: nextJob.errorsSoFar ?? existing?.errors ?? [],
+        itemFailures: nextJob.failuresSoFar ?? existing?.itemFailures ?? [],
         storagePath: nextJob.partialStoragePath || existing?.storagePath,
         zipBytes: nextJob.zipBytesSoFar ?? existing?.zipBytes,
         zipFilename: existing?.zipFilename ?? nextJob.zipFilename,
@@ -669,4 +706,218 @@ export async function recoverVideoDownloadProcessingToQueue(options?: {
     console.error("[video-download-queue] recoverProcessingJobsToQueue failed:", message);
     return { moved: 0, error: message };
   }
+}
+
+export type VideoDownloadBatchPart = {
+  jobId: string;
+  submissionIds: string[];
+  items: VideoDownloadItem[];
+  zipFilename: string;
+};
+
+export type VideoDownloadBatch = {
+  batchId: string;
+  userId: string;
+  parts: VideoDownloadBatchPart[];
+  /** Next 0-based part index to enqueue. After part 0 is enqueued this is 1. */
+  nextIndex: number;
+  createdAt: string;
+};
+
+function batchKey(batchId: string): string {
+  return `${REDIS_PREFIX}:batch:${batchId}`;
+}
+
+function parseVideoDownloadBatch(raw: unknown): VideoDownloadBatch | null {
+  let parsed: VideoDownloadBatch;
+  try {
+    parsed =
+      typeof raw === "string"
+        ? (JSON.parse(raw) as VideoDownloadBatch)
+        : (raw as VideoDownloadBatch);
+  } catch {
+    return null;
+  }
+  if (
+    !parsed?.batchId ||
+    !parsed?.userId ||
+    !Array.isArray(parsed.parts) ||
+    parsed.parts.length === 0
+  ) {
+    return null;
+  }
+  const parts: VideoDownloadBatchPart[] = [];
+  for (const part of parsed.parts) {
+    if (
+      !part ||
+      typeof part.jobId !== "string" ||
+      typeof part.zipFilename !== "string" ||
+      !Array.isArray(part.items) ||
+      !Array.isArray(part.submissionIds)
+    ) {
+      continue;
+    }
+    const items = part.items.filter(
+      (item) =>
+        item &&
+        typeof item.url === "string" &&
+        typeof item.filename === "string" &&
+        typeof item.isInstagram === "boolean",
+    );
+    if (items.length === 0) continue;
+    parts.push({
+      jobId: part.jobId,
+      zipFilename: part.zipFilename,
+      submissionIds: part.submissionIds.filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      ),
+      items,
+    });
+  }
+  if (parts.length === 0) return null;
+  return {
+    batchId: parsed.batchId,
+    userId: parsed.userId,
+    parts,
+    nextIndex: Math.max(
+      0,
+      Math.min(
+        parts.length,
+        typeof parsed.nextIndex === "number" && Number.isFinite(parsed.nextIndex)
+          ? Math.floor(parsed.nextIndex)
+          : 0,
+      ),
+    ),
+    createdAt:
+      typeof parsed.createdAt === "string" && parsed.createdAt
+        ? parsed.createdAt
+        : new Date().toISOString(),
+  };
+}
+
+export async function saveVideoDownloadBatch(
+  batch: VideoDownloadBatch,
+): Promise<{ error?: string }> {
+  const redis = getRedis();
+  if (!redis) return { error: "Redis not configured" };
+  try {
+    await redis.set(batchKey(batch.batchId), JSON.stringify(batch), {
+      ex: VIDEO_DOWNLOAD_JOB_TTL_SECONDS,
+    });
+    return {};
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[video-download-queue] saveBatch failed:", message);
+    return { error: message };
+  }
+}
+
+export async function getVideoDownloadBatch(
+  batchId: string,
+): Promise<VideoDownloadBatch | null> {
+  const redis = getRedis();
+  if (!redis || !batchId) return null;
+  try {
+    const raw = await redis.get(batchKey(batchId));
+    return parseVideoDownloadBatch(raw);
+  } catch (err) {
+    console.error("[video-download-queue] getBatch failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Enqueue the next ZIP part for a multi-ZIP batch after the previous part
+ * reaches a terminal status. Safe to call more than once (idempotent via nextIndex).
+ */
+export async function enqueueNextVideoDownloadBatchPart(
+  batchId: string,
+): Promise<{ enqueuedJobId?: string; done?: boolean; error?: string }> {
+  if (!batchId) return { done: true };
+  const redis = getRedis();
+  if (!redis) return { error: "Redis not configured" };
+
+  const lockKey = `${REDIS_PREFIX}:batch_lock:${batchId}`;
+  let locked = false;
+  try {
+    for (let i = 0; i < 12; i++) {
+      const ok = await redis.set(lockKey, "1", { nx: true, ex: 8 });
+      if (ok) {
+        locked = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50 + i * 25));
+    }
+    if (!locked) {
+      return {
+        error: "Batch enqueue is busy; next ZIP part will retry on the next kick.",
+      };
+    }
+
+    const batch = await getVideoDownloadBatch(batchId);
+    if (!batch) return { done: true };
+    if (batch.nextIndex >= batch.parts.length) return { done: true };
+
+    const partIndex = batch.nextIndex;
+    const part = batch.parts[partIndex];
+    const enqueued = await enqueueVideoDownloadJob({
+      jobId: part.jobId,
+      userId: batch.userId,
+      items: part.items,
+      zipFilename: part.zipFilename,
+      batchId: batch.batchId,
+      batchIndex: partIndex,
+      batchTotal: batch.parts.length,
+    });
+    if (enqueued.error) {
+      return { error: enqueued.error };
+    }
+
+    batch.nextIndex = partIndex + 1;
+    const saved = await saveVideoDownloadBatch(batch);
+    if (saved.error) {
+      console.warn(
+        `[video-download-queue] Enqueued batch part but failed to save cursor: ${saved.error}`,
+      );
+    }
+    console.log(
+      `[video-download-queue] Batch ${batchId} enqueued part ${partIndex + 1}/${batch.parts.length} jobId=${part.jobId}`,
+    );
+    return { enqueuedJobId: part.jobId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[video-download-queue] enqueueNextBatchPart failed:", message);
+    return { error: message };
+  } finally {
+    if (locked) {
+      await redis.del(lockKey).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Persist a multi-ZIP batch and enqueue only the first part. Later parts are
+ * enqueued by the processor via enqueueNextVideoDownloadBatchPart.
+ */
+export async function createVideoDownloadBatchAndEnqueueFirst(options: {
+  batchId: string;
+  userId: string;
+  parts: VideoDownloadBatchPart[];
+}): Promise<{ error?: string; status?: number }> {
+  if (!options.parts.length) {
+    return { error: "Batch has no ZIP parts", status: 400 };
+  }
+  const batch: VideoDownloadBatch = {
+    batchId: options.batchId,
+    userId: options.userId,
+    parts: options.parts,
+    nextIndex: 0,
+    createdAt: new Date().toISOString(),
+  };
+  const saved = await saveVideoDownloadBatch(batch);
+  if (saved.error) return { error: saved.error, status: 500 };
+
+  const first = await enqueueNextVideoDownloadBatchPart(options.batchId);
+  if (first.error) return { error: first.error, status: 500 };
+  return {};
 }

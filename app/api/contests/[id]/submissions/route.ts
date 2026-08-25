@@ -69,7 +69,7 @@ function parsePaginationParams(url: URL): {
     !Number.isFinite(limit) ||
     !Number.isFinite(offset) ||
     limit < 1 ||
-    limit > 200 ||
+    limit > 1000 ||
     offset < 0
   ) {
     return null;

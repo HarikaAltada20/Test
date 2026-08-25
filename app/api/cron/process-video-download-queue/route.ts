@@ -17,6 +17,7 @@ import {
   ensureProcessVideoDownloadQueueSchedule,
 } from "@/lib/qstash";
 import {
+  enqueueNextVideoDownloadBatchPart,
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   popVideoDownloadJob,
@@ -30,6 +31,7 @@ import {
   videoDownloadStoragePath,
   type VideoDownloadJob,
   type VideoDownloadJobStatus,
+  type VideoDownloadItemFailure,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
 import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
@@ -126,6 +128,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       completed: current?.completed ?? 0,
       failed: current?.failed ?? 0,
       errors: current?.errors ?? [],
+      itemFailures: current?.itemFailures ?? [],
       storagePath: current?.storagePath,
       zipBytes: current?.zipBytes,
       zipFilename: current?.zipFilename || job.zipFilename,
@@ -138,6 +141,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     completed: number;
     failed: number;
     errors: string[];
+    itemFailures?: VideoDownloadItemFailure[];
   }): Promise<"ready" | "failed"> => {
     const terminal = resolveVideoDownloadTerminalStatus({
       completed: options.completed,
@@ -152,6 +156,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       userId: job.userId,
       total: originalTotal,
       zipFilename: existing?.zipFilename || job.zipFilename,
+      itemFailures: options.itemFailures ?? existing?.itemFailures ?? [],
       createdAt: existing?.createdAt || now(),
       updatedAt: now(),
       ...terminal,
@@ -181,6 +186,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     cleanupTemp = result.cleanup;
 
     const accumulatedFailed = failedBase + result.failures.length;
+    const accumulatedItemFailures: VideoDownloadItemFailure[] = [
+      ...(job.failuresSoFar ?? existing?.itemFailures ?? []),
+      ...result.failures,
+    ];
     const accumulatedErrors = [
       ...(job.errorsSoFar ?? existing?.errors ?? []),
       ...result.failures.map((failure) => failure.error),
@@ -199,6 +208,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
             completedSoFar: completedBase,
             failedSoFar: accumulatedFailed,
             errorsSoFar: accumulatedErrors,
+            failuresSoFar: accumulatedItemFailures,
             zipBytesSoFar: usedBytes,
           }),
         });
@@ -233,9 +243,10 @@ async function handleRequest(request: Request): Promise<NextResponse> {
               completed: completedBase,
               failed: accumulatedFailed || originalTotal,
               errors: result.failures.map((f) => f.error).slice(0, 5),
+              itemFailures: accumulatedItemFailures,
             });
           }
-          await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+          await continueBatchAndKick(request, job, { delaySeconds: 2 });
         }
         return NextResponse.json({
           processed: 1,
@@ -249,11 +260,12 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         completed: completedBase,
         failed: accumulatedFailed || originalTotal,
         errors: result.failures.map((f) => f.error).slice(0, 5),
+        itemFailures: accumulatedItemFailures,
       });
       console.log(
         `[process-video-download-queue] Job ${job.jobId} finished with 0 new downloads; status=${terminalStatus}`,
       );
-      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+      await continueBatchAndKick(request, job, { delaySeconds: 2 });
       return NextResponse.json({
         processed: 1,
         jobId: job.jobId,
@@ -317,6 +329,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
           completedSoFar: completed,
           failedSoFar: accumulatedFailed,
           errorsSoFar: accumulatedErrors,
+          failuresSoFar: accumulatedItemFailures,
           zipBytesSoFar: zipBytes,
         }),
       });
@@ -342,6 +355,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       completed,
       failed: accumulatedFailed,
       errors: accumulatedErrors,
+      itemFailures: accumulatedItemFailures,
       storagePath,
       zipBytes,
       zipFilename: existing?.zipFilename || job.zipFilename,
@@ -352,7 +366,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
     await removeVideoDownloadFromProcessing(rawJobString);
     await cleanupTemp();
     await cleanupExpiredVideoDownloadZips({ maxDeletes: 25 });
-    await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+    await continueBatchAndKick(request, job, { delaySeconds: 2 });
 
     return NextResponse.json({
       processed: 1,
@@ -376,7 +390,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         failed: Math.max(failedBase, job.items.length),
         errors: [message],
       });
-      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+      await continueBatchAndKick(request, job, { delaySeconds: 2 });
       return NextResponse.json({
         processed: 1,
         jobId: job.jobId,
@@ -398,7 +412,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
           errors: [message],
         });
       }
-      await kickProcessVideoDownloadQueue(request, { delaySeconds: 2 });
+      await continueBatchAndKick(request, job, { delaySeconds: 2 });
     }
     return NextResponse.json({ processed: 1, error: message, retry }, { status: 200 });
   }
@@ -412,6 +426,7 @@ function buildRemainderJob(options: {
   completedSoFar: number;
   failedSoFar: number;
   errorsSoFar: string[];
+  failuresSoFar: VideoDownloadItemFailure[];
   zipBytesSoFar: number;
 }): VideoDownloadJob {
   return {
@@ -419,11 +434,38 @@ function buildRemainderJob(options: {
     userId: options.job.userId,
     items: options.items,
     zipFilename: options.job.zipFilename,
+    batchId: options.job.batchId,
+    batchIndex: options.job.batchIndex,
+    batchTotal: options.job.batchTotal,
     partialStoragePath: options.partialStoragePath,
     originalTotal: options.originalTotal,
     completedSoFar: options.completedSoFar,
     failedSoFar: options.failedSoFar,
     errorsSoFar: options.errorsSoFar,
+    failuresSoFar: options.failuresSoFar,
     zipBytesSoFar: options.zipBytesSoFar,
   };
+}
+
+/** After a ZIP part finishes (ready/failed), enqueue the next part and kick. */
+async function continueBatchAndKick(
+  request: Request,
+  job: VideoDownloadJob,
+  options?: { delaySeconds?: number },
+): Promise<void> {
+  if (job.batchId) {
+    const next = await enqueueNextVideoDownloadBatchPart(job.batchId);
+    if (next.error) {
+      console.warn(
+        `[process-video-download-queue] Failed to enqueue next batch part for ${job.batchId}: ${next.error}`,
+      );
+    } else if (next.enqueuedJobId) {
+      console.log(
+        `[process-video-download-queue] Chained next ZIP job=${next.enqueuedJobId} batch=${job.batchId}`,
+      );
+    }
+  }
+  await kickProcessVideoDownloadQueue(request, {
+    delaySeconds: options?.delaySeconds ?? 2,
+  });
 }

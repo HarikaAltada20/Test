@@ -67,6 +67,7 @@ import squareLogo from "@/public/images/Group (2).avif";
 import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
 import { BulkModerationProgressProvider } from "@/components/BulkModerationProgressProvider";
 import { BulkPaymentProgressProvider } from "@/components/BulkPaymentProgressProvider";
+import { BulkVideoDownloadProgressProvider } from "@/components/BulkVideoDownloadProgressProvider";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -2777,7 +2778,9 @@ function DashboardContent({
                 >
                   <BulkModerationProgressProvider>
                     <BulkPaymentProgressProvider>
-                      {children}
+                      <BulkVideoDownloadProgressProvider>
+                        {children}
+                      </BulkVideoDownloadProgressProvider>
                     </BulkPaymentProgressProvider>
                   </BulkModerationProgressProvider>
                 </div>

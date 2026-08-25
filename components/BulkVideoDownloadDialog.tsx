@@ -30,8 +30,6 @@ import {
   parseVideosPerZip,
   readPendingBulkZipJob,
 } from "@/lib/video-download-ui";
-import { BulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgress";
-import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 
 const PATTERN_STORAGE_KEY = "goc-bulk-video-naming-pattern";
 const VIDEOS_PER_ZIP_STORAGE_KEY = "goc-bulk-videos-per-zip";
@@ -94,7 +92,6 @@ export function BulkVideoDownloadDialog({
   videoCount,
   zipFilenamePrefix,
   downloading = false,
-  progress = null,
   onConfirm,
 }: {
   open: boolean;
@@ -103,7 +100,6 @@ export function BulkVideoDownloadDialog({
   videoCount: number;
   zipFilenamePrefix: string;
   downloading?: boolean;
-  progress?: BulkVideoDownloadProgressState | null;
   onConfirm: (
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
@@ -324,32 +320,6 @@ export function BulkVideoDownloadDialog({
           </p>
         )}
 
-        {downloading && (
-          <div
-            className={cn(
-              "rounded-lg border p-3",
-              isDark
-                ? "border-gray-600 bg-[#170337]/60"
-                : "border-slate-200 bg-slate-50",
-            )}
-          >
-            <p
-              className={cn(
-                "text-sm font-medium mb-2",
-                isDark ? "text-slate-100" : "text-slate-800",
-              )}
-            >
-              Download progress
-            </p>
-            <BulkVideoDownloadProgress
-              successCount={progress?.successCount ?? 0}
-              failedCount={progress?.failedCount ?? 0}
-              total={progress?.total ?? videoCount}
-              isDark={isDark}
-            />
-          </div>
-        )}
-
         <DialogFooter className="flex-row justify-end gap-2">
           <Button
             type="button"
@@ -367,7 +337,7 @@ export function BulkVideoDownloadDialog({
           <Button
             type="button"
             loading={downloading}
-            loadingText="Downloading..."
+            loadingText="Starting..."
             disabled={downloading || videoCount < 2 || !videosPerZipValid}
             onClick={() => {
               persistPattern(pattern);

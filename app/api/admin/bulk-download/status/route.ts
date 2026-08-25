@@ -4,6 +4,7 @@ import {
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
 } from "@/lib/queue/video-download-queue";
+import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Download job not found" }, { status: 404 });
   }
 
+  // Keep the worker alive while the client polls (esp. local/dev where QStash
+  // cannot reach localhost). Safe no-op when already processing.
+  if (status.status === "queued" || status.status === "processing") {
+    void kickProcessVideoDownloadQueue(request);
+  }
+
   const payload = {
     jobId: status.jobId,
     status: status.status,
@@ -40,6 +47,7 @@ export async function GET(request: Request) {
     completed: status.completed,
     failed: status.failed,
     errors: status.errors.slice(0, 5),
+    itemFailures: (status.itemFailures ?? []).slice(0, 100),
     zipBytes: status.zipBytes ?? null,
   };
 

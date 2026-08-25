@@ -34,6 +34,7 @@ import {
   isTerminalPostCampaignRunStatus,
   isTrackedPostCampaignRun,
 } from "@/lib/post-campaign-refresh-client";
+import { CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE } from "@/lib/fetch-contest-submissions";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest";
@@ -109,11 +110,11 @@ import { buildBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
-  downloadSubmissionVideosInChunks,
+  buildBulkDownloadMetaMap,
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
-import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
+import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
 import {
   useBulkModerationProgress,
   type BulkModerationJobStatus,
@@ -1536,6 +1537,10 @@ export default function ContestDetailClient({
     isBusy: isBulkPaymentBusy,
     startTracking: startBulkPaymentTracking,
   } = useBulkPaymentProgress();
+  const {
+    downloading: normalViewBulkDownloading,
+    startDownload: startBulkVideoDownload,
+  } = useBulkVideoDownloadProgress();
   const [currentContest, setCurrentContest] = useState<Contest>(contest);
   const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
     percentage: number | null;
@@ -2566,10 +2571,6 @@ export default function ContestDetailClient({
     useState(false);
   const [normalViewSelectedSubmissions, setNormalViewSelectedSubmissions] =
     useState<Set<string>>(new Set());
-  const [normalViewBulkDownloading, setNormalViewBulkDownloading] =
-    useState(false);
-  const [normalViewBulkDownloadProgress, setNormalViewBulkDownloadProgress] =
-    useState<BulkVideoDownloadProgressState | null>(null);
   const [
     normalViewBulkDownloadDialogOpen,
     setNormalViewBulkDownloadDialogOpen,
@@ -3486,64 +3487,43 @@ export default function ContestDetailClient({
   ) => {
     const submissionIds = Array.from(normalViewSelectedSubmissions);
     if (submissionIds.length < 2) return;
+    if (!currentContest?.id) return;
 
-    setNormalViewBulkDownloading(true);
-    setNormalViewBulkDownloadProgress({
-      successCount: 0,
-      failedCount: 0,
-      total: submissionIds.length,
+    setNormalViewBulkDownloadDialogOpen(false);
+
+    const metaById = buildBulkDownloadMetaMap(submissionIds, (id) => {
+      const sub = currentSubmissions.find((entry) => entry.id === id);
+      if (!sub) return null;
+      return {
+        username:
+          sub.creator_username ||
+          sub.user_username ||
+          sub.creator?.username ||
+          "unknown",
+        videoTitle: sub.video_title || "Untitled",
+        link: sub.content_link || "",
+        views: Number(sub.views) || 0,
+        avatarUrl:
+          (sub as any).creator_avatar_url ||
+          sub.creator?.profile_picture_url ||
+          null,
+        displayName:
+          (sub as any).creator_display_name ||
+          sub.creator?.full_name ||
+          null,
+        creatorId: sub.creator_id || sub.creator?.id || null,
+      };
     });
 
-    try {
-      const result = await downloadSubmissionVideosInChunks({
-        submissionIds,
-        namingPattern,
-        videosPerZip,
-        fileNamePrefix: bulkZipFilenamePrefix,
-        onProgress: ({ successCount, failedCount, totalVideos }) => {
-          setNormalViewBulkDownloadProgress({
-            successCount,
-            failedCount,
-            total: totalVideos,
-          });
-        },
-      });
-
-      if (result.successCount === 0 && result.failedCount === 0) {
-        throw new Error(result.errors[0] || "Failed to download ZIP archives.");
-      }
-
-      const hasPartialFailures =
-        result.successCount > 0 && result.failedCount > 0;
-      const isTotalFailure =
-        result.successCount === 0 && result.failedCount > 0;
-
-      toast({
-        title: isTotalFailure
-          ? "Download failed"
-          : hasPartialFailures
-            ? "Download complete"
-            : "Download complete",
-        description: `${result.totalVideos} selected · ${result.successCount} succeeded · ${result.failedCount} failed`,
-        variant: isTotalFailure
-          ? "destructive"
-          : hasPartialFailures
-            ? "pending"
-            : "success",
-      });
-      setNormalViewBulkDownloadDialogOpen(false);
-    } catch (error: any) {
-      console.error("Bulk download failed:", error);
-      toast({
-        title: "Bulk Download Failed",
-        description:
-          error.message || "An error occurred while compiling the ZIP folder.",
-        variant: "destructive",
-      });
-    } finally {
-      setNormalViewBulkDownloading(false);
-      setNormalViewBulkDownloadProgress(null);
-    }
+    await startBulkVideoDownload({
+      contestId: String(currentContest.id),
+      scope: "normal",
+      submissionIds,
+      namingPattern,
+      videosPerZip,
+      fileNamePrefix: bulkZipFilenamePrefix,
+      metaById,
+    });
   };
 
   const normalViewFlatFeeBonusExpectedCentsBySubmissionId = useMemo(
@@ -6185,7 +6165,7 @@ export default function ContestDetailClient({
 
     let cancelled = false;
     const abort = new AbortController();
-    const pageSize = 75;
+    const pageSize = CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE;
 
     (async () => {
       try {
@@ -31139,7 +31119,6 @@ export default function ContestDetailClient({
         videoCount={normalViewSelectedSubmissions.size}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
-        progress={normalViewBulkDownloadProgress}
         onConfirm={runNormalViewBulkDownload}
       />
 

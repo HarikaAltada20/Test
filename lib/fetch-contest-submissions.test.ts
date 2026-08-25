@@ -56,31 +56,31 @@ describe("formatSubmissionFetchError", () => {
 
 describe("fetchContestSubmissionsPage", () => {
   it("returns one page with total and hasMore", async () => {
-    const rows = Array.from({ length: 75 }, (_, i) => ({ id: `r-${i}` }));
+    const rows = Array.from({ length: 1000 }, (_, i) => ({ id: `r-${i}` }));
     const { supabase } = createMockSupabase([
-      { data: rows, error: null, count: 200 },
+      { data: rows, error: null, count: 1500 },
     ]);
     const result = await fetchContestSubmissionsPage(supabase, "c1", "id", {
-      limit: 75,
+      limit: 1000,
       offset: 0,
     });
     assert.equal(result.error, null);
-    assert.equal(result.data.length, 75);
-    assert.equal(result.total, 200);
+    assert.equal(result.data.length, 1000);
+    assert.equal(result.total, 1500);
     assert.equal(result.hasMore, true);
   });
 
   it("sets hasMore false on last page", async () => {
     const rows = [{ id: "last" }];
     const { supabase } = createMockSupabase([
-      { data: rows, error: null, count: 76 },
+      { data: rows, error: null, count: 1001 },
     ]);
     const result = await fetchContestSubmissionsPage(supabase, "c1", "id", {
-      limit: 75,
-      offset: 75,
+      limit: 1000,
+      offset: 1000,
     });
     assert.equal(result.hasMore, false);
-    assert.equal(result.total, 76);
+    assert.equal(result.total, 1001);
   });
 });
 
