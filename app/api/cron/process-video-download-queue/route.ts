@@ -175,12 +175,17 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       items: job.items,
       requestId: job.jobId.slice(0, 8),
       usedBytes,
-      onProgress: async ({ completed, failed }) => {
+      onProgress: async ({ completed, failed, itemFailures }) => {
+        const liveItemFailures: VideoDownloadItemFailure[] = [
+          ...(job.failuresSoFar ?? existing?.itemFailures ?? []),
+          ...(itemFailures ?? []),
+        ];
         await patchStatus({
           status: "processing",
           completed: completedBase + completed,
           failed: failedBase + failed,
           total: originalTotal,
+          itemFailures: liveItemFailures,
         });
       },
     });

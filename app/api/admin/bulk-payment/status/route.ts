@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import { kickProcessBulkPaymentQueue } from "@/lib/bulk-payment-kick";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
@@ -46,15 +49,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    // Keep the worker alive while the client polls (esp. local/dev where QStash
+    // cannot reach localhost). Safe no-op when already processing / queue empty.
+    if (job.status === "queued" || job.status === "running") {
+      void kickProcessBulkPaymentQueue(request);
+    }
+
     const total = Number(job.total_count) || 0;
     const processed = Number(job.processed_count) || 0;
     const progressPercent =
       total > 0 ? Math.max(0, Math.min(100, (processed / total) * 100)) : 0;
 
-    return NextResponse.json({
-      ...job,
-      progressPercent,
-    });
+    return NextResponse.json(
+      {
+        ...job,
+        progressPercent,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    );
   } catch (error) {
     console.error("[bulk-payment status]", error);
     return NextResponse.json(

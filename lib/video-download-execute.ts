@@ -66,7 +66,11 @@ export async function executeQueuedVideoDownloads(options: {
   budgetMs?: number;
   /** Bytes already stored on this job from earlier remainder waves. */
   usedBytes?: number;
-  onProgress?: (info: { completed: number; failed: number }) => Promise<void> | void;
+  onProgress?: (info: {
+    completed: number;
+    failed: number;
+    itemFailures: { url: string; error: string }[];
+  }) => Promise<void> | void;
 }): Promise<ExecuteVideoDownloadResult> {
   const requestId = options.requestId || randomUUID().substring(0, 8);
   const startedAtMs = options.startedAtMs ?? Date.now();
@@ -111,6 +115,7 @@ export async function executeQueuedVideoDownloads(options: {
           await options.onProgress?.({
             completed: zippedFiles.length,
             failed: failedQueue.length,
+            itemFailures: failedQueue,
           });
           return;
         }
@@ -164,6 +169,7 @@ export async function executeQueuedVideoDownloads(options: {
         await options.onProgress?.({
           completed: zippedFiles.length,
           failed: failedQueue.length,
+          itemFailures: failedQueue,
         });
       },
       { shouldSkipGap: () => budgetExhausted },

@@ -678,8 +678,6 @@ async function downloadOneZipChunk(options: {
       itemFailures?: { url: string; error: string }[];
     },
   ): BulkVideoDownloadResultRow[] => {
-    const terminal =
-      queueInfo.status === "ready" || queueInfo.status === "failed";
     const failureByLink = new Map(
       (queueInfo.itemFailures ?? []).map((failure) => [
         normalizeBulkDownloadLink(failure.url),
@@ -704,11 +702,22 @@ async function downloadOneZipChunk(options: {
         creatorId: meta?.creatorId ?? null,
       };
 
-      if (failureError && terminal) {
+      // Mark known URL failures as soon as the queue reports them so the Failed
+      // chip tracks live progress. Keep non-failed rows pending until the ZIP is
+      // ready so we never persist provisional successes mid-batch.
+      if (failureError) {
         return {
           ...base,
           status: "failed" as const,
           error: failureError,
+        };
+      }
+
+      if (queueInfo.status === "failed") {
+        return {
+          ...base,
+          status: "failed" as const,
+          error: "Download failed",
         };
       }
 
@@ -749,13 +758,19 @@ async function downloadOneZipChunk(options: {
                 ) === normalizeBulkDownloadLink(failure.url),
             ),
         ).length;
+        // Prefer live queue `failed` so the Failed chip moves with the bar;
+        // itemFailures can lag until the worker finishes a wave.
+        const liveFailed = Math.max(
+          Number(queueInfo.failed) || 0,
+          confirmedFailed,
+        );
         emit({
           queuedCompleted: queueInfo.completed,
           queuedFailed: queueInfo.failed,
           queuedTotal: queueInfo.total,
           queueStatus: queueInfo.status,
           successCount: queueInfo.completed,
-          failedCount: confirmedFailed,
+          failedCount: liveFailed,
           chunkResults: provisional,
         });
       },
@@ -1181,6 +1196,8 @@ export async function downloadSubmissionVideosInChunks(options: {
           const mergedResults = info.results
             ? mergeBulkDownloadResultRows(results, info.results)
             : results;
+          // Live counters come from prior finished ZIPs + this ZIP's queue
+          // completed/failed (result rows stay pending until the ZIP is ready).
           options.onProgress?.({
             ...info,
             successCount: successCount + info.successCount,

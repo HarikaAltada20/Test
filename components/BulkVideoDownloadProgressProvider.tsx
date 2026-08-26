@@ -291,8 +291,10 @@ function sessionWithDerivedProgress(
   session: BulkVideoDownloadSession,
 ): BulkVideoDownloadSession {
   const results = session.progress.results || [];
-  const successCount = results.filter((row) => row.status === "success").length;
-  const failedCount = results.filter((row) => row.status === "failed").length;
+  const derivedSuccess = results.filter(
+    (row) => row.status === "success",
+  ).length;
+  const derivedFailed = results.filter((row) => row.status === "failed").length;
   const resumeIdx = findResumeZipPartIndex(session.zipParts, results);
   const totalParts = Math.max(
     1,
@@ -300,19 +302,41 @@ function sessionWithDerivedProgress(
   );
   const allTerminal =
     results.length > 0 &&
-    successCount + failedCount >= results.length &&
+    derivedSuccess + derivedFailed >= results.length &&
     resumeIdx >= (session.zipParts?.length || 0);
 
   if (allTerminal && session.status === "running") {
     return {
       ...session,
-      status: failedCount > 0 && successCount === 0 ? "failed" : "finished",
+      status: derivedFailed > 0 && derivedSuccess === 0 ? "failed" : "finished",
       progress: {
         ...session.progress,
-        successCount,
-        failedCount,
+        successCount: derivedSuccess,
+        failedCount: derivedFailed,
         finished: true,
         chunkIndex: totalParts,
+        totalChunks: totalParts,
+      },
+    };
+  }
+
+  // While a ZIP is still downloading, keep live queue counters so the progress
+  // bar moves within the batch (derived terminal rows alone lag until the ZIP is ready).
+  // Do not rewrite chunkIndex here — provisional per-video successes would jump
+  // the batch indicator before the current ZIP file is actually ready.
+  if (session.status === "running" && !session.progress.finished) {
+    return {
+      ...session,
+      progress: {
+        ...session.progress,
+        successCount: Math.max(
+          Number(session.progress.successCount) || 0,
+          derivedSuccess,
+        ),
+        failedCount: Math.max(
+          Number(session.progress.failedCount) || 0,
+          derivedFailed,
+        ),
         totalChunks: totalParts,
       },
     };
@@ -322,9 +346,8 @@ function sessionWithDerivedProgress(
     ...session,
     progress: {
       ...session.progress,
-      successCount,
-      failedCount,
-      // Persist next part to resume so reloads skip completed ZIPs.
+      successCount: derivedSuccess,
+      failedCount: derivedFailed,
       chunkIndex: Math.min(totalParts, resumeIdx + 1),
       totalChunks: totalParts,
     },

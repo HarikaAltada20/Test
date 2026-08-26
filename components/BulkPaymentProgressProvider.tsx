@@ -172,11 +172,19 @@ export function BulkPaymentProgressProvider({
   const [dismissed, setDismissed] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackedRef = useRef<TrackedJob | null>(initialTracked);
+  const activeJobRef = useRef<BulkPaymentJobStatus | null>(
+    initialTracked ? jobFromTracked(initialTracked) : null,
+  );
+  const pollInFlightRef = useRef(false);
   const consecutivePollErrorsRef = useRef(0);
 
   useEffect(() => {
     trackedRef.current = tracked;
   }, [tracked]);
+
+  useEffect(() => {
+    activeJobRef.current = activeJob;
+  }, [activeJob]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -190,9 +198,74 @@ export function BulkPaymentProgressProvider({
     writeStoredJob(null);
     setTracked(null);
     setActiveJob(null);
+    activeJobRef.current = null;
+    pollInFlightRef.current = false;
     setDismissed(false);
     consecutivePollErrorsRef.current = 0;
   }, [stopPolling]);
+
+  /** Merge server status with last UI snapshot so progress never jumps backward. */
+  const mergeMonotonicJob = useCallback(
+    (incoming: BulkPaymentJobStatus): BulkPaymentJobStatus => {
+      const prev = activeJobRef.current;
+      if (!prev || prev.id !== incoming.id) return incoming;
+
+      const processed = Math.max(
+        Number(prev.processed_count) || 0,
+        Number(incoming.processed_count) || 0,
+      );
+      const success = Math.max(
+        Number(prev.success_count) || 0,
+        Number(incoming.success_count) || 0,
+      );
+      const failed = Math.max(
+        Number(prev.failed_count) || 0,
+        Number(incoming.failed_count) || 0,
+      );
+      const total = Math.max(
+        Number(prev.total_count) || 0,
+        Number(incoming.total_count) || 0,
+      );
+      const amount = Math.max(
+        Number(prev.total_amount_cents) || 0,
+        Number(incoming.total_amount_cents) || 0,
+      );
+      const progressPercent =
+        total > 0
+          ? Math.max(
+              Number(prev.progressPercent) || 0,
+              Number(incoming.progressPercent) || 0,
+              (processed / total) * 100,
+            )
+          : Math.max(
+              Number(prev.progressPercent) || 0,
+              Number(incoming.progressPercent) || 0,
+            );
+
+      return {
+        ...incoming,
+        total_count: total,
+        processed_count: processed,
+        success_count: success,
+        failed_count: failed,
+        total_amount_cents: amount,
+        total_cpm_cents: Math.max(
+          Number(prev.total_cpm_cents) || 0,
+          Number(incoming.total_cpm_cents) || 0,
+        ),
+        total_bonus_cents: Math.max(
+          Number(prev.total_bonus_cents) || 0,
+          Number(incoming.total_bonus_cents) || 0,
+        ),
+        total_milestone_cents: Math.max(
+          Number(prev.total_milestone_cents) || 0,
+          Number(incoming.total_milestone_cents) || 0,
+        ),
+        progressPercent: Math.min(100, progressPercent),
+      };
+    },
+    [],
+  );
 
   const persistSnapshot = useCallback(
     (meta: TrackedJob, job: BulkPaymentJobStatus) => {
@@ -215,7 +288,7 @@ export function BulkPaymentProgressProvider({
         },
       };
       writeStoredJob(next);
-      setTracked(next);
+      // Update ref only — avoid setTracked on every poll (restarts / races).
       trackedRef.current = next;
     },
     [],
@@ -290,11 +363,13 @@ export function BulkPaymentProgressProvider({
 
   const pollOnce = useCallback(async () => {
     const meta = trackedRef.current;
-    if (!meta?.jobId) return;
+    if (!meta?.jobId || pollInFlightRef.current) return;
 
+    pollInFlightRef.current = true;
     try {
       const res = await fetch(
         `/api/admin/bulk-payment/status?jobId=${encodeURIComponent(meta.jobId)}`,
+        { cache: "no-store" },
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -332,12 +407,13 @@ export function BulkPaymentProgressProvider({
           : job.total_count > 0
             ? (job.processed_count / job.total_count) * 100
             : 0;
-      const nextJob: BulkPaymentJobStatus = {
+      const nextJob = mergeMonotonicJob({
         ...job,
         id: job.id || meta.jobId,
         progressPercent,
         payment_type: meta.paymentType,
-      };
+      });
+      activeJobRef.current = nextJob;
       setActiveJob(nextJob);
       setDismissed(false);
       persistSnapshot(meta, nextJob);
@@ -360,8 +436,10 @@ export function BulkPaymentProgressProvider({
         });
         clearTracking();
       }
+    } finally {
+      pollInFlightRef.current = false;
     }
-  }, [clearTracking, finishWithToast, persistSnapshot]);
+  }, [clearTracking, finishWithToast, mergeMonotonicJob, persistSnapshot]);
 
   const startTracking = useCallback((params: TrackedJob) => {
     const submissionCount =
@@ -389,9 +467,12 @@ export function BulkPaymentProgressProvider({
     writeStoredJob(next);
     setTracked(next);
     trackedRef.current = next;
+    const initialJob = jobFromTracked(next);
+    activeJobRef.current = initialJob;
     setDismissed(false);
     consecutivePollErrorsRef.current = 0;
-    setActiveJob(jobFromTracked(next));
+    pollInFlightRef.current = false;
+    setActiveJob(initialJob);
   }, []);
 
   useEffect(() => {
@@ -399,7 +480,9 @@ export function BulkPaymentProgressProvider({
     if (!stored) return;
     setTracked(stored);
     trackedRef.current = stored;
-    setActiveJob(jobFromTracked(stored));
+    const restored = jobFromTracked(stored);
+    activeJobRef.current = restored;
+    setActiveJob(restored);
     setDismissed(false);
   }, []);
 
@@ -434,6 +517,7 @@ export function BulkPaymentProgressProvider({
   const processed = Math.max(0, Number(activeJob?.processed_count) || 0);
   const success = Math.max(0, Number(activeJob?.success_count) || 0);
   const failed = Math.max(0, Number(activeJob?.failed_count) || 0);
+  const skipped = Math.max(0, processed - success - failed);
   const pct = Math.round(
     Number.isFinite(activeJob?.progressPercent)
       ? Number(activeJob?.progressPercent)
@@ -483,7 +567,7 @@ export function BulkPaymentProgressProvider({
               />
             </div>
             <p className="text-xs opacity-80">
-              {success} succeeded · {failed} failed
+              {success} succeeded · {skipped} skipped
               {Number(activeJob.total_amount_cents) > 0
                 ? ` · ${formatMoney(Number(activeJob.total_amount_cents) || 0)}`
                 : ""}

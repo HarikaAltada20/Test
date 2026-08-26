@@ -16,7 +16,9 @@ import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownl
 import { BulkVideoDownloadResultsTable } from "@/components/BulkVideoDownloadResultsTable";
 import {
   buildBulkZipFileDownloadUrl,
+  countBulkDownloadResultStatuses,
   triggerBulkZipFileDownload,
+  type BulkVideoDownloadResultRow,
 } from "@/lib/video-download-ui";
 import type { BulkVideoDownloadZipPartRef } from "@/components/BulkVideoDownloadProgressProvider";
 import {
@@ -24,6 +26,21 @@ import {
   isVideoFilenamePattern,
   type VideoFilenamePattern,
 } from "@/lib/video-download-filename";
+
+function countZipPartResultStatuses(
+  part: BulkVideoDownloadZipPartRef,
+  results: BulkVideoDownloadResultRow[] | undefined,
+): { successCount: number; failedCount: number } {
+  const ids = new Set(
+    Array.isArray(part.submissionIds) ? part.submissionIds : [],
+  );
+  if (ids.size === 0 || !results?.length) {
+    return { successCount: 0, failedCount: 0 };
+  }
+  const partRows = results.filter((row) => ids.has(row.submissionId));
+  const { successCount, failedCount } = countBulkDownloadResultStatuses(partRows);
+  return { successCount, failedCount };
+}
 
 export function BulkVideoDownloadStatusDialog({
   open,
@@ -182,6 +199,10 @@ export function BulkVideoDownloadStatusDialog({
                   const videoCount = Array.isArray(part.submissionIds)
                     ? part.submissionIds.length
                     : 0;
+                  const { successCount, failedCount } = countZipPartResultStatuses(
+                    part,
+                    progress?.results,
+                  );
                   const downloadUrl = buildBulkZipFileDownloadUrl(
                     part.jobId,
                     part.zipFilename || "bulk.zip",
@@ -219,6 +240,22 @@ export function BulkVideoDownloadStatusDialog({
                               ? ` of ${part.zipPartTotal}`
                               : ""}{" "}
                             · {videoCount} video{videoCount === 1 ? "" : "s"}
+                            {" · "}
+                            <span
+                              className={
+                                isDark ? "text-emerald-300" : "text-emerald-700"
+                              }
+                            >
+                              {successCount} succeeded
+                            </span>
+                            {" · "}
+                            <span
+                              className={
+                                isDark ? "text-red-300" : "text-red-600"
+                              }
+                            >
+                              {failedCount} failed
+                            </span>
                           </p>
                         </div>
                       </div>
