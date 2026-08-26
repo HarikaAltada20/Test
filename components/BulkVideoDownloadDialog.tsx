@@ -143,7 +143,7 @@ export function BulkVideoDownloadDialog({
               isDark ? "text-slate-100" : "text-slate-800",
             )}
           >
-            Videos per ZIP (0–{MAX_BULK_VIDEO_DOWNLOADS})
+           Videos per ZIP: Choose a maximum of up to {MAX_BULK_VIDEO_DOWNLOADS}
           </Label>
           <Input
             id="bulk-videos-per-zip"

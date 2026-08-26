@@ -223,17 +223,58 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   }, 120_000);
 }
 
+/** Prevent duplicate browser saves for the same queued ZIP job. */
+const recentBulkZipDownloadJobIds = new Set<string>();
+const BULK_ZIP_DOWNLOAD_DEDUPE_MS = 5_000;
+const BULK_ZIP_DOWNLOAD_IFRAME_MS = 120_000;
+
+function bulkZipDownloadJobIdFromUrl(url: string): string | null {
+  try {
+    const base =
+      typeof window !== "undefined" ? window.location.origin : "http://localhost";
+    return new URL(url, base).searchParams.get("jobId");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * One hidden iframe. Content-Disposition: attachment saves the file.
  * Do not also click an <a> — that starts a second download of the same ZIP.
+ * Dedupes by jobId so queue auto-download + summary button cannot double-save.
  */
-function triggerNativeZipDownload(url: string): void {
+export function triggerBulkZipFileDownload(
+  url: string,
+  options?: { force?: boolean },
+): void {
+  if (typeof document === "undefined") return;
+
+  const jobId = bulkZipDownloadJobIdFromUrl(url);
+  if (jobId && !options?.force) {
+    if (recentBulkZipDownloadJobIds.has(jobId)) return;
+    recentBulkZipDownloadJobIds.add(jobId);
+    window.setTimeout(() => {
+      recentBulkZipDownloadJobIds.delete(jobId);
+    }, BULK_ZIP_DOWNLOAD_DEDUPE_MS);
+  }
+
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.style.display = "none";
   iframe.src = url;
   document.body.appendChild(iframe);
-  window.setTimeout(() => iframe.remove(), 120_000);
+  window.setTimeout(() => iframe.remove(), BULK_ZIP_DOWNLOAD_IFRAME_MS);
+}
+
+function triggerNativeZipDownload(url: string): void {
+  triggerBulkZipFileDownload(url);
+}
+
+export function buildBulkZipFileDownloadUrl(
+  jobId: string,
+  filename: string,
+): string {
+  return `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(filename)}&proxy=1`;
 }
 
 export function parseBulkZipFileResponse(options: {
@@ -288,6 +329,48 @@ export type BulkVideoDownloadResultRow = BulkVideoDownloadSubmissionMeta & {
 
 export function normalizeBulkDownloadLink(link: string): string {
   return link.trim().replace(/\/+$/, "").toLowerCase();
+}
+
+/** Drop failures for URLs that succeeded in the latest worker wave (retry/remainder). */
+export function stripResolvedVideoDownloadFailures(
+  failures: { url: string; error: string }[],
+  waveItems: { url: string }[],
+  waveFailures: { url: string; error: string }[],
+  waveDeferred: { url: string }[] = [],
+): { url: string; error: string }[] {
+  if (failures.length === 0) return failures;
+  const failedThisWave = new Set(
+    waveFailures.map((failure) => normalizeBulkDownloadLink(failure.url)),
+  );
+  const deferredThisWave = new Set(
+    waveDeferred.map((item) => normalizeBulkDownloadLink(item.url)),
+  );
+  const succeededThisWave = new Set(
+    waveItems
+      .map((item) => normalizeBulkDownloadLink(item.url))
+      .filter(
+        (url) => !failedThisWave.has(url) && !deferredThisWave.has(url),
+      ),
+  );
+  if (succeededThisWave.size === 0) return failures;
+  return failures.filter(
+    (failure) =>
+      !succeededThisWave.has(normalizeBulkDownloadLink(failure.url)),
+  );
+}
+
+export function countBulkDownloadResultStatuses(
+  rows: BulkVideoDownloadResultRow[],
+): { successCount: number; failedCount: number; pendingCount: number } {
+  let successCount = 0;
+  let failedCount = 0;
+  let pendingCount = 0;
+  for (const row of rows) {
+    if (row.status === "success") successCount += 1;
+    else if (row.status === "failed") failedCount += 1;
+    else pendingCount += 1;
+  }
+  return { successCount, failedCount, pendingCount };
 }
 
 export function buildBulkDownloadMetaMap(
@@ -364,9 +447,15 @@ export function mergeBulkDownloadResultRows(
   existing: BulkVideoDownloadResultRow[],
   next: BulkVideoDownloadResultRow[],
 ): BulkVideoDownloadResultRow[] {
+  const statusRank = (status: BulkVideoDownloadResultRow["status"]) =>
+    status === "success" ? 2 : status === "failed" ? 1 : 0;
+
   const byId = new Map(existing.map((row) => [row.submissionId, row]));
   for (const row of next) {
-    byId.set(row.submissionId, row);
+    const prev = byId.get(row.submissionId);
+    if (!prev || statusRank(row.status) >= statusRank(prev.status)) {
+      byId.set(row.submissionId, row);
+    }
   }
   return Array.from(byId.values());
 }
@@ -425,6 +514,7 @@ async function waitForQueuedZipJob(
     failed: number;
     total: number;
     status: string;
+    itemFailures?: { url: string; error: string }[];
   }) => void,
   options?: { allowMissingWhileQueued?: boolean },
 ): Promise<{
@@ -461,6 +551,7 @@ async function waitForQueuedZipJob(
         failed: last.failed,
         total: last.total,
         status: "queued",
+        itemFailures: [],
       });
       await sleep(QUEUED_DOWNLOAD_POLL_MS);
       continue;
@@ -482,12 +573,13 @@ async function waitForQueuedZipJob(
       failed: last.failed,
       total: last.total,
       status: String(statusRes.data.status || "queued"),
+      itemFailures: statusRes.data.itemFailures ?? [],
     });
 
     if (statusRes.data.status === "ready") {
       if (!downloadStarted) {
         downloadStarted = true;
-        const fileUrl = `/api/admin/bulk-download/file?jobId=${encodeURIComponent(jobId)}&filename=${encodeURIComponent(fileName)}&proxy=1`;
+        const fileUrl = buildBulkZipFileDownloadUrl(jobId, fileName);
         triggerNativeZipDownload(fileUrl);
         await sleep(NATIVE_DOWNLOAD_SETTLE_MS);
       }
@@ -578,6 +670,55 @@ async function downloadOneZipChunk(options: {
       jobError,
     });
 
+  const buildProvisionalChunkResults = (
+    queueInfo: {
+      completed: number;
+      failed: number;
+      status: string;
+      itemFailures?: { url: string; error: string }[];
+    },
+  ): BulkVideoDownloadResultRow[] => {
+    const terminal =
+      queueInfo.status === "ready" || queueInfo.status === "failed";
+    const failureByLink = new Map(
+      (queueInfo.itemFailures ?? []).map((failure) => [
+        normalizeBulkDownloadLink(failure.url),
+        failure.error,
+      ]),
+    );
+
+    return chunk.map((submissionId) => {
+      const meta = options.metaById.get(submissionId);
+      const link = meta?.link ?? "";
+      const failureError = link
+        ? failureByLink.get(normalizeBulkDownloadLink(link))
+        : undefined;
+      const base = {
+        submissionId,
+        username: meta?.username ?? "unknown",
+        videoTitle: meta?.videoTitle ?? "Untitled",
+        link,
+        views: meta?.views ?? 0,
+        avatarUrl: meta?.avatarUrl ?? null,
+        displayName: meta?.displayName ?? null,
+        creatorId: meta?.creatorId ?? null,
+      };
+
+      if (failureError && terminal) {
+        return {
+          ...base,
+          status: "failed" as const,
+          error: failureError,
+        };
+      }
+
+      return {
+        ...base,
+        status: "pending" as const,
+      };
+    });
+  };
+
   const pollQueued = async (jobId: string, fileName: string) => {
     if (options.batchSession && typeof options.batchJobIndex === "number") {
       writePendingBulkZipSession({
@@ -598,36 +739,23 @@ async function downloadOneZipChunk(options: {
       jobId,
       fileName,
       (queueInfo) => {
-        // Provisional per-video statuses so the results table tracks the counters.
-        const provisional = chunk.map((submissionId, index) => {
-          const meta = options.metaById.get(submissionId);
-          let status: "pending" | "success" | "failed" = "pending";
-          if (index < queueInfo.completed) status = "success";
-          else if (
-            queueInfo.failed > 0 &&
-            index >= Math.max(0, chunk.length - queueInfo.failed)
-          ) {
-            status = "failed";
-          }
-          return {
-            submissionId,
-            username: meta?.username ?? "unknown",
-            videoTitle: meta?.videoTitle ?? "Untitled",
-            link: meta?.link ?? "",
-            views: meta?.views ?? 0,
-            avatarUrl: meta?.avatarUrl ?? null,
-            displayName: meta?.displayName ?? null,
-            creatorId: meta?.creatorId ?? null,
-            status,
-          };
-        });
+        const provisional = buildProvisionalChunkResults(queueInfo);
+        const confirmedFailed = (queueInfo.itemFailures ?? []).filter(
+          (failure) =>
+            chunk.some(
+              (submissionId) =>
+                normalizeBulkDownloadLink(
+                  options.metaById.get(submissionId)?.link ?? "",
+                ) === normalizeBulkDownloadLink(failure.url),
+            ),
+        ).length;
         emit({
           queuedCompleted: queueInfo.completed,
           queuedFailed: queueInfo.failed,
           queuedTotal: queueInfo.total,
           queueStatus: queueInfo.status,
           successCount: queueInfo.completed,
-          failedCount: queueInfo.failed,
+          failedCount: confirmedFailed,
           chunkResults: provisional,
         });
       },
@@ -638,23 +766,19 @@ async function downloadOneZipChunk(options: {
       !queued.downloaded && !queued.itemFailures?.length,
       queued.error,
     );
+    const { successCount, failedCount } =
+      countBulkDownloadResultStatuses(chunkResults);
     if (queued.error) {
       errors.push(queued.error);
     }
     emit({
-      successCount: queued.completed,
-      failedCount: Math.max(
-        queued.failed,
-        Math.max(0, chunk.length - queued.completed),
-      ),
+      successCount,
+      failedCount,
       chunkResults,
     });
     return {
-      successCount: queued.completed,
-      failedCount: Math.max(
-        queued.failed,
-        Math.max(0, chunk.length - queued.completed),
-      ),
+      successCount,
+      failedCount,
       downloaded: queued.downloaded,
       errors,
       chunkResults,

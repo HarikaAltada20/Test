@@ -16,18 +16,19 @@ export const VIDEO_FILENAME_PATTERN_LABELS: Record<
 > = {
   views: {
     label: "Views only",
-    description: "Names the file with the view count. Zero-padded so Explorer sort matches popularity.",
-    example: "000000012500.mp4",
+    description:
+      "Names the file with sort rank + view count so Explorer order matches your table sort.",
+    example: "001_000000012500.mp4",
   },
   views_username: {
     label: "Views + username",
-    description: "Uses the view count and creator username.",
-    example: "000000012500_jane_creator.mp4",
+    description: "Uses sort rank, view count, and creator username.",
+    example: "001_000000012500_jane_creator.mp4",
   },
   views_username_status_quality_score: {
     label: "Views + username + status + quality",
-    description: "Includes moderation status and quality score.",
-    example: "000000012500_jane_creator_verified_3.mp4",
+    description: "Includes sort rank, moderation status, and quality score.",
+    example: "001_000000012500_jane_creator_verified_3.mp4",
   },
 };
 
@@ -37,6 +38,10 @@ export type VideoFilenameParts = {
   status?: string | null;
   qualityScore?: number | null;
   uniqueSuffix?: string | null;
+  /** 1-based rank in the current leaderboard sort (Explorer name order). */
+  sortRank?: number | null;
+  /** Total videos in this download (controls rank zero-padding width). */
+  sortTotal?: number | null;
 };
 
 export function isVideoFilenamePattern(
@@ -51,14 +56,23 @@ export function isVideoFilenamePattern(
 export function parseVideoFilenamePattern(
   value: unknown,
 ): VideoFilenamePattern {
-  return isVideoFilenamePattern(value)
-    ? value
-    : DEFAULT_VIDEO_FILENAME_PATTERN;
+  return isVideoFilenamePattern(value) ? value : DEFAULT_VIDEO_FILENAME_PATTERN;
 }
 
 export function formatViewCountPart(views: number | null | undefined): string {
   const n = Math.max(0, Math.floor(Number(views) || 0));
   return String(n).padStart(12, "0");
+}
+
+/** Zero-padded rank so Explorer A→Z order matches the selected table sort. */
+export function formatSortRankPart(
+  rank: number | null | undefined,
+  total?: number | null,
+): string {
+  const safeRank = Math.max(1, Math.floor(Number(rank) || 1));
+  const safeTotal = Math.max(safeRank, Math.floor(Number(total) || safeRank));
+  const width = Math.max(3, String(safeTotal).length);
+  return String(safeRank).padStart(width, "0");
 }
 
 function sanitizePart(
@@ -132,6 +146,10 @@ export function buildVideoDownloadFilename(
 
   if (parts.uniqueSuffix) {
     base = `${base}_${sanitizePart(String(parts.uniqueSuffix), "id", 12)}`;
+  }
+
+  if (parts.sortRank != null && Number(parts.sortRank) > 0) {
+    base = `${formatSortRankPart(parts.sortRank, parts.sortTotal)}_${base}`;
   }
 
   return sanitizeFilename(base) || views;
@@ -253,7 +271,9 @@ export function formatBulkZipQualityPart(
  * ZIP prefix: contest + sort + quality + status tab.
  * Caller appends `_part_N_of_M` when splitting into multiple archives.
  */
-export function buildBulkZipFilenamePrefix(context: BulkZipNameContext): string {
+export function buildBulkZipFilenamePrefix(
+  context: BulkZipNameContext,
+): string {
   const contest =
     (sanitizeFilename(context.contestTitle || "contest") || "contest")
       .slice(0, BULK_ZIP_CONTEST_SLUG_MAX)

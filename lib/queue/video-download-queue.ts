@@ -341,8 +341,14 @@ export async function setVideoDownloadJobStatus(
 ): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
+  // Ready/failed only need to live until the client polls + downloads.
+  // Keep a short TTL so orphaned keys do not linger for hours.
+  const ttlSeconds =
+    status.status === "ready" || status.status === "failed"
+      ? Math.min(15 * 60, VIDEO_DOWNLOAD_JOB_TTL_SECONDS)
+      : VIDEO_DOWNLOAD_JOB_TTL_SECONDS;
   await redis.set(statusKey(status.jobId), JSON.stringify(status), {
-    ex: VIDEO_DOWNLOAD_JOB_TTL_SECONDS,
+    ex: ttlSeconds,
   });
 }
 
@@ -372,6 +378,18 @@ export async function clearVideoDownloadJobStatus(
     await redis.del(statusKey(jobId));
   } catch (e) {
     console.error("[video-download-queue] clear status failed:", e);
+  }
+}
+
+export async function clearVideoDownloadBatch(
+  batchId: string,
+): Promise<void> {
+  const redis = getRedis();
+  if (!redis || !batchId) return;
+  try {
+    await redis.del(batchKey(batchId));
+  } catch (e) {
+    console.error("[video-download-queue] clear batch failed:", e);
   }
 }
 
@@ -905,7 +923,10 @@ export async function enqueueNextVideoDownloadBatchPart(
 
     const batch = await getVideoDownloadBatch(batchId);
     if (!batch) return { done: true };
-    if (batch.nextIndex >= batch.parts.length) return { done: true };
+    if (batch.nextIndex >= batch.parts.length) {
+      await clearVideoDownloadBatch(batchId);
+      return { done: true };
+    }
 
     const partIndex = batch.nextIndex;
     const part = batch.parts[partIndex];
@@ -923,16 +944,22 @@ export async function enqueueNextVideoDownloadBatchPart(
     }
 
     batch.nextIndex = partIndex + 1;
-    const saved = await saveVideoDownloadBatch(batch);
-    if (saved.error) {
-      console.warn(
-        `[video-download-queue] Enqueued batch part but failed to save cursor: ${saved.error}`,
-      );
+    const batchFinished = batch.nextIndex >= batch.parts.length;
+    if (batchFinished) {
+      // All ZIP parts are now queued/running; drop the batch cursor from Redis.
+      await clearVideoDownloadBatch(batchId);
+    } else {
+      const saved = await saveVideoDownloadBatch(batch);
+      if (saved.error) {
+        console.warn(
+          `[video-download-queue] Enqueued batch part but failed to save cursor: ${saved.error}`,
+        );
+      }
     }
     console.log(
       `[video-download-queue] Batch ${batchId} enqueued part ${partIndex + 1}/${batch.parts.length} jobId=${part.jobId}`,
     );
-    return { enqueuedJobId: part.jobId };
+    return { enqueuedJobId: part.jobId, done: batchFinished };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(

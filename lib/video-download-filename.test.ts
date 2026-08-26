@@ -31,6 +31,22 @@ describe("video download filename patterns", () => {
     assert.equal(buildViewsBasedVideoFilename(1500), "000000001500");
   });
 
+  it("prefixes sort rank so Explorer order matches table sort", () => {
+    const first = buildVideoDownloadFilename("views", {
+      views: 100,
+      sortRank: 1,
+      sortTotal: 125,
+    });
+    const second = buildVideoDownloadFilename("views", {
+      views: 999999,
+      sortRank: 2,
+      sortTotal: 125,
+    });
+    assert.equal(first, "001_000000000100");
+    assert.equal(second, "002_000000999999");
+    assert.equal(first < second, true);
+  });
+
   it("builds views_username names", () => {
     assert.equal(
       buildVideoDownloadFilename("views_username", {

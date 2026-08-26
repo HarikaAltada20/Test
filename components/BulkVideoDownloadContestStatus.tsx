@@ -56,6 +56,8 @@ export function BulkVideoDownloadContestStatus({
         isDark={isDark}
         downloading={downloading}
         progress={progress}
+        namingPattern={session.namingPattern}
+        zipParts={session.zipParts}
       />
       {showButton && (
         <BulkVideoDownloadStatusButton

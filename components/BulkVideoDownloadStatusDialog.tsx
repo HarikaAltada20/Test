@@ -1,7 +1,7 @@
 "use client";
 
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { Download, FolderArchive,ExternalLink } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,10 +9,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgress";
 import type { BulkVideoDownloadProgressState } from "@/components/BulkVideoDownloadProgress";
 import { BulkVideoDownloadResultsTable } from "@/components/BulkVideoDownloadResultsTable";
+import {
+  buildBulkZipFileDownloadUrl,
+  triggerBulkZipFileDownload,
+} from "@/lib/video-download-ui";
+import type { BulkVideoDownloadZipPartRef } from "@/components/BulkVideoDownloadProgressProvider";
+import {
+  VIDEO_FILENAME_PATTERN_LABELS,
+  isVideoFilenamePattern,
+  type VideoFilenamePattern,
+} from "@/lib/video-download-filename";
 
 export function BulkVideoDownloadStatusDialog({
   open,
@@ -20,12 +31,16 @@ export function BulkVideoDownloadStatusDialog({
   isDark,
   downloading,
   progress,
+  namingPattern,
+  zipParts,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isDark: boolean;
   downloading: boolean;
   progress: BulkVideoDownloadProgressState | null;
+  namingPattern?: VideoFilenamePattern | string | null;
+  zipParts?: BulkVideoDownloadZipPartRef[] | null;
 }) {
   const total = progress?.total ?? 0;
   const hasResults = (progress?.results?.length ?? 0) > 0;
@@ -34,6 +49,18 @@ export function BulkVideoDownloadStatusDialog({
   const currentBatch = Math.min(
     batches,
     Math.max(1, progress?.chunkIndex || 1),
+  );
+  const pattern = isVideoFilenamePattern(namingPattern)
+    ? namingPattern
+    : null;
+  const patternMeta = pattern ? VIDEO_FILENAME_PATTERN_LABELS[pattern] : null;
+  const currentZipParts = Array.isArray(zipParts)
+    ? [...zipParts].sort(
+        (a, b) => (a.zipPartIndex || 0) - (b.zipPartIndex || 0),
+      )
+    : [];
+  const [downloadingZipJobId, setDownloadingZipJobId] = useState<string | null>(
+    null,
   );
 
   return (
@@ -95,6 +122,139 @@ export function BulkVideoDownloadStatusDialog({
             finished={finished}
             isDark={isDark}
           />
+
+          {patternMeta && (
+            <div
+              className={cn(
+                "rounded-lg border px-3 py-2.5",
+                isDark
+                  ? "border-gray-600 bg-white/[0.03]"
+                  : "border-slate-200 bg-white",
+              )}
+            >
+              <p
+                className={cn(
+                  "text-[10px] uppercase tracking-wide",
+                  isDark ? "text-slate-400" : "text-slate-500",
+                )}
+              >
+                Naming format used
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-sm font-medium",
+                  isDark ? "text-slate-100" : "text-slate-900",
+                )}
+              >
+                {patternMeta.label}
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-xs font-mono truncate",
+                  isDark ? "text-purple-300" : "text-purple-700",
+                )}
+                title={patternMeta.example}
+              >
+                Example: {patternMeta.example}
+              </p>
+            </div>
+          )}
+
+          {finished && currentZipParts.length > 0 && (
+            <div className="space-y-2">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-slate-100" : "text-slate-800",
+                )}
+              >
+                ZIP folders ({currentZipParts.length})
+              </p>
+              <ul
+                className={cn(
+                  "rounded-lg border divide-y",
+                  isDark
+                    ? "border-gray-600 divide-white/10"
+                    : "border-slate-200 divide-slate-200",
+                )}
+              >
+                {currentZipParts.map((part) => {
+                  const videoCount = Array.isArray(part.submissionIds)
+                    ? part.submissionIds.length
+                    : 0;
+                  const downloadUrl = buildBulkZipFileDownloadUrl(
+                    part.jobId,
+                    part.zipFilename || "bulk.zip",
+                  );
+                  return (
+                    <li
+                      key={part.jobId}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
+                    >
+                      <div className="flex min-w-0 items-start gap-2.5">
+                        <FolderArchive
+                          className={cn(
+                            "mt-0.5 h-4 w-4 shrink-0",
+                            isDark ? "text-purple-300" : "text-purple-600",
+                          )}
+                        />
+                        <div className="min-w-0">
+                          <p
+                            className={cn(
+                              "truncate text-sm font-medium",
+                              isDark ? "text-slate-100" : "text-slate-900",
+                            )}
+                            title={part.zipFilename}
+                          >
+                            {part.zipFilename || `ZIP part ${part.zipPartIndex}`}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-slate-400" : "text-slate-500",
+                            )}
+                          >
+                            Part {part.zipPartIndex}
+                            {part.zipPartTotal
+                              ? ` of ${part.zipPartTotal}`
+                              : ""}{" "}
+                            · {videoCount} video{videoCount === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={downloadingZipJobId === part.jobId}
+                        onClick={() => {
+                          if (downloadingZipJobId === part.jobId) return;
+                          setDownloadingZipJobId(part.jobId);
+                          triggerBulkZipFileDownload(downloadUrl);
+                          window.setTimeout(
+                            () =>
+                              setDownloadingZipJobId((current) =>
+                                current === part.jobId ? null : current,
+                              ),
+                            3000,
+                          );
+                        }}
+                        className={cn(
+                          "h-8 gap-1.5 text-xs font-medium",
+                          isDark
+                            ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15 hover:text-sky-200"
+                            : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
+                        )}
+                      >
+                        <ExternalLink className="h-3 w-3 opacity-80" />
+                        Open ZIP file
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {hasResults && (
             <div className="space-y-2 pt-1 border-t border-dashed border-slate-300/60 dark:border-white/10 -mx-1 sm:mx-0">

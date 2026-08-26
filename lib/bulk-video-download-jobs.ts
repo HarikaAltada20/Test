@@ -31,7 +31,6 @@ export type BulkVideoDownloadJobRow = {
   contest_id: string;
   user_id: string;
   user_type: "admin" | "advertiser";
-  scope: "normal" | "creator";
   status: BulkVideoDownloadJobStatus;
   total_count: number;
   success_count: number;
@@ -124,7 +123,6 @@ function normalizeJobRow(raw: Record<string, unknown>): BulkVideoDownloadJobRow 
     contest_id: String(raw.contest_id),
     user_id: String(raw.user_id),
     user_type: raw.user_type === "advertiser" ? "advertiser" : "admin",
-    scope: raw.scope === "creator" ? "creator" : "normal",
     status:
       raw.status === "queued" ||
       raw.status === "completed" ||
@@ -379,8 +377,13 @@ export function buildEnrichedSession(
     },
   );
 
+  const successCount = results.filter((row) => row.status === "success").length;
+  const failedCount = results.filter((row) => row.status === "failed").length;
+
   return {
     ...job,
+    success_count: successCount,
+    failed_count: failedCount,
     metaById,
     results,
   };
@@ -401,7 +404,6 @@ export type CreateBulkVideoDownloadJobInput = {
   contestId: string;
   userId: string;
   userType: "admin" | "advertiser";
-  scope?: "normal" | "creator";
   totalCount: number;
   zipPartTotal: number;
   videosPerZip: number;
@@ -425,7 +427,6 @@ export async function createBulkVideoDownloadJob(
       contest_id: input.contestId,
       user_id: input.userId,
       user_type: input.userType,
-      scope: input.scope === "creator" ? "creator" : "normal",
       status: "running",
       total_count: input.totalCount || submissionIds.length,
       success_count: 0,
@@ -508,6 +509,16 @@ export async function updateBulkVideoDownloadJob(
     const itemsResult = await upsertJobItemStatuses(input.id, input.itemStatuses);
     if (itemsResult.error) {
       return { data: null, error: itemsResult.error };
+    }
+    // Terminal sessions: derive counts from all stored item rows (authoritative).
+    if (input.status === "completed" || input.status === "failed") {
+      const allItems = await loadJobItemStatuses(input.id);
+      patch.success_count = allItems.filter(
+        (item) => item.status === "success",
+      ).length;
+      patch.failed_count = allItems.filter(
+        (item) => item.status === "failed",
+      ).length;
     }
   }
 

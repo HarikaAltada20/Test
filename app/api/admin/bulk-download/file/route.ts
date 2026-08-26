@@ -8,6 +8,7 @@ import {
   getVideoDownloadJobStatus,
   isVideoDownloadQueueEnabled,
   VIDEO_DOWNLOAD_STORAGE_BUCKET,
+  videoDownloadStoragePath,
 } from "@/lib/queue/video-download-queue";
 import { toBulkZipDownloadFilename } from "@/lib/video-download-filename";
 import { videoDownloadLocalZipPath } from "@/lib/video-download-storage";
@@ -26,13 +27,180 @@ function zipDownloadHeaders(filename: string, contentLength?: number): Headers {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   });
-  if (contentLength != null) headers.set("Content-Length", String(contentLength));
+  if (contentLength != null)
+    headers.set("Content-Length", String(contentLength));
   return headers;
+}
+
+async function resolveStoragePathAndFilename(options: {
+  jobId: string;
+  userId: string;
+  requestedName: string | null;
+}): Promise<
+  | { ok: true; storagePath: string; filename: string; clearJobId?: string }
+  | { ok: false; response: NextResponse }
+> {
+  const status = await getVideoDownloadJobStatus(options.jobId);
+
+  if (status) {
+    if (status.userId !== options.userId) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Download job not found" },
+          { status: 404 },
+        ),
+      };
+    }
+    if (status.status !== "ready" || !status.storagePath) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "ZIP is not ready yet", status: status.status },
+          { status: 409 },
+        ),
+      };
+    }
+    return {
+      ok: true,
+      storagePath: status.storagePath,
+      filename: toBulkZipDownloadFilename(
+        options.requestedName ||
+          status.zipFilename ||
+          `bulk_submissions_contest`,
+      ),
+      clearJobId: options.jobId,
+    };
+  }
+
+  const storagePath = videoDownloadStoragePath(options.userId, options.jobId);
+  const filename = toBulkZipDownloadFilename(
+    options.requestedName || `bulk_submissions_contest`,
+  );
+  const localPath = videoDownloadLocalZipPath(storagePath);
+  if (!existsSync(localPath)) {
+    const supabase = createAdminClient();
+    const probe = await supabase.storage
+      .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+      .createSignedUrl(storagePath, 60);
+    if (probe.error || !probe.data?.signedUrl) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Download job not found" },
+          { status: 404 },
+        ),
+      };
+    }
+  }
+
+  return { ok: true, storagePath, filename };
+}
+
+async function streamZipResponse(options: {
+  storagePath: string;
+  filename: string;
+  proxy: boolean;
+  clearJobId?: string;
+}): Promise<NextResponse> {
+  const localPath = videoDownloadLocalZipPath(options.storagePath);
+  if (existsSync(localPath)) {
+    const zipStat = await stat(localPath);
+    const nodeStream = createReadStream(localPath);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    if (options.clearJobId) {
+      void clearVideoDownloadJobStatus(options.clearJobId);
+    }
+    return new NextResponse(webStream, {
+      headers: zipDownloadHeaders(options.filename, zipStat.size),
+    });
+  }
+
+  const supabase = createAdminClient();
+  const signed = await supabase.storage
+    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+    .createSignedUrl(options.storagePath, SIGNED_URL_TTL_SECONDS, {
+      download: options.filename,
+    });
+
+  if (signed.error || !signed.data?.signedUrl) {
+    return NextResponse.json(
+      { error: signed.error?.message || "Could not create ZIP download URL" },
+      { status: 500 },
+    );
+  }
+
+  if (options.proxy) {
+    const upstream = await fetch(signed.data.signedUrl);
+    if (!upstream.ok || !upstream.body) {
+      return NextResponse.json(
+        { error: "Could not fetch ZIP archive" },
+        { status: 502 },
+      );
+    }
+    const headers = zipDownloadHeaders(options.filename);
+    const length = upstream.headers.get("content-length");
+    if (length) headers.set("Content-Length", length);
+    if (options.clearJobId) {
+      void clearVideoDownloadJobStatus(options.clearJobId);
+    }
+    return new NextResponse(upstream.body, { headers });
+  }
+
+  if (options.clearJobId) {
+    void clearVideoDownloadJobStatus(options.clearJobId);
+  }
+  return NextResponse.json({
+    url: signed.data.signedUrl,
+    filename: options.filename,
+  });
+}
+
+/** Open/view link only — no Content-Disposition: attachment download. */
+async function redirectToZipLink(options: {
+  storagePath: string;
+  filename: string;
+}): Promise<NextResponse> {
+  const localPath = videoDownloadLocalZipPath(options.storagePath);
+  if (existsSync(localPath)) {
+    // Local/dev: stream inline so the browser opens the file URL instead of
+    // forcing a Save As download.
+    const zipStat = await stat(localPath);
+    const nodeStream = createReadStream(localPath);
+    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+    const safe = options.filename.replace(/["\\]/g, "_");
+    return new NextResponse(webStream, {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `inline; filename="${safe}"`,
+        "Content-Length": String(zipStat.size),
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  const supabase = createAdminClient();
+  // Omit `download` so Supabase returns a viewable/openable signed URL.
+  const signed = await supabase.storage
+    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
+    .createSignedUrl(options.storagePath, SIGNED_URL_TTL_SECONDS);
+
+  if (signed.error || !signed.data?.signedUrl) {
+    return NextResponse.json(
+      { error: signed.error?.message || "Could not create ZIP link" },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.redirect(signed.data.signedUrl, 302);
 }
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const proxy = requestUrl.searchParams.get("proxy") === "1";
+  const openOnly =
+    requestUrl.searchParams.get("mode") === "open" ||
+    requestUrl.searchParams.get("open") === "1";
   const access = await verifyAdminOrBrandDownloadAccess();
   if (!access.allowed) {
     return NextResponse.json(
@@ -53,72 +221,28 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "jobId is required" }, { status: 400 });
   }
 
-  const status = await getVideoDownloadJobStatus(jobId);
-  if (!status || status.userId !== access.user.id) {
-    return NextResponse.json({ error: "Download job not found" }, { status: 404 });
-  }
-  if (status.status !== "ready" || !status.storagePath) {
-    return NextResponse.json(
-      { error: "ZIP is not ready yet", status: status.status },
-      { status: 409 },
-    );
-  }
+  const resolved = await resolveStoragePathAndFilename({
+    jobId,
+    userId: access.user.id,
+    requestedName: requestUrl.searchParams.get("filename"),
+  });
+  if (!resolved.ok) return resolved.response;
 
-  const requestedName = requestUrl.searchParams.get("filename");
-  const filename = toBulkZipDownloadFilename(
-    requestedName || status.zipFilename || `bulk_submissions_contest`,
-  );
-
-  const localPath = videoDownloadLocalZipPath(status.storagePath);
-  if (existsSync(localPath)) {
-    const zipStat = await stat(localPath);
-    const nodeStream = createReadStream(localPath);
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
-    // ZIP is being delivered — drop Redis status so it does not linger for 2h.
+  if (openOnly) {
+    // Still wipe Redis status after the client opens the ZIP link.
     void clearVideoDownloadJobStatus(jobId);
-    return new NextResponse(webStream, {
-      headers: zipDownloadHeaders(filename, zipStat.size),
+    return redirectToZipLink({
+      storagePath: resolved.storagePath,
+      filename: resolved.filename,
     });
   }
 
-  const supabase = createAdminClient();
-  const signed = await supabase.storage
-    .from(VIDEO_DOWNLOAD_STORAGE_BUCKET)
-    .createSignedUrl(status.storagePath, SIGNED_URL_TTL_SECONDS, {
-      download: filename,
-    });
-
-  if (signed.error || !signed.data?.signedUrl) {
-    return NextResponse.json(
-      { error: signed.error?.message || "Could not create ZIP download URL" },
-      { status: 500 },
-    );
-  }
-
-  if (proxy) {
-    const upstream = await fetch(signed.data.signedUrl);
-    if (!upstream.ok || !upstream.body) {
-      return NextResponse.json(
-        { error: "Could not fetch ZIP archive" },
-        { status: 502 },
-      );
-    }
-    const headers = zipDownloadHeaders(filename);
-    const length = upstream.headers.get("content-length");
-    if (length) headers.set("Content-Length", length);
-    void clearVideoDownloadJobStatus(jobId);
-    return new NextResponse(upstream.body, { headers });
-  }
-
-  // Non-proxy: client gets a signed URL; clear Redis so ready keys do not linger.
-  // Storage ZIP is still cleaned by the process-video-download-queue cron.
-  void clearVideoDownloadJobStatus(jobId);
-  return NextResponse.json({
-    url: signed.data.signedUrl,
-    filename,
-    completed: status.completed,
-    failed: status.failed,
-    total: status.total,
-    zipBytes: status.zipBytes ?? null,
+  return streamZipResponse({
+    storagePath: resolved.storagePath,
+    filename: resolved.filename,
+    proxy,
+    // Always clear by jobId after a successful download response, even when
+    // status was already gone and we resolved the ZIP from storage alone.
+    clearJobId: jobId,
   });
 }

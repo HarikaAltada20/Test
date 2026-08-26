@@ -171,9 +171,13 @@ export async function POST(request: Request) {
 
       const byId = new Map((submissions || []).map((sub) => [String(sub.id), sub]));
       const usedFilenames = new Set<string>();
+      const sortTotal = submissionIdList.length;
 
       // Preserve client selection order so ZIP parts match the UI batches.
-      for (const submissionId of submissionIdList) {
+      // Prefix filenames with sort rank so Explorer name order matches the
+      // selected leaderboard sort (e.g. views high → low).
+      for (let index = 0; index < submissionIdList.length; index++) {
+        const submissionId = submissionIdList[index];
         const sub = byId.get(submissionId);
         if (!sub) continue;
         const advertiserId = joinedRecordAdvertiserId(sub.contests);
@@ -198,6 +202,8 @@ export async function POST(request: Request) {
             qualityScore:
               sub.quality_score == null ? null : Number(sub.quality_score),
             uniqueSuffix: String(sub.id).slice(0, 8),
+            sortRank: index + 1,
+            sortTotal,
           },
           format,
         );

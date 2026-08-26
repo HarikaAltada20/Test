@@ -104,7 +104,7 @@ export function BulkVideoDownloadProgress({
               {batches} ZIP folder{batches === 1 ? "" : "s"}
             </p> */}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
             <StatChip
               label="Succeeded"
               value={success}
@@ -121,12 +121,6 @@ export function BulkVideoDownloadProgress({
               label="Total videos"
               value={safeTotal}
               tone="neutral"
-              isDark={isDark}
-            />
-            <StatChip
-              label="ZIP folders"
-              value={batches}
-              tone="accent"
               isDark={isDark}
             />
           </div>

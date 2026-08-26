@@ -486,16 +486,20 @@ export function BulkVideoDownloadResultsTable({
             aria-expanded={viewMenuOpen}
             onClick={() => setViewMenuOpen((open) => !open)}
             className={cn(
-              "flex h-9 w-[160px] items-center justify-between rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+              "flex h-9 min-w-[200px] max-w-[260px] items-center justify-between rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
               isDark
                 ? "border-gray-700 bg-[#07031D] text-white hover:bg-gray-700"
                 : "border-input bg-white text-slate-800 hover:bg-accent/50",
             )}
           >
-            <span>{viewMode === "creators" ? "Creators wise" : "Normal"}</span>
+            <span className="truncate pr-1">
+              {viewMode === "creators"
+                ? "Creator-wise view"
+                : "Individual Submission view"}
+            </span>
             <ChevronDown
               className={cn(
-                "h-4 w-4 opacity-50 transition-transform",
+                "h-4 w-4 shrink-0 opacity-50 transition-transform",
                 viewMenuOpen && "rotate-180",
               )}
             />
@@ -504,7 +508,7 @@ export function BulkVideoDownloadResultsTable({
             <div
               role="listbox"
               className={cn(
-                "absolute right-0 z-20 mt-1 w-[160px] overflow-hidden rounded-lg border shadow-lg",
+                "absolute right-0 z-20 mt-1 w-[240px] overflow-hidden rounded-lg border shadow-lg",
                 isDark
                   ? "border-gray-700 bg-[#07031D] text-white"
                   : "border-slate-200 bg-white text-slate-900",
@@ -512,8 +516,14 @@ export function BulkVideoDownloadResultsTable({
             >
               {(
                 [
-                  { value: "normal", label: "Normal" },
-                  { value: "creators", label: "Creators wise" },
+                  {
+                    value: "normal",
+                    label: "Individual Submission view",
+                  },
+                  {
+                    value: "creators",
+                    label: "Creator-wise view",
+                  },
                 ] as const
               ).map((option) => (
                 <button
@@ -526,7 +536,7 @@ export function BulkVideoDownloadResultsTable({
                     setViewMenuOpen(false);
                   }}
                   className={cn(
-                    "flex w-full items-center px-3 py-2 text-left text-xs font-medium transition-colors",
+                    "flex w-full items-center px-3 py-2 text-left text-sm font-medium transition-colors",
                     viewMode === option.value
                       ? "bg-purple-600 text-white"
                       : isDark

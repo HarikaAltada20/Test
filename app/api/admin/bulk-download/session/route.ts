@@ -143,7 +143,6 @@ export async function POST(request: Request) {
     contestId,
     userId: access.user.id,
     userType: access.user.user_type,
-    scope: body.scope === "creator" ? "creator" : "normal",
     totalCount: resolvedIds.length,
     zipPartTotal: Math.max(
       1,
@@ -239,5 +238,9 @@ export async function PATCH(request: Request) {
   }
 
   // PATCH responses stay lean (no join) for frequent progress updates.
-  return NextResponse.json({ session: data });
+  const session =
+    data.status === "completed" || data.status === "failed"
+      ? await enrichBulkVideoDownloadJob(data)
+      : data;
+  return NextResponse.json({ session });
 }

@@ -5,7 +5,6 @@ create table if not exists public.bulk_video_download_jobs (
   contest_id uuid not null references public.contests(id) on delete cascade,
   user_id uuid not null references public.users(id) on delete cascade,
   user_type text not null check (user_type in ('admin', 'advertiser')),
-  scope text not null default 'normal' check (scope in ('normal', 'creator')),
   status text not null default 'running'
     check (status in ('queued', 'running', 'completed', 'failed')),
   total_count integer not null default 0,
@@ -54,6 +53,15 @@ begin
       and column_name = 'creator_id'
   ) then
     alter table public.bulk_video_download_jobs drop column creator_id;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'bulk_video_download_jobs'
+      and column_name = 'scope'
+  ) then
+    alter table public.bulk_video_download_jobs drop column scope;
   end if;
 
   if exists (

@@ -8,8 +8,10 @@ import {
   chunkArray,
   DEFAULT_VIDEOS_PER_ZIP,
   MAX_BULK_VIDEO_DOWNLOADS,
+  mergeBulkDownloadResultRows,
   parseBulkZipFileResponse,
   parseVideosPerZip,
+  stripResolvedVideoDownloadFailures,
 } from "./video-download-ui";
 
 describe("video-download-ui", () => {
@@ -109,6 +111,31 @@ describe("video-download-ui", () => {
       "creator_a",
     );
     assert.equal(rows.find((row) => row.submissionId === "b")?.views, 900);
+  });
+
+  it("prefers success over failed when merging download result rows", () => {
+    const pending = {
+      submissionId: "a",
+      username: "creator",
+      videoTitle: "Video",
+      link: "https://instagram.com/reel/a/",
+      views: 1,
+      status: "failed" as const,
+    };
+    const success = { ...pending, status: "success" as const };
+    const merged = mergeBulkDownloadResultRows([pending], [success]);
+    assert.equal(merged[0]?.status, "success");
+  });
+
+  it("drops stale failures after a retry succeeds", () => {
+    const url = "https://instagram.com/reel/a/";
+    const stripped = stripResolvedVideoDownloadFailures(
+      [{ url, error: "Temporary error" }],
+      [{ url }],
+      [],
+      [],
+    );
+    assert.equal(stripped.length, 0);
   });
 
   it("uses a signed ZIP URL when the file proxy returns JSON", () => {

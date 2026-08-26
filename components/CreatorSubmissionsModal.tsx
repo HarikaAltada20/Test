@@ -496,7 +496,6 @@ export function CreatorSubmissionsModal({
 
     await startBulkVideoDownload({
       contestId: String(contest.id),
-      scope: "creator",
       creatorId: creator.id,
       submissionIds,
       namingPattern,

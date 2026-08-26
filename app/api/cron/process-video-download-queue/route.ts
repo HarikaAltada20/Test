@@ -34,6 +34,7 @@ import {
   type VideoDownloadItemFailure,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
+import { stripResolvedVideoDownloadFailures } from "@/lib/video-download-ui";
 import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
 import {
   cleanupExpiredVideoDownloadZips,
@@ -190,6 +191,13 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       ...(job.failuresSoFar ?? existing?.itemFailures ?? []),
       ...result.failures,
     ];
+    const resolvedItemFailures = stripResolvedVideoDownloadFailures(
+      accumulatedItemFailures,
+      job.items,
+      result.failures,
+      result.deferredItems,
+    );
+    const resolvedFailedCount = resolvedItemFailures.length;
     const accumulatedErrors = [
       ...(job.errorsSoFar ?? existing?.errors ?? []),
       ...result.failures.map((failure) => failure.error),
@@ -206,9 +214,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
             partialStoragePath: job.partialStoragePath,
             originalTotal,
             completedSoFar: completedBase,
-            failedSoFar: accumulatedFailed,
+            failedSoFar: resolvedFailedCount,
             errorsSoFar: accumulatedErrors,
-            failuresSoFar: accumulatedItemFailures,
+            failuresSoFar: resolvedItemFailures,
             zipBytesSoFar: usedBytes,
           }),
         });
@@ -241,9 +249,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
           if (!retry.deadLettered) {
             await finishTerminal({
               completed: completedBase,
-              failed: accumulatedFailed || originalTotal,
+              failed: resolvedFailedCount || originalTotal,
               errors: result.failures.map((f) => f.error).slice(0, 5),
-              itemFailures: accumulatedItemFailures,
+              itemFailures: resolvedItemFailures,
             });
           }
           await continueBatchAndKick(request, job, { delaySeconds: 2 });
@@ -258,9 +266,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
 
       const terminalStatus = await finishTerminal({
         completed: completedBase,
-        failed: accumulatedFailed || originalTotal,
+        failed: resolvedFailedCount || originalTotal,
         errors: result.failures.map((f) => f.error).slice(0, 5),
-        itemFailures: accumulatedItemFailures,
+        itemFailures: resolvedItemFailures,
       });
       console.log(
         `[process-video-download-queue] Job ${job.jobId} finished with 0 new downloads; status=${terminalStatus}`,
@@ -270,12 +278,12 @@ async function handleRequest(request: Request): Promise<NextResponse> {
         processed: 1,
         jobId: job.jobId,
         downloaded: completedBase,
-        failed: accumulatedFailed || originalTotal,
+        failed: resolvedFailedCount || originalTotal,
         status: terminalStatus,
       });
     }
 
-    // Always persist to shared private storage. /tmp is per-instance on Vercel,
+    // Always persist to shared private storage.
     // so a later /file request on a different lambda would 410 a local ZIP.
     await ensureVideoDownloadBucket();
     const storagePath = videoDownloadStoragePath(job.userId, job.jobId);
@@ -327,9 +335,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
           partialStoragePath: storagePath,
           originalTotal,
           completedSoFar: completed,
-          failedSoFar: accumulatedFailed,
+          failedSoFar: resolvedFailedCount,
           errorsSoFar: accumulatedErrors,
-          failuresSoFar: accumulatedItemFailures,
+          failuresSoFar: resolvedItemFailures,
           zipBytesSoFar: zipBytes,
         }),
       });
@@ -353,9 +361,9 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       status: "ready",
       total: originalTotal,
       completed,
-      failed: accumulatedFailed,
+      failed: resolvedFailedCount,
       errors: accumulatedErrors,
-      itemFailures: accumulatedItemFailures,
+      itemFailures: resolvedItemFailures,
       storagePath,
       zipBytes,
       zipFilename: existing?.zipFilename || job.zipFilename,
@@ -372,7 +380,7 @@ async function handleRequest(request: Request): Promise<NextResponse> {
       processed: 1,
       jobId: job.jobId,
       downloaded: completed,
-      failed: accumulatedFailed,
+      failed: resolvedFailedCount,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Video download failed";
