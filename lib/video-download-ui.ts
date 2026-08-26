@@ -878,6 +878,8 @@ export async function downloadSubmissionVideosInChunks(options: {
   namingPattern?: VideoFilenamePattern;
   videosPerZip?: number;
   metaById: Map<string, BulkVideoDownloadSubmissionMeta>;
+  /** Prior per-video outcomes (e.g. after reload) so completed ZIP parts stay terminal. */
+  existingResults?: BulkVideoDownloadResultRow[];
   onProgress?: (info: BulkDownloadProgressInfo) => void;
   /** Fired once when ZIP jobs are registered (new enqueue or local resume). */
   onEnqueued?: (info: {
@@ -898,9 +900,12 @@ export async function downloadSubmissionVideosInChunks(options: {
   const expectedChunks = chunkArray(ids, videosPerZip);
   const errors: string[] = [];
   let succeededChunks = 0;
-  let successCount = 0;
-  let failedCount = 0;
+  const existingById = new Map(
+    (options.existingResults || []).map((row) => [row.submissionId, row]),
+  );
   let results: BulkVideoDownloadResultRow[] = ids.map((submissionId) => {
+    const existing = existingById.get(submissionId);
+    if (existing) return existing;
     const meta = options.metaById.get(submissionId);
     return {
       submissionId,
@@ -914,6 +919,8 @@ export async function downloadSubmissionVideosInChunks(options: {
       status: "pending",
     };
   });
+  let successCount = results.filter((row) => row.status === "success").length;
+  let failedCount = results.filter((row) => row.status === "failed").length;
 
   const resumeJobs = (options.resumeJobs || []).filter(
     (job) => typeof job.jobId === "string" && job.jobId.length > 0,
@@ -1124,6 +1131,29 @@ export async function downloadSubmissionVideosInChunks(options: {
         ? job.submissionIds
         : expectedChunks[job.chunkIndex - 1] || [];
 
+    // Skip ZIP parts already completed before a reload.
+    const chunkAlreadyDone =
+      chunk.length > 0 &&
+      chunk.every((submissionId) => {
+        const status = results.find(
+          (row) => row.submissionId === submissionId,
+        )?.status;
+        return status === "success" || status === "failed";
+      });
+    if (chunkAlreadyDone) {
+      succeededChunks += 1;
+      options.onProgress?.({
+        chunkIndex: job.chunkIndex,
+        totalChunks: job.totalChunks,
+        chunkSize: chunk.length,
+        totalVideos: ids.length,
+        successCount,
+        failedCount,
+        results,
+      });
+      continue;
+    }
+
     options.onProgress?.({
       chunkIndex: job.chunkIndex,
       totalChunks: job.totalChunks,
@@ -1162,6 +1192,9 @@ export async function downloadSubmissionVideosInChunks(options: {
       successCount += result.successCount;
       failedCount += result.failedCount;
       results = mergeBulkDownloadResultRows(results, result.chunkResults);
+      // Recompute from merged rows so seeded prior parts stay accurate.
+      successCount = results.filter((row) => row.status === "success").length;
+      failedCount = results.filter((row) => row.status === "failed").length;
       errors.push(...result.errors);
       if (result.downloaded) succeededChunks += 1;
       options.onProgress?.({
@@ -1186,7 +1219,8 @@ export async function downloadSubmissionVideosInChunks(options: {
         jobError: message,
       });
       results = mergeBulkDownloadResultRows(results, chunkResults);
-      failedCount += chunk.length;
+      successCount = results.filter((row) => row.status === "success").length;
+      failedCount = results.filter((row) => row.status === "failed").length;
     }
 
     if (i < enqueuedJobs.length - 1) {

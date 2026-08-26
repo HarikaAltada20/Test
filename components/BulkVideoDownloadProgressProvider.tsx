@@ -192,9 +192,8 @@ function remoteRowToSession(row: RemoteSessionRow): BulkVideoDownloadSession | n
   const storedSuccess = Number(row.success_count) || 0;
   const storedFailed = Number(row.failed_count) || 0;
   const useDerivedCounts =
-    finished &&
-    successFromResults + failedFromResults >
-      storedSuccess + storedFailed;
+    successFromResults + failedFromResults >=
+    storedSuccess + storedFailed;
   return {
     contestId: String(row.contest_id),
     submissionIds,
@@ -252,6 +251,84 @@ function leanItemStatusesFromProgress(
         row.status === "success" ||
         row.status === "failed",
     );
+}
+
+function countTerminalResults(
+  results: BulkVideoDownloadResultRow[] | undefined,
+): number {
+  if (!Array.isArray(results)) return 0;
+  return results.filter(
+    (row) => row.status === "success" || row.status === "failed",
+  ).length;
+}
+
+function isResultTerminal(
+  status: BulkVideoDownloadResultRow["status"] | undefined,
+): boolean {
+  return status === "success" || status === "failed";
+}
+
+/** First ZIP part that still has pending/unknown videos (0-based). */
+function findResumeZipPartIndex(
+  zipParts: BulkVideoDownloadZipPartRef[] | undefined,
+  results: BulkVideoDownloadResultRow[] | undefined,
+): number {
+  const parts = Array.isArray(zipParts) ? zipParts : [];
+  if (parts.length === 0) return 0;
+  const statusById = new Map(
+    (results || []).map((row) => [row.submissionId, row.status]),
+  );
+  for (let i = 0; i < parts.length; i++) {
+    const ids = parts[i]?.submissionIds || [];
+    if (ids.length === 0) return i;
+    const allTerminal = ids.every((id) => isResultTerminal(statusById.get(id)));
+    if (!allTerminal) return i;
+  }
+  return parts.length;
+}
+
+function sessionWithDerivedProgress(
+  session: BulkVideoDownloadSession,
+): BulkVideoDownloadSession {
+  const results = session.progress.results || [];
+  const successCount = results.filter((row) => row.status === "success").length;
+  const failedCount = results.filter((row) => row.status === "failed").length;
+  const resumeIdx = findResumeZipPartIndex(session.zipParts, results);
+  const totalParts = Math.max(
+    1,
+    session.zipParts?.length || session.progress.totalChunks || 1,
+  );
+  const allTerminal =
+    results.length > 0 &&
+    successCount + failedCount >= results.length &&
+    resumeIdx >= (session.zipParts?.length || 0);
+
+  if (allTerminal && session.status === "running") {
+    return {
+      ...session,
+      status: failedCount > 0 && successCount === 0 ? "failed" : "finished",
+      progress: {
+        ...session.progress,
+        successCount,
+        failedCount,
+        finished: true,
+        chunkIndex: totalParts,
+        totalChunks: totalParts,
+      },
+    };
+  }
+
+  return {
+    ...session,
+    progress: {
+      ...session.progress,
+      successCount,
+      failedCount,
+      // Persist next part to resume so reloads skip completed ZIPs.
+      chunkIndex: Math.min(totalParts, resumeIdx + 1),
+      totalChunks: totalParts,
+    },
+  };
 }
 
 async function createRemoteSession(options: {
@@ -379,7 +456,10 @@ export function BulkVideoDownloadProgressProvider({
   }, []);
 
   const scheduleRemoteProgressSync = useCallback(
-    (next: BulkVideoDownloadSession) => {
+    (
+      next: BulkVideoDownloadSession,
+      options?: { immediate?: boolean },
+    ) => {
       const jobId = next.supabaseJobId;
       if (!jobId) return;
       if (progressSyncTimerRef.current) {
@@ -394,8 +474,13 @@ export function BulkVideoDownloadProgressProvider({
             ? "failed"
             : "running";
 
-      // Final writes go immediately so a stale debounced patch cannot overwrite counts.
-      if (next.status === "finished" || next.status === "failed") {
+      // Final writes and per-ZIP completions go immediately so a reload cannot
+      // lose the first batch's success/failed rows.
+      if (
+        options?.immediate ||
+        next.status === "finished" ||
+        next.status === "failed"
+      ) {
         void patchRemoteSession({
           id: jobId,
           session: next,
@@ -443,6 +528,31 @@ export function BulkVideoDownloadProgressProvider({
               zipFilename: part.zipFilename,
             }))
           : undefined;
+      const resumeCurrentIndex = resumeJobs
+        ? findResumeZipPartIndex(active.zipParts, active.progress.results)
+        : undefined;
+
+      // Everything already terminal in Supabase — just show summary.
+      if (
+        resumeJobs &&
+        typeof resumeCurrentIndex === "number" &&
+        resumeCurrentIndex >= resumeJobs.length
+      ) {
+        const finished = sessionWithDerivedProgress({
+          ...active,
+          status: "finished",
+          progress: { ...active.progress, finished: true },
+        });
+        persistSession(finished);
+        setStatusOpen(true);
+        if (finished.supabaseJobId) {
+          scheduleRemoteProgressSync(finished, { immediate: true });
+        }
+        activeDownloadRuns.delete(active.startedAt);
+        runningRef.current = false;
+        return;
+      }
+
       try {
         const result = await downloadSubmissionVideosInChunks({
           submissionIds: active.submissionIds,
@@ -450,11 +560,10 @@ export function BulkVideoDownloadProgressProvider({
           videosPerZip: active.videosPerZip,
           fileNamePrefix: active.fileNamePrefix,
           metaById,
+          existingResults: active.progress.results,
           resumeJobs,
           resumeBatchId: active.supabaseJobId || undefined,
-          resumeCurrentIndex: resumeJobs
-            ? Math.max(0, (active.progress.chunkIndex || 1) - 1)
-            : undefined,
+          resumeCurrentIndex,
           onEnqueued: ({ batchId, jobs }) => {
             if (token !== runTokenRef.current) return;
             const current = sessionRef.current;
@@ -501,7 +610,9 @@ export function BulkVideoDownloadProgressProvider({
             if (token !== runTokenRef.current) return;
             const current = sessionRef.current;
             if (!current || current.startedAt !== active.startedAt) return;
-            const next: BulkVideoDownloadSession = {
+            const prevTerminal = countTerminalResults(current.progress.results);
+            const nextTerminal = countTerminalResults(results);
+            const next: BulkVideoDownloadSession = sessionWithDerivedProgress({
               ...current,
               status: "running",
               progress: {
@@ -514,9 +625,13 @@ export function BulkVideoDownloadProgressProvider({
                 totalChunks,
                 chunkSize,
               },
-            };
+            });
             persistSession(next);
-            scheduleRemoteProgressSync(next);
+            // Flush as soon as a ZIP part lands terminal rows so reload mid-batch
+            // restores accurate counts instead of leaving items as pending.
+            scheduleRemoteProgressSync(next, {
+              immediate: nextTerminal > prevTerminal,
+            });
           },
         });
 
@@ -544,7 +659,7 @@ export function BulkVideoDownloadProgressProvider({
         });
 
         const current = sessionRef.current;
-        const finished: BulkVideoDownloadSession = {
+        const finished = sessionWithDerivedProgress({
           ...active,
           ...(current || {}),
           supabaseJobId:
@@ -562,7 +677,7 @@ export function BulkVideoDownloadProgressProvider({
             totalChunks: result.totalChunks,
             chunkSize: current?.progress.chunkSize || active.videosPerZip,
           },
-        };
+        });
         persistSession(finished);
         setStatusOpen(true);
         if (finished.supabaseJobId) {
@@ -570,7 +685,7 @@ export function BulkVideoDownloadProgressProvider({
             clearTimeout(progressSyncTimerRef.current);
             progressSyncTimerRef.current = null;
           }
-          scheduleRemoteProgressSync(finished);
+          scheduleRemoteProgressSync(finished, { immediate: true });
         }
       } catch (error: unknown) {
         if (token !== runTokenRef.current) return;
@@ -656,16 +771,17 @@ export function BulkVideoDownloadProgressProvider({
             restored.startedAt >= local.startedAt);
 
         if (pickRemote) {
-          persistSession(restored);
-          if (restored.status === "running" && !runningRef.current) {
-            void runSession(restored);
+          const normalized = sessionWithDerivedProgress(restored);
+          persistSession(normalized);
+          if (normalized.status === "running" && !runningRef.current) {
+            void runSession(normalized);
           }
           return;
         }
 
         if (local && local.contestId === id) {
           if (local.status === "running" && !runningRef.current) {
-            void runSession(local);
+            void runSession(sessionWithDerivedProgress(local));
           }
         }
       } catch (error) {

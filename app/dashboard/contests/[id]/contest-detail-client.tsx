@@ -242,6 +242,7 @@ import {
 import {
   computeContestDetailSubmissionStatusCounts,
   getContestDetailRowStatus,
+  type ContestDetailSubmissionStatusCounts,
 } from "@/lib/contest-detail-submission-status-counts";
 import {
   Tooltip,
@@ -875,195 +876,249 @@ function getTwitterSubmissionPointsForRanking(submission: any): number {
   return base + manual;
 }
 
+/** Status tab count: `loaded / total` while submissions hydrate (spinner lives on the tab icon). */
+function SubmissionStatusCountBadge({
+  loaded,
+  total,
+  isLoading,
+  isDark,
+  className,
+}: {
+  loaded: number;
+  total: number;
+  isLoading: boolean;
+  isDark: boolean;
+  className?: string;
+}) {
+  return (
+    <Badge
+      variant="secondary"
+      className={cn(
+        "inline-flex items-center gap-1 px-1.5 py-0.5 text-sm h-5 tabular-nums",
+        isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200",
+        className,
+      )}
+    >
+      {isLoading ? `${loaded} / ${total}` : total}
+    </Badge>
+  );
+}
+
+/** Tab leading icon — swapped for a same-size spinner while hydrating (avoids badge overflow). */
+function SubmissionStatusTabIcon({
+  isLoading,
+  children,
+  className,
+}: {
+  isLoading: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  if (isLoading) {
+    return (
+      <Loader2
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 animate-spin",
+          className,
+        )}
+        aria-hidden
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
 /** Compact submission status filters for Twitter (used below table controls; top row hidden for Twitter). */
 function TwitterContestSubmissionStatusTabs({
   activeStatusTab,
   onValueChange,
   isDark,
   counts,
+  loadedCounts,
+  isLoading = false,
 }: {
   activeStatusTab: string;
   onValueChange: (value: string) => void;
   isDark: boolean;
-  counts: {
-    total: number;
-    pending: number;
-    rejected: number;
-    verified: number;
-    paid: number;
-    verified_or_paid: number;
-    not_rejected: number;
-  };
+  counts: ContestDetailSubmissionStatusCounts;
+  loadedCounts?: ContestDetailSubmissionStatusCounts;
+  isLoading?: boolean;
 }) {
+  const loaded = loadedCounts ?? counts;
+  const badgeClass = cn(
+    "ml-1 px-1.5 py-0.5 text-xs h-5",
+    isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200",
+  );
   return (
     <div className="mb-4 px-4">
       <Tabs
         value={activeStatusTab}
-        onValueChange={onValueChange}
+        onValueChange={(value) => {
+          if (isLoading) return;
+          onValueChange(value);
+        }}
         className="w-full"
       >
         <TabsList className="flex w-full flex-wrap gap-2 h-auto p-1">
           <TabsTrigger
             value="all"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <Users className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <Users className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             All
-            <Badge
-              variant="secondary"
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-[#7F39EC] bg-purple-200",
-              )}
-            >
-              {counts.total}
-            </Badge>
+            <SubmissionStatusCountBadge
+              loaded={loaded.total}
+              total={counts.total}
+              isLoading={isLoading}
+              isDark={isDark}
+              className={badgeClass}
+            />
           </TabsTrigger>
           <TabsTrigger
             value="not_rejected"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             Not Rejected
-            <Badge
-              variant="secondary"
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-[#7F39EC] bg-purple-200",
-              )}
-            >
-              {counts.not_rejected}
-            </Badge>
+            <SubmissionStatusCountBadge
+              loaded={loaded.not_rejected}
+              total={counts.not_rejected}
+              isLoading={isLoading}
+              isDark={isDark}
+              className={badgeClass}
+            />
           </TabsTrigger>
           <TabsTrigger
             value="verified_or_paid"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-            <Wallet className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <Wallet className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             Verified + Paid
-            <Badge
-              variant="secondary"
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-[#7F39EC] bg-purple-200",
-              )}
-            >
-              {counts.verified_or_paid}
-            </Badge>
+            <SubmissionStatusCountBadge
+              loaded={loaded.verified_or_paid}
+              total={counts.verified_or_paid}
+              isLoading={isLoading}
+              isDark={isDark}
+              className={badgeClass}
+            />
           </TabsTrigger>
           <TabsTrigger
             value="pending"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             Pending
-            <Badge
-              variant="secondary"
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-[#7F39EC] bg-purple-200",
-              )}
-            >
-              {counts.pending}
-            </Badge>
+            <SubmissionStatusCountBadge
+              loaded={loaded.pending}
+              total={counts.pending}
+              isLoading={isLoading}
+              isDark={isDark}
+              className={badgeClass}
+            />
           </TabsTrigger>
           <TabsTrigger
             value="rejected"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <XCircle className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <XCircle className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             Rejected
-            <Badge
-              variant="secondary"
+            <SubmissionStatusCountBadge
+              loaded={loaded.rejected}
+              total={counts.rejected}
+              isLoading={isLoading}
+              isDark={isDark}
               className={cn(
                 "ml-1 px-1.5 py-0.5 text-xs h-5",
                 isDark
                   ? "text-white bg-[#FFFFFF36]"
                   : "text-red-600 bg-red-200",
               )}
-            >
-              {counts.rejected}
-            </Badge>
+            />
           </TabsTrigger>
           <TabsTrigger
             value="verified"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             Verified
-            <Badge
-              variant="secondary"
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-[#7F39EC] bg-purple-200",
-              )}
-            >
-              {counts.verified}
-            </Badge>
+            <SubmissionStatusCountBadge
+              loaded={loaded.verified}
+              total={counts.verified}
+              isLoading={isLoading}
+              isDark={isDark}
+              className={badgeClass}
+            />
           </TabsTrigger>
           <TabsTrigger
             value="paid"
+            disabled={isLoading}
             className={cn(
-              "flex-1 min-w-[100px] gap-2 text-sm",
+              "flex-1 min-w-[100px] gap-2 text-sm disabled:opacity-100",
               isDark
                 ? "text-white border border-gray-500"
                 : "data-[state=inactive]:bg-gray-100",
             )}
           >
-            <Wallet className="h-3.5 w-3.5 shrink-0" />
+            <SubmissionStatusTabIcon isLoading={isLoading}>
+              <Wallet className="h-3.5 w-3.5 shrink-0" />
+            </SubmissionStatusTabIcon>
             Paid
-            <Badge
-              variant="secondary"
-              className={cn(
-                "ml-1 px-1.5 py-0.5 text-xs h-5",
-                isDark
-                  ? "text-white bg-[#FFFFFF36]"
-                  : "text-[#7F39EC] bg-purple-200",
-              )}
-            >
-              {counts.paid}
-            </Badge>
+            <SubmissionStatusCountBadge
+              loaded={loaded.paid}
+              total={counts.paid}
+              isLoading={isLoading}
+              isDark={isDark}
+              className={badgeClass}
+            />
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -2986,18 +3041,26 @@ export default function ContestDetailClient({
   const getStatus = (submission: Submission) =>
     getContestDetailRowStatus(submission as any);
 
+  const isHydratingSubmissions = !submissionsFullyHydrated;
+
+  const loadedSubmissionStatusCounts = useMemo(
+    () => computeContestDetailSubmissionStatusCounts(currentSubmissions),
+    [currentSubmissions],
+  );
+
   const liveSubmissionStatusCounts = useMemo(() => {
     const loadedAll =
       submissionsFullyHydrated ||
       (submissionTotalCount > 0 &&
         currentSubmissions.length >= submissionTotalCount);
     if (!loadedAll) return submissionStatusCounts;
-    return computeContestDetailSubmissionStatusCounts(currentSubmissions);
+    return loadedSubmissionStatusCounts;
   }, [
     submissionsFullyHydrated,
     submissionTotalCount,
-    currentSubmissions,
+    currentSubmissions.length,
     submissionStatusCounts,
+    loadedSubmissionStatusCounts,
   ]);
 
   function getExplicitSubmissionQualityScoreForFiltering(
@@ -3210,6 +3273,7 @@ export default function ContestDetailClient({
     });
 
   const handleNormalViewSelectAll = () => {
+    if (isHydratingSubmissions) return;
     const ids = sortedSubmissions.map((s) => s.id);
     const allSelected =
       ids.length > 0 &&
@@ -3369,6 +3433,7 @@ export default function ContestDetailClient({
     submissionId: string,
     checked: boolean,
   ) => {
+    if (isHydratingSubmissions) return;
     const newSet = new Set(normalViewSelectedSubmissions);
     if (checked) {
       newSet.add(submissionId);
@@ -3486,7 +3551,11 @@ export default function ContestDetailClient({
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
   ) => {
-    const submissionIds = Array.from(normalViewSelectedSubmissions);
+    const selected = new Set(normalViewSelectedSubmissions);
+    // Keep leaderboard sort order (e.g. views high → low), not checkbox click order.
+    const submissionIds = sortedSubmissions
+      .map((submission) => submission.id)
+      .filter((id) => selected.has(id));
     if (submissionIds.length < 2) return;
     if (!currentContest?.id) return;
 
@@ -3518,7 +3587,6 @@ export default function ContestDetailClient({
 
     await startBulkVideoDownload({
       contestId: String(currentContest.id),
-      scope: "normal",
       submissionIds,
       namingPattern,
       videosPerZip,
@@ -8108,6 +8176,7 @@ export default function ContestDetailClient({
     creatorId: string,
     checked: boolean | "indeterminate",
   ) => {
+    if (isHydratingSubmissions) return;
     setCreatorWiseSelectedCreators((prev) => {
       const next = new Set(prev);
       if (checked === true) {
@@ -8123,6 +8192,7 @@ export default function ContestDetailClient({
     groups: Array<{ creator: { id: string } }>,
     checked: boolean | "indeterminate",
   ) => {
+    if (isHydratingSubmissions) return;
     setCreatorWiseSelectedCreators((prev) => {
       const next = new Set(prev);
       for (const group of groups) {
@@ -13600,16 +13670,27 @@ export default function ContestDetailClient({
                     />
                   </div>
                   <div>
-                    <h3
-                      className={cn(
-                        "text-lg font-bold",
-                        isDark
-                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
-                          : "text-gray-900",
+                    <div className="flex items-center gap-2">
+                      {isHydratingSubmissions && (
+                        <Loader2
+                          className={cn(
+                            "h-4 w-4 animate-spin shrink-0",
+                            isDark ? "text-white" : "text-indigo-600",
+                          )}
+                          aria-hidden
+                        />
                       )}
-                    >
-                      Budget Tracker
-                    </h3>
+                      <h3
+                        className={cn(
+                          "text-lg font-bold",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
+                            : "text-gray-900",
+                        )}
+                      >
+                        Budget Tracker
+                      </h3>
+                    </div>
                     <p
                       className={cn(
                         "text-sm",
@@ -13686,16 +13767,27 @@ export default function ContestDetailClient({
                     <BarChart3 className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h3
-                      className={cn(
-                        "text-lg font-bold",
-                        isDark
-                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
-                          : "text-gray-900",
+                    <div className="flex items-center gap-2">
+                      {isHydratingSubmissions && (
+                        <Loader2
+                          className={cn(
+                            "h-4 w-4 animate-spin shrink-0",
+                            isDark ? "text-white" : "text-emerald-600",
+                          )}
+                          aria-hidden
+                        />
                       )}
-                    >
-                      Budget Tracker
-                    </h3>
+                      <h3
+                        className={cn(
+                          "text-lg font-bold",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
+                            : "text-gray-900",
+                        )}
+                      >
+                        Budget Tracker
+                      </h3>
+                    </div>
                     <p
                       className={cn(
                         "text-sm",
@@ -13754,16 +13846,27 @@ export default function ContestDetailClient({
                     <BarChart3 className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h3
-                      className={cn(
-                        "text-lg font-bold",
-                        isDark
-                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
-                          : "text-gray-900",
+                    <div className="flex items-center gap-2">
+                      {isHydratingSubmissions && (
+                        <Loader2
+                          className={cn(
+                            "h-4 w-4 animate-spin shrink-0",
+                            isDark ? "text-white" : "text-blue-600",
+                          )}
+                          aria-hidden
+                        />
                       )}
-                    >
-                      Budget Tracker
-                    </h3>
+                      <h3
+                        className={cn(
+                          "text-lg font-bold",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                            : "text-gray-900",
+                        )}
+                      >
+                        Budget Tracker
+                      </h3>
+                    </div>
                     <p
                       className={cn(
                         "text-sm",
@@ -13868,16 +13971,25 @@ export default function ContestDetailClient({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={currentSubmissions.length === 0}
+                disabled={
+                  isHydratingSubmissions || currentSubmissions.length === 0
+                }
                 className={cn(
-                  "gap-2 shrink-0",
+                  "gap-2 shrink-0 disabled:opacity-100",
                   isDark
                     ? "border-slate-600 text-slate-300 hover:bg-slate-800"
                     : "border-slate-300 text-slate-700 hover:bg-slate-50",
                 )}
-                onClick={() => setFullReportDialogOpen(true)}
+                onClick={() => {
+                  if (isHydratingSubmissions) return;
+                  setFullReportDialogOpen(true);
+                }}
               >
-                <Download className="h-4 w-4" />
+                {isHydratingSubmissions ? (
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
+                ) : (
+                  <Download className="h-4 w-4 shrink-0" />
+                )}
                 Download full report
               </Button>
             </div>
@@ -17771,9 +17883,26 @@ export default function ContestDetailClient({
                                 isDark ? "text-slate-300" : "text-slate-600",
                               )}
                             >
-                              <div>
-                                {filteredSubmissions.length} submission
-                                {filteredSubmissions.length !== 1 ? "s" : ""}
+                              <div className="inline-flex items-center gap-1.5">
+                                {isHydratingSubmissions &&
+                                  !isPostCampaignLeaderboard && (
+                                    <Loader2
+                                      className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]"
+                                      aria-hidden
+                                    />
+                                  )}
+                                {isHydratingSubmissions &&
+                                !isPostCampaignLeaderboard
+                                  ? `${loadedSubmissionStatusCounts.total} / ${liveSubmissionStatusCounts.total} submission${
+                                      liveSubmissionStatusCounts.total !== 1
+                                        ? "s"
+                                        : ""
+                                    }`
+                                  : `${filteredSubmissions.length} submission${
+                                      filteredSubmissions.length !== 1
+                                        ? "s"
+                                        : ""
+                                    }`}
                               </div>
                               <div
                                 className={cn(
@@ -19134,201 +19263,215 @@ export default function ContestDetailClient({
                     <div className="py-4">
                       <Tabs
                         value={activeStatusTab}
-                        onValueChange={(value) =>
-                          setActiveStatusTab(value as any)
-                        }
+                        onValueChange={(value) => {
+                          if (isHydratingSubmissions) return;
+                          setActiveStatusTab(value as any);
+                        }}
                         className="w-full"
                       >
-                        <TabsList className="flex gap-5 w-full h-auto p-1">
+                        <TabsList className="flex flex-wrap gap-2 w-full h-auto p-1">
                           <TabsTrigger
                             value="all"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <Users className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <Users className="h-3.5 w-3.5 mr-1 mb-0.5 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 All
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.total}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={loadedSubmissionStatusCounts.total}
+                              total={liveSubmissionStatusCounts.total}
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                           <TabsTrigger
                             value="not_rejected"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <CheckCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5 mr-1 mb-0.5 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 Not Rejected
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.not_rejected}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={
+                                loadedSubmissionStatusCounts.not_rejected
+                              }
+                              total={liveSubmissionStatusCounts.not_rejected}
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                           <TabsTrigger
                             value="verified_or_paid"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <CheckCircle2 className="h-3.5 w-3.5 mb-0.5" />
-                              <Wallet className="h-3.5 w-3.5 mr-1" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mb-0.5 shrink-0" />
+                                <Wallet className="h-3.5 w-3.5 mr-1 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 Verified + Paid
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.verified_or_paid}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={
+                                loadedSubmissionStatusCounts.verified_or_paid
+                              }
+                              total={
+                                liveSubmissionStatusCounts.verified_or_paid
+                              }
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                           <TabsTrigger
                             value="pending"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <Clock className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <Clock className="h-3.5 w-3.5 mr-1 mb-0.5 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 Pending
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.pending}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={loadedSubmissionStatusCounts.pending}
+                              total={liveSubmissionStatusCounts.pending}
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                           <TabsTrigger
                             value="verified"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1 mb-0.5 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 Verified
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.verified}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={loadedSubmissionStatusCounts.verified}
+                              total={liveSubmissionStatusCounts.verified}
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                           <TabsTrigger
                             value="rejected"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <XCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1 mb-0.5 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 Rejected
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.rejected}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={loadedSubmissionStatusCounts.rejected}
+                              total={liveSubmissionStatusCounts.rejected}
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                           <TabsTrigger
                             value="paid"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "flex-1 gap-3 items-center px-1 border",
+                              "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
                                 ? "text-white border-gray-400"
                                 : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
                             <div className="flex items-center gap-1">
-                              <Wallet className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <SubmissionStatusTabIcon
+                                isLoading={isHydratingSubmissions}
+                                className="mr-1 mb-0.5"
+                              >
+                                <Wallet className="h-3.5 w-3.5 mr-1 mb-0.5 shrink-0" />
+                              </SubmissionStatusTabIcon>
                               <span className="text-[13px] font-medium">
                                 Paid
                               </span>
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "px-1.5 py-0.5 text-sm h-5",
-                                isDark
-                                  ? "text-white bg-[#FFFFFF36]"
-                                  : "text-[#7F39EC] bg-purple-200",
-                              )}
-                            >
-                              {liveSubmissionStatusCounts.paid}
-                            </Badge>
+                            <SubmissionStatusCountBadge
+                              loaded={loadedSubmissionStatusCounts.paid}
+                              total={liveSubmissionStatusCounts.paid}
+                              isLoading={isHydratingSubmissions}
+                              isDark={isDark}
+                            />
                           </TabsTrigger>
                         </TabsList>
                       </Tabs>
@@ -19564,17 +19707,24 @@ export default function ContestDetailClient({
                           </span>
                           <Select
                             value={viewMode}
-                            onValueChange={(v) =>
-                              setViewMode(v as "normal" | "creator-wise")
-                            }
+                            onValueChange={(v) => {
+                              if (isHydratingSubmissions) return;
+                              setViewMode(v as "normal" | "creator-wise");
+                            }}
+                            disabled={isHydratingSubmissions}
                           >
                             <SelectTrigger
                               className={cn(
-                                "h-12 w-full sm:w-[180px]",
+                                "h-12 w-full sm:w-[180px] disabled:opacity-100",
                                 isDark ? "border-gray-500" : "border-gray-300",
                               )}
                             >
-                              <SelectValue placeholder="View mode" />
+                              <div className="flex items-center gap-2 truncate">
+                                {isHydratingSubmissions && (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]" />
+                                )}
+                                <SelectValue placeholder="View mode" />
+                              </div>
                             </SelectTrigger>
                             <SelectContent isDark={isDark}>
                               <SelectItem value="normal" isDark={isDark}>
@@ -19599,19 +19749,26 @@ export default function ContestDetailClient({
                             </span>
                             <Select
                               value={sortOption}
-                              onValueChange={(v) =>
-                                setSortOption(v as SortOption)
-                              }
+                              onValueChange={(v) => {
+                                if (isHydratingSubmissions) return;
+                                setSortOption(v as SortOption);
+                              }}
+                              disabled={isHydratingSubmissions}
                             >
                               <SelectTrigger
                                 className={cn(
-                                  "h-12 w-full sm:w-[220px]",
+                                  "h-12 w-full sm:w-[220px] disabled:opacity-100",
                                   isDark
                                     ? "border-gray-500"
                                     : "border-slate-300",
                                 )}
                               >
-                                <SelectValue placeholder="Sort submissions" />
+                                <div className="flex items-center gap-2 truncate">
+                                  {isHydratingSubmissions && (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]" />
+                                  )}
+                                  <SelectValue placeholder="Sort submissions" />
+                                </div>
                               </SelectTrigger>
                               <SelectContent isDark={isDark}>
                                 {isTwitterTextImageContest ? (
@@ -19715,14 +19872,19 @@ export default function ContestDetailClient({
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  disabled={isHydratingSubmissions}
                                   className={cn(
-                                    "h-12 w-full sm:w-[220px] rounded-xl justify-start text-left font-semibold text-sm shadow-none",
+                                    "h-12 w-full sm:w-[220px] rounded-xl justify-start text-left font-semibold text-sm shadow-none disabled:opacity-100",
                                     isDark
                                       ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
                                       : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
                                   )}
                                 >
-                                  <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                                  {isHydratingSubmissions ? (
+                                    <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin text-[#7F39EC]" />
+                                  ) : (
+                                    <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                                  )}
                                   <span className="truncate text-sm font-semibold">
                                     {submissionQualityScoreFilterButtonLabel}
                                   </span>
@@ -19966,7 +20128,10 @@ export default function ContestDetailClient({
                                 <Checkbox
                                   id="detailed-view-inline"
                                   checked={detailedViewEnabled}
+                                  disabled={isHydratingSubmissions}
+                                  className="disabled:opacity-100"
                                   onCheckedChange={(checked) => {
+                                    if (isHydratingSubmissions) return;
                                     const enabled = checked === true;
                                     setDetailedViewEnabled(enabled);
                                     try {
@@ -19987,6 +20152,8 @@ export default function ContestDetailClient({
                                   htmlFor="detailed-view-inline"
                                   className={cn(
                                     "text-sm font-medium cursor-pointer whitespace-nowrap",
+                                    isHydratingSubmissions &&
+                                      "pointer-events-none",
                                     isDark ? "text-white" : "text-slate-700",
                                   )}
                                 >
@@ -19998,13 +20165,14 @@ export default function ContestDetailClient({
                             variant="outline"
                             size="sm"
                             disabled={
+                              isHydratingSubmissions ||
                               (isSubmissionTableView
                                 ? sortedSubmissions.length === 0
                                 : (filteredCreatorGroups?.length ?? 0) === 0) ||
                               anyYtRefreshInProgress
                             }
                             className={cn(
-                              "h-12 gap-2",
+                              "h-12 gap-2 disabled:opacity-100",
                               isDark
                                 ? "border-slate-600 text-slate-300 hover:bg-slate-800"
                                 : "border-slate-300 text-slate-700 hover:bg-slate-50",
@@ -20016,9 +20184,16 @@ export default function ContestDetailClient({
                                 ? "Download creator-wise leaderboard report"
                                 : "Download submissions leaderboard report"
                             }
-                            onClick={() => setExportDialogOpen(true)}
+                            onClick={() => {
+                              if (isHydratingSubmissions) return;
+                              setExportDialogOpen(true);
+                            }}
                           >
-                            <Download className="h-4 w-4" />
+                            {isHydratingSubmissions ? (
+                              <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
+                            ) : (
+                              <Download className="h-4 w-4 shrink-0" />
+                            )}
                             Download report
                           </Button>
                         </div>
@@ -20097,6 +20272,8 @@ export default function ContestDetailClient({
                           }}
                           isDark={isDark}
                           counts={liveSubmissionStatusCounts}
+                          loadedCounts={loadedSubmissionStatusCounts}
+                          isLoading={isHydratingSubmissions}
                         />
                       )}
                       {isSubmissionTableView &&
@@ -20247,6 +20424,8 @@ export default function ContestDetailClient({
                                         normalViewSelectedSubmissions.has(s.id),
                                       )
                                     }
+                                    disabled={isHydratingSubmissions}
+                                    className="disabled:opacity-100"
                                     onCheckedChange={handleNormalViewSelectAll}
                                     aria-label="Select all submissions in current view"
                                   />
@@ -21572,6 +21751,8 @@ export default function ContestDetailClient({
                                         checked={normalViewSelectedSubmissions.has(
                                           submission.id,
                                         )}
+                                        disabled={isHydratingSubmissions}
+                                        className="disabled:opacity-100"
                                         onCheckedChange={(checked) =>
                                           handleNormalViewCheckboxChange(
                                             submission.id,
@@ -24479,6 +24660,8 @@ export default function ContestDetailClient({
                                 }}
                                 isDark={isDark}
                                 counts={liveSubmissionStatusCounts}
+                                loadedCounts={loadedSubmissionStatusCounts}
+                                isLoading={isHydratingSubmissions}
                               />
                             )}
                             {showCreatorWiseSelectionUi &&
@@ -24715,6 +24898,8 @@ export default function ContestDetailClient({
                                               ? "indeterminate"
                                               : false
                                         }
+                                        disabled={isHydratingSubmissions}
+                                        className="disabled:opacity-100"
                                         onCheckedChange={(checked) =>
                                           handleCreatorWiseSelectAll(
                                             paginatedCreatorGroups as Array<{
@@ -25373,6 +25558,8 @@ export default function ContestDetailClient({
                                                 checked={creatorWiseSelectedCreators.has(
                                                   String(group.creator.id),
                                                 )}
+                                                disabled={isHydratingSubmissions}
+                                                className="disabled:opacity-100"
                                                 onCheckedChange={(checked) =>
                                                   handleCreatorWiseCheckboxChange(
                                                     String(group.creator.id),
@@ -27955,14 +28142,19 @@ export default function ContestDetailClient({
                           <Button
                             variant="outline"
                             size="sm"
+                            disabled={isHydratingSubmissions}
                             className={cn(
-                              "h-9 w-full sm:w-[200px] rounded-lg justify-start text-left font-semibold text-sm shadow-none",
+                              "h-9 w-full sm:w-[200px] rounded-lg justify-start text-left font-semibold text-sm shadow-none disabled:opacity-100",
                               isDark
                                 ? "border-slate-600 bg-[#1e293b] text-slate-100 hover:bg-slate-800"
                                 : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
                             )}
                           >
-                            <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                            {isHydratingSubmissions ? (
+                              <Loader2 className="h-4 w-4 mr-2 shrink-0 animate-spin text-[#7F39EC]" />
+                            ) : (
+                              <Star className="h-4 w-4 mr-2 shrink-0 text-[#7F39EC]" />
+                            )}
                             <span className="truncate font-semibold text-sm">
                               {analyticsQualityScoreFilterButtonLabel}
                             </span>
@@ -28088,17 +28280,25 @@ export default function ContestDetailClient({
                       variant="outline"
                       size="sm"
                       disabled={
+                        isHydratingSubmissions ||
                         analyticsQualityFilteredSubmissions.length === 0
                       }
                       className={cn(
-                        "gap-2 shrink-0",
+                        "gap-2 shrink-0 disabled:opacity-100",
                         isDark
                           ? "border-slate-600 text-slate-300 hover:bg-slate-800"
                           : "border-slate-300 text-slate-700 hover:bg-slate-50",
                       )}
-                      onClick={() => setAnalyticsExportDialogOpen(true)}
+                      onClick={() => {
+                        if (isHydratingSubmissions) return;
+                        setAnalyticsExportDialogOpen(true);
+                      }}
                     >
-                      <Download className="h-4 w-4" />
+                      {isHydratingSubmissions ? (
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
+                      ) : (
+                        <Download className="h-4 w-4 shrink-0" />
+                      )}
                       Download report
                     </Button>
                     <ContestAnalyticsExportDialog
@@ -28117,32 +28317,41 @@ export default function ContestDetailClient({
                 <div className="mt-4">
                   <Tabs
                     value={activeAnalyticsTab}
-                    onValueChange={(value) =>
-                      setActiveAnalyticsTab(value as any)
-                    }
+                    onValueChange={(value) => {
+                      if (isHydratingSubmissions) return;
+                      setActiveAnalyticsTab(value as any);
+                    }}
                     className="w-full"
                   >
-                    <TabsList className="grid w-full grid-cols-7">
+                    <TabsList className="flex flex-wrap gap-1 w-full h-auto p-1">
                       <TabsTrigger
                         value="all"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         All ({analyticsQualityFilteredSubmissions.length || 0})
                       </TabsTrigger>
                       <TabsTrigger
                         value="not_rejected"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         Not Rejected (
                         {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) !== "rejected",
@@ -28151,13 +28360,17 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="verified"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         Verified (
                         {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "verified",
@@ -28166,13 +28379,17 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="paid"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         Paid (
                         {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "paid",
@@ -28181,13 +28398,17 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="pending"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         Pending (
                         {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "pending",
@@ -28196,13 +28417,17 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="rejected"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         Rejected (
                         {analyticsQualityFilteredSubmissions.filter(
                           (s) => getStatus(s) === "rejected",
@@ -28211,13 +28436,17 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="verified_or_paid"
+                        disabled={isHydratingSubmissions}
                         className={cn(
-                          "text-sm",
+                          "flex-1 text-sm gap-1.5 disabled:opacity-100 whitespace-nowrap",
                           isDark
                             ? "text-white border border-gray-500"
                             : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600",
                         )}
                       >
+                        {isHydratingSubmissions ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                        ) : null}
                         Verified/Paid (
                         {analyticsQualityFilteredSubmissions.filter(
                           (s) =>

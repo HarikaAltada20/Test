@@ -471,8 +471,6 @@ export function BulkModerationProgressProvider({
   const showPanel = isBusy && activeJob && !dismissed;
   const total = Math.max(0, Number(activeJob?.total_count) || 0);
   const processed = Math.max(0, Number(activeJob?.processed_count) || 0);
-  const success = Math.max(0, Number(activeJob?.success_count) || 0);
-  const failed = Math.max(0, Number(activeJob?.failed_count) || 0);
   const pct = Math.round(
     Number.isFinite(activeJob?.progressPercent)
       ? Number(activeJob?.progressPercent)
@@ -521,9 +519,6 @@ export function BulkModerationProgressProvider({
                 style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
               />
             </div>
-            <p className="text-xs opacity-80">
-              {success} succeeded · {failed} failed
-            </p>
             {/* <p className="text-xs opacity-70">
               Continues in the background if you refresh or leave this page.
             </p> */}
