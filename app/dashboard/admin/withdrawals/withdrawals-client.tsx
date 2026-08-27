@@ -1327,17 +1327,6 @@ export default function WithdrawalsClient({
     );
   };
 
-  const stickyHeadBg = isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]";
-  const stickyCellBg = isDark ? "bg-[#170337]" : "bg-white";
-  /** Checkbox 2.5rem + Created 7.5rem = Name sticks at 10rem */
-  const stickyCreatedClass = "sticky left-10 z-20 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem]";
-  const stickyNameClass =
-    "sticky left-[10rem] z-20 w-[8rem] min-w-[8rem] max-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]";
-  const stickyCreatedCellClass =
-    "sticky left-10 z-10 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem]";
-  const stickyNameCellClass =
-    "sticky left-[10rem] z-10 w-[8rem] min-w-[8rem] max-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]";
-
   const renderTable = (rows: Request[]) => (
     <div
       className={cn(
@@ -1355,12 +1344,7 @@ export default function WithdrawalsClient({
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
             )}
           >
-            <TableHead
-              className={cn(
-                "w-10 min-w-10 max-w-10 pr-0 px-2 sm:px-4 sticky left-0 z-20",
-                stickyHeadBg,
-              )}
-            >
+            <TableHead className="w-10 pr-0 px-2 sm:px-4">
               <Checkbox
                 checked={
                   someApprovableSelected && !allApprovableSelected
@@ -1379,13 +1363,11 @@ export default function WithdrawalsClient({
               colKey="created_at"
               label="Created"
               icon={<Calendar className="h-4 w-4" />}
-              className={cn(stickyCreatedClass, stickyHeadBg)}
             />
             <SortableTh
               colKey="user_full_name"
               label="Name"
               icon={<User className="h-4 w-4" />}
-              className={cn(stickyNameClass, stickyHeadBg)}
             />
             <SortableTh
               colKey="username"
@@ -1420,12 +1402,7 @@ export default function WithdrawalsClient({
                 key={r.id}
                 className="hover:bg-muted/30 transition-colors"
               >
-                <TableCell
-                  className={cn(
-                    "w-10 min-w-10 max-w-10 pr-0 align-middle px-2 sm:px-4 sticky left-0 z-10",
-                    stickyCellBg,
-                  )}
-                >
+                <TableCell className="w-10 pr-0 align-middle px-2 sm:px-4">
                   <Checkbox
                     checked={selectedIds.has(r.id)}
                     onCheckedChange={(v) =>
@@ -1436,13 +1413,7 @@ export default function WithdrawalsClient({
                     className={cn(isDark && "border-white/60")}
                   />
                 </TableCell>
-                <TableCell
-                  className={cn(
-                    "whitespace-nowrap px-2 sm:px-4",
-                    stickyCreatedCellClass,
-                    stickyCellBg,
-                  )}
-                >
+                <TableCell className="whitespace-nowrap px-2 sm:px-4">
                   <div className="text-sm text-muted-foreground">
                     {new Date(r.created_at).toLocaleDateString()}
                   </div>
@@ -1450,13 +1421,7 @@ export default function WithdrawalsClient({
                     {new Date(r.created_at).toLocaleTimeString()}
                   </div>
                 </TableCell>
-                <TableCell
-                  className={cn(
-                    "px-2 sm:px-4",
-                    stickyNameCellClass,
-                    stickyCellBg,
-                  )}
-                >
+                <TableCell className="max-w-[160px] px-2 sm:px-4">
                   <span className="font-medium truncate block">
                     {user?.full_name || "—"}
                   </span>
