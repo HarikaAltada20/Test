@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildBulkDownloadMetaMap,
   buildBulkDownloadResultRows,
+  buildProvisionalBulkDownloadResultRows,
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   chunkArray,
@@ -124,6 +125,43 @@ describe("video-download-ui", () => {
     };
     const success = { ...pending, status: "success" as const };
     const merged = mergeBulkDownloadResultRows([pending], [success]);
+    assert.equal(merged[0]?.status, "success");
+  });
+
+  it("marks live completed videos as downloaded (not terminal success)", () => {
+    const metaById = buildBulkDownloadMetaMap(["a", "b", "c"], (id) => ({
+      username: `creator_${id}`,
+      videoTitle: `Video ${id}`,
+      link: `https://instagram.com/reel/${id}/`,
+      views: 100,
+    }));
+    const rows = buildProvisionalBulkDownloadResultRows({
+      submissionIds: ["a", "b", "c"],
+      metaById,
+      completed: 1,
+      itemFailures: [
+        {
+          url: "https://instagram.com/reel/b/",
+          error: "Video not found",
+        },
+      ],
+    });
+    assert.equal(rows.find((row) => row.submissionId === "a")?.status, "downloaded");
+    assert.equal(rows.find((row) => row.submissionId === "b")?.status, "failed");
+    assert.equal(rows.find((row) => row.submissionId === "c")?.status, "pending");
+  });
+
+  it("upgrades downloaded to success when merging final ZIP results", () => {
+    const downloaded = {
+      submissionId: "a",
+      username: "creator",
+      videoTitle: "Video",
+      link: "https://instagram.com/reel/a/",
+      views: 1,
+      status: "downloaded" as const,
+    };
+    const success = { ...downloaded, status: "success" as const };
+    const merged = mergeBulkDownloadResultRows([downloaded], [success]);
     assert.equal(merged[0]?.status, "success");
   });
 

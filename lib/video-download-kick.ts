@@ -1,6 +1,5 @@
 import { after } from "next/server";
 import {
-  ensureProcessVideoDownloadQueueScheduleOnce,
   getQStashPublishBaseUrl,
   isLoopbackUrl,
   isQStashEnabled,
@@ -11,7 +10,8 @@ import {
 /**
  * Publish a QStash message (awaited) so the job is not left stranded if the
  * lambda freezes after the HTTP response. Direct fetch is only a fallback and
- * must not be awaited — that would block until the next 5-minute job finishes.
+ * Direct fetch is only a fallback and must not be awaited — that would block
+ * until the current job finishes.
  */
 export async function kickProcessVideoDownloadQueue(
   request: Request,
@@ -44,7 +44,6 @@ export async function kickProcessVideoDownloadQueue(
   };
 
   if (isQStashEnabled() && !isLoopbackUrl(qstashUrl)) {
-    ensureProcessVideoDownloadQueueScheduleOnce(qstashUrl);
     const res = await triggerProcessVideoDownloadQueue(qstashUrl, options);
     if (res?.error) runFallbackAfterResponse();
     return;

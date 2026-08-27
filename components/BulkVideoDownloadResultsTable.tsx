@@ -11,7 +11,10 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import type { BulkVideoDownloadResultRow } from "@/lib/video-download-ui";
+import {
+  isBulkDownloadSuccessRow,
+  type BulkVideoDownloadResultRow,
+} from "@/lib/video-download-ui";
 
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -245,7 +248,7 @@ export function BulkVideoDownloadResultsTable({
   };
 
   const succeeded = useMemo(
-    () => rows.filter((row) => row.status === "success"),
+    () => rows.filter(isBulkDownloadSuccessRow),
     [rows],
   );
   const failed = useMemo(

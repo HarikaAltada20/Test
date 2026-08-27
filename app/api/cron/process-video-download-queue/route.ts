@@ -3,8 +3,7 @@
  *
  * Triggers:
  * - QStash one-shot after enqueue / after each job (primary)
- * - QStash schedule every 5 minutes (stuck-job recovery + ZIP cleanup)
- * - Vercel Cron once daily (backup if QStash is down) — see vercel.json
+ * - Vercel Cron once daily (backup) — see vercel.json
  * - Local CRON_SECRET POST
  */
 
@@ -12,10 +11,7 @@ import { mkdir, rm, stat } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { NextResponse } from "next/server";
-import {
-  authorizeProcessVideoDownloadQueue,
-  ensureProcessVideoDownloadQueueSchedule,
-} from "@/lib/qstash";
+import { authorizeProcessVideoDownloadQueue } from "@/lib/qstash";
 import {
   enqueueNextVideoDownloadBatchPart,
   getVideoDownloadJobStatus,
@@ -69,14 +65,6 @@ export async function POST(request: Request) {
   console.log(
     `[process-video-download-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
   );
-
-  const ensured = await ensureProcessVideoDownloadQueueSchedule();
-  if (ensured.error) {
-    console.warn(
-      "[process-video-download-queue] schedule ensure:",
-      ensured.error,
-    );
-  }
 
   return handleRequest(request);
 }

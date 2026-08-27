@@ -381,7 +381,6 @@ export function BulkModerationProgressProvider({
         action: meta.action,
       };
       setActiveJob(nextJob);
-      setDismissed(false);
       persistSnapshot(meta, nextJob);
 
       if (job.status === "queued" || job.status === "running") {

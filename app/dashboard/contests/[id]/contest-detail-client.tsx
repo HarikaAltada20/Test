@@ -7626,6 +7626,11 @@ export default function ContestDetailClient({
             "Another bulk moderation job is already running. Wait for it to finish before starting a new one.",
           );
         }
+        if (isBulkPaymentBusy) {
+          throw new Error(
+            "A bulk payment job is already running. Wait for it to finish before starting verify, pending, or reject.",
+          );
+        }
 
         const enqueueAction =
           action === "approve"
@@ -8451,6 +8456,15 @@ export default function ContestDetailClient({
           title: "Bulk payment already running",
           description:
             "Wait for the current bulk payment job to finish before starting a new one.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (isBulkModerationBusy) {
+        toast({
+          title: "Bulk moderation in progress",
+          description:
+            "Wait for verify, pending, or reject to finish before starting bulk pay.",
           variant: "destructive",
         });
         return;

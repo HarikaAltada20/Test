@@ -415,7 +415,6 @@ export function BulkPaymentProgressProvider({
       });
       activeJobRef.current = nextJob;
       setActiveJob(nextJob);
-      setDismissed(false);
       persistSnapshot(meta, nextJob);
 
       if (job.status === "queued" || job.status === "running") {

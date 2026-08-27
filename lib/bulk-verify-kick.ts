@@ -4,15 +4,15 @@ import {
   isLoopbackUrl,
   isQStashEnabled,
   resolveLocalAwareBaseUrl,
-  triggerProcessBulkPaymentQueue,
+  triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
 
 /**
- * Keep the bulk-payment worker alive while the client polls (esp. local/dev
+ * Keep the bulk-moderation worker alive while the client polls (esp. local/dev
  * where QStash cannot reach localhost). Safe no-op when the queue is empty or
  * already processing.
  */
-export async function kickProcessBulkPaymentQueue(
+export async function kickProcessBulkVerifyQueue(
   request: Request,
 ): Promise<void> {
   const qstashUrl = getQStashPublishBaseUrl(request);
@@ -25,12 +25,12 @@ export async function kickProcessBulkPaymentQueue(
   }
 
   const fallback = () =>
-    fetch(`${localUrl}/api/cron/process-bulk-payment-queue`, {
+    fetch(`${localUrl}/api/cron/process-bulk-verify-queue`, {
       method: "POST",
       headers,
       body: "{}",
     }).catch((e) =>
-      console.error("[bulk-payment-queue] Direct processor trigger failed:", e),
+      console.error("[bulk-verify-queue] Direct processor trigger failed:", e),
     );
 
   const runFallbackAfterResponse = () => {
@@ -42,7 +42,7 @@ export async function kickProcessBulkPaymentQueue(
   };
 
   if (isQStashEnabled() && !isLoopbackUrl(qstashUrl)) {
-    const res = await triggerProcessBulkPaymentQueue(qstashUrl);
+    const res = await triggerProcessBulkVerifyQueue(qstashUrl);
     if (res?.error) runFallbackAfterResponse();
     return;
   }

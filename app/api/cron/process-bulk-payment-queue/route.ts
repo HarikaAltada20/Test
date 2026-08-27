@@ -17,7 +17,6 @@ import {
 } from "@/lib/queue/bulk-payment-queue";
 import {
   authorizeProcessBulkPaymentQueue,
-  ensureProcessBulkPaymentQueueScheduleOnce,
   isQStashEnabled,
   triggerProcessBulkPaymentQueue,
 } from "@/lib/qstash";
@@ -141,7 +140,6 @@ export async function POST(request: Request) {
   console.log(
     `[process-bulk-payment-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
   );
-  ensureProcessBulkPaymentQueueScheduleOnce(getBaseUrlFromRequest(request));
   return handleRequest(getBaseUrlFromRequest(request));
 }
 

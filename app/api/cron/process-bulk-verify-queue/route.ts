@@ -18,7 +18,6 @@ import {
 } from "@/lib/queue/bulk-submission-moderation-queue";
 import {
   authorizeProcessBulkVerifyQueue,
-  ensureProcessBulkVerifyQueueScheduleOnce,
   isQStashEnabled,
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
@@ -579,7 +578,6 @@ export async function POST(request: Request) {
   console.log(
     `[process-bulk-verify-queue] Invoked by ${viaQStash ? "QStash" : "CRON/direct"}`,
   );
-  ensureProcessBulkVerifyQueueScheduleOnce(getBaseUrlFromRequest(request));
   return handleRequest(getBaseUrlFromRequest(request));
 }
 

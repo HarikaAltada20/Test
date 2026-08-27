@@ -242,7 +242,9 @@ function leanItemStatusesFromProgress(
   return results
     .map((row) => ({
       submissionId: row.submissionId,
-      status: row.status,
+      // Live `downloaded` is UI-only until the ZIP is ready — persist as pending
+      // so reload/resume does not treat the ZIP part as finished.
+      status: row.status === "downloaded" ? "pending" : row.status,
       error: row.error,
     }))
     .filter(

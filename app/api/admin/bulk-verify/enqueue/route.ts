@@ -11,11 +11,14 @@ import {
 } from "@/lib/queue/bulk-submission-moderation-queue";
 import {
   isQStashEnabled,
-  ensureProcessBulkVerifyQueueScheduleOnce,
   triggerProcessBulkVerifyQueue,
 } from "@/lib/qstash";
 import { MAX_BULK_MODERATION_SUBMISSIONS } from "@/lib/queue/bulk-job-limits";
 import type { BulkModerationChannel } from "@/lib/queue/bulk-job-payload";
+import {
+  bulkContestConflictMessage,
+  findActiveBulkContestConflict,
+} from "@/lib/bulk-job-contest-lock";
 
 const ALLOWED_ACTIONS = new Set(["verified", "pending", "rejected"]);
 const OWNERSHIP_ID_CHUNK_SIZE = 200;
@@ -272,6 +275,19 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const paymentConflict = await findActiveBulkContestConflict(
+      supabaseAdmin,
+      contestId,
+      "moderation",
+    );
+    if (paymentConflict) {
+      return NextResponse.json(
+        { error: bulkContestConflictMessage(paymentConflict) },
+        { status: 409 },
+      );
+    }
+
     const now = new Date().toISOString();
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("bulk_submission_moderation_jobs")
@@ -338,7 +354,6 @@ export async function POST(request: Request) {
     }
 
     const baseUrl = getBaseUrlFromRequest(request).replace(/\/$/, "");
-    ensureProcessBulkVerifyQueueScheduleOnce(baseUrl);
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-bulk-verify-queue`, {
         method: "POST",

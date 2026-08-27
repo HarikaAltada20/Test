@@ -323,9 +323,22 @@ export type BulkVideoDownloadSubmissionMeta = {
 };
 
 export type BulkVideoDownloadResultRow = BulkVideoDownloadSubmissionMeta & {
-  status: "pending" | "success" | "failed";
+  /**
+   * - pending: not finished yet
+   * - downloaded: video fetched in the current ZIP wave (ZIP not ready yet; not terminal)
+   * - success: confirmed in a finished ZIP
+   * - failed: known failure
+   */
+  status: "pending" | "downloaded" | "success" | "failed";
   error?: string;
 };
+
+/** True when the row should appear under the Succeeded results tab. */
+export function isBulkDownloadSuccessRow(
+  row: Pick<BulkVideoDownloadResultRow, "status">,
+): boolean {
+  return row.status === "success" || row.status === "downloaded";
+}
 
 export function normalizeBulkDownloadLink(link: string): string {
   return link.trim().replace(/\/+$/, "").toLowerCase();
@@ -366,7 +379,7 @@ export function countBulkDownloadResultStatuses(
   let failedCount = 0;
   let pendingCount = 0;
   for (const row of rows) {
-    if (row.status === "success") successCount += 1;
+    if (isBulkDownloadSuccessRow(row)) successCount += 1;
     else if (row.status === "failed") failedCount += 1;
     else pendingCount += 1;
   }
@@ -448,7 +461,13 @@ export function mergeBulkDownloadResultRows(
   next: BulkVideoDownloadResultRow[],
 ): BulkVideoDownloadResultRow[] {
   const statusRank = (status: BulkVideoDownloadResultRow["status"]) =>
-    status === "success" ? 2 : status === "failed" ? 1 : 0;
+    status === "success"
+      ? 3
+      : status === "failed"
+        ? 2
+        : status === "downloaded"
+          ? 1
+          : 0;
 
   const byId = new Map(existing.map((row) => [row.submissionId, row]));
   for (const row of next) {
@@ -458,6 +477,76 @@ export function mergeBulkDownloadResultRows(
     }
   }
   return Array.from(byId.values());
+}
+
+/**
+ * Live per-video rows while a ZIP job is still queued/processing.
+ * Failures are marked immediately; completed downloads use non-terminal
+ * `downloaded` so the Succeeded tab fills without treating the ZIP as done.
+ */
+export function buildProvisionalBulkDownloadResultRows(options: {
+  submissionIds: string[];
+  metaById: Map<string, BulkVideoDownloadSubmissionMeta>;
+  completed: number;
+  status?: string;
+  itemFailures?: { url: string; error: string }[];
+}): BulkVideoDownloadResultRow[] {
+  const failureByLink = new Map(
+    (options.itemFailures ?? []).map((failure) => [
+      normalizeBulkDownloadLink(failure.url),
+      failure.error,
+    ]),
+  );
+  // Worker downloads sequentially in submission order, so the first N
+  // non-failed rows match queue `completed`.
+  let downloadedSlots = Math.max(0, Math.floor(options.completed) || 0);
+
+  return options.submissionIds.map((submissionId) => {
+    const meta = options.metaById.get(submissionId);
+    const link = meta?.link ?? "";
+    const failureError = link
+      ? failureByLink.get(normalizeBulkDownloadLink(link))
+      : undefined;
+    const base = {
+      submissionId,
+      username: meta?.username ?? "unknown",
+      videoTitle: meta?.videoTitle ?? "Untitled",
+      link,
+      views: meta?.views ?? 0,
+      avatarUrl: meta?.avatarUrl ?? null,
+      displayName: meta?.displayName ?? null,
+      creatorId: meta?.creatorId ?? null,
+    };
+
+    if (failureError) {
+      return {
+        ...base,
+        status: "failed" as const,
+        error: failureError,
+      };
+    }
+
+    if (options.status === "failed") {
+      return {
+        ...base,
+        status: "failed" as const,
+        error: "Download failed",
+      };
+    }
+
+    if (downloadedSlots > 0) {
+      downloadedSlots -= 1;
+      return {
+        ...base,
+        status: "downloaded" as const,
+      };
+    }
+
+    return {
+      ...base,
+      status: "pending" as const,
+    };
+  });
 }
 
 export type ChunkedBulkDownloadResult = {
@@ -677,56 +766,14 @@ async function downloadOneZipChunk(options: {
       status: string;
       itemFailures?: { url: string; error: string }[];
     },
-  ): BulkVideoDownloadResultRow[] => {
-    const failureByLink = new Map(
-      (queueInfo.itemFailures ?? []).map((failure) => [
-        normalizeBulkDownloadLink(failure.url),
-        failure.error,
-      ]),
-    );
-
-    return chunk.map((submissionId) => {
-      const meta = options.metaById.get(submissionId);
-      const link = meta?.link ?? "";
-      const failureError = link
-        ? failureByLink.get(normalizeBulkDownloadLink(link))
-        : undefined;
-      const base = {
-        submissionId,
-        username: meta?.username ?? "unknown",
-        videoTitle: meta?.videoTitle ?? "Untitled",
-        link,
-        views: meta?.views ?? 0,
-        avatarUrl: meta?.avatarUrl ?? null,
-        displayName: meta?.displayName ?? null,
-        creatorId: meta?.creatorId ?? null,
-      };
-
-      // Mark known URL failures as soon as the queue reports them so the Failed
-      // chip tracks live progress. Keep non-failed rows pending until the ZIP is
-      // ready so we never persist provisional successes mid-batch.
-      if (failureError) {
-        return {
-          ...base,
-          status: "failed" as const,
-          error: failureError,
-        };
-      }
-
-      if (queueInfo.status === "failed") {
-        return {
-          ...base,
-          status: "failed" as const,
-          error: "Download failed",
-        };
-      }
-
-      return {
-        ...base,
-        status: "pending" as const,
-      };
+  ): BulkVideoDownloadResultRow[] =>
+    buildProvisionalBulkDownloadResultRows({
+      submissionIds: chunk,
+      metaById: options.metaById,
+      completed: queueInfo.completed,
+      status: queueInfo.status,
+      itemFailures: queueInfo.itemFailures,
     });
-  };
 
   const pollQueued = async (jobId: string, fileName: string) => {
     if (options.batchSession && typeof options.batchJobIndex === "number") {
@@ -1197,7 +1244,8 @@ export async function downloadSubmissionVideosInChunks(options: {
             ? mergeBulkDownloadResultRows(results, info.results)
             : results;
           // Live counters come from prior finished ZIPs + this ZIP's queue
-          // completed/failed (result rows stay pending until the ZIP is ready).
+          // completed/failed. Per-video rows use non-terminal `downloaded`
+          // until the ZIP is ready (then upgraded to `success`).
           options.onProgress?.({
             ...info,
             successCount: successCount + info.successCount,

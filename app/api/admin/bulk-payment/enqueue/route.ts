@@ -13,13 +13,16 @@ import {
 } from "@/lib/queue/bulk-payment-queue";
 import {
   isQStashEnabled,
-  ensureProcessBulkPaymentQueueScheduleOnce,
   triggerProcessBulkPaymentQueue,
 } from "@/lib/qstash";
 import {
   MAX_BULK_PAYMENT_CREATORS,
   MAX_BULK_PAYMENT_SUBMISSIONS,
 } from "@/lib/queue/bulk-job-limits";
+import {
+  bulkContestConflictMessage,
+  findActiveBulkContestConflict,
+} from "@/lib/bulk-job-contest-lock";
 
 const ALLOWED_PAYMENT_TYPES = new Set(["standard", "bonus", "both"]);
 const ALLOWED_CHANNELS = new Set([
@@ -254,6 +257,18 @@ export async function POST(request: Request) {
       0,
     );
 
+    const moderationConflict = await findActiveBulkContestConflict(
+      supabaseAdmin,
+      contestId,
+      "payment",
+    );
+    if (moderationConflict) {
+      return NextResponse.json(
+        { error: bulkContestConflictMessage(moderationConflict) },
+        { status: 409 },
+      );
+    }
+
     const now = new Date().toISOString();
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("bulk_payment_jobs")
@@ -324,7 +339,6 @@ export async function POST(request: Request) {
     }
 
     const baseUrl = getBaseUrlFromRequest(request).replace(/\/$/, "");
-    ensureProcessBulkPaymentQueueScheduleOnce(baseUrl);
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-bulk-payment-queue`, {
         method: "POST",

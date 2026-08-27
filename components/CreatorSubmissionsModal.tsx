@@ -694,6 +694,15 @@ export function CreatorSubmissionsModal({
               });
               return;
             }
+            if (bulkModerationJobActive) {
+              toast({
+                title: "Bulk moderation in progress",
+                description:
+                  "Wait for verify, pending, or reject to finish before starting bulk pay.",
+                variant: "destructive",
+              });
+              return;
+            }
             const enqueueRes = await fetch("/api/admin/bulk-payment/enqueue", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -833,6 +842,15 @@ export function CreatorSubmissionsModal({
               title: "Bulk payment already running",
               description:
                 "Wait for the current bulk payment job to finish before starting a new one.",
+              variant: "destructive",
+            });
+            return;
+          }
+          if (bulkModerationJobActive) {
+            toast({
+              title: "Bulk moderation in progress",
+              description:
+                "Wait for verify, pending, or reject to finish before starting bulk pay.",
               variant: "destructive",
             });
             return;
