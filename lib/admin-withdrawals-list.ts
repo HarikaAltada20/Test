@@ -160,3 +160,119 @@ export async function fetchWithdrawalsPage(
     total: total ?? 0,
   };
 }
+
+export type WithdrawalPayoutSeriesPoint = {
+  date: string;
+  label: string;
+  amountCents: number;
+  count: number;
+};
+
+function formatPayoutDayLabel(key: string): string {
+  const d = new Date(`${key}T12:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return key;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function utcDayKeysInclusive(fromIso: string, toIso: string): string[] {
+  const keys: string[] = [];
+  const cursor = new Date(fromIso);
+  cursor.setUTCHours(12, 0, 0, 0);
+  const end = new Date(toIso);
+  end.setUTCHours(12, 0, 0, 0);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) {
+    return keys;
+  }
+  while (cursor <= end) {
+    keys.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return keys;
+}
+
+/**
+ * Daily cash payout series for processed withdrawals, bucketed by processed_at (UTC).
+ * Fills zero days across the inclusive range. Paginates past Supabase's 1000-row cap.
+ */
+export async function fetchWithdrawalPayoutSeries(
+  supabase: SupabaseClient,
+  opts: {
+    processedFrom?: string | null;
+    processedTo?: string | null;
+  },
+): Promise<{ error: string | null; data: WithdrawalPayoutSeriesPoint[] }> {
+  const fromIso = opts.processedFrom || undefined;
+  const toIso = opts.processedTo || undefined;
+
+  const dayKeys =
+    fromIso && toIso ? utcDayKeysInclusive(fromIso, toIso) : [];
+  const buckets = new Map<string, { amountCents: number; count: number }>();
+  for (const key of dayKeys) {
+    buckets.set(key, { amountCents: 0, count: 0 });
+  }
+
+  const pageSize = 1000;
+  let offset = 0;
+  for (;;) {
+    let q = supabase
+      .from("admin_withdrawal_requests_list")
+      .select("amount, amount_type, processed_at")
+      .eq("status", "processed")
+      .not("processed_at", "is", null)
+      .order("processed_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (fromIso) {
+      q = q.gte("processed_at", fromIso);
+    }
+    if (toIso) {
+      q = q.lte("processed_at", toIso);
+    }
+
+    const { data, error } = await q;
+    if (error) {
+      return { error: error.message, data: [] };
+    }
+
+    const rows = data ?? [];
+    for (const row of rows) {
+      const processedAt = row.processed_at as string | null;
+      if (!processedAt) continue;
+      const amountType = (row.amount_type as string | null) || "cash";
+      if (amountType !== "cash") continue;
+      const day = new Date(processedAt).toISOString().slice(0, 10);
+      const amount = Number(row.amount ?? 0);
+      if (!Number.isFinite(amount)) continue;
+      const prev = buckets.get(day) ?? { amountCents: 0, count: 0 };
+      prev.amountCents += amount;
+      prev.count += 1;
+      buckets.set(day, prev);
+    }
+
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  const orderedKeys =
+    dayKeys.length > 0
+      ? dayKeys
+      : Array.from(buckets.keys()).sort((a, b) => a.localeCompare(b));
+
+  return {
+    error: null,
+    data: orderedKeys.map((date) => {
+      const b = buckets.get(date) ?? { amountCents: 0, count: 0 };
+      return {
+        date,
+        label: formatPayoutDayLabel(date),
+        amountCents: b.amountCents,
+        count: b.count,
+      };
+    }),
+  };
+}

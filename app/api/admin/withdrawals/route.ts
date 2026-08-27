@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
+  fetchWithdrawalPayoutSeries,
   fetchWithdrawalsPage,
   parseOrder,
   parseSortKey,
@@ -40,18 +41,24 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  const [{ error, data, total }, summaryRes] = await Promise.all([
-    fetchWithdrawalsPage(supabase, {
-      page,
-      pageSize,
-      tab,
-      createdFrom,
-      createdTo,
-      sort,
-      order,
-    }),
-    supabase.rpc("admin_withdrawal_status_summary"),
-  ]);
+  const [{ error, data, total }, summaryRes, payoutSeriesRes] =
+    await Promise.all([
+      fetchWithdrawalsPage(supabase, {
+        page,
+        pageSize,
+        tab,
+        createdFrom,
+        createdTo,
+        sort,
+        order,
+      }),
+      supabase.rpc("admin_withdrawal_status_summary"),
+      // Chart uses processed_at; reuse the page date range as the paid window.
+      fetchWithdrawalPayoutSeries(supabase, {
+        processedFrom: createdFrom,
+        processedTo: createdTo,
+      }),
+    ]);
 
   if (error) {
     console.error("Withdrawals list error:", error);
@@ -62,6 +69,17 @@ export async function GET(req: NextRequest) {
     console.error("Withdrawals summary error:", summaryRes.error);
     return NextResponse.json(
       { error: summaryRes.error.message || "Failed to load withdrawal totals" },
+      { status: 500 },
+    );
+  }
+
+  if (payoutSeriesRes.error) {
+    console.error("Withdrawals payout series error:", payoutSeriesRes.error);
+    return NextResponse.json(
+      {
+        error:
+          payoutSeriesRes.error || "Failed to load payout history series",
+      },
       { status: 500 },
     );
   }
@@ -132,5 +150,6 @@ export async function GET(req: NextRequest) {
     pageSize,
     totals,
     statusCounts,
+    payoutSeries: payoutSeriesRes.data ?? [],
   });
 }

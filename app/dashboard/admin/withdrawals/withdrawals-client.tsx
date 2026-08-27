@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import type { WithdrawalPayoutSeriesPoint } from "@/lib/admin-withdrawals-list";
+import { PayoutHistoryChart } from "./payout-history-chart";
 import {
   Dialog,
   DialogContent,
@@ -177,6 +179,9 @@ export default function WithdrawalsClient({
     forfeited: number;
     failed: number;
   } | null>(null);
+  const [payoutSeries, setPayoutSeries] = useState<WithdrawalPayoutSeriesPoint[]>(
+    [],
+  );
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTab, setSelectedTab] = useState<string>("all");
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
@@ -314,17 +319,28 @@ export default function WithdrawalsClient({
         toast.error(message);
         setRequests([]);
         setTotalCount(0);
+        setPayoutSeries([]);
         return;
       }
       const json = await res.json();
+      const nextTotal = json.total ?? 0;
+      const totalPages = Math.max(1, Math.ceil(nextTotal / pageSize) || 1);
+      if (page > totalPages) {
+        setPage(totalPages);
+        return;
+      }
       setRequests(json.data ?? []);
-      setTotalCount(json.total ?? 0);
+      setTotalCount(nextTotal);
       setTotalsFromApi(json.totals ?? null);
       setStatusCountsFromApi(json.statusCounts ?? null);
+      setPayoutSeries(
+        Array.isArray(json.payoutSeries) ? json.payoutSeries : [],
+      );
     } catch (e) {
       console.error("Fetch withdrawals error", e);
       setRequests([]);
       setTotalCount(0);
+      setPayoutSeries([]);
     } finally {
       setLoading(false);
     }
@@ -433,22 +449,6 @@ export default function WithdrawalsClient({
     }
   };
 
-  const tabForStatus = (status: string): string | null => {
-    if (status === "pending") return "pending";
-    if (status === "in_review") return "in_review";
-    if (status === "approved") return "approved";
-    if (status === "processed") return "paid";
-    if (status === "rejected" || status === "cancelled") return "rejected";
-    if (status === "forfeited") return "forfeited";
-    if (status === "failed") return "failed";
-    return null;
-  };
-
-  const statusMatchesTab = (status: string, tab: string) => {
-    if (tab === "all") return true;
-    return tabForStatus(status) === tab;
-  };
-
   const updateStatus = async (
     id: string,
     newStatus: string,
@@ -519,26 +519,10 @@ export default function WithdrawalsClient({
         setDetailsOpen(false);
       }
 
-      const nextTab = tabForStatus(newStatus);
-      const leavesCurrentTab =
-        selectedTab !== "all" &&
-        nextTab != null &&
-        !statusMatchesTab(newStatus, selectedTab);
-
-      if (leavesCurrentTab && nextTab) {
-        const label = newStatus.replace(/_/g, " ");
-        toast.success(
-          `Marked as ${label}. Switched to ${nextTab} so the request stays visible.`,
-        );
-        setPage(1);
-        setSelectedTab(nextTab);
-        // Tab change triggers reloadWithdrawals via effect
-      } else {
-        toast.success(
-          `Status updated to ${newStatus.replace(/_/g, " ")}`,
-        );
-        void reloadWithdrawals();
-      }
+      toast.success(
+        `Status updated to ${newStatus.replace(/_/g, " ")}`,
+      );
+      void reloadWithdrawals();
     } catch (e) {
       console.error("Failed to update status", e);
       alert("Failed to update status");
@@ -584,16 +568,8 @@ export default function WithdrawalsClient({
         next.delete(req.id);
         return next;
       });
-      if (selectedTab !== "all" && selectedTab !== "rejected") {
-        toast.success(
-          "Withdrawal cancelled. Switched to Rejected so it stays visible.",
-        );
-        setPage(1);
-        setSelectedTab("rejected");
-      } else {
-        toast.success("Withdrawal request cancelled successfully");
-        void reloadWithdrawals();
-      }
+      toast.success("Withdrawal request cancelled successfully");
+      void reloadWithdrawals();
     } catch (e) {
       console.error("Failed to cancel request", e);
       alert(
@@ -1201,7 +1177,7 @@ export default function WithdrawalsClient({
     }
     if (
       !confirm(
-        `Approve ${ids.length} withdrawal request${ids.length === 1 ? "" : "s"}? They will move to the Approved tab.`,
+        `Approve ${ids.length} withdrawal request${ids.length === 1 ? "" : "s"}? They will move to Approved status.`,
       )
     ) {
       return;
@@ -1229,34 +1205,23 @@ export default function WithdrawalsClient({
       const skipped = json.skipped ?? 0;
       setSelectedIds(new Set());
 
-      if (
-        succeeded > 0 &&
-        (selectedTab === "pending" || selectedTab === "in_review")
-      ) {
+      if (succeeded > 0) {
         const parts = [
           `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}`,
         ];
         if (failed > 0) parts.push(`${failed} failed`);
         if (skipped > 0) parts.push(`${skipped} skipped`);
-        toast.success(`${parts.join(", ")}. Showing Approved tab.`);
-        setPage(1);
-        setSelectedTab("approved");
-      } else {
-        if (succeeded > 0) {
-          toast.success(
-            `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}`,
-          );
-        }
-        if (failed > 0) {
-          toast.error(`${failed} approval${failed === 1 ? "" : "s"} failed`);
-        }
-        if (skipped > 0 && succeeded === 0) {
-          toast.error(
-            `${skipped} request${skipped === 1 ? " was" : "s were"} not pending/in review`,
-          );
-        }
-        void reloadWithdrawals();
+        toast.success(parts.join(", "));
       }
+      if (failed > 0 && succeeded === 0) {
+        toast.error(`${failed} approval${failed === 1 ? "" : "s"} failed`);
+      }
+      if (skipped > 0 && succeeded === 0) {
+        toast.error(
+          `${skipped} request${skipped === 1 ? " was" : "s were"} not pending/in review`,
+        );
+      }
+      void reloadWithdrawals();
     } catch (e) {
       console.error(e);
       toast.error(
@@ -1281,17 +1246,20 @@ export default function WithdrawalsClient({
     colKey,
     label,
     icon,
+    className,
   }: {
     colKey: WithdrawalsSortKey;
     label: string;
     icon?: ReactNode;
+    className?: string;
   }) => {
     const active = sortKey === colKey;
     return (
       <TableHead
         className={cn(
-          "cursor-pointer select-none",
+          "cursor-pointer select-none px-2 sm:px-4",
           isDark ? "hover:bg-white/10" : "hover:bg-slate-100",
+          className,
         )}
         onClick={() => handleSortColumn(colKey)}
       >
@@ -1312,10 +1280,13 @@ export default function WithdrawalsClient({
     );
   };
 
+  const stickyHeadBg = isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]";
+  const stickyCellBg = isDark ? "bg-[#170337]" : "bg-white";
+
   const renderTable = (rows: Request[]) => (
     <div
       className={cn(
-        "rounded-xl shadow overflow-x-auto",
+        "rounded-xl shadow",
         isDark ? "bg-[#170337]" : "bg-white  border border-gray-200"
       )}
     >
@@ -1329,7 +1300,12 @@ export default function WithdrawalsClient({
                 : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
             )}
           >
-            <TableHead className="w-10 pr-0">
+            <TableHead
+              className={cn(
+                "w-10 pr-0 px-2 sm:px-4 sticky left-0 z-20",
+                stickyHeadBg,
+              )}
+            >
               <Checkbox
                 checked={
                   someApprovableSelected && !allApprovableSelected
@@ -1353,6 +1329,10 @@ export default function WithdrawalsClient({
               colKey="user_full_name"
               label="Name"
               icon={<User className="h-4 w-4" />}
+              className={cn(
+                "sticky left-10 z-20 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]",
+                stickyHeadBg,
+              )}
             />
             <SortableTh
               colKey="username"
@@ -1368,14 +1348,14 @@ export default function WithdrawalsClient({
               label="Amount"
               icon={<DollarSign className="h-4 w-4" />}
             />
-            <TableHead>Status</TableHead>
-            <TableHead>
+            <TableHead className="px-2 sm:px-4">Status</TableHead>
+            <TableHead className="px-2 sm:px-4">
               <div className="flex items-center gap-2">
                 <CreditCard className="h-4 w-4" />
                 Payment method
               </div>
             </TableHead>
-            <TableHead className="w-12 text-right"> </TableHead>
+            <TableHead className="w-12 text-right px-2 sm:px-4"> </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1387,7 +1367,12 @@ export default function WithdrawalsClient({
                 key={r.id}
                 className="hover:bg-muted/30 transition-colors"
               >
-                <TableCell className="w-10 pr-0 align-middle">
+                <TableCell
+                  className={cn(
+                    "w-10 pr-0 align-middle px-2 sm:px-4 sticky left-0 z-10",
+                    stickyCellBg,
+                  )}
+                >
                   <Checkbox
                     checked={selectedIds.has(r.id)}
                     onCheckedChange={(v) =>
@@ -1398,7 +1383,7 @@ export default function WithdrawalsClient({
                     className={cn(isDark && "border-white/60")}
                   />
                 </TableCell>
-                <TableCell className="whitespace-nowrap">
+                <TableCell className="whitespace-nowrap px-2 sm:px-4">
                   <div className="text-sm text-muted-foreground">
                     {new Date(r.created_at).toLocaleDateString()}
                   </div>
@@ -1406,7 +1391,12 @@ export default function WithdrawalsClient({
                     {new Date(r.created_at).toLocaleTimeString()}
                   </div>
                 </TableCell>
-                <TableCell className="max-w-[160px]">
+                <TableCell
+                  className={cn(
+                    "max-w-[160px] px-2 sm:px-4 sticky left-10 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]",
+                    stickyCellBg,
+                  )}
+                >
                   <span className="font-medium truncate block">
                     {user?.full_name || "—"}
                   </span>
@@ -2088,6 +2078,12 @@ export default function WithdrawalsClient({
           </Button>
         </div>
 
+        <PayoutHistoryChart
+          series={payoutSeries}
+          loading={loading}
+          isDark={isDark}
+        />
+
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
             Tip: tap/click any column header to sort.
@@ -2142,7 +2138,7 @@ export default function WithdrawalsClient({
             )}
         </div>
 
-        <div className="overflow-x-auto pb-1">
+        <div className="overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
           <EnhancedTabs
             tabs={[
               {
@@ -2215,10 +2211,10 @@ export default function WithdrawalsClient({
               setPage(1);
               setSelectedTab(id);
             }}
-            className="mb-4 w-full"
+            className="mb-4"
             isDark={isDark}
             light={!isDark}
-            fillWidth
+            fillWidth={false}
           />
         </div>
 
