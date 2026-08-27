@@ -38,27 +38,42 @@ export async function GET(req: NextRequest) {
   const order = parseOrder(searchParams.get("order"));
   const createdFrom = searchParams.get("createdFrom") || undefined;
   const createdTo = searchParams.get("createdTo") || undefined;
+  const includePayoutSeriesParam = (
+    searchParams.get("includePayoutSeries") ?? "1"
+  ).toLowerCase();
+  const includePayoutSeries =
+    includePayoutSeriesParam !== "0" && includePayoutSeriesParam !== "false";
 
   const supabase = createAdminClient();
 
-  const [{ error, data, total }, summaryRes, payoutSeriesRes] =
-    await Promise.all([
-      fetchWithdrawalsPage(supabase, {
-        page,
-        pageSize,
-        tab,
-        createdFrom,
-        createdTo,
-        sort,
-        order,
-      }),
-      supabase.rpc("admin_withdrawal_status_summary"),
-      // Chart uses processed_at; reuse the page date range as the paid window.
-      fetchWithdrawalPayoutSeries(supabase, {
-        processedFrom: createdFrom,
-        processedTo: createdTo,
-      }),
-    ]);
+  const [pageRes, summaryRes, payoutSeriesRes] = await Promise.all([
+    fetchWithdrawalsPage(supabase, {
+      page,
+      pageSize,
+      tab,
+      createdFrom,
+      createdTo,
+      sort,
+      order,
+    }),
+    supabase.rpc("admin_withdrawal_status_summary"),
+    includePayoutSeries
+      ? // Chart uses processed_at; reuse the page date range as the paid window.
+        fetchWithdrawalPayoutSeries(supabase, {
+          processedFrom: createdFrom,
+          processedTo: createdTo,
+        })
+      : Promise.resolve({
+          error: null as string | null,
+          data: [] as Awaited<
+            ReturnType<typeof fetchWithdrawalPayoutSeries>
+          >["data"],
+          granularity: "day" as const,
+          skipped: true as const,
+        }),
+  ]);
+
+  const { error, data, total } = pageRes;
 
   if (error) {
     console.error("Withdrawals list error:", error);
@@ -74,9 +89,13 @@ export async function GET(req: NextRequest) {
   }
 
   // Chart is best-effort: never block the withdrawals list if series fails.
-  let payoutSeries = payoutSeriesRes.data ?? [];
-  let payoutSeriesGranularity = payoutSeriesRes.granularity ?? "day";
-  if (payoutSeriesRes.error) {
+  const seriesSkipped =
+    "skipped" in payoutSeriesRes && payoutSeriesRes.skipped === true;
+  let payoutSeries = seriesSkipped ? undefined : payoutSeriesRes.data ?? [];
+  let payoutSeriesGranularity = seriesSkipped
+    ? undefined
+    : payoutSeriesRes.granularity ?? "day";
+  if (!seriesSkipped && payoutSeriesRes.error) {
     console.error("Withdrawals payout series error:", payoutSeriesRes.error);
     payoutSeries = [];
     payoutSeriesGranularity = "day";
@@ -148,7 +167,8 @@ export async function GET(req: NextRequest) {
     pageSize,
     totals,
     statusCounts,
-    payoutSeries,
-    payoutSeriesGranularity,
+    payoutSeriesIncluded: !seriesSkipped,
+    payoutSeries: seriesSkipped ? null : payoutSeries,
+    payoutSeriesGranularity: seriesSkipped ? null : payoutSeriesGranularity,
   });
 }

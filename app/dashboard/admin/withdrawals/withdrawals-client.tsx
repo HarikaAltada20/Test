@@ -301,11 +301,20 @@ export default function WithdrawalsClient({
   const filterFromMs = filterRange.from.getTime();
   const filterToMs = filterRange.to.getTime();
   const payoutSeriesRangeKeyRef = useRef<string | null>(null);
+  const forcePayoutSeriesRefreshRef = useRef(false);
 
-  const reloadWithdrawals = useCallback(async () => {
+  const reloadWithdrawals = useCallback(async (opts?: {
+    refreshPayoutSeries?: boolean;
+  }) => {
     const rangeKey = `${filterFromMs}:${filterToMs}`;
     const rangeChanged = payoutSeriesRangeKeyRef.current !== rangeKey;
-    if (rangeChanged) {
+    const includePayoutSeries =
+      rangeChanged ||
+      opts?.refreshPayoutSeries === true ||
+      forcePayoutSeriesRefreshRef.current;
+    forcePayoutSeriesRefreshRef.current = false;
+
+    if (includePayoutSeries) {
       setPayoutSeriesLoading(true);
     }
     setLoading(true);
@@ -319,6 +328,7 @@ export default function WithdrawalsClient({
         order: sortOrder,
         createdFrom: new Date(filterFromMs).toISOString(),
         createdTo: new Date(filterToMs).toISOString(),
+        includePayoutSeries: includePayoutSeries ? "1" : "0",
       });
       const res = await fetch(`/api/admin/withdrawals?${params}`);
       if (!res.ok) {
@@ -332,7 +342,7 @@ export default function WithdrawalsClient({
         toast.error(message);
         setRequests([]);
         setTotalCount(0);
-        if (rangeChanged) {
+        if (includePayoutSeries && rangeChanged) {
           setPayoutSeries([]);
           setPayoutSeriesGranularity("day");
         }
@@ -341,22 +351,22 @@ export default function WithdrawalsClient({
       const json = await res.json();
       const nextTotal = json.total ?? 0;
       const totalPages = Math.max(1, Math.ceil(nextTotal / pageSize) || 1);
-      const nextSeries = Array.isArray(json.payoutSeries)
-        ? json.payoutSeries
-        : [];
-      const nextGranularity =
-        json.payoutSeriesGranularity === "week" ||
-        json.payoutSeriesGranularity === "month" ||
-        json.payoutSeriesGranularity === "day"
-          ? (json.payoutSeriesGranularity as WithdrawalPayoutSeriesGranularity)
-          : "day";
 
       setTotalCount(nextTotal);
       setTotalsFromApi(json.totals ?? null);
       setStatusCountsFromApi(json.statusCounts ?? null);
-      setPayoutSeries(nextSeries);
-      setPayoutSeriesGranularity(nextGranularity);
-      payoutSeriesRangeKeyRef.current = rangeKey;
+
+      if (json.payoutSeriesIncluded && Array.isArray(json.payoutSeries)) {
+        setPayoutSeries(json.payoutSeries);
+        setPayoutSeriesGranularity(
+          json.payoutSeriesGranularity === "week" ||
+            json.payoutSeriesGranularity === "month" ||
+            json.payoutSeriesGranularity === "day"
+            ? (json.payoutSeriesGranularity as WithdrawalPayoutSeriesGranularity)
+            : "day",
+        );
+        payoutSeriesRangeKeyRef.current = rangeKey;
+      }
 
       if (page > totalPages) {
         setRequests([]);
@@ -370,14 +380,17 @@ export default function WithdrawalsClient({
       console.error("Fetch withdrawals error", e);
       setRequests([]);
       setTotalCount(0);
-      if (rangeChanged) {
+      if (includePayoutSeries && rangeChanged) {
         setPayoutSeries([]);
         setPayoutSeriesGranularity("day");
-      } finally {
+      }
+    } finally {
       if (!keepLoadingForPageClamp) {
         setLoading(false);
       }
-      setPayoutSeriesLoading(false);
+      if (includePayoutSeries) {
+        setPayoutSeriesLoading(false);
+      }
     }
   }, [
     page,
@@ -557,7 +570,9 @@ export default function WithdrawalsClient({
       toast.success(
         `Status updated to ${newStatus.replace(/_/g, " ")}`,
       );
-      void reloadWithdrawals();
+      void reloadWithdrawals({
+        refreshPayoutSeries: newStatus === "processed",
+      });
     } catch (e) {
       console.error("Failed to update status", e);
       alert("Failed to update status");
@@ -1314,6 +1329,14 @@ export default function WithdrawalsClient({
 
   const stickyHeadBg = isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]";
   const stickyCellBg = isDark ? "bg-[#170337]" : "bg-white";
+  /** Checkbox 2.5rem + Created 7.5rem = Name sticks at 10rem */
+  const stickyCreatedClass = "sticky left-10 z-20 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem]";
+  const stickyNameClass =
+    "sticky left-[10rem] z-20 w-[8rem] min-w-[8rem] max-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]";
+  const stickyCreatedCellClass =
+    "sticky left-10 z-10 w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem]";
+  const stickyNameCellClass =
+    "sticky left-[10rem] z-10 w-[8rem] min-w-[8rem] max-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]";
 
   const renderTable = (rows: Request[]) => (
     <div
@@ -1334,7 +1357,7 @@ export default function WithdrawalsClient({
           >
             <TableHead
               className={cn(
-                "w-10 pr-0 px-2 sm:px-4 sticky left-0 z-20",
+                "w-10 min-w-10 max-w-10 pr-0 px-2 sm:px-4 sticky left-0 z-20",
                 stickyHeadBg,
               )}
             >
@@ -1356,19 +1379,13 @@ export default function WithdrawalsClient({
               colKey="created_at"
               label="Created"
               icon={<Calendar className="h-4 w-4" />}
-              className={cn(
-                "sticky left-10 z-20 min-w-[7.5rem]",
-                stickyHeadBg,
-              )}
+              className={cn(stickyCreatedClass, stickyHeadBg)}
             />
             <SortableTh
               colKey="user_full_name"
               label="Name"
               icon={<User className="h-4 w-4" />}
-              className={cn(
-                "sticky left-[10rem] z-20 min-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]",
-                stickyHeadBg,
-              )}
+              className={cn(stickyNameClass, stickyHeadBg)}
             />
             <SortableTh
               colKey="username"
@@ -1405,7 +1422,7 @@ export default function WithdrawalsClient({
               >
                 <TableCell
                   className={cn(
-                    "w-10 pr-0 align-middle px-2 sm:px-4 sticky left-0 z-10",
+                    "w-10 min-w-10 max-w-10 pr-0 align-middle px-2 sm:px-4 sticky left-0 z-10",
                     stickyCellBg,
                   )}
                 >
@@ -1421,7 +1438,8 @@ export default function WithdrawalsClient({
                 </TableCell>
                 <TableCell
                   className={cn(
-                    "whitespace-nowrap px-2 sm:px-4 sticky left-10 z-10 min-w-[7.5rem]",
+                    "whitespace-nowrap px-2 sm:px-4",
+                    stickyCreatedCellClass,
                     stickyCellBg,
                   )}
                 >
@@ -1434,7 +1452,8 @@ export default function WithdrawalsClient({
                 </TableCell>
                 <TableCell
                   className={cn(
-                    "max-w-[160px] px-2 sm:px-4 sticky left-[10rem] z-10 min-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]",
+                    "px-2 sm:px-4",
+                    stickyNameCellClass,
                     stickyCellBg,
                   )}
                 >

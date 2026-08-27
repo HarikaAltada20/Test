@@ -29,17 +29,20 @@ const GRANULARITY_COPY: Record<
 > = {
   day: {
     periodLabel: "Daily",
-    subtitle: "Daily payouts marked paid in this date range",
+    subtitle:
+      "By payment date (when marked paid) — not request created date",
     periodWord: "day",
   },
   week: {
     periodLabel: "Weekly",
-    subtitle: "Weekly payouts marked paid in this date range",
+    subtitle:
+      "Weekly totals by payment date (when marked paid) — not request created date",
     periodWord: "week",
   },
   month: {
     periodLabel: "Monthly",
-    subtitle: "Monthly payouts marked paid in this date range",
+    subtitle:
+      "Monthly totals by payment date (when marked paid) — not request created date",
     periodWord: "month",
   },
 };
