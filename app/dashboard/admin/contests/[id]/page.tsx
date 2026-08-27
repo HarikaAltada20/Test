@@ -7,8 +7,7 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import {
-  CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE,
-  loadContestDetailSubmissionsPage,
+  loadContestDetailSubmissionCounts,
 } from "@/lib/contest-detail-submissions";
 import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
 import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
@@ -274,34 +273,19 @@ export default async function AdminContestDetailPage({
       }
     }
 
-    const firstPage = await loadContestDetailSubmissionsPage(
+    // Virtualization only needs rows client-side. Skip SSR of up to 1000 enriched
+    // rows (slow HTML) — load counts here; client hydrates in 1000-row chunks.
+    const submissionCounts = await loadContestDetailSubmissionCounts(
       supabase,
       contestId,
       contestData,
-      {
-        limit: CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE,
-        offset: 0,
-        creatorModerationData,
-      },
     );
-
-    const submissionsFetchError = firstPage.errorMessage;
-    if (submissionsFetchError) {
-      console.error(
-        `Admin: error fetching submissions for contest ${contestId}:`,
-        submissionsFetchError,
-      );
-    }
-
-    const allSubmissions = firstPage.submissions;
-    const submissionCounts = firstPage.counts;
-    const initialSubmissionTotal = Math.max(
-      submissionCounts.total,
-      firstPage.total,
-    );
+    const allSubmissions: any[] = [];
+    const initialSubmissionTotal = submissionCounts.total;
+    const submissionsFetchError: string | undefined = undefined;
 
     console.log(
-      `[Admin page.tsx] SSR submissions page for ${contestId}: ${allSubmissions.length}/${initialSubmissionTotal}`,
+      `[Admin page.tsx] SSR submissions counts for ${contestId}: 0 seeded / ${initialSubmissionTotal} (client hydrate)`,
     );
 
     const calculateDurationDays = (

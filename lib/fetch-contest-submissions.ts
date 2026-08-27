@@ -66,7 +66,10 @@ function buildContestSubmissionsQuery(
   options?: FetchContestSubmissionsOptions & { withCount?: boolean },
 ) {
   let query = options?.withCount
-    ? supabase.from("submissions").select(select, { count: "exact" }).eq("contest_id", contestId)
+    ? supabase
+        .from("submissions")
+        .select(select, { count: "exact" })
+        .eq("contest_id", contestId)
     : supabase.from("submissions").select(select).eq("contest_id", contestId);
 
   if (options?.creatorId) {
@@ -91,7 +94,9 @@ function buildContestSubmissionsQuery(
   for (const order of resolveSubmissionOrders(options)) {
     query = query.order(order.column, {
       ascending: order.ascending,
-      ...(order.nullsFirst !== undefined ? { nullsFirst: order.nullsFirst } : {}),
+      ...(order.nullsFirst !== undefined
+        ? { nullsFirst: order.nullsFirst }
+        : {}),
     });
   }
 
@@ -264,7 +269,9 @@ function buildContestTwitterTweetsQuery(
   for (const order of orders) {
     query = query.order(order.column, {
       ascending: order.ascending,
-      ...(order.nullsFirst !== undefined ? { nullsFirst: order.nullsFirst } : {}),
+      ...(order.nullsFirst !== undefined
+        ? { nullsFirst: order.nullsFirst }
+        : {}),
     });
   }
 

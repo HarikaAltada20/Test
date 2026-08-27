@@ -251,6 +251,13 @@ async function loadCreatorEnrichmentMaps(
   supabase: any,
   creatorIds: string[],
   isVideoContest: boolean,
+  options?: {
+    /**
+     * List/hydrate path: skip live trust/quality RPCs and omit bulky archive
+     * JSON. Profile-stored metrics remain available for creator-wise display.
+     */
+    lean?: boolean;
+  },
 ): Promise<{
   profilesById: Map<string, any>;
   usersById: Map<string, any>;
@@ -261,16 +268,26 @@ async function loadCreatorEnrichmentMaps(
   const usersById = new Map<string, any>();
   let liveTrustById: Record<string, any> = {};
   let liveQualityById: Record<string, any> = {};
+  const lean = options?.lean === true;
 
   if (creatorIds.length === 0) {
     return { profilesById, usersById, liveTrustById, liveQualityById };
   }
 
-  const [{ data: profiles }, { data: users }] = await Promise.all([
-    supabase
-      .from("creator_profiles")
-      .select(
-        `
+  const profileSelect = lean
+    ? `
+        id,
+        youtube_account,
+        instagram_account,
+        twitter_account,
+        trust_score_metrics,
+        avg_quality_score,
+        best_quality_score,
+        quality_score_sum,
+        total_money_won,
+        total_views
+      `
+    : `
         id,
         youtube_account,
         instagram_account,
@@ -282,8 +299,12 @@ async function loadCreatorEnrichmentMaps(
         quality_score_sum,
         total_money_won,
         total_views
-      `,
-      )
+      `;
+
+  const [{ data: profiles }, { data: users }] = await Promise.all([
+    supabase
+      .from("creator_profiles")
+      .select(profileSelect)
       .in("id", creatorIds),
     supabase
       .from("users")
@@ -294,7 +315,9 @@ async function loadCreatorEnrichmentMaps(
   for (const p of profiles || []) profilesById.set(p.id, p);
   for (const u of users || []) usersById.set(u.id, u);
 
-  if (isVideoContest) {
+  // Contest-detail list loads up to ~50k rows in chunks — live trust/quality
+  // RPCs per chunk dominate hydrate time and aren't needed for the table.
+  if (isVideoContest && !lean) {
     const admin = createAdminClient();
     liveTrustById = await fetchLiveTrustMetricsByCreatorIds(admin, creatorIds);
     liveQualityById = await fetchLiveQualityMetricsByCreatorIds(
@@ -650,6 +673,11 @@ export type LoadContestDetailSubmissionsPageOptions = {
   /** When set, skip a second counts round-trip (SSR can pass preloaded counts). */
   counts?: ContestDetailSubmissionCounts;
   creatorModerationData?: Record<string, any>;
+  /**
+   * Default true for contest-detail list/hydrate: skip live trust/quality RPCs
+   * and omit bulky creator archive JSON from the payload.
+   */
+  lean?: boolean;
 };
 
 /**
@@ -671,6 +699,8 @@ export async function loadContestDetailSubmissionsPage(
   const offset = options?.offset ?? 0;
   const isVideoContest = isVideoContestFormat(contest.contest_format);
   const twitter = isTwitterCampaign(contest);
+  // Contest detail SSR + hydrate always use the lean list path.
+  const lean = options?.lean !== false;
 
   const countsPromise = options?.counts
     ? Promise.resolve(options.counts)
@@ -725,19 +755,20 @@ export async function loadContestDetailSubmissionsPage(
       };
     }
 
-  const creatorIds = Array.from(
-    new Set(
-      page.data
-        .map((t) =>
-          typeof t.creator_id === "string" ? t.creator_id.trim() : "",
-        )
-        .filter(Boolean),
-    ),
-  );
+    const creatorIds = Array.from(
+      new Set(
+        page.data
+          .map((t) =>
+            typeof t.creator_id === "string" ? t.creator_id.trim() : "",
+          )
+          .filter(Boolean),
+      ),
+    );
     const enrichment = await loadCreatorEnrichmentMaps(
       supabase,
       creatorIds,
       isVideoContest,
+      { lean },
     );
 
     const submissions = page.data.map((tweet) =>
@@ -810,6 +841,7 @@ export async function loadContestDetailSubmissionsPage(
     supabase,
     creatorIds,
     isVideoContest,
+    { lean },
   );
 
   const submissions = page.data.map((sub) =>
