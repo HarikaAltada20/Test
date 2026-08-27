@@ -16,24 +16,51 @@ import {
   formatCompactCount,
   formatCurrencyFromCents,
 } from "@/lib/currency-utils";
-import type { WithdrawalPayoutSeriesPoint } from "@/lib/admin-withdrawals-list";
+import type {
+  WithdrawalPayoutSeriesGranularity,
+  WithdrawalPayoutSeriesPoint,
+} from "@/lib/admin-withdrawals-list";
 
-type ChartMode = "daily" | "cumulative";
+type ChartMode = "period" | "cumulative";
+
+const GRANULARITY_COPY: Record<
+  WithdrawalPayoutSeriesGranularity,
+  { periodLabel: string; subtitle: string; periodWord: string }
+> = {
+  day: {
+    periodLabel: "Daily",
+    subtitle: "Daily payouts marked paid in this date range",
+    periodWord: "day",
+  },
+  week: {
+    periodLabel: "Weekly",
+    subtitle: "Weekly payouts marked paid in this date range",
+    periodWord: "week",
+  },
+  month: {
+    periodLabel: "Monthly",
+    subtitle: "Monthly payouts marked paid in this date range",
+    periodWord: "month",
+  },
+};
 
 function PayoutChartTooltip({
   active,
   payload,
   isDark,
   mode,
+  granularity,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: WithdrawalPayoutSeriesPoint & { value: number } }>;
   isDark: boolean;
   mode: ChartMode;
+  granularity: WithdrawalPayoutSeriesGranularity;
 }) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
+  const periodWord = GRANULARITY_COPY[granularity].periodWord;
 
   return (
     <div
@@ -51,7 +78,7 @@ function PayoutChartTooltip({
       </p>
       <p className={cn(isDark ? "text-white/55" : "text-black/55")}>
         {row.count} payout{row.count === 1 ? "" : "s"}
-        {mode === "cumulative" ? " that day" : ""}
+        {mode === "cumulative" ? ` that ${periodWord}` : ""}
       </p>
     </div>
   );
@@ -61,12 +88,15 @@ export function PayoutHistoryChart({
   series,
   loading,
   isDark,
+  granularity = "day",
 }: {
   series: WithdrawalPayoutSeriesPoint[];
   loading?: boolean;
   isDark: boolean;
+  granularity?: WithdrawalPayoutSeriesGranularity;
 }) {
-  const [mode, setMode] = useState<ChartMode>("daily");
+  const [mode, setMode] = useState<ChartMode>("period");
+  const copy = GRANULARITY_COPY[granularity] ?? GRANULARITY_COPY.day;
 
   const chartData = useMemo(() => {
     let running = 0;
@@ -124,7 +154,7 @@ export function PayoutHistoryChart({
               isDark ? "text-white/40" : "text-black/40",
             )}
           >
-            Withdrawals marked paid in this date range
+            {copy.subtitle}
           </p>
         </div>
 
@@ -138,10 +168,10 @@ export function PayoutHistoryChart({
         >
           <button
             type="button"
-            onClick={() => setMode("daily")}
-            className={modeButtonClass(mode === "daily")}
+            onClick={() => setMode("period")}
+            className={modeButtonClass(mode === "period")}
           >
-            Daily
+            {copy.periodLabel}
           </button>
           <button
             type="button"
@@ -226,7 +256,13 @@ export function PayoutHistoryChart({
                 }}
               />
               <Tooltip
-                content={<PayoutChartTooltip isDark={isDark} mode={mode} />}
+                content={
+                  <PayoutChartTooltip
+                    isDark={isDark}
+                    mode={mode}
+                    granularity={granularity}
+                  />
+                }
               />
               <Area
                 type="monotone"

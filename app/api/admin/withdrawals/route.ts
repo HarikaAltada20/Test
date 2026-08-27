@@ -73,15 +73,13 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Chart is best-effort: never block the withdrawals list if series fails.
+  let payoutSeries = payoutSeriesRes.data ?? [];
+  let payoutSeriesGranularity = payoutSeriesRes.granularity ?? "day";
   if (payoutSeriesRes.error) {
     console.error("Withdrawals payout series error:", payoutSeriesRes.error);
-    return NextResponse.json(
-      {
-        error:
-          payoutSeriesRes.error || "Failed to load payout history series",
-      },
-      { status: 500 },
-    );
+    payoutSeries = [];
+    payoutSeriesGranularity = "day";
   }
 
   const summaryRows = (summaryRes.data ?? []) as StatusSummaryRow[];
@@ -150,6 +148,7 @@ export async function GET(req: NextRequest) {
     pageSize,
     totals,
     statusCounts,
-    payoutSeries: payoutSeriesRes.data ?? [],
+    payoutSeries,
+    payoutSeriesGranularity,
   });
 }

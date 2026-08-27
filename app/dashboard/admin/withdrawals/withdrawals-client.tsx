@@ -20,7 +20,10 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import type { WithdrawalPayoutSeriesPoint } from "@/lib/admin-withdrawals-list";
+import type {
+  WithdrawalPayoutSeriesGranularity,
+  WithdrawalPayoutSeriesPoint,
+} from "@/lib/admin-withdrawals-list";
 import { PayoutHistoryChart } from "./payout-history-chart";
 import {
   Dialog,
@@ -182,6 +185,9 @@ export default function WithdrawalsClient({
   const [payoutSeries, setPayoutSeries] = useState<WithdrawalPayoutSeriesPoint[]>(
     [],
   );
+  const [payoutSeriesGranularity, setPayoutSeriesGranularity] =
+    useState<WithdrawalPayoutSeriesGranularity>("day");
+  const [payoutSeriesLoading, setPayoutSeriesLoading] = useState(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTab, setSelectedTab] = useState<string>("all");
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
@@ -294,9 +300,16 @@ export default function WithdrawalsClient({
 
   const filterFromMs = filterRange.from.getTime();
   const filterToMs = filterRange.to.getTime();
+  const payoutSeriesRangeKeyRef = useRef<string | null>(null);
 
   const reloadWithdrawals = useCallback(async () => {
+    const rangeKey = `${filterFromMs}:${filterToMs}`;
+    const rangeChanged = payoutSeriesRangeKeyRef.current !== rangeKey;
+    if (rangeChanged) {
+      setPayoutSeriesLoading(true);
+    }
     setLoading(true);
+    let keepLoadingForPageClamp = false;
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -319,30 +332,52 @@ export default function WithdrawalsClient({
         toast.error(message);
         setRequests([]);
         setTotalCount(0);
-        setPayoutSeries([]);
+        if (rangeChanged) {
+          setPayoutSeries([]);
+          setPayoutSeriesGranularity("day");
+        }
         return;
       }
       const json = await res.json();
       const nextTotal = json.total ?? 0;
       const totalPages = Math.max(1, Math.ceil(nextTotal / pageSize) || 1);
-      if (page > totalPages) {
-        setPage(totalPages);
-        return;
-      }
-      setRequests(json.data ?? []);
+      const nextSeries = Array.isArray(json.payoutSeries)
+        ? json.payoutSeries
+        : [];
+      const nextGranularity =
+        json.payoutSeriesGranularity === "week" ||
+        json.payoutSeriesGranularity === "month" ||
+        json.payoutSeriesGranularity === "day"
+          ? (json.payoutSeriesGranularity as WithdrawalPayoutSeriesGranularity)
+          : "day";
+
       setTotalCount(nextTotal);
       setTotalsFromApi(json.totals ?? null);
       setStatusCountsFromApi(json.statusCounts ?? null);
-      setPayoutSeries(
-        Array.isArray(json.payoutSeries) ? json.payoutSeries : [],
-      );
+      setPayoutSeries(nextSeries);
+      setPayoutSeriesGranularity(nextGranularity);
+      payoutSeriesRangeKeyRef.current = rangeKey;
+
+      if (page > totalPages) {
+        setRequests([]);
+        keepLoadingForPageClamp = true;
+        setPage(totalPages);
+        return;
+      }
+
+      setRequests(json.data ?? []);
     } catch (e) {
       console.error("Fetch withdrawals error", e);
       setRequests([]);
       setTotalCount(0);
-      setPayoutSeries([]);
-    } finally {
-      setLoading(false);
+      if (rangeChanged) {
+        setPayoutSeries([]);
+        setPayoutSeriesGranularity("day");
+      } finally {
+      if (!keepLoadingForPageClamp) {
+        setLoading(false);
+      }
+      setPayoutSeriesLoading(false);
     }
   }, [
     page,
@@ -1206,17 +1241,14 @@ export default function WithdrawalsClient({
       setSelectedIds(new Set());
 
       if (succeeded > 0) {
-        const parts = [
+        toast.success(
           `Approved ${succeeded} request${succeeded === 1 ? "" : "s"}`,
-        ];
-        if (failed > 0) parts.push(`${failed} failed`);
-        if (skipped > 0) parts.push(`${skipped} skipped`);
-        toast.success(parts.join(", "));
+        );
       }
-      if (failed > 0 && succeeded === 0) {
+      if (failed > 0) {
         toast.error(`${failed} approval${failed === 1 ? "" : "s"} failed`);
       }
-      if (skipped > 0 && succeeded === 0) {
+      if (skipped > 0) {
         toast.error(
           `${skipped} request${skipped === 1 ? " was" : "s were"} not pending/in review`,
         );
@@ -1324,13 +1356,17 @@ export default function WithdrawalsClient({
               colKey="created_at"
               label="Created"
               icon={<Calendar className="h-4 w-4" />}
+              className={cn(
+                "sticky left-10 z-20 min-w-[7.5rem]",
+                stickyHeadBg,
+              )}
             />
             <SortableTh
               colKey="user_full_name"
               label="Name"
               icon={<User className="h-4 w-4" />}
               className={cn(
-                "sticky left-10 z-20 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]",
+                "sticky left-[10rem] z-20 min-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]",
                 stickyHeadBg,
               )}
             />
@@ -1383,7 +1419,12 @@ export default function WithdrawalsClient({
                     className={cn(isDark && "border-white/60")}
                   />
                 </TableCell>
-                <TableCell className="whitespace-nowrap px-2 sm:px-4">
+                <TableCell
+                  className={cn(
+                    "whitespace-nowrap px-2 sm:px-4 sticky left-10 z-10 min-w-[7.5rem]",
+                    stickyCellBg,
+                  )}
+                >
                   <div className="text-sm text-muted-foreground">
                     {new Date(r.created_at).toLocaleDateString()}
                   </div>
@@ -1393,7 +1434,7 @@ export default function WithdrawalsClient({
                 </TableCell>
                 <TableCell
                   className={cn(
-                    "max-w-[160px] px-2 sm:px-4 sticky left-10 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]",
+                    "max-w-[160px] px-2 sm:px-4 sticky left-[10rem] z-10 min-w-[8rem] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]",
                     stickyCellBg,
                   )}
                 >
@@ -2080,8 +2121,9 @@ export default function WithdrawalsClient({
 
         <PayoutHistoryChart
           series={payoutSeries}
-          loading={loading}
+          loading={payoutSeriesLoading}
           isDark={isDark}
+          granularity={payoutSeriesGranularity}
         />
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
