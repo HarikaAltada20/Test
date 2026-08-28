@@ -116,7 +116,10 @@ import {
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
-import { BulkVideoDownloadContestStatus } from "@/components/BulkVideoDownloadContestStatus";
+import {
+  BulkVideoDownloadContestStatus,
+  BulkVideoDownloadSummaryButton,
+} from "@/components/BulkVideoDownloadContestStatus";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
 import {
   useBulkModerationProgress,
@@ -3590,6 +3593,13 @@ export default function ContestDetailClient({
         displayName:
           (sub as any).creator_display_name || sub.creator?.full_name || null,
         creatorId: sub.creator_id || sub.creator?.id || null,
+        submissionStatus: getStatus(sub),
+        qualityScore:
+          typeof (sub as any).quality_score === "number"
+            ? (sub as any).quality_score
+            : Number.isFinite(Number((sub as any).quality_score))
+              ? Number((sub as any).quality_score)
+              : null,
       };
     });
 
@@ -18107,6 +18117,9 @@ export default function ContestDetailClient({
                                           ? `Wait ${cooldownInfo.remainingMinutes}m`
                                           : "Refresh Metrics"}
                                     </button>
+                                    <BulkVideoDownloadSummaryButton
+                                      isDark={isDark}
+                                    />
                                   </>
                                 );
                               })()}
@@ -18364,7 +18377,7 @@ export default function ContestDetailClient({
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-start gap-2">
+                      <div className="flex w-full flex-wrap items-start justify-between gap-2">
                         {(() => {
                           const { isDisabled, disabledReason } =
                             getRefreshButtonState();
@@ -18439,6 +18452,11 @@ export default function ContestDetailClient({
                                       ? `Wait ${cooldownInfo.remainingMinutes}m`
                                       : "Refresh Metrics"}
                                 </button>
+                                <div className="ml-auto">
+                                  <BulkVideoDownloadSummaryButton
+                                    isDark={isDark}
+                                  />
+                                </div>
                               </>
                             );
                           }
@@ -18710,7 +18728,10 @@ export default function ContestDetailClient({
                                     </span>
                                   </div>
                                 </div>
-                                <div className="flex flex-col items-start gap-1">
+                                <div className="flex flex-col items-end gap-2 shrink-0">
+                                  <BulkVideoDownloadSummaryButton
+                                    isDark={isDark}
+                                  />
                                   <button
                                     type="button"
                                     onClick={() =>

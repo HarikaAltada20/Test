@@ -491,6 +491,14 @@ export function CreatorSubmissionsModal({
         avatarUrl: creator.profile_picture_url,
         displayName: creator.full_name,
         creatorId: creator.id,
+        submissionStatus:
+          String(
+            (sub as { is_twitter_tweet?: boolean }).is_twitter_tweet
+              ? sub.moderation_status || sub.status
+              : sub.status || "pending",
+          ).toLowerCase(),
+        qualityScore:
+          typeof sub.quality_score === "number" ? sub.quality_score : null,
       };
     });
 

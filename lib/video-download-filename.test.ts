@@ -11,6 +11,7 @@ import {
   parseVideoFilenamePattern,
   slugifyBulkZipSort,
   slugifyBulkZipStatusTab,
+  parseBulkZipFilenamePrefix,
   uniqueVideoDownloadFilename,
   toBulkZipDownloadFilename,
   bulkZipFilenameFromContestTitle,
@@ -147,5 +148,19 @@ describe("video download filename patterns", () => {
       }),
       "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_verified",
     );
+  });
+
+  it("parses sort, quality, and status back from a ZIP prefix", () => {
+    const parsed = parseBulkZipFilenamePrefix(
+      "bulk_submissions_Ranveer_BTS_Vlogs_views_high_to_low_all_quality_verified",
+    );
+    assert.equal(parsed.sortLabel, "Views (high to low)");
+    assert.equal(parsed.qualityLabel, "All quality");
+    assert.equal(parsed.statusLabel, "Verified");
+    const quality = parseBulkZipFilenamePrefix(
+      "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_verified",
+    );
+    assert.equal(quality.qualityLabel, "Q1, Q2, Q3");
+    assert.equal(quality.sortLabel, "Views (high to low)");
   });
 });

@@ -267,6 +267,116 @@ export function formatBulkZipQualityPart(
   return parts.length > 0 ? parts.join("_") : "all_quality";
 }
 
+const BULK_ZIP_SORT_LABELS: Record<string, string> = {
+  views_high_to_low: "Views (high to low)",
+  views_low_to_high: "Views (low to high)",
+  submitted_newest_first: "Newest first",
+  submitted_oldest_first: "Oldest first",
+  submissions_high_to_low: "Submissions (high to low)",
+  submissions_low_to_high: "Submissions (low to high)",
+  points_high_to_low: "Points (high to low)",
+  points_low_to_high: "Points (low to high)",
+  impressions_high_to_low: "Impressions (high to low)",
+  impressions_low_to_high: "Impressions (low to high)",
+  unsorted: "Default sort",
+};
+
+const BULK_ZIP_STATUS_LABELS: Record<string, string> = {
+  all: "All",
+  verified: "Verified",
+  rejected: "Rejected",
+  pending: "Pending",
+  paid: "Paid",
+  nonrejected: "Not Rejected",
+  verified_paid: "Verified + Paid",
+};
+
+const ZIP_SORT_SLUGS_BY_LENGTH = [
+  ...new Set(["unsorted", ...Object.values(BULK_ZIP_SORT_SLUGS)]),
+].sort((a, b) => b.length - a.length);
+
+const ZIP_STATUS_SLUGS_BY_LENGTH = [
+  ...new Set(Object.values(BULK_ZIP_STATUS_SLUGS)),
+].sort((a, b) => b.length - a.length);
+
+function qualityLabelFromSlug(slug: string | null): string {
+  if (!slug || slug === "all_quality") return "All quality";
+  return slug
+    .split("_")
+    .filter(Boolean)
+    .map((part) =>
+      part.toLowerCase() === "unscored" ? "Unscored" : part.toUpperCase(),
+    )
+    .join(", ");
+}
+
+function takeTrailingSlug(
+  value: string,
+  slugs: string[],
+): { rest: string; slug: string | null } {
+  const haystack = `_${value}`;
+  for (const slug of slugs) {
+    if (haystack.endsWith(`_${slug}`)) {
+      const rest = value.slice(0, Math.max(0, value.length - slug.length - 1));
+      return { rest, slug };
+    }
+  }
+  return { rest: value, slug: null };
+}
+
+function takeTrailingQuality(value: string): {
+  rest: string;
+  slug: string | null;
+} {
+  if (value.endsWith("_all_quality") || value === "all_quality") {
+    const rest =
+      value === "all_quality"
+        ? ""
+        : value.slice(0, value.length - "_all_quality".length);
+    return { rest, slug: "all_quality" };
+  }
+  const parts = value.split("_");
+  const qualityBits: string[] = [];
+  while (parts.length > 0) {
+    const last = parts[parts.length - 1];
+    const isQuality =
+      last === "unscored" || /^Q[1-3]$/i.test(last);
+    if (!isQuality) break;
+    qualityBits.unshift(parts.pop() as string);
+  }
+  if (qualityBits.length === 0) return { rest: value, slug: null };
+  return { rest: parts.join("_"), slug: qualityBits.join("_") };
+}
+
+export type ParsedBulkZipFilenamePrefix = {
+  sortSlug: string | null;
+  sortLabel: string;
+  qualitySlug: string | null;
+  qualityLabel: string;
+  statusSlug: string | null;
+  statusLabel: string;
+};
+
+/** Read sort / quality / status from a stored ZIP prefix. */
+export function parseBulkZipFilenamePrefix(
+  prefix: string | null | undefined,
+): ParsedBulkZipFilenamePrefix {
+  const raw = String(prefix || "").replace(/\.zip$/i, "").trim();
+  const stripped = raw.replace(/^bulk_submissions_/i, "");
+  const status = takeTrailingSlug(stripped, ZIP_STATUS_SLUGS_BY_LENGTH);
+  const quality = takeTrailingQuality(status.rest);
+  const sort = takeTrailingSlug(quality.rest, ZIP_SORT_SLUGS_BY_LENGTH);
+  return {
+    sortSlug: sort.slug,
+    sortLabel: (sort.slug && BULK_ZIP_SORT_LABELS[sort.slug]) || "Default sort",
+    qualitySlug: quality.slug,
+    qualityLabel: qualityLabelFromSlug(quality.slug),
+    statusSlug: status.slug,
+    statusLabel:
+      (status.slug && BULK_ZIP_STATUS_LABELS[status.slug]) || "All",
+  };
+}
+
 /**
  * ZIP prefix: contest + sort + quality + status tab.
  * Caller appends `_part_N_of_M` when splitting into multiple archives.

@@ -23,6 +23,11 @@ import {
   type BulkVideoDownloadResultRow,
   type BulkVideoDownloadSubmissionMeta,
 } from "@/lib/video-download-ui";
+import {
+  jobRowToDownloadSummary,
+  type BulkDownloadSummaryUserType,
+  type BulkVideoDownloadJobSummary,
+} from "@/lib/bulk-video-download-summary";
 
 const LEGACY_SESSION_STORAGE_KEY = "goc-bulk-video-download-session-v1";
 const LEGACY_PATTERN_STORAGE_KEY = "goc-bulk-video-naming-pattern";
@@ -55,9 +60,10 @@ export type BulkVideoDownloadSession = {
   supabaseJobId?: string | null;
   /** ZIP parts from Supabase — used to resume without localStorage. */
   zipParts?: BulkVideoDownloadZipPartRef[];
-  /** True after the user opened Download summary (hides floating button). */
+  /** True after the user opened Download summary. */
   summaryViewed?: boolean;
   summaryViewedAt?: string | null;
+  userType?: BulkDownloadSummaryUserType | null;
 };
 
 type StartBulkVideoDownloadParams = {
@@ -83,6 +89,10 @@ type BulkVideoDownloadProgressContextValue = {
   isBusyForContest: (contestId: string) => boolean;
   hasSessionForContest: (contestId: string) => boolean;
   hydrateForContest: (contestId: string) => Promise<void>;
+  contestJobSummaries: BulkVideoDownloadJobSummary[];
+  viewerUserType: BulkDownloadSummaryUserType | null;
+  hydrateContestJobs: (contestId: string) => Promise<void>;
+  fetchJobSession: (jobId: string) => Promise<BulkVideoDownloadSession | null>;
 };
 
 const BulkVideoDownloadProgressContext =
@@ -145,6 +155,8 @@ type RemoteSessionRow = {
   }[];
   summary_viewed?: boolean;
   summary_viewed_at?: string | null;
+  user_type?: string | null;
+  user_id?: string | null;
   /** Enriched on GET by joining submissions + job_items. */
   metaById?: Record<string, BulkVideoDownloadSubmissionMeta>;
   results?: BulkVideoDownloadResultRow[];
@@ -218,6 +230,7 @@ function remoteRowToSession(row: RemoteSessionRow): BulkVideoDownloadSession | n
     summaryViewedAt: row.summary_viewed_at
       ? String(row.summary_viewed_at)
       : null,
+    userType: row.user_type === "advertiser" ? "advertiser" : "admin",
     progress: {
       successCount: useDerivedCounts ? successFromResults : storedSuccess,
       failedCount: useDerivedCounts ? failedFromResults : storedFailed,
@@ -438,10 +451,19 @@ export function BulkVideoDownloadProgressProvider({
 }) {
   const [session, setSession] = useState<BulkVideoDownloadSession | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [contestJobSummaries, setContestJobSummaries] = useState<
+    BulkVideoDownloadJobSummary[]
+  >([]);
+  const [viewerUserType, setViewerUserType] =
+    useState<BulkDownloadSummaryUserType | null>(null);
   const runTokenRef = useRef(0);
   const runningRef = useRef(false);
   const sessionRef = useRef<BulkVideoDownloadSession | null>(null);
   const supabaseJobIdRef = useRef<string | null>(null);
+  const viewerUserTypeRef = useRef<BulkDownloadSummaryUserType | null>(null);
+  const hydrateContestJobsRef = useRef<
+    ((contestId: string) => Promise<void>) | null
+  >(null);
   const progressSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -455,6 +477,10 @@ export function BulkVideoDownloadProgressProvider({
     sessionRef.current = session;
     supabaseJobIdRef.current = session?.supabaseJobId ?? null;
   }, [session]);
+
+  useEffect(() => {
+    viewerUserTypeRef.current = viewerUserType;
+  }, [viewerUserType]);
 
   useEffect(() => {
     return () => {
@@ -478,6 +504,9 @@ export function BulkVideoDownloadProgressProvider({
     setSession(next);
     sessionRef.current = next;
     supabaseJobIdRef.current = next.supabaseJobId ?? null;
+    if (next.status === "finished" || next.status === "failed") {
+      void hydrateContestJobsRef.current?.(next.contestId);
+    }
   }, []);
 
   const scheduleRemoteProgressSync = useCallback(
@@ -849,6 +878,7 @@ export function BulkVideoDownloadProgressProvider({
         startedAt,
         status: "running",
         supabaseJobId: null,
+        userType: viewerUserTypeRef.current,
         progress: {
           successCount: 0,
           failedCount: 0,
@@ -864,6 +894,9 @@ export function BulkVideoDownloadProgressProvider({
               avatarUrl: meta?.avatarUrl ?? null,
               displayName: meta?.displayName ?? null,
               creatorId: meta?.creatorId ?? null,
+              submissionStatus: meta?.submissionStatus ?? null,
+              qualityScore: meta?.qualityScore ?? null,
+              downloadedAt: meta?.downloadedAt ?? null,
               status: "pending",
             } satisfies BulkVideoDownloadResultRow;
           }),
@@ -879,9 +912,58 @@ export function BulkVideoDownloadProgressProvider({
     [persistSession, runSession],
   );
 
+  const hydrateContestJobs = useCallback(async (contestId: string) => {
+    const id = String(contestId || "");
+    if (!id) return;
+    try {
+      const res = await fetch(
+        `/api/admin/bulk-download/session?contestId=${encodeURIComponent(id)}&list=1`,
+      );
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      setViewerUserType(
+        data.viewerUserType === "advertiser" ? "advertiser" : "admin",
+      );
+      const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      setContestJobSummaries(
+        jobs.map((row: Parameters<typeof jobRowToDownloadSummary>[0]) =>
+          jobRowToDownloadSummary(row),
+        ),
+      );
+    } catch (error) {
+      console.warn(
+        "[bulk-video-download] Failed to load contest download summaries",
+        error,
+      );
+    }
+  }, []);
+
+  hydrateContestJobsRef.current = hydrateContestJobs;
+
+  const fetchJobSession = useCallback(async (jobId: string) => {
+    const id = String(jobId || "").trim();
+    if (!id) return null;
+    try {
+      const res = await fetch(
+        `/api/admin/bulk-download/session?jobId=${encodeURIComponent(id)}`,
+      );
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}));
+      const row = data.session as RemoteSessionRow | null;
+      const restored = row ? remoteRowToSession(row) : null;
+      return restored ? sessionWithDerivedProgress(restored) : null;
+    } catch (error) {
+      console.warn(
+        "[bulk-video-download] Failed to load download summary job",
+        error,
+      );
+      return null;
+    }
+  }, []);
+
   const openVideoSummary = useCallback(() => {
-    const current = sessionRef.current;
     setStatusOpen(true);
+    const current = sessionRef.current;
     if (!current) return;
     const finished =
       current.status === "finished" ||
@@ -931,6 +1013,10 @@ export function BulkVideoDownloadProgressProvider({
       hasSessionForContest: (contestId: string) =>
         !!session && session.contestId === String(contestId),
       hydrateForContest,
+      contestJobSummaries,
+      viewerUserType,
+      hydrateContestJobs,
+      fetchJobSession,
     }),
     [
       session,
@@ -941,6 +1027,10 @@ export function BulkVideoDownloadProgressProvider({
       startDownload,
       clearSession,
       hydrateForContest,
+      contestJobSummaries,
+      viewerUserType,
+      hydrateContestJobs,
+      fetchJobSession,
     ],
   );
 

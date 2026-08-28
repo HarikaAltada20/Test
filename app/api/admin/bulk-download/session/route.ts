@@ -5,9 +5,11 @@ import {
   enrichBulkVideoDownloadJob,
   getBulkVideoDownloadJobById,
   getLatestBulkVideoDownloadJobForContest,
+  listBulkVideoDownloadJobsForContest,
   parseItemStatuses,
   parseZipParts,
   updateBulkVideoDownloadJob,
+  viewerCanAccessBulkVideoDownloadJob,
   type BulkVideoDownloadJobStatus,
   type BulkVideoDownloadItemStatus,
 } from "@/lib/bulk-video-download-jobs";
@@ -38,15 +40,14 @@ function leanItemStatusesFromResults(
   );
 }
 
-async function sessionResponse(jobId: string, userId: string) {
+async function sessionResponse(jobId: string, viewer: { id: string; user_type: "admin" | "advertiser" }) {
   const { data, error } = await getBulkVideoDownloadJobById({
     id: jobId,
-    userId,
   });
   if (error) {
     return NextResponse.json({ error }, { status: 500 });
   }
-  if (!data) {
+  if (!data || !viewerCanAccessBulkVideoDownloadJob({ viewer, job: data })) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
   const session = await enrichBulkVideoDownloadJob(data);
@@ -66,9 +67,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const contestId = url.searchParams.get("contestId")?.trim();
   const jobId = url.searchParams.get("jobId")?.trim();
+  const listJobs =
+    url.searchParams.get("list") === "1" ||
+    url.searchParams.get("summaries") === "1";
 
   if (jobId) {
-    return sessionResponse(jobId, access.user.id);
+    return sessionResponse(jobId, access.user);
   }
 
   if (!contestId) {
@@ -76,6 +80,20 @@ export async function GET(request: Request) {
       { error: "contestId or jobId is required" },
       { status: 400 },
     );
+  }
+
+  if (listJobs) {
+    const { data, error } = await listBulkVideoDownloadJobsForContest({
+      contestId,
+      viewer: access.user,
+    });
+    if (error) {
+      return NextResponse.json({ error }, { status: 500 });
+    }
+    return NextResponse.json({
+      jobs: data,
+      viewerUserType: access.user.user_type,
+    });
   }
 
   const { data, error } = await getLatestBulkVideoDownloadJobForContest({

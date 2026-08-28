@@ -13,6 +13,11 @@ import {
 import { toBulkZipDownloadFilename } from "@/lib/video-download-filename";
 import { videoDownloadLocalZipPath } from "@/lib/video-download-storage";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { findBulkVideoDownloadJobByZipPartId } from "@/lib/bulk-video-download-jobs";
+import {
+  isAdminDownloadUser,
+  type DownloadAccessUser,
+} from "@/lib/video-download-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,16 +39,17 @@ function zipDownloadHeaders(filename: string, contentLength?: number): Headers {
 
 async function resolveStoragePathAndFilename(options: {
   jobId: string;
-  userId: string;
+  user: DownloadAccessUser;
   requestedName: string | null;
 }): Promise<
   | { ok: true; storagePath: string; filename: string; clearJobId?: string }
   | { ok: false; response: NextResponse }
 > {
+  const isAdmin = isAdminDownloadUser(options.user);
   const status = await getVideoDownloadJobStatus(options.jobId);
 
   if (status) {
-    if (status.userId !== options.userId) {
+    if (status.userId !== options.user.id && !isAdmin) {
       return {
         ok: false,
         response: NextResponse.json(
@@ -73,7 +79,20 @@ async function resolveStoragePathAndFilename(options: {
     };
   }
 
-  const storagePath = videoDownloadStoragePath(options.userId, options.jobId);
+  const { data: job } = await findBulkVideoDownloadJobByZipPartId({
+    jobId: options.jobId,
+  });
+  if (job && job.user_id !== options.user.id && !isAdmin) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Download job not found" },
+        { status: 404 },
+      ),
+    };
+  }
+  const storageOwnerId = job?.user_id || options.user.id;
+  const storagePath = videoDownloadStoragePath(storageOwnerId, options.jobId);
   const filename = toBulkZipDownloadFilename(
     options.requestedName || `bulk_submissions_contest`,
   );
@@ -223,7 +242,7 @@ export async function GET(request: Request) {
 
   const resolved = await resolveStoragePathAndFilename({
     jobId,
-    userId: access.user.id,
+    user: access.user,
     requestedName: requestUrl.searchParams.get("filename"),
   });
   if (!resolved.ok) return resolved.response;

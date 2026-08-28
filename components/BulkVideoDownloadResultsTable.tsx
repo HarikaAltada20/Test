@@ -67,7 +67,7 @@ function VideoResultRow({
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 px-4 py-3.5",
+        "flex items-start justify-between gap-4 px-4 py-5",
         striped && (isDark ? "bg-white/[0.03]" : "bg-slate-50/80"),
       )}
     >
@@ -114,7 +114,7 @@ function VideoResultRow({
           >
             {truncateTitle(fullTitle)}
           </p>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
             {row.link ? (
               <a
                 href={row.link}

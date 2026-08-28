@@ -320,7 +320,31 @@ export type BulkVideoDownloadSubmissionMeta = {
   displayName?: string | null;
   /** Stable creator id for creators-wise grouping when available. */
   creatorId?: string | null;
+  /** Contest moderation status: pending, verified, rejected, paid. */
+  submissionStatus?: string | null;
+  qualityScore?: number | null;
+  /** When this video finished in the ZIP job (item updated_at). */
+  downloadedAt?: string | null;
 };
+
+export function extraDownloadRowMeta(
+  meta?: Pick<
+    BulkVideoDownloadSubmissionMeta,
+    "submissionStatus" | "qualityScore" | "downloadedAt"
+  > | null,
+): Pick<
+  BulkVideoDownloadSubmissionMeta,
+  "submissionStatus" | "qualityScore" | "downloadedAt"
+> {
+  const quality = Number(meta?.qualityScore);
+  return {
+    submissionStatus: meta?.submissionStatus
+      ? String(meta.submissionStatus).toLowerCase()
+      : null,
+    qualityScore: Number.isFinite(quality) ? quality : null,
+    downloadedAt: meta?.downloadedAt ? String(meta.downloadedAt) : null,
+  };
+}
 
 export type BulkVideoDownloadResultRow = BulkVideoDownloadSubmissionMeta & {
   /**
@@ -431,6 +455,7 @@ export function buildBulkDownloadResultRows(options: {
       avatarUrl: meta?.avatarUrl ?? null,
       displayName: meta?.displayName ?? null,
       creatorId: meta?.creatorId ?? null,
+      ...extraDownloadRowMeta(meta),
     };
 
     if (failureError) {
@@ -516,6 +541,7 @@ export function buildProvisionalBulkDownloadResultRows(options: {
       avatarUrl: meta?.avatarUrl ?? null,
       displayName: meta?.displayName ?? null,
       creatorId: meta?.creatorId ?? null,
+      ...extraDownloadRowMeta(meta),
     };
 
     if (failureError) {

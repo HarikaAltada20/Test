@@ -4,6 +4,10 @@ import type {
   BulkVideoDownloadSubmissionMeta,
 } from "@/lib/video-download-ui";
 import type { VideoFilenamePattern } from "@/lib/video-download-filename";
+import {
+  canAccessBulkVideoDownloadJob,
+} from "@/lib/bulk-video-download-summary";
+import type { DownloadAccessUser } from "@/lib/video-download-auth";
 
 export type BulkVideoDownloadJobStatus =
   | "queued"
@@ -24,6 +28,7 @@ export type BulkVideoDownloadItemStatus = {
   submissionId: string;
   status: "pending" | "success" | "failed";
   error?: string;
+  updatedAt?: string | null;
 };
 
 export type BulkVideoDownloadJobRow = {
@@ -114,6 +119,12 @@ export function parseItemStatuses(
           : typeof row.error_message === "string"
             ? row.error_message
             : undefined,
+      updatedAt:
+        typeof row.updatedAt === "string"
+          ? row.updatedAt
+          : typeof row.updated_at === "string"
+            ? row.updated_at
+            : undefined,
     }));
 }
 
@@ -199,6 +210,8 @@ export async function loadSubmissionMetaByIds(
         content_link,
         video_title,
         views,
+        status,
+        quality_score,
         creator_id,
         users!creator_id(username, full_name, profile_picture_url)
       `,
@@ -212,6 +225,8 @@ export async function loadSubmissionMetaByIds(
 
     for (const row of data || []) {
       const id = String(row.id);
+      const submissionStatus = String(row.status || "pending").toLowerCase();
+      const quality = Number(row.quality_score);
       out[id] = {
         submissionId: id,
         username: joinedUsername(row.users) || "unknown",
@@ -224,6 +239,8 @@ export async function loadSubmissionMetaByIds(
         avatarUrl: joinedAvatar(row.users),
         displayName: joinedFullName(row.users),
         creatorId: row.creator_id ? String(row.creator_id) : null,
+        submissionStatus,
+        qualityScore: Number.isFinite(quality) ? quality : null,
       };
     }
   }
@@ -241,7 +258,7 @@ export async function loadJobItemStatuses(
   for (;;) {
     const { data, error } = await admin
       .from("bulk_video_download_job_items")
-      .select("submission_id, status, error_message")
+      .select("submission_id, status, error_message, updated_at")
       .eq("job_id", jobId)
       .order("submission_id", { ascending: true })
       .range(offset, offset + ITEM_PAGE_SIZE - 1);
@@ -262,6 +279,7 @@ export async function loadJobItemStatuses(
           typeof row.error_message === "string" && row.error_message
             ? row.error_message
             : undefined,
+        updatedAt: row.updated_at ? String(row.updated_at) : null,
       });
     }
     if (page.length < ITEM_PAGE_SIZE) break;
@@ -362,6 +380,10 @@ export function buildEnrichedSession(
     (submissionId) => {
       const meta = metaById[submissionId];
       const statusRow = statusById.get(submissionId);
+      const downloadedAt =
+        statusRow?.status === "success" || statusRow?.status === "failed"
+          ? statusRow.updatedAt || null
+          : meta?.downloadedAt ?? null;
       return {
         submissionId,
         username: meta?.username ?? "unknown",
@@ -371,6 +393,9 @@ export function buildEnrichedSession(
         avatarUrl: meta?.avatarUrl ?? null,
         displayName: meta?.displayName ?? null,
         creatorId: meta?.creatorId ?? null,
+        submissionStatus: meta?.submissionStatus ?? null,
+        qualityScore: meta?.qualityScore ?? null,
+        downloadedAt,
         status: statusRow?.status ?? "pending",
         error: statusRow?.error,
       };
@@ -538,6 +563,72 @@ export async function updateBulkVideoDownloadJob(
   return { data: normalizeJobRow(data as Record<string, unknown>) };
 }
 
+export async function listBulkVideoDownloadJobsForContest(options: {
+  contestId: string;
+  viewer: DownloadAccessUser;
+  limit?: number;
+}): Promise<{ data: BulkVideoDownloadJobRow[]; error?: string }> {
+  const admin = createAdminClient();
+  const limit = Math.min(50, Math.max(1, options.limit ?? 30));
+  let query = admin
+    .from("bulk_video_download_jobs")
+    .select(
+      "id, contest_id, user_id, user_type, status, total_count, success_count, failed_count, zip_part_total, naming_pattern, file_name_prefix, created_at, finished_at",
+    )
+    .eq("contest_id", options.contestId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (options.viewer.user_type !== "admin") {
+    query = query.eq("user_id", options.viewer.id);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("[bulk-video-download-jobs] list failed:", error);
+    return { data: [], error: error.message };
+  }
+  return {
+    data: (data || []).map((row) =>
+      normalizeJobRow(row as Record<string, unknown>),
+    ),
+  };
+}
+
+export async function findBulkVideoDownloadJobByZipPartId(options: {
+  jobId: string;
+}): Promise<{ data: BulkVideoDownloadJobRow | null; error?: string }> {
+  const admin = createAdminClient();
+  const { data: byId, error: byIdError } = await admin
+    .from("bulk_video_download_jobs")
+    .select("*")
+    .eq("id", options.jobId)
+    .maybeSingle();
+  if (byIdError) {
+    console.error("[bulk-video-download-jobs] find by id failed:", byIdError);
+    return { data: null, error: byIdError.message };
+  }
+  if (byId) {
+    return { data: normalizeJobRow(byId as Record<string, unknown>) };
+  }
+
+  const { data: byPart, error: byPartError } = await admin
+    .from("bulk_video_download_jobs")
+    .select("*")
+    .contains("zip_parts", [{ jobId: options.jobId }])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (byPartError) {
+    console.error(
+      "[bulk-video-download-jobs] find by zip part failed:",
+      byPartError,
+    );
+    return { data: null, error: byPartError.message };
+  }
+  if (!byPart) return { data: null };
+  return { data: normalizeJobRow(byPart as Record<string, unknown>) };
+}
+
 export async function getLatestBulkVideoDownloadJobForContest(options: {
   contestId: string;
   userId: string;
@@ -579,15 +670,17 @@ export async function getLatestBulkVideoDownloadJobForContest(options: {
 
 export async function getBulkVideoDownloadJobById(options: {
   id: string;
-  userId: string;
+  userId?: string;
 }): Promise<{ data: BulkVideoDownloadJobRow | null; error?: string }> {
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("bulk_video_download_jobs")
     .select("*")
-    .eq("id", options.id)
-    .eq("user_id", options.userId)
-    .maybeSingle();
+    .eq("id", options.id);
+  if (options.userId) {
+    query = query.eq("user_id", options.userId);
+  }
+  const { data, error } = await query.maybeSingle();
 
   if (error) {
     console.error("[bulk-video-download-jobs] get by id failed:", error);
@@ -595,4 +688,15 @@ export async function getBulkVideoDownloadJobById(options: {
   }
   if (!data) return { data: null };
   return { data: normalizeJobRow(data as Record<string, unknown>) };
+}
+
+export function viewerCanAccessBulkVideoDownloadJob(options: {
+  viewer: DownloadAccessUser;
+  job: Pick<BulkVideoDownloadJobRow, "user_id">;
+}): boolean {
+  return canAccessBulkVideoDownloadJob({
+    viewerUserType: options.viewer.user_type,
+    viewerUserId: options.viewer.id,
+    jobUserId: options.job.user_id,
+  });
 }
