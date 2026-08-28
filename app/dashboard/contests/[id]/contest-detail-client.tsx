@@ -37,6 +37,9 @@ import {
   isTrackedPostCampaignRun,
 } from "@/lib/post-campaign-refresh-client";
 import { CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE } from "@/lib/fetch-contest-submissions";
+import {
+  finishContestSubmissionsHydrate,
+} from "@/lib/contest-detail-submissions-hydrate";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest";
@@ -1530,6 +1533,10 @@ export default function ContestDetailClient({
         ? initialSubmissionTotal
         : (initialSubmissions?.length ?? 0)),
   );
+  const [submissionsHydrateError, setSubmissionsHydrateError] = useState<
+    string | null
+  >(null);
+  const [submissionsHydrateRetry, setSubmissionsHydrateRetry] = useState(0);
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
@@ -3042,6 +3049,14 @@ export default function ContestDetailClient({
     getContestDetailRowStatus(submission as any);
 
   const isHydratingSubmissions = !submissionsFullyHydrated;
+  const isLoadingSubmissionsHydrate =
+    isHydratingSubmissions && !submissionsHydrateError;
+
+  const retrySubmissionsHydrate = useCallback(() => {
+    setSubmissionsHydrateError(null);
+    setSubmissionsFullyHydrated(false);
+    setSubmissionsHydrateRetry((n) => n + 1);
+  }, []);
 
   const loadedSubmissionStatusCounts = useMemo(
     () => computeContestDetailSubmissionStatusCounts(currentSubmissions),
@@ -6276,6 +6291,7 @@ export default function ContestDetailClient({
           ? initialSubmissionTotal
           : (initialSubmissions?.length ?? 0)),
     );
+    setSubmissionsHydrateError(null);
   }, [initialSubmissions, initialSubmissionTotal, initialSubmissionCounts]);
 
   // Client-hydrate all submission pages in 1000-row chunks (SSR seeds counts only).
@@ -6284,14 +6300,18 @@ export default function ContestDetailClient({
     if (typeof initialSubmissionTotal !== "number") return;
     if ((initialSubmissions?.length ?? 0) >= initialSubmissionTotal) {
       setSubmissionsFullyHydrated(true);
+      setSubmissionsHydrateError(null);
       return;
     }
 
     let cancelled = false;
     const abort = new AbortController();
     const pageSize = CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE;
+    setSubmissionsHydrateError(null);
 
     (async () => {
+      let pageFailed = false;
+      let aborted = false;
       try {
         let offset = initialSubmissions?.length ?? 0;
         let hasMore = offset < initialSubmissionTotal;
@@ -6352,7 +6372,10 @@ export default function ContestDetailClient({
 
         while (!cancelled && hasMore) {
           const page = await fetchPage(offset);
-          if (!page) break;
+          if (!page) {
+            pageFailed = true;
+            break;
+          }
           if (page.counts) {
             setSubmissionStatusCounts({
               total: Number(page.counts.total) || 0,
@@ -6375,10 +6398,28 @@ export default function ContestDetailClient({
           offset += pageSize;
         }
       } catch (err) {
-        if ((err as { name?: string })?.name === "AbortError") return;
+        if ((err as { name?: string })?.name === "AbortError") {
+          aborted = true;
+          return;
+        }
         console.error("[contest-detail] submissions hydrate error:", err);
+        pageFailed = true;
       } finally {
-        if (!cancelled) setSubmissionsFullyHydrated(true);
+        const outcome = finishContestSubmissionsHydrate({
+          cancelled,
+          aborted,
+          pageFailed,
+        });
+        if (cancelled || aborted) return;
+        setSubmissionsFullyHydrated(outcome.fullyHydrated);
+        setSubmissionsHydrateError(outcome.error);
+        if (outcome.error) {
+          toast({
+            title: "Could not load all submissions",
+            description: outcome.error,
+            variant: "destructive",
+          });
+        }
       }
     })();
 
@@ -6386,9 +6427,9 @@ export default function ContestDetailClient({
       cancelled = true;
       abort.abort();
     };
-    // Only re-run when contest / SSR seed changes
+    // Only re-run when contest / SSR seed / retry changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contestId, initialSubmissions, initialSubmissionTotal]);
+  }, [contestId, initialSubmissions, initialSubmissionTotal, submissionsHydrateRetry]);
 
   useEffect(() => {
     setCurrentContest(contest);
@@ -7662,8 +7703,11 @@ export default function ContestDetailClient({
       action === "pending";
     if (isModerationBulkAction && !submissionsFullyHydrated) {
       toast({
-        title: "Still loading submissions",
+        title: submissionsHydrateError
+          ? "Submissions failed to load"
+          : "Still loading submissions",
         description:
+          submissionsHydrateError ||
           "Wait until all contest submissions finish loading before bulk moderation.",
         variant: "destructive",
       });
@@ -8454,8 +8498,11 @@ export default function ContestDetailClient({
   ) => {
     if (!submissionsFullyHydrated) {
       toast({
-        title: "Still loading submissions",
+        title: submissionsHydrateError
+          ? "Submissions failed to load"
+          : "Still loading submissions",
         description:
+          submissionsHydrateError ||
           "Wait until all contest submissions finish loading before bulk payment.",
         variant: "destructive",
       });
@@ -12565,6 +12612,24 @@ export default function ContestDetailClient({
             {submissionsFetchError}
             ). Counts and moderation data may be incomplete — refresh the page
             or contact support if this persists.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {submissionsHydrateError ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{submissionsHydrateError}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-red-300 bg-white text-red-800 hover:bg-red-50"
+              onClick={retrySubmissionsHydrate}
+            >
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              Retry
+            </Button>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -17884,7 +17949,7 @@ export default function ContestDetailClient({
 
           <TabPanel value="submissions" activeTab={activeTab}>
             {!isPostCampaignLeaderboard &&
-            isHydratingSubmissions &&
+            isLoadingSubmissionsHydrate &&
             currentSubmissions.length === 0 ? (
               <div className="flex items-center justify-center min-h-[76vh] w-full">
                 <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
@@ -17997,7 +18062,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               <div className="inline-flex items-center gap-1.5">
-                                {isHydratingSubmissions &&
+                                {isLoadingSubmissionsHydrate &&
                                   !isPostCampaignLeaderboard && (
                                     <Loader2
                                       className="h-3.5 w-3.5 animate-spin shrink-0 text-[#7F39EC]"

@@ -139,7 +139,7 @@ describe("download summary status tabs", () => {
     { submissionStatus: "approved" },
   ];
 
-  it("counts all / verified / pending / rejected / paid / not rejected", () => {
+  it("counts all / verified / pending / rejected / paid / not rejected / verified paid", () => {
     const counts = countDownloadRowsByStatusTab(rows);
     assert.equal(counts.all, 5);
     assert.equal(counts.verified, 2);
@@ -147,6 +147,7 @@ describe("download summary status tabs", () => {
     assert.equal(counts.pending, 1);
     assert.equal(counts.rejected, 1);
     assert.equal(counts.not_rejected, 4);
+    assert.equal(counts.verified_paid, 3);
   });
 
   it("filters rows by the selected status tab", () => {
@@ -155,6 +156,9 @@ describe("download summary status tabs", () => {
     assert.equal(rowMatchesDownloadStatusTab("rejected", "not_rejected"), false);
     assert.equal(rowMatchesDownloadStatusTab("paid", "not_rejected"), true);
     assert.equal(rowMatchesDownloadStatusTab("pending", "all"), true);
+    assert.equal(rowMatchesDownloadStatusTab("verified", "verified_paid"), true);
+    assert.equal(rowMatchesDownloadStatusTab("paid", "verified_paid"), true);
+    assert.equal(rowMatchesDownloadStatusTab("pending", "verified_paid"), false);
   });
 
   it("filters download cards by the status used at download time", () => {
@@ -162,16 +166,20 @@ describe("download summary status tabs", () => {
       { statusSlug: "verified" },
       { statusSlug: "nonrejected" },
       { statusSlug: "paid" },
+      { statusSlug: "verified_paid" },
       { statusSlug: "all" },
     ];
     const counts = countDownloadJobsByStatusTab(jobs);
-    assert.equal(counts.all, 4);
+    assert.equal(counts.all, 5);
     assert.equal(counts.verified, 1);
     assert.equal(counts.paid, 1);
     assert.equal(counts.not_rejected, 1);
+    assert.equal(counts.verified_paid, 1);
     assert.equal(jobMatchesListStatusTab("verified", "verified"), true);
     assert.equal(jobMatchesListStatusTab("verified", "paid"), false);
     assert.equal(jobMatchesListStatusTab("nonrejected", "not_rejected"), true);
+    assert.equal(jobMatchesListStatusTab("verified_paid", "verified_paid"), true);
+    assert.equal(jobMatchesListStatusTab("verified_paid", "verified"), false);
     assert.equal(jobMatchesListStatusTab("all", "all"), true);
     assert.equal(jobMatchesListStatusTab("all", "verified"), false);
   });

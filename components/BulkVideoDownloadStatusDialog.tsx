@@ -218,7 +218,7 @@ export function BulkVideoDownloadStatusDialog({
 
         {showJobList ? (
           <div className="space-y-3">
-            <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="flex w-full flex-nowrap items-stretch gap-2 overflow-x-auto">
               {DOWNLOAD_SUMMARY_STATUS_TABS.map((tab) => {
                 const selected = listStatusTab === tab.id;
                 return (
@@ -230,7 +230,7 @@ export function BulkVideoDownloadStatusDialog({
                       setJobPage(1);
                     }}
                     className={cn(
-                      "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
+                      "inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-2.5 text-sm font-semibold transition-colors",
                       selected
                         ? "border-transparent bg-[#6C43D0] text-white"
                         : isDark

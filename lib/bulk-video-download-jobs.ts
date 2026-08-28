@@ -8,6 +8,10 @@ import {
   canAccessBulkVideoDownloadJob,
 } from "@/lib/bulk-video-download-summary";
 import type { DownloadAccessUser } from "@/lib/video-download-auth";
+import {
+  scopeItemStatusesToJob,
+  scopeZipPartsToJob,
+} from "@/lib/bulk-video-download-session-access";
 
 export type BulkVideoDownloadJobStatus =
   | "queued"
@@ -518,7 +522,6 @@ export async function updateBulkVideoDownloadJob(
   if (typeof input.zipPartTotal === "number") {
     patch.zip_part_total = Math.max(1, input.zipPartTotal);
   }
-  if (input.zipParts) patch.zip_parts = input.zipParts;
   if (input.errorMessage !== undefined) {
     patch.error_message = input.errorMessage;
   }
@@ -530,8 +533,24 @@ export async function updateBulkVideoDownloadJob(
     patch.finished_at = new Date().toISOString();
   }
 
-  if (input.itemStatuses && input.itemStatuses.length > 0) {
-    const itemsResult = await upsertJobItemStatuses(input.id, input.itemStatuses);
+  const existing = await getBulkVideoDownloadJobById({
+    id: input.id,
+    userId: input.userId,
+  });
+  if (existing.error) return { data: null, error: existing.error };
+  if (!existing.data) return { data: null };
+
+  const allowedIds = existing.data.submission_ids;
+  const scopedStatuses =
+    input.itemStatuses && input.itemStatuses.length > 0
+      ? scopeItemStatusesToJob(input.itemStatuses, allowedIds)
+      : [];
+  if (input.zipParts) {
+    patch.zip_parts = scopeZipPartsToJob(input.zipParts, allowedIds);
+  }
+
+  if (scopedStatuses.length > 0) {
+    const itemsResult = await upsertJobItemStatuses(input.id, scopedStatuses);
     if (itemsResult.error) {
       return { data: null, error: itemsResult.error };
     }

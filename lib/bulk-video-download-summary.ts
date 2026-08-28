@@ -72,7 +72,8 @@ export type DownloadSummaryStatusTab =
   | "pending"
   | "rejected"
   | "paid"
-  | "not_rejected";
+  | "not_rejected"
+  | "verified_paid";
 
 export const DOWNLOAD_SUMMARY_STATUS_TABS: {
   id: DownloadSummaryStatusTab;
@@ -84,6 +85,7 @@ export const DOWNLOAD_SUMMARY_STATUS_TABS: {
   { id: "rejected", label: "Rejected" },
   { id: "paid", label: "Paid" },
   { id: "not_rejected", label: "Not Rejected" },
+  { id: "verified_paid", label: "Verified + Paid" },
 ];
 
 export type DownloadSummarySort =
@@ -108,6 +110,7 @@ export function rowMatchesDownloadStatusTab(
   const status = normalizeDownloadSubmissionStatus(submissionStatus);
   if (tab === "all") return true;
   if (tab === "not_rejected") return status !== "rejected";
+  if (tab === "verified_paid") return status === "verified" || status === "paid";
   return status === tab;
 }
 
@@ -118,7 +121,9 @@ const ZIP_STATUS_SLUG_TO_TAB: Record<string, DownloadSummaryStatusTab> = {
   rejected: "rejected",
   paid: "paid",
   nonrejected: "not_rejected",
-  verified_paid: "verified",
+  verified_paid: "verified_paid",
+  verified_or_paid: "verified_paid",
+  verifiedorpaid: "verified_paid",
 };
 
 export function downloadJobStatusSlugToTab(
@@ -149,6 +154,7 @@ export function countDownloadJobsByStatusTab(
     rejected: 0,
     paid: 0,
     not_rejected: 0,
+    verified_paid: 0,
   };
   for (const job of jobs) {
     const tab = downloadJobStatusSlugToTab(job.statusSlug);
@@ -167,11 +173,13 @@ export function countDownloadRowsByStatusTab(
     rejected: 0,
     paid: 0,
     not_rejected: 0,
+    verified_paid: 0,
   };
   for (const row of rows) {
     const status = normalizeDownloadSubmissionStatus(row.submissionStatus);
     counts[status] += 1;
     if (status !== "rejected") counts.not_rejected += 1;
+    if (status === "verified" || status === "paid") counts.verified_paid += 1;
   }
   return counts;
 }

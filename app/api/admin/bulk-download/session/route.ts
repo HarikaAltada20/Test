@@ -13,6 +13,13 @@ import {
   type BulkVideoDownloadJobStatus,
   type BulkVideoDownloadItemStatus,
 } from "@/lib/bulk-video-download-jobs";
+import {
+  assertSessionSubmissionsOnContest,
+  collectSessionSubmissionIds,
+  scopeItemStatusesToJob,
+  scopeZipPartsToJob,
+  verifyDownloadContestAccess,
+} from "@/lib/bulk-video-download-session-access";
 
 export const dynamic = "force-dynamic";
 
@@ -82,9 +89,21 @@ export async function GET(request: Request) {
     );
   }
 
+  const contestAccess = await verifyDownloadContestAccess({
+    supabase: access.supabase,
+    viewer: access.user,
+    contestId,
+  });
+  if (!contestAccess.ok) {
+    return NextResponse.json(
+      { error: contestAccess.error },
+      { status: contestAccess.status },
+    );
+  }
+
   if (listJobs) {
     const { data, error } = await listBulkVideoDownloadJobsForContest({
-      contestId,
+      contestId: contestAccess.contestId,
       viewer: access.user,
     });
     if (error) {
@@ -97,7 +116,7 @@ export async function GET(request: Request) {
   }
 
   const { data, error } = await getLatestBulkVideoDownloadJobForContest({
-    contestId,
+    contestId: contestAccess.contestId,
     userId: access.user.id,
   });
   if (error) {
@@ -131,12 +150,21 @@ export async function POST(request: Request) {
     );
   }
 
+  const contestAccess = await verifyDownloadContestAccess({
+    supabase: access.supabase,
+    viewer: access.user,
+    contestId,
+  });
+  if (!contestAccess.ok) {
+    return NextResponse.json(
+      { error: contestAccess.error },
+      { status: contestAccess.status },
+    );
+  }
+
   const zipParts = parseZipParts(body.zipParts ?? body.jobs);
   const submissionIds = parseSubmissionIds(body.submissionIds);
-  const resolvedIds =
-    submissionIds.length > 0
-      ? submissionIds
-      : zipParts.flatMap((part) => part.submissionIds);
+  const resolvedIds = collectSessionSubmissionIds(submissionIds, zipParts);
 
   if (resolvedIds.length < 2) {
     return NextResponse.json(
@@ -145,23 +173,36 @@ export async function POST(request: Request) {
     );
   }
 
+  const submissionsAccess = await assertSessionSubmissionsOnContest({
+    contestId: contestAccess.contestId,
+    submissionIds: resolvedIds,
+  });
+  if (!submissionsAccess.ok) {
+    return NextResponse.json(
+      { error: submissionsAccess.error },
+      { status: submissionsAccess.status },
+    );
+  }
+
+  const allowedIds = submissionsAccess.submissionIds;
+  const scopedZipParts = scopeZipPartsToJob(zipParts, allowedIds);
   const parsedStatuses = leanItemStatusesFromResults(
     body.itemStatuses ?? body.results,
   );
   const itemStatuses =
     parsedStatuses.length > 0
-      ? parsedStatuses
-      : resolvedIds.map((submissionId) => ({
+      ? scopeItemStatusesToJob(parsedStatuses, allowedIds)
+      : allowedIds.map((submissionId) => ({
           submissionId,
           status: "pending" as const,
         }));
 
   const { data, error } = await createBulkVideoDownloadJob({
     id,
-    contestId,
+    contestId: contestAccess.contestId,
     userId: access.user.id,
     userType: access.user.user_type,
-    totalCount: resolvedIds.length,
+    totalCount: allowedIds.length,
     zipPartTotal: Math.max(
       1,
       zipParts.length || Number(body.zipPartTotal ?? body.totalChunks) || 1,
@@ -171,8 +212,8 @@ export async function POST(request: Request) {
       typeof body.namingPattern === "string" ? body.namingPattern : null,
     fileNamePrefix:
       typeof body.fileNamePrefix === "string" ? body.fileNamePrefix : null,
-    submissionIds: resolvedIds,
-    zipParts,
+    submissionIds: allowedIds,
+    zipParts: scopedZipParts,
     itemStatuses,
   });
 
