@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
+  fetchWithdrawalPayoutSeries,
   fetchWithdrawalsPage,
   parseOrder,
   parseSortKey,
@@ -37,10 +38,15 @@ export async function GET(req: NextRequest) {
   const order = parseOrder(searchParams.get("order"));
   const createdFrom = searchParams.get("createdFrom") || undefined;
   const createdTo = searchParams.get("createdTo") || undefined;
+  const includePayoutSeriesParam = (
+    searchParams.get("includePayoutSeries") ?? "1"
+  ).toLowerCase();
+  const includePayoutSeries =
+    includePayoutSeriesParam !== "0" && includePayoutSeriesParam !== "false";
 
   const supabase = createAdminClient();
 
-  const [{ error, data, total }, summaryRes] = await Promise.all([
+  const [pageRes, summaryRes, payoutSeriesRes] = await Promise.all([
     fetchWithdrawalsPage(supabase, {
       page,
       pageSize,
@@ -51,7 +57,23 @@ export async function GET(req: NextRequest) {
       order,
     }),
     supabase.rpc("admin_withdrawal_status_summary"),
+    includePayoutSeries
+      ? // Chart uses processed_at; reuse the page date range as the paid window.
+        fetchWithdrawalPayoutSeries(supabase, {
+          processedFrom: createdFrom,
+          processedTo: createdTo,
+        })
+      : Promise.resolve({
+          error: null as string | null,
+          data: [] as Awaited<
+            ReturnType<typeof fetchWithdrawalPayoutSeries>
+          >["data"],
+          granularity: "day" as const,
+          skipped: true as const,
+        }),
   ]);
+
+  const { error, data, total } = pageRes;
 
   if (error) {
     console.error("Withdrawals list error:", error);
@@ -64,6 +86,19 @@ export async function GET(req: NextRequest) {
       { error: summaryRes.error.message || "Failed to load withdrawal totals" },
       { status: 500 },
     );
+  }
+
+  // Chart is best-effort: never block the withdrawals list if series fails.
+  const seriesSkipped =
+    "skipped" in payoutSeriesRes && payoutSeriesRes.skipped === true;
+  let payoutSeries = seriesSkipped ? undefined : payoutSeriesRes.data ?? [];
+  let payoutSeriesGranularity = seriesSkipped
+    ? undefined
+    : payoutSeriesRes.granularity ?? "day";
+  if (!seriesSkipped && payoutSeriesRes.error) {
+    console.error("Withdrawals payout series error:", payoutSeriesRes.error);
+    payoutSeries = [];
+    payoutSeriesGranularity = "day";
   }
 
   const summaryRows = (summaryRes.data ?? []) as StatusSummaryRow[];
@@ -132,5 +167,8 @@ export async function GET(req: NextRequest) {
     pageSize,
     totals,
     statusCounts,
+    payoutSeriesIncluded: !seriesSkipped,
+    payoutSeries: seriesSkipped ? null : payoutSeries,
+    payoutSeriesGranularity: seriesSkipped ? null : payoutSeriesGranularity,
   });
 }
