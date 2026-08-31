@@ -9,7 +9,10 @@ import React, {
 } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import { useContestSubmissionsVirtualTable } from "@/components/contest/use-contest-submissions-virtual-table";
+import {
+  CONTEST_VIRTUAL_SPACER_CLASS,
+  useContestSubmissionsVirtualTable,
+} from "@/components/contest/use-contest-submissions-virtual-table";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   getMetricsRefreshCooldownInfoBrand,
@@ -20590,12 +20593,11 @@ export default function ContestDetailClient({
                         )}
                       {isSubmissionTableView && (
                         <>
-                          <div
-                            ref={submissionsVirtualTable.listRef}
-                            aria-hidden
-                            className="h-0 w-0 overflow-hidden"
-                          />
-                          <Table>
+                          <Table
+                            wrapperClassName={
+                              submissionsVirtualTable.scrollClassName
+                            }
+                          >
                             <TableHeader>
                               <TableRow
                                 className={cn(
@@ -21103,11 +21105,11 @@ export default function ContestDetailClient({
                                 </TableHead>
                               </TableRow>
                             </TableHeader>
-                            <TableBody>
+                            <TableBody ref={submissionsVirtualTable.listRef}>
                               {submissionsVirtualTable.paddingTop > 0 && (
                                 <TableRow
                                   aria-hidden
-                                  className="hover:bg-transparent"
+                                  className={CONTEST_VIRTUAL_SPACER_CLASS}
                                 >
                                   <TableCell
                                     colSpan={48}
@@ -21997,6 +21999,10 @@ export default function ContestDetailClient({
                                   return (
                                     <TableRow
                                       key={submission.id}
+                                      ref={
+                                        submissionsVirtualTable.measureElement
+                                      }
+                                      data-index={virtualIndex}
                                       className={cn(
                                         "transition-colors duration-200",
                                         isDeleted && "opacity-60",
@@ -24983,7 +24989,7 @@ export default function ContestDetailClient({
                               {submissionsVirtualTable.paddingBottom > 0 && (
                                 <TableRow
                                   aria-hidden
-                                  className="hover:bg-transparent"
+                                  className={CONTEST_VIRTUAL_SPACER_CLASS}
                                 >
                                   <TableCell
                                     colSpan={48}
@@ -25254,12 +25260,11 @@ export default function ContestDetailClient({
                                   </div>
                                 </div>
                               )}
-                            <div
-                              ref={creatorWiseVirtualTable.listRef}
-                              aria-hidden
-                              className="h-0 w-0 overflow-hidden"
-                            />
-                            <Table>
+                            <Table
+                              wrapperClassName={
+                                creatorWiseVirtualTable.scrollClassName
+                              }
+                            >
                               <TableHeader>
                                 <TableRow
                                   className={cn(
@@ -25702,7 +25707,7 @@ export default function ContestDetailClient({
                                   </TableHead>
                                 </TableRow>
                               </TableHeader>
-                              <TableBody>
+                              <TableBody ref={creatorWiseVirtualTable.listRef}>
                                 {paginatedCreatorGroups.length === 0 ? (
                                   <TableRow>
                                     <TableCell
@@ -25740,7 +25745,7 @@ export default function ContestDetailClient({
                                     {creatorWiseVirtualTable.paddingTop > 0 && (
                                       <TableRow
                                         aria-hidden
-                                        className="hover:bg-transparent"
+                                        className={CONTEST_VIRTUAL_SPACER_CLASS}
                                       >
                                         <TableCell
                                           colSpan={48}
@@ -25949,7 +25954,13 @@ export default function ContestDetailClient({
                                         score3: 0,
                                       };
                                       return (
-                                        <TableRow key={group.creator.id}>
+                                        <TableRow
+                                          key={group.creator.id}
+                                          ref={
+                                            creatorWiseVirtualTable.measureElement
+                                          }
+                                          data-index={virtualIndex}
+                                        >
                                           {showCreatorWiseSelectionUi && (
                                             <TableCell className="text-center">
                                               <Checkbox
@@ -28427,7 +28438,7 @@ export default function ContestDetailClient({
                                       0 && (
                                       <TableRow
                                         aria-hidden
-                                        className="hover:bg-transparent"
+                                        className={CONTEST_VIRTUAL_SPACER_CLASS}
                                       >
                                         <TableCell
                                           colSpan={48}

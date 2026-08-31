@@ -993,6 +993,12 @@ function DashboardContent({
         .dashboard-container * {
           transition: all 0.3s ease-in-out;
         }
+
+        /* Window-virtualized table spacers must not animate height or rows blank. */
+        .dashboard-container tr.contest-virtual-spacer,
+        .dashboard-container tr.contest-virtual-spacer * {
+          transition: none !important;
+        }
       `}</style>
 
       {/* Global Theme-Based Scrollbar Styles */}
