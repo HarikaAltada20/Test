@@ -68,6 +68,7 @@ export async function POST(request: Request) {
         : null;
     const qualityScore =
       body?.qualityScore == null ? null : Number(body.qualityScore);
+    const reverseMostVerifiedBonus = Boolean(body?.reverseMostVerifiedBonus);
 
     if (submissionIds.length === 0) {
       return NextResponse.json(
@@ -306,7 +307,7 @@ export async function POST(request: Request) {
             ? qualityScore
             : null,
         reason,
-        payload: { submissionIds, channel },
+        payload: { submissionIds, channel, reverseMostVerifiedBonus },
         queue_offset: 0,
         created_at: now,
         updated_at: now,

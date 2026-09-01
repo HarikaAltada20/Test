@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  debitCreatorWithdrawableBalance,
+  debitCreatorReversalClawback,
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
@@ -414,7 +414,7 @@ export async function reverseTwitterTweetPayment(options: {
     debitCents: due.totalCents,
   });
 
-  const debitRes = await debitCreatorWithdrawableBalance(
+  const debitRes = await debitCreatorReversalClawback(
     creatorId,
     due.totalCents,
     { idempotencyKey: reversalDebitKey },

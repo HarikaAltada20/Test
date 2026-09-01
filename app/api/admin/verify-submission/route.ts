@@ -3,7 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { NextResponse } from "next/server";
 import {
   creditCreatorWithdrawableBalance,
-  debitCreatorWithdrawableBalance,
+  debitCreatorReversalClawback,
   logTransaction,
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
@@ -59,6 +59,7 @@ import {
   stripDualComponentTagFromRemarks,
   buildDualRewardsSubmissionPayUpdatePayload,
   buildSubmissionPaidReversalUpdate,
+  buildSubmissionPaidStateClearUpdate,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -69,7 +70,6 @@ import {
   moneyTxnAppliesToSubmission,
   getDualRewardsSubmissionPaidComponents,
   rollbackDualRewardsPoolCommitIfNeeded,
-  scaleDualReversalDuesToTotalCap,
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 import {
@@ -84,6 +84,8 @@ import {
   releaseCreatorContestPayoutLease,
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
+import { clawbackMostVerifiedBonusForCreator } from "@/lib/milestone-most-verified-bonus-clawback";
+import { isMilestoneContestType } from "@/lib/contest-type";
 
 export interface VerifySubmissionPayload {
   submissionId: string;
@@ -99,6 +101,7 @@ export interface VerifySubmissionPayload {
   skipWalletDebit?: boolean;
   walletDebitBypassToken?: string;
   qualityScore?: number | null;
+  reverseMostVerifiedBonus?: boolean;
 }
 
 export interface VerifySubmissionActorOverride {
@@ -153,6 +156,7 @@ export async function processVerifySubmission(
       skipWalletDebit,
       walletDebitBypassToken,
       qualityScore,
+      reverseMostVerifiedBonus,
     } = payload;
 
     if (!submissionId || !action) {
@@ -2132,54 +2136,9 @@ export async function processVerifySubmission(
         };
       }
 
+      let walletDebitCents = 0;
       if (reversalAmount > 0 && !walletDebitWasHandledByBulk) {
-        const { data: reversalProfile } = await supabaseAdmin
-          .from("creator_profiles")
-          .select("withdrawable_balance")
-          .eq("id", submissionFull.creator_id)
-          .single();
-        const reversalAvailableCents = Math.max(
-          0,
-          Math.round(Number(reversalProfile?.withdrawable_balance) || 0),
-        );
-
-        let walletDebitCents = reversalAmount;
-        if (reversalAvailableCents < reversalAmount) {
-          if (reversalAvailableCents <= 0) {
-            walletDebitCents = 0;
-          } else {
-            const scaled = scaleDualReversalDuesToTotalCap(
-              new Map([
-                [
-                  submissionId,
-                  {
-                    totalCents: reversalAmount,
-                    mainCents: mainReversalAmount,
-                    bonusCents: bonusReversalAmount,
-                    bonusReversals,
-                  },
-                ],
-              ]),
-              reversalAvailableCents,
-            );
-            const capped = scaled.get(submissionId)!;
-            mainReversalAmount = capped.mainCents;
-            bonusReversalAmount = capped.bonusCents;
-            bonusReversals = capped.bonusReversals;
-            walletDebitCents = capped.totalCents;
-            reversalAmount = capped.totalCents;
-            if (paidStatusReversalSummary) {
-              paidStatusReversalSummary = {
-                ...paidStatusReversalSummary,
-                reward_refunded_cents: mainReversalAmount,
-                bonus_refunded_cents: bonusReversalAmount,
-                total_refunded_cents: reversalAmount,
-                cpm_refunded_cents: mainReversalAmount,
-                milestone_refunded_cents: bonusReversalAmount,
-              };
-            }
-          }
-        }
+        walletDebitCents = reversalAmount;
 
         if (walletDebitCents > 0) {
           // Fingerprint reward/refund txn ids so a later pay→reverse cycle
@@ -2201,7 +2160,7 @@ export async function processVerifySubmission(
             ),
             debitCents: walletDebitCents,
           });
-          const debitRes = await debitCreatorWithdrawableBalance(
+          const debitRes = await debitCreatorReversalClawback(
             submissionFull.creator_id,
             walletDebitCents,
             { idempotencyKey: reversalDebitKey },
@@ -2295,6 +2254,48 @@ export async function processVerifySubmission(
         }
       }
 
+      if (
+        reverseMostVerifiedBonus &&
+        !walletDebitWasHandledByBulk &&
+        isMilestoneContestType(contest.contest_type)
+      ) {
+        const mvClawback = await clawbackMostVerifiedBonusForCreator({
+          supabaseAdmin,
+          contestId: submissionFull.contest_id,
+          contestTitle: (contest as { title?: string })?.title || "Contest",
+          contestType: contest.contest_type,
+          creatorId: submissionFull.creator_id,
+        });
+        if (!mvClawback.ok) {
+          return NextResponse.json(
+            {
+              error:
+                mvClawback.error ||
+                "Submission reversal succeeded but Most Verified bonus clawback failed.",
+            },
+            { status: 500 },
+          );
+        }
+        if (mvClawback.reversedCents > 0 && paidStatusReversalSummary) {
+          paidStatusReversalSummary = {
+            ...paidStatusReversalSummary,
+            total_refunded_cents:
+              paidStatusReversalSummary.total_refunded_cents +
+              mvClawback.reversedCents,
+            bonus_refunded_cents:
+              paidStatusReversalSummary.bonus_refunded_cents +
+              mvClawback.reversedCents,
+            ...(paidStatusReversalSummary.milestone_refunded_cents != null
+              ? {
+                  milestone_refunded_cents:
+                    (paidStatusReversalSummary.milestone_refunded_cents ?? 0) +
+                    mvClawback.reversedCents,
+                }
+              : {}),
+          };
+        }
+      }
+
       // Revert submission/contest win counts whenever leaving Paid (not only when wallet debit runs)
       try {
         await MetricsService.decrementSubmissionWin(
@@ -2309,15 +2310,35 @@ export async function processVerifySubmission(
       // Queue bulk path: keep paid flags until job-end wallet finalize writes
       // money_transactions refunds. Clearing them here made verified/rejected
       // refunds compute as $0 after status left `paid`.
-      if (!walletDebitWasHandledByBulk) {
+      const shouldClearPaidFlags =
+        !walletDebitWasHandledByBulk &&
+        (reversalAmount <= 0 || walletDebitCents > 0);
+      if (shouldClearPaidFlags) {
+        const paidRowInput = {
+          earnings: submissionFull.earnings,
+          paid: submissionFull.paid,
+          paid_at: submissionFull.paid_at,
+          bonus_paid: submissionFull.bonus_paid,
+          bonus_paid_at: submissionFull.bonus_paid_at,
+          bonus_amount: submissionFull.bonus_amount,
+          milestone_bonus_paid: submissionFull.milestone_bonus_paid as never,
+          metadata: submissionFull.metadata as never,
+          dual_rewards_payout: submissionFull.dual_rewards_payout,
+        };
+        const leftPaidModeration =
+          action === SUBMISSION_STATUS.pending ||
+          action === SUBMISSION_STATUS.rejected ||
+          action === SUBMISSION_STATUS.verified;
         await supabaseAdmin
           .from("submissions")
           .update(
-            buildSubmissionPaidReversalUpdate(submissionFull, {
-              mainCents: mainReversalAmount,
-              bonusCents: bonusReversalAmount,
-              bonusReversals,
-            }),
+            leftPaidModeration
+              ? buildSubmissionPaidStateClearUpdate(paidRowInput)
+              : buildSubmissionPaidReversalUpdate(paidRowInput, {
+                  mainCents: mainReversalAmount,
+                  bonusCents: bonusReversalAmount,
+                  bonusReversals,
+                }),
           )
           .eq("id", submissionId);
       }
@@ -2331,7 +2352,7 @@ export async function processVerifySubmission(
     const { data: latestSubmission } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, status, quality_score, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, views, creator_id, created_at, contest_id, platform, other_stats, metadata, dual_rewards_payout",
+        "id, status, quality_score, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid, views, creator_id, created_at, contest_id, platform, other_stats, metadata, dual_rewards_payout",
       )
       .eq("id", submissionId)
       .single();

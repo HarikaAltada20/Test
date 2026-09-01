@@ -1180,6 +1180,7 @@ export async function creditCreatorWithdrawableBalance(
 async function debitCreatorWithdrawableBalanceLegacy(
   creatorId: string,
   amountInCents: number,
+  allowNegativeBalance = false,
 ): Promise<{ success: boolean; newBalance?: number; error?: string }> {
   const supabase = createAdminClient();
   const { data: profile, error: readErr } = await supabase
@@ -1194,7 +1195,7 @@ async function debitCreatorWithdrawableBalanceLegacy(
 
   const currentBalance = profile?.withdrawable_balance || 0;
   const currentTotalWon = profile?.total_money_won || 0;
-  if (currentBalance < amountInCents) {
+  if (!allowNegativeBalance && currentBalance < amountInCents) {
     return {
       success: false,
       error: `Insufficient withdrawable balance to reverse ${amountInCents} cents`,
@@ -1222,7 +1223,10 @@ async function debitCreatorWithdrawableBalanceLegacy(
 export async function debitCreatorWithdrawableBalance(
   creatorId: string,
   amountInCents: number,
-  opts?: { idempotencyKey?: string | null },
+  opts?: {
+    idempotencyKey?: string | null;
+    allowNegativeBalance?: boolean;
+  },
 ): Promise<{
   success: boolean;
   newBalance?: number;
@@ -1235,6 +1239,7 @@ export async function debitCreatorWithdrawableBalance(
     }
 
     const supabase = createAdminClient();
+    const allowNegativeBalance = Boolean(opts?.allowNegativeBalance);
 
     const idempotencyKey = String(opts?.idempotencyKey || "").trim();
     const rpcName = idempotencyKey
@@ -1245,10 +1250,12 @@ export async function debitCreatorWithdrawableBalance(
           p_creator_id: creatorId,
           p_amount_cents: amountInCents,
           p_idempotency_key: idempotencyKey,
+          p_allow_negative_balance: allowNegativeBalance,
         }
       : {
           p_creator_id: creatorId,
           p_amount_cents: amountInCents,
+          p_allow_negative_balance: allowNegativeBalance,
         };
     const { data: rpcRaw, error: rpcErr } = await supabase.rpc(
       rpcName,
@@ -1272,7 +1279,11 @@ export async function debitCreatorWithdrawableBalance(
         msg.includes("creator_payout_debit_atomic") &&
         (msg.includes("Could not find") || msg.includes("does not exist"))
       ) {
-        return debitCreatorWithdrawableBalanceLegacy(creatorId, amountInCents);
+        return debitCreatorWithdrawableBalanceLegacy(
+          creatorId,
+          amountInCents,
+          allowNegativeBalance,
+        );
       }
       if (msg.toLowerCase().includes("insufficient withdrawable balance")) {
         return {
@@ -1304,6 +1315,18 @@ export async function debitCreatorWithdrawableBalance(
   } catch (error: any) {
     return { success: false, error: error?.message || "Unknown error" };
   }
+}
+
+/** Admin reversal clawback: debits full amount even if balance goes negative. */
+export function debitCreatorReversalClawback(
+  creatorId: string,
+  amountInCents: number,
+  opts?: { idempotencyKey?: string | null },
+) {
+  return debitCreatorWithdrawableBalance(creatorId, amountInCents, {
+    ...opts,
+    allowNegativeBalance: true,
+  });
 }
 
 // Wallet credit for non-contest affiliate income: updates profile withdrawable_balance,

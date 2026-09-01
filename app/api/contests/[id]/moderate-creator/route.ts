@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
-  debitCreatorWithdrawableBalance,
+  debitCreatorReversalClawback,
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
@@ -251,7 +251,7 @@ export async function POST(
           ],
           debitCents: totalReversalAmount,
         });
-        const debitRes = await debitCreatorWithdrawableBalance(
+        const debitRes = await debitCreatorReversalClawback(
           creatorId,
           totalReversalAmount,
           { idempotencyKey: reversalDebitKey },

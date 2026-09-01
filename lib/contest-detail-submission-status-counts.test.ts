@@ -22,6 +22,23 @@ describe("computeContestDetailSubmissionStatusCounts", () => {
     });
   });
 
+  it("counts uncleared payment on pending status as paid until cleared", () => {
+    const counts = computeContestDetailSubmissionStatusCounts([
+      { status: "pending", paid: true },
+      { status: "pending", paid: false },
+      { status: "paid" },
+    ]);
+    assert.deepEqual(counts, {
+      total: 3,
+      pending: 1,
+      rejected: 0,
+      verified: 0,
+      paid: 2,
+      verified_or_paid: 2,
+      not_rejected: 3,
+    });
+  });
+
   it("uses moderation_status for Twitter tweets", () => {
     const counts = computeContestDetailSubmissionStatusCounts([
       {

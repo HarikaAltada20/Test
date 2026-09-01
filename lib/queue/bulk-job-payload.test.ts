@@ -40,6 +40,22 @@ describe("parseBulkModerationJobPayload", () => {
     assert.ok(payload);
     assert.equal(payload!.channel, "twitter_tweets");
   });
+
+  it("parses reverseMostVerifiedBonus flag", () => {
+    assert.equal(
+      parseBulkModerationJobPayload({
+        submissionIds: ["a"],
+        reverseMostVerifiedBonus: true,
+      })!.reverseMostVerifiedBonus,
+      true,
+    );
+    assert.equal(
+      parseBulkModerationJobPayload({
+        submissionIds: ["a"],
+      })!.reverseMostVerifiedBonus,
+      false,
+    );
+  });
 });
 
 describe("readQueueOffset", () => {

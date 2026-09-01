@@ -94,6 +94,10 @@ import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
 import {
+  computeSubmissionModerationStatusCounts,
+  getSubmissionModerationBucket,
+} from "@/lib/contest-detail-submission-status-counts";
+import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
 } from "@/lib/youtube-url";
@@ -953,14 +957,12 @@ export function CreatorSubmissionsModal({
     }
   };
 
-  const getStatusBadge = (status: string, paid: boolean) => {
-    const statusLower = status?.toLowerCase() || "pending";
-
-    if (paid || statusLower === "paid") {
-      return <Badge className="bg-green-600 text-white">Paid</Badge>;
-    }
-
-    switch (statusLower) {
+  const getModerationBucketBadge = (
+    bucket: ReturnType<typeof getSubmissionModerationBucket>,
+  ) => {
+    switch (bucket) {
+      case "paid":
+        return <Badge className="bg-green-600 text-white">Paid</Badge>;
       case "verified":
         return <Badge className="bg-green-500 text-white">Verified</Badge>;
       case "pending":
@@ -968,11 +970,7 @@ export function CreatorSubmissionsModal({
       case "rejected":
         return <Badge className="bg-red-500 text-white">Rejected</Badge>;
       default:
-        return (
-          <Badge variant="outline">
-            {statusLower.charAt(0).toUpperCase() + statusLower.slice(1)}
-          </Badge>
-        );
+        return <Badge variant="outline">Unknown</Badge>;
     }
   };
 
@@ -1689,16 +1687,15 @@ export function CreatorSubmissionsModal({
   // Filter submissions based on status
   // For Twitter tweets, use moderation_status; for others, use status
   const filteredSubmissions = submissions.filter((sub) => {
-    const normalizedStatus = getNormalizedSubmissionStatus(sub);
-    const isPaidSubmission = normalizedStatus === "paid" || sub.paid === true;
+    const bucket = getSubmissionModerationBucket(sub);
 
     if (statusFilter === "all") return true;
     if (statusFilter === "verified_or_paid")
-      return normalizedStatus === "verified" || isPaidSubmission;
-    if (statusFilter === "paid") return isPaidSubmission;
-    if (statusFilter === "verified") return normalizedStatus === "verified";
-    if (statusFilter === "pending") return normalizedStatus === "pending";
-    if (statusFilter === "rejected") return normalizedStatus === "rejected";
+      return bucket === "verified" || bucket === "paid";
+    if (statusFilter === "paid") return bucket === "paid";
+    if (statusFilter === "verified") return bucket === "verified";
+    if (statusFilter === "pending") return bucket === "pending";
+    if (statusFilter === "rejected") return bucket === "rejected";
     return true;
   });
 
@@ -1782,33 +1779,15 @@ export function CreatorSubmissionsModal({
     });
   }
 
-  // Count submissions by status (handle Twitter tweets with moderation_status)
+  const moderationStatusCounts =
+    computeSubmissionModerationStatusCounts(submissions);
   const statusCounts = {
-    all: submissions.length,
-    verifiedOrPaid: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return (
-        normalizedStatus === "verified" ||
-        normalizedStatus === "paid" ||
-        s.paid === true
-      );
-    }).length,
-    pending: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "pending";
-    }).length,
-    verified: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "verified";
-    }).length,
-    rejected: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "rejected";
-    }).length,
-    paid: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "paid" || s.paid === true;
-    }).length,
+    all: moderationStatusCounts.all,
+    verifiedOrPaid: moderationStatusCounts.verified_or_paid,
+    pending: moderationStatusCounts.pending,
+    verified: moderationStatusCounts.verified,
+    rejected: moderationStatusCounts.rejected,
+    paid: moderationStatusCounts.paid,
   };
   const isDark = mode === "dark";
   const creatorDisplayName =
@@ -3194,6 +3173,8 @@ export function CreatorSubmissionsModal({
                     </TableRow>
                   ) : (
                     sortedSubmissions.map((submission, index) => {
+                      const moderationBucket =
+                        getSubmissionModerationBucket(submission);
                       const isTwitterTweet =
                         submission.is_twitter_tweet === true;
 
@@ -3427,13 +3408,8 @@ export function CreatorSubmissionsModal({
                         milestoneExpectedForDual < milestoneUncappedForDual;
 
                       // Use ACTUAL earnings for granted reward (includes custom pay amount)
-                      // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
                       // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
-                      const statusForGranted =
-                        getNormalizedSubmissionStatus(submission);
-                      const isPaidForGranted =
-                        submission.paid ||
-                        (isTwitterTweet && statusForGranted === "paid");
+                      const isPaidForGranted = moderationBucket === "paid";
                       const explicitPaidAmount =
                         (submission as any).granted_amount_cents ??
                         (submission as any).paid_amount_cents ??
@@ -3545,18 +3521,18 @@ export function CreatorSubmissionsModal({
                         submission.bonus_paid &&
                         (contest?.contest_type !== "cpm" ||
                           !isTwitterTweet ||
-                          statusForGranted === "paid")
+                          moderationBucket === "paid")
                           ? (submission as any).bonus_amount || flatFeeBonus
                           : 0;
 
                       const normalizedStatus =
                         getNormalizedSubmissionStatus(submission);
                       const isSubmissionVerified =
-                        normalizedStatus === "verified";
+                        moderationBucket === "verified";
                       const isSubmissionRejected =
-                        normalizedStatus === "rejected";
+                        moderationBucket === "rejected";
                       const isSubmissionPending =
-                        normalizedStatus === "pending";
+                        moderationBucket === "pending";
                       const milestoneAssignmentLabel =
                         contest?.contest_type === "milestone" ||
                         contest?.contest_type === "dual_rewards"
@@ -4910,10 +4886,7 @@ export function CreatorSubmissionsModal({
                             )}
                           {(!isYouTubeContest || showYtColumn("status")) && (
                             <TableCell>
-                              {getStatusBadge(
-                                normalizedStatus,
-                                submission.paid,
-                              )}
+                              {getModerationBucketBadge(moderationBucket)}
                             </TableCell>
                           )}
                           <TableCell
@@ -5034,9 +5007,7 @@ export function CreatorSubmissionsModal({
 
                                 {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
                                 {showPaymentActions &&
-                                  getNormalizedSubmissionStatus(submission) ===
-                                    "verified" &&
-                                  !submission.paid &&
+                                  moderationBucket === "verified" &&
                                   !isTwitterLeaderboardContest && (
                                     <>
                                       <DropdownMenuSeparator />
@@ -5143,7 +5114,7 @@ export function CreatorSubmissionsModal({
                                   !isTwitterTweet &&
                                   hasFlatFeeBonus &&
                                   !submission.bonus_paid &&
-                                  submission.paid === true && (
+                                  moderationBucket === "paid" && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
@@ -5176,8 +5147,8 @@ export function CreatorSubmissionsModal({
 
                                 {canEditQualityScore &&
                                   !isTwitterTweet &&
-                                  (normalizedStatus === "verified" ||
-                                    normalizedStatus === "paid") && (
+                                  (moderationBucket === "verified" ||
+                                    moderationBucket === "paid") && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

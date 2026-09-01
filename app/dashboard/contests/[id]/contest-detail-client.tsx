@@ -156,8 +156,12 @@ import PaymentModal from "@/components/PaymentModal";
 import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
+import { UpdateCampaignStatusDialog } from "@/components/contest/UpdateCampaignStatusDialog";
 import { BudgetProgress } from "@/components/BudgetProgress";
-import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
+import {
+  buildMilestoneMostVerifiedBonusByCreatorMap,
+  sumMilestoneMostVerifiedBonusGrantedForCreators,
+} from "@/lib/milestone-contest-expected-spend";
 import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-contest-expected-spend";
 
 /** Normalize id so submission `creator_id` matches SSR ledger keys (`money_transactions.user_id`). */
@@ -252,7 +256,9 @@ import {
 } from "@/lib/twitter/twitter-tweet-visibility";
 import {
   computeContestDetailSubmissionStatusCounts,
+  computeSubmissionModerationStatusCounts,
   getContestDetailRowStatus,
+  getSubmissionModerationBucket,
   type ContestDetailSubmissionStatusCounts,
 } from "@/lib/contest-detail-submission-status-counts";
 import {
@@ -1734,11 +1740,8 @@ export default function ContestDetailClient({
     useState<number | null>(null);
 
   // Status update states
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isSyncingCreatorViews, setIsSyncingCreatorViews] = useState(false);
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
-  const [statusUpdateReason, setStatusUpdateReason] = useState("");
   // Get theme from parent layout instead of managing independent state
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -2689,6 +2692,7 @@ export default function ContestDetailClient({
     needRejectionReason?: boolean;
     /** Set when confirm was opened from Creator Submissions modal */
     closeCreatorModalOnSuccess?: boolean;
+    reverseMostVerifiedBonus?: boolean;
   } | null>(null);
   const [
     closeCreatorModalAfterRejectBulk,
@@ -4081,14 +4085,8 @@ export default function ContestDetailClient({
   const groupSubmissionsByCreator = useMemo(() => {
     if (!filteredSubmissions) return [];
 
-    const isSubmissionPaidForGrantedReward = (submission: any) => {
-      const status = (submission?.status || "").toLowerCase();
-      return (
-        submission?.paid === true ||
-        status === "paid" ||
-        Boolean(submission?.paid_at)
-      );
-    };
+    const isSubmissionPaidForGrantedReward = (submission: any) =>
+      getSubmissionModerationBucket(submission) === "paid";
 
     // Check if this is a Twitter leaderboard campaign
     const isTwitterLeaderboard =
@@ -4263,40 +4261,9 @@ export default function ContestDetailClient({
           submissions: creatorSubmissions,
           totalCount:
             leaderboardData.total_eligible_tweets || creatorSubmissions.length,
-          statusCounts: {
-            all: creatorSubmissions.length,
-            verified: creatorSubmissions.filter((s: any) => {
-              const status =
-                (s.is_twitter_tweet && (s as any).moderation_status) ||
-                s.status;
-              return status === "verified" && !s.paid;
-            }).length,
-            paid: creatorSubmissions.filter((s: any) => {
-              const status =
-                (s.is_twitter_tweet && (s as any).moderation_status) ||
-                s.status;
-              return s.paid || status === "paid";
-            }).length,
-            pending: creatorSubmissions.filter(
-              (s: any) =>
-                (s.is_twitter_tweet &&
-                  (!(s as any).moderation_status ||
-                    (s as any).moderation_status === "pending")) ||
-                (!s.is_twitter_tweet && s.status === "pending"),
-            ).length,
-            rejected: creatorSubmissions.filter(
-              (s: any) =>
-                (s.is_twitter_tweet &&
-                  (s as any).moderation_status === "rejected") ||
-                (!s.is_twitter_tweet && s.status === "rejected"),
-            ).length,
-            verified_paid: creatorSubmissions.filter((s: any) => {
-              const status =
-                (s.is_twitter_tweet && (s as any).moderation_status) ||
-                s.status;
-              return status === "verified" && s.paid;
-            }).length,
-          },
+          statusCounts: computeSubmissionModerationStatusCounts(
+            creatorSubmissions as any[],
+          ),
           insightsCounts: {
             ok: creatorSubmissions.filter(
               (s: any) => s.insights_status === "ok",
@@ -4507,6 +4474,7 @@ export default function ContestDetailClient({
     // For non-Twitter leaderboard campaigns, use the original aggregation logic
     const grouped = filteredSubmissions.reduce((acc: any, submission: any) => {
       const creatorId = submission.creator_id;
+      const isTwitterTweet = submission.is_twitter_tweet === true;
 
       if (!acc[creatorId]) {
         // Get creator-level moderation data if available
@@ -4683,58 +4651,35 @@ export default function ContestDetailClient({
       group.submissions.push(submission);
       group.totalCount++;
 
-      // Update status counts
-      // For Twitter tweets, use moderation_status; for others, use status
-      const isTwitterTweet =
-        submission.is_twitter_tweet ||
-        submission.platform?.toLowerCase() === "twitter";
-      const status = isTwitterTweet
-        ? ((submission as any).moderation_status || "pending")?.toLowerCase()
-        : submission.status?.toLowerCase() || "pending";
-
-      // Map Twitter moderation_status to standard status for counting
-      let normalizedStatus = status;
-      if (isTwitterTweet) {
-        // Treat "paid" as an approved/verified state for counting & eligibility
-        if (
-          status === "approved" ||
-          status === "verified" ||
-          status === "paid"
-        ) {
-          normalizedStatus = "verified";
-        } else if (status === "rejected") {
-          normalizedStatus = "rejected";
-        } else {
-          normalizedStatus = "pending";
-        }
-      }
-
+      // Update status counts (mutually exclusive buckets — status wins over stale paid flags)
+      const moderationBucket = getSubmissionModerationBucket(submission as any);
       group.statusCounts.all++;
 
-      // For CPM (and leaderboard), if any tweet is paid, show creator as paid and enable reversal
-      if (status === "paid" || (submission as any).paid) {
+      if (moderationBucket === "paid") {
         group.statusCounts.paid++;
         group.paid = true;
+      } else if (moderationBucket === "verified") {
+        group.statusCounts.verified++;
+      } else if (moderationBucket === "pending") {
+        group.statusCounts.pending++;
+      } else if (moderationBucket === "rejected") {
+        group.statusCounts.rejected++;
       }
 
-      const isPaidSubmission =
-        status === "paid" || Boolean((submission as any).paid);
+      const rowStatus = getContestDetailRowStatus(submission as any);
+      if (
+        (rowStatus === "verified" || rowStatus === "approved") &&
+        submission.paid
+      ) {
+        group.statusCounts.verified_paid++;
+      }
+
+      const isPaidSubmission = moderationBucket === "paid";
 
       if (
-        normalizedStatus === "verified" ||
-        normalizedStatus === "approved" ||
-        normalizedStatus === "paid"
+        moderationBucket === "verified" ||
+        moderationBucket === "paid"
       ) {
-        if (
-          (normalizedStatus === "verified" ||
-            normalizedStatus === "approved") &&
-          !isPaidSubmission
-        ) {
-          group.statusCounts.verified++;
-        }
-        if (submission.paid) group.statusCounts.verified_paid++;
-
-        // Get flat_fee_bonus from the correct nested location
         const flatFeeBonus = isCpmContestType(currentContest?.contest_type)
           ? (currentContest?.contest_based_details as any)?.cpm_contest
               ?.flat_fee_bonus || 0
@@ -4779,12 +4724,6 @@ export default function ContestDetailClient({
             }
           }
         }
-      } else if (normalizedStatus === "pending") {
-        // Track pending submissions at creator level (used in creator-wise badges)
-        group.statusCounts.pending++;
-      } else if (normalizedStatus === "rejected") {
-        // Track rejected submissions at creator level (used in creator-wise badges)
-        group.statusCounts.rejected++;
       }
       if (
         twitterCpmBonusGrantedDisplay(
@@ -7038,6 +6977,7 @@ export default function ContestDetailClient({
       qualityScore?: 1 | 2 | 3;
       /** After paid-reversal confirm — run verify API without quality score modal */
       skipQualityPrompt?: boolean;
+      reverseMostVerifiedBonus?: boolean;
     },
   ) => {
     console.log("🚀 Starting submission status update:", {
@@ -7313,6 +7253,7 @@ export default function ContestDetailClient({
           reason: reason || null,
           paymentDetails: paymentDetails || null,
           qualityScore: options?.qualityScore,
+          reverseMostVerifiedBonus: options?.reverseMostVerifiedBonus,
         }),
       });
 
@@ -7368,6 +7309,7 @@ export default function ContestDetailClient({
               "bonus_paid",
               "bonus_paid_at",
               "bonus_amount",
+              "milestone_bonus_paid",
               "other_stats",
               "platform",
               "metadata",
@@ -7767,6 +7709,18 @@ export default function ContestDetailClient({
                 : detail.action === "pending" || detail.action === "rejected"
                   ? { quality_score: null }
                   : {}),
+              ...(detail.action === "pending" || detail.action === "rejected"
+                ? {
+                    earnings: null,
+                    paid: false,
+                    paid_at: null,
+                    bonus_paid: false,
+                    bonus_paid_at: null,
+                    bonus_amount: null,
+                    milestone_bonus_paid: null,
+                    dual_rewards_payout: null,
+                  }
+                : {}),
             };
           }),
         );
@@ -7815,6 +7769,7 @@ export default function ContestDetailClient({
       qualityScore?: 1 | 2 | 3;
       /** After paid-reversal confirm — run verify API without quality score modal */
       skipQualityPrompt?: boolean;
+      reverseMostVerifiedBonus?: boolean;
     },
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
@@ -7907,6 +7862,7 @@ export default function ContestDetailClient({
             action: enqueueAction,
             reason,
             qualityScore: options?.qualityScore,
+            reverseMostVerifiedBonus: options?.reverseMostVerifiedBonus,
           }),
         });
         const enqueueData = await enqueueRes.json().catch(() => ({}));
@@ -9350,6 +9306,7 @@ export default function ContestDetailClient({
       target,
       needRejectionReason,
       closeCreatorModalOnSuccess,
+      reverseMostVerifiedBonus,
     } = confirmReversal;
     setConfirmReversal(null);
     if (needRejectionReason) {
@@ -9367,8 +9324,9 @@ export default function ContestDetailClient({
             ...closeOpts,
             skipQualityPrompt: true,
             qualityScore: resolveReversalVerifyQualityScore(submissionIds),
+            reverseMostVerifiedBonus,
           }
-        : closeOpts;
+        : { ...closeOpts, reverseMostVerifiedBonus };
     if (closeCreatorModalOnSuccess) {
       setCreatorModalParentBulkLoading(true);
       setCreatorModalRefundProcessing(true);
@@ -9412,95 +9370,6 @@ export default function ContestDetailClient({
     setCreatorWiseSelectedCreators(new Set());
   };
 
-  const handleUpdateContestStatus = async () => {
-    if (!selectedStatus) {
-      toast({
-        title: "Error",
-        description: "Please select a status",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsUpdatingStatus(true);
-    try {
-      const response = await fetch(`/api/contests/${contestId}/update-status`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: selectedStatus,
-          reason: statusUpdateReason || null,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to update status");
-      }
-
-      // Update the local contest state
-      setCurrentContest((prev) => ({
-        ...prev,
-        post_contest_status: selectedStatus as any,
-      }));
-
-      // Enhanced contest status update toast
-      const getContestStatusToast = (status: string) => {
-        switch (status) {
-          case "pending_review":
-            return {
-              title: "📋 Status: Pending Review",
-              description: "Campaign is now pending review phase",
-              variant: "pending" as const,
-            };
-          case "in_review":
-            return {
-              title: "🔍 Status: In Review",
-              description: "Campaign is currently under review",
-              variant: "pending" as const,
-            };
-          case "verification_complete":
-            return {
-              title: "✅ Status: Verification Complete",
-              description: "All submissions have been verified",
-              variant: "success" as const,
-            };
-          case "payouts_processed":
-            return {
-              title: "💰 Status: Payouts Processed",
-              description: "All payments have been processed",
-              variant: "payment" as const,
-            };
-          default:
-            return {
-              title: "Status Updated",
-              description: result.message,
-              variant: "default" as const,
-            };
-        }
-      };
-
-      const contestToastConfig = getContestStatusToast(selectedStatus);
-      toast(contestToastConfig);
-
-      setStatusUpdateDialog(false);
-      setSelectedStatus("");
-      setStatusUpdateReason("");
-    } catch (error: any) {
-      console.error("Error updating contest status:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update campaign status",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
-
   const handleSyncCreatorViews = async () => {
     setIsSyncingCreatorViews(true);
     try {
@@ -9539,43 +9408,6 @@ export default function ContestDetailClient({
       currentContest.status === "ended" &&
       currentContest.post_contest_status !== "payouts_processed"
     );
-  };
-
-  const getAvailableStatusOptions = () => {
-    const current = currentContest.post_contest_status;
-    const options = [
-      {
-        value: "pending_review",
-        label: "Pending Review",
-        description: "Campaign submissions are under initial review",
-      },
-      {
-        value: "in_review",
-        label: "In Review",
-        description: "Active review of submissions in progress",
-      },
-      {
-        value: "verification_complete",
-        label: "Verification Complete",
-        description: "All submissions verified, preparing payouts",
-      },
-      {
-        value: "payouts_processed",
-        label: "Payouts Processed",
-        description: "All payments have been released",
-      },
-    ];
-
-    // For non-admin users (brands), exclude payouts_processed and only allow moving forward
-    if (!isAdminView) {
-      const currentIndex = options.findIndex((opt) => opt.value === current);
-      return options
-        .filter((opt) => opt.value !== "payouts_processed") // Brands cannot set payouts_processed
-        .filter((_, index) => index > currentIndex);
-    }
-
-    // For admins, show all options except current
-    return options.filter((opt) => opt.value !== current);
   };
 
   // Fetch Twitter campaign metrics
@@ -11056,6 +10888,8 @@ export default function ContestDetailClient({
       verifiedReels: 0,
       minRequired: 0,
     };
+    const ledgerRow =
+      milestoneLedgerNormalized[milestoneMvCreatorIdKey(creatorId)];
     const busy = markingMilestoneVerifiedBonus[creatorId];
     const busyRev = markingMilestoneMvBonusReversal[creatorId];
     const d = Boolean(busy) || Boolean(busyRev) || Boolean(extraDisabled);
@@ -11063,9 +10897,11 @@ export default function ContestDetailClient({
     const canGetViewsBonus = row.viewsExpectedCents > 0;
     const canGetReelsBonus = row.expectedCents > 0;
     const canReverseViews =
-      showMostVerifiedViewsBonusColumns && row.viewsPaidCents > 0;
+      showMostVerifiedViewsBonusColumns &&
+      (Number(ledgerRow?.viewsPaidCents ?? 0) > 0 || row.viewsPaidCents > 0);
     const canReverseReels =
-      showMostVerifiedReelsCreatorColumn && row.paidCents > 0;
+      showMostVerifiedReelsCreatorColumn &&
+      (Number(ledgerRow?.reelsPaidCents ?? 0) > 0 || row.paidCents > 0);
 
     if (
       !canGetViewsBonus &&
@@ -12923,149 +12759,37 @@ export default function ContestDetailClient({
             )}
             {/* Contest Status Update Button */}
             {canUpdateContestStatus() && (
-              <Dialog
-                open={statusUpdateDialog}
-                onOpenChange={setStatusUpdateDialog}
-                isdark={isDark}
-              >
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className={cn(
-                      "rounded-xl",
-                      isDark
-                        ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
-                        : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
-                    )}
-                  >
-                    <Settings className="h-4 w-4 shrink-0" />
-                    Update Status
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle
-                      className={cn(isDark ? "text-white" : "text-gray-900")}
-                    >
-                      Update Campaign Status
-                    </DialogTitle>
-                    <DialogDescription>
-                      Change the post-contest status to reflect the current
-                      stage of verification and payouts. Current status:{" "}
-                      <strong>
-                        {currentContest.post_contest_status || "Not set"}
-                      </strong>
-                      {(selectedStatus === "verification_complete" ||
-                        selectedStatus === "payouts_processed") && (
-                        <>
-                          {" "}
-                          <span className="block mt-2 text-amber-600 dark:text-amber-400">
-                            Setting{" "}
-                            {selectedStatus === "verification_complete"
-                              ? "Verification Complete"
-                              : "Payouts Processed"}{" "}
-                            will sync all pending, verified, and paid submission
-                            views to creator profiles before saving. If sync
-                            fails, the status will not change.
-                          </span>
-                        </>
-                      )}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="status"
-                        className={cn(
-                          "text-sm font-medium",
-                          isDark ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        New Status
-                      </label>
-                      <Select
-                        value={selectedStatus}
-                        onValueChange={setSelectedStatus}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select new status" />
-                        </SelectTrigger>
-                        <SelectContent isDark={isDark}>
-                          {getAvailableStatusOptions().map((option) => (
-                            <SelectItem
-                              key={option.value}
-                              value={option.value}
-                              isDark={isDark}
-                            >
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {option.label}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {option.description}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="reason"
-                        className={cn(
-                          "text-sm font-medium",
-                          isDark ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        Reason (Optional)
-                      </label>
-                      <Textarea
-                        id="reason"
-                        placeholder="Add a note about this status change..."
-                        value={statusUpdateReason}
-                        onChange={(e) => setStatusUpdateReason(e.target.value)}
-                        className="resize-none"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <button
-                      onClick={handleUpdateContestStatus}
-                      disabled={isUpdatingStatus || !selectedStatus}
-                      className={cn(
-                        "w-full text-md rounded-full flex items-center justify-center",
-                        isDark
-                          ? "bg-[#7F39EC] py-3 text-white"
-                          : " bg-[#D9C0FF61] py-3 text-[#7F39EC] ",
-                      )}
-                    >
-                      {isUpdatingStatus ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Updating...
-                        </>
-                      ) : (
-                        "Update Status"
-                      )}
-                    </button>
-                    {!isUpdatingStatus && (
-                      <button
-                        onClick={() => setStatusUpdateDialog(false)}
-                        className={cn(
-                          "w-full text-md rounded-full",
-                          isDark
-                            ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                            : "bg-[#FF323224] text-[#E50000] py-3",
-                        )}
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setStatusUpdateDialog(true)}
+                  className={cn(
+                    "rounded-xl",
+                    isDark
+                      ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
+                      : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
+                  )}
+                >
+                  <Settings className="h-4 w-4 shrink-0" />
+                  Update Status
+                </Button>
+                <UpdateCampaignStatusDialog
+                  open={statusUpdateDialog}
+                  onOpenChange={setStatusUpdateDialog}
+                  contestId={contestId}
+                  currentStatus={currentContest.post_contest_status}
+                  isAdmin={isAdminView}
+                  isDark={isDark}
+                  submissionCount={submissionStatusCounts.total}
+                  onSuccess={(newStatus) => {
+                    setCurrentContest((prev) => ({
+                      ...prev,
+                      post_contest_status: newStatus,
+                    }));
+                  }}
+                />
+              </>
             )}
 
             {contest.moderation_status === "approved" && (
@@ -32263,10 +31987,43 @@ export default function ContestDetailClient({
                 const isDualReversalContest = isDualRewardsContestType(
                   currentContest?.contest_type,
                 );
+                const isMilestoneReversalContest = isMilestoneContestType(
+                  currentContest?.contest_type,
+                );
+                const useSplitReversalBreakdown = isDualReversalContest;
+                const paidReversalCreatorIds: string[] = [];
+                for (const id of confirmReversal.submissionIds) {
+                  const sub = currentSubmissions.find((s) => s.id === id);
+                  if (!sub || !submissionIsPaidRow(sub)) continue;
+                  const creatorId = milestoneMvCreatorIdKey(sub.creator_id);
+                  if (creatorId) paidReversalCreatorIds.push(creatorId);
+                }
+                const mostVerifiedBonusGrantedCents =
+                  isMilestoneReversalContest
+                    ? sumMilestoneMostVerifiedBonusGrantedForCreators(
+                        milestoneReelsBonusByCreator,
+                        paidReversalCreatorIds,
+                      )
+                    : preview.mostVerifiedBonusCents;
+                const includeMvBonusReversal = Boolean(
+                  confirmReversal.reverseMostVerifiedBonus,
+                );
+                const mvBonusInEstimate = includeMvBonusReversal
+                  ? mostVerifiedBonusGrantedCents
+                  : 0;
+                const bonusGrantedCents =
+                  preview.bonusCents + mvBonusInEstimate;
+                const reversalRefundTotalCents =
+                  preview.rewardCents + bonusGrantedCents;
+                const showMvBonusReversalCheckbox =
+                  isMilestoneReversalContest &&
+                  (showMostVerifiedViewsBonusColumns ||
+                    showMostVerifiedReelsCreatorColumn) &&
+                  mostVerifiedBonusGrantedCents > 0;
                 let dualReversalCpmCents = 0;
                 let dualReversalMilestoneCents = 0;
                 let dualReversalTotalCents = 0;
-                if (isDualReversalContest) {
+                if (useSplitReversalBreakdown) {
                   for (const id of confirmReversal.submissionIds) {
                     const sub = currentSubmissions.find((s) => s.id === id);
                     if (!sub || !submissionIsPaidRow(sub)) continue;
@@ -32321,11 +32078,19 @@ export default function ContestDetailClient({
                                 {preview.paidNonTwitterCount}
                               </span>
                             </p>
-                            {isDualReversalContest ? (
+                            {useSplitReversalBreakdown ? (
                               <>
-                                <p>CPM: {formatMoney(dualReversalCpmCents)}</p>
                                 <p>
-                                  Milestone:{" "}
+                                  {isDualReversalContest
+                                    ? "CPM"
+                                    : "Main reward (CPM)"}
+                                  : {formatMoney(dualReversalCpmCents)}
+                                </p>
+                                <p>
+                                  {isDualReversalContest
+                                    ? "Milestone"
+                                    : "Milestone bonus"}
+                                  :{" "}
                                   {formatMoney(dualReversalMilestoneCents)}
                                 </p>
                                 <p className="font-semibold">
@@ -32335,12 +32100,58 @@ export default function ContestDetailClient({
                             ) : (
                               <>
                                 <p>
-                                  Main reward (CPM):{" "}
-                                  {formatMoney(preview.rewardCents)}
+                                  {isMilestoneReversalContest
+                                    ? "Reward granted"
+                                    : "Main reward (CPM)"}
+                                  : {formatMoney(preview.rewardCents)}
                                 </p>
-                                <p>Bonus: {formatMoney(preview.bonusCents)}</p>
+                                <p>
+                                  {isMilestoneReversalContest
+                                    ? "Bonus granted"
+                                    : "Bonus"}
+                                  : {formatMoney(bonusGrantedCents)}
+                                </p>
+                                {isMilestoneReversalContest &&
+                                preview.bonusCents > 0 &&
+                                mostVerifiedBonusGrantedCents > 0 &&
+                                includeMvBonusReversal ? (
+                                  <p
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-slate-500",
+                                    )}
+                                  >
+                                    Includes{" "}
+                                    {formatMoney(preview.bonusCents)} milestone
+                                    ladder and{" "}
+                                    {formatMoney(mostVerifiedBonusGrantedCents)}{" "}
+                                    most-verified bonus.
+                                  </p>
+                                ) : isMilestoneReversalContest &&
+                                  preview.bonusCents > 0 &&
+                                  mostVerifiedBonusGrantedCents > 0 &&
+                                  !includeMvBonusReversal ? (
+                                  <p
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-slate-500",
+                                    )}
+                                  >
+                                    Includes{" "}
+                                    {formatMoney(preview.bonusCents)} milestone
+                                    ladder. Most-verified bonus (
+                                    {formatMoney(mostVerifiedBonusGrantedCents)})
+                                    is not included unless you tick the option
+                                    below.
+                                  </p>
+                                ) : null}
                                 <p className="font-semibold">
-                                  Total: {formatMoney(preview.totalCents)}
+                                  Total:{" "}
+                                  {formatMoney(reversalRefundTotalCents)}
                                 </p>
                               </>
                             )}
@@ -32372,6 +32183,37 @@ export default function ContestDetailClient({
                         </p>
                       </div>
                     )}
+                    {showMvBonusReversalCheckbox ? (
+                      <label
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg border p-3 text-sm cursor-pointer",
+                          isDark
+                            ? "border-gray-600 bg-gray-900/40"
+                            : "border-slate-200 bg-slate-50",
+                        )}
+                      >
+                        <Checkbox
+                          checked={includeMvBonusReversal}
+                          onCheckedChange={(checked) => {
+                            setConfirmReversal((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    reverseMostVerifiedBonus: checked === true,
+                                  }
+                                : prev,
+                            );
+                          }}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          Also reverse Most Verified bonus (views/reels) —{" "}
+                          <span className="font-medium">
+                            {formatMoney(mostVerifiedBonusGrantedCents)}
+                          </span>
+                        </span>
+                      </label>
+                    ) : null}
                   </>
                 );
               })()}

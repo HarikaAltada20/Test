@@ -28,9 +28,18 @@ import {
 import { reconcileCreatorTotalViews } from "@/lib/creator-total-views";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 import { refreshContestStats } from "@/lib/contest-stats";
-import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+import {
+  applyBulkDualRewardsWalletReversals,
+  reconcileStalePaidFlagsForSubmissionIds,
+} from "@/lib/dual-rewards-bulk-reversal";
 import { reverseTwitterTweetPayment } from "@/lib/twitter-tweet-payment-reversal";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import { clawbackMostVerifiedBonusForCreator } from "@/lib/milestone-most-verified-bonus-clawback";
+import {
+  buildMilestoneMostVerifiedBonusByCreatorMap,
+} from "@/lib/milestone-contest-expected-spend";
+import { isMilestoneContestType } from "@/lib/contest-type";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -157,6 +166,7 @@ async function finalizeBulkModerationWalletReversals(options: {
   action: string;
   submissionIds: string[];
   channel?: string;
+  reverseMostVerifiedBonus?: boolean;
 }): Promise<{
   ok: boolean;
   error?: string;
@@ -376,9 +386,24 @@ async function finalizeBulkModerationWalletReversals(options: {
     forceWasPaidBeforeReversal: true,
   });
 
-  if (!walletResult.ok) {
-    return { ok: false, error: walletResult.error };
-  }
+    if (!walletResult.ok) {
+      console.error(
+        "[process-bulk-verify-queue] Wallet reversal finalize failed:",
+        {
+          jobId,
+          contestId,
+          action,
+          error: walletResult.error,
+        },
+      );
+      return { ok: false, error: walletResult.error };
+    }
+
+  await reconcileStalePaidFlagsForSubmissionIds(supabaseAdmin, toReverse);
+
+  // Paid flags are cleared inside applyBulkDualRewardsWalletReversals after a
+  // successful wallet debit (creator_payout_debit_atomic updates withdrawable_balance
+  // and total_money_won together).
 
   let rewardCents = 0;
   let bonusCents = 0;
@@ -386,6 +411,87 @@ async function finalizeBulkModerationWalletReversals(options: {
   let cpmCents = 0;
   let milestoneCents = 0;
   let refundedCount = 0;
+  let mvBonusRefundedCents = 0;
+
+  if (options.reverseMostVerifiedBonus) {
+    const { data: contestRow } = await supabaseAdmin
+      .from("contests")
+      .select(
+        "title, contest_type, contest_based_details, payout_adjustment_percentage, payout_adjustment_mode",
+      )
+      .eq("id", contestId)
+      .maybeSingle();
+
+    if (isMilestoneContestType(contestRow?.contest_type)) {
+      const bonus = (contestRow?.contest_based_details as {
+        milestone_contest?: { bonus?: unknown };
+      } | null)?.milestone_contest?.bonus;
+
+      const { data: reversedRows } = await fetchByIdsInChunks({
+        ids: toReverse,
+        fetchChunk: async (chunkIds) => {
+          const result = await supabaseAdmin
+            .from("submissions")
+            .select("id, creator_id")
+            .in("id", chunkIds);
+          return { data: result.data, error: result.error };
+        },
+      });
+
+      const creatorIds = [
+        ...new Set(
+          (reversedRows || [])
+            .map((row) => String(row.creator_id || ""))
+            .filter(Boolean),
+        ),
+      ];
+
+      if (creatorIds.length > 0 && bonus) {
+        const { data: allSubs } = await fetchContestSubmissionsAllPages(
+          supabaseAdmin,
+          contestId,
+          "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout, bonus_paid_at",
+          { order: { column: "created_at", ascending: true } },
+        );
+        const mvMap = buildMilestoneMostVerifiedBonusByCreatorMap(
+          allSubs || [],
+          bonus as never,
+        );
+
+        for (const creatorId of creatorIds) {
+          const mvRow = mvMap.get(creatorId);
+          if (!mvRow) continue;
+          const tracks: Array<"views" | "reels"> = [];
+          if ((mvRow.viewsPaidCents || 0) > 0) tracks.push("views");
+          if ((mvRow.paidCents || 0) > 0) tracks.push("reels");
+          if (tracks.length === 0) continue;
+
+          const clawback = await clawbackMostVerifiedBonusForCreator({
+            supabaseAdmin,
+            contestId,
+            contestTitle: contestRow?.title || "Contest",
+            contestType: contestRow?.contest_type,
+            creatorId,
+            tracks,
+            submissions: allSubs || [],
+          });
+          if (!clawback.ok) {
+            return {
+              ok: false,
+              error:
+                clawback.error ||
+                `Most Verified bonus clawback failed for creator ${creatorId}`,
+            };
+          }
+          mvBonusRefundedCents += clawback.reversedCents;
+          bonusCents += clawback.reversedCents;
+          totalCents += clawback.reversedCents;
+          milestoneCents += clawback.reversedCents;
+        }
+      }
+    }
+  }
+
   for (const rs of walletResult.refundSummaryBySubmissionId.values()) {
     const rowTotal = Math.max(0, Number(rs.total_refunded_cents) || 0);
     if (rowTotal <= 0) continue;
@@ -416,6 +522,7 @@ async function finalizeBulkModerationWalletReversals(options: {
     total_refunded_cents: totalCents,
     cpm_refunded_cents: cpmCents,
     milestone_refunded_cents: milestoneCents,
+    mv_bonus_refunded_cents: mvBonusRefundedCents,
     refunded_count: refundedCount,
     skipped_count: skippedCount,
     is_dual_rewards: String(contestRow?.contest_type || "") === "dual_rewards",
@@ -435,6 +542,7 @@ async function finalizeBulkModerationWalletReversalsWithRetry(options: {
   action: string;
   submissionIds: string[];
   channel?: string;
+  reverseMostVerifiedBonus?: boolean;
 }): Promise<{
   ok: boolean;
   error?: string;
@@ -462,6 +570,7 @@ async function failModerationJobWithWalletReconciliation(options: {
   errorMessage: string;
   runSideEffects?: boolean;
   channel?: string;
+  reverseMostVerifiedBonus?: boolean;
 }): Promise<void> {
   const walletFinalize = await finalizeBulkModerationWalletReversalsWithRetry({
     jobId: options.jobId,
@@ -469,6 +578,7 @@ async function failModerationJobWithWalletReconciliation(options: {
     action: options.action,
     submissionIds: options.submissionIds,
     channel: options.channel,
+    reverseMostVerifiedBonus: options.reverseMostVerifiedBonus,
   });
 
   const finalMessage = walletFinalize.ok
@@ -669,8 +779,19 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       action,
       submissionIds,
       channel,
+      reverseMostVerifiedBonus: Boolean(payloadFromDb?.reverseMostVerifiedBonus),
     });
     if (!walletFinalize.ok) {
+      console.error(
+        "[process-bulk-verify-queue] Wallet reversal finalize failed (offset exhausted):",
+        {
+          jobId: job.jobId,
+          contestId,
+          action,
+          submissionCount: submissionIds.length,
+          error: walletFinalize.error,
+        },
+      );
       await markJobFailed(
         job.jobId,
         walletFinalize.error || "Wallet reversal finalize failed",
@@ -743,6 +864,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           "Job dead-lettered after repeated batch fetch failures",
         runSideEffects: true,
         channel,
+        reverseMostVerifiedBonus: Boolean(
+          payloadFromDb?.reverseMostVerifiedBonus,
+        ),
       });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
@@ -782,6 +906,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         errorMessage: `Job dead-lettered after repeated batch failures: ${errorMessage}`,
         runSideEffects: true,
         channel,
+        reverseMostVerifiedBonus: Boolean(
+          payloadFromDb?.reverseMostVerifiedBonus,
+        ),
       });
     } else if (retryResult.requeued) {
       await triggerNextProcessor(baseUrl);
@@ -850,6 +977,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         errorMessage: `Job dead-lettered after repeated transient batch failures: ${batchErrors[0]?.error || "timeout"}`,
         runSideEffects: true,
         channel,
+        reverseMostVerifiedBonus: Boolean(
+          payloadFromDb?.reverseMostVerifiedBonus,
+        ),
       });
     } else if (retryResult.requeued) {
       await sleep(CHUNK_PAUSE_MS * 2);
@@ -867,39 +997,70 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   }
 
   if (attemptedDelta <= 0) {
-    const retryResult = await retryOrDeadLetterBulkSubmissionModeration({
-      rawJobString,
-      reason: "Queue stall: chunk completed without progress",
-    });
-    if (retryResult.deadLettered) {
-      await failModerationJobWithWalletReconciliation({
-        jobId: job.jobId,
-        contestId: job.contestId || String(jobRow.contest_id),
-        action: resolveModerationJobAction(jobRow.action, job.action),
-        submissionIds,
-        errorMessage:
-          "Queue stall: chunk completed without progress (dead-lettered)",
-        runSideEffects: true,
-        channel,
+    const batchHasMore = (responseData as any)?.hasMore === true;
+    const finalEmptyChunk =
+      chunkIdsFromBatch.length === 0 && !batchHasMore;
+
+    if (!finalEmptyChunk) {
+      console.error(
+        "[process-bulk-verify-queue] Queue stall: chunk completed without progress",
+        {
+          jobId: job.jobId,
+          offset,
+          processedDelta,
+          failedDelta,
+          chunkSize: chunkIdsFromBatch.length,
+        },
+      );
+      const retryResult = await retryOrDeadLetterBulkSubmissionModeration({
+        rawJobString,
+        reason: "Queue stall: chunk completed without progress",
       });
-    } else if (retryResult.requeued) {
-      await triggerNextProcessor(baseUrl);
+      if (retryResult.deadLettered) {
+        await failModerationJobWithWalletReconciliation({
+          jobId: job.jobId,
+          contestId: job.contestId || String(jobRow.contest_id),
+          action: resolveModerationJobAction(jobRow.action, job.action),
+          submissionIds,
+          errorMessage:
+            "Queue stall: chunk completed without progress (dead-lettered)",
+          runSideEffects: true,
+          channel,
+          reverseMostVerifiedBonus: Boolean(
+            payloadFromDb?.reverseMostVerifiedBonus,
+          ),
+        });
+      } else if (retryResult.requeued) {
+        await triggerNextProcessor(baseUrl);
+      }
+      return NextResponse.json(
+        {
+          processed: 1,
+          jobId: job.jobId,
+          error: "Queue stall: chunk completed without progress",
+          retry: retryResult,
+        },
+        { status: 500 },
+      );
     }
-    return NextResponse.json(
-      {
-        processed: 1,
-        jobId: job.jobId,
-        error: "Queue stall: chunk completed without progress",
-        retry: retryResult,
-      },
-      { status: 500 },
+
+    console.warn(
+      "[process-bulk-verify-queue] Final empty chunk; completing job",
+      { jobId: job.jobId, offset, total: submissionIds.length },
     );
   }
 
-  const nextOffset =
-    typeof (responseData as any)?.nextOffset === "number"
+  const batchHasMore = (responseData as any)?.hasMore === true;
+  const finalEmptyChunk =
+    attemptedDelta <= 0 &&
+    chunkIdsFromBatch.length === 0 &&
+    !batchHasMore;
+
+  const nextOffset = finalEmptyChunk
+    ? submissionIds.length
+    : typeof (responseData as any)?.nextOffset === "number"
       ? Math.max(0, Math.floor((responseData as any).nextOffset))
-      : offset + attemptedDelta;
+      : offset + (attemptedDelta > 0 ? attemptedDelta : chunkIdsFromBatch.length);
   const nextProcessed =
     (Number(jobRow.processed_count) || 0) + attemptedDelta;
   const hasMore =
@@ -922,8 +1083,19 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       action,
       submissionIds,
       channel,
+      reverseMostVerifiedBonus: Boolean(payloadFromDb?.reverseMostVerifiedBonus),
     });
     if (!walletFinalize.ok) {
+      console.error(
+        "[process-bulk-verify-queue] Wallet reversal finalize failed:",
+        {
+          jobId: job.jobId,
+          contestId,
+          action,
+          submissionCount: submissionIds.length,
+          error: walletFinalize.error,
+        },
+      );
       await supabaseAdmin.rpc(
         "apply_bulk_submission_moderation_job_batch_progress",
         {

@@ -1,4 +1,5 @@
 import type { PlatformMetrics } from "@/lib/submission-leaderboard-export";
+import { getSubmissionModerationBucket } from "@/lib/contest-detail-submission-status-counts";
 
 function normalizeExportSubmissionStatus(
   submission: Record<string, unknown>,
@@ -119,20 +120,28 @@ function rebuildCreatorGroupForScopedSubmissions(
 
   for (const submission of scopedSubmissions) {
     statusCounts.all++;
-    const status = normalizeExportSubmissionStatus(submission, getStatus);
+    const bucket = getSubmissionModerationBucket(
+      submission as {
+        status?: string | null;
+        moderation_status?: string | null;
+        is_twitter_tweet?: boolean;
+        paid?: boolean | null;
+      },
+    );
 
-    if (status === "paid" || submission.paid === true) {
+    if (bucket === "paid") {
       statusCounts.paid++;
       paid = true;
-    } else if (status === "verified") {
+    } else if (bucket === "verified") {
       statusCounts.verified++;
-    } else if (status === "pending") {
+    } else if (bucket === "pending") {
       statusCounts.pending++;
-    } else if (status === "rejected") {
+    } else if (bucket === "rejected") {
       statusCounts.rejected++;
     }
 
-    if (submission.paid === true) {
+    const rowStatus = normalizeExportSubmissionStatus(submission, getStatus);
+    if (rowStatus === "verified" && submission.paid === true) {
       statusCounts.verified_paid++;
     }
 
@@ -152,13 +161,13 @@ function rebuildCreatorGroupForScopedSubmissions(
       earningsExpected += getExpectedCents(submission);
     }
 
-    if (status === "paid" || submission.paid === true) {
+    if (bucket === "paid") {
       earningsGranted += Number(submission.earnings) || 0;
     }
 
     if (submission.bonus_paid === true) {
       bonusGranted += Number(submission.bonus_amount) || 0;
-    } else if (status === "verified" || status === "paid") {
+    } else if (bucket === "verified" || bucket === "paid") {
       bonusExpected += Number(submission.bonus_amount) || 0;
     }
 

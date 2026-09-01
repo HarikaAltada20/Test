@@ -182,6 +182,7 @@ export async function POST(
           message: `Contest status updated to ${status}`,
           previous_status: currentStatus,
           new_status: status,
+          reason: reason ?? null,
           views_sync: syncResult,
         });
       } catch (syncError: unknown) {

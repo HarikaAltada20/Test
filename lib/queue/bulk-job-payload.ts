@@ -10,6 +10,7 @@ export type BulkModerationWalletRefundSummary = {
   total_refunded_cents: number;
   cpm_refunded_cents: number;
   milestone_refunded_cents: number;
+  mv_bonus_refunded_cents?: number;
 };
 
 export type BulkModerationChannel = "submissions" | "twitter_tweets";
@@ -20,6 +21,7 @@ export type BulkModerationJobPayload = {
   walletPreflightDone?: boolean;
   walletSkipSubmissionIds?: string[];
   walletRefundSummaries?: Record<string, BulkModerationWalletRefundSummary>;
+  reverseMostVerifiedBonus?: boolean;
 };
 
 function normalizePaymentItems(raw: unknown): BulkPaymentQueueItem[] {
@@ -84,6 +86,9 @@ export function parseBulkModerationJobPayload(
     walletSkipSubmissionIds,
     walletRefundSummaries:
       (raw as BulkModerationJobPayload).walletRefundSummaries ?? undefined,
+    reverseMostVerifiedBonus: Boolean(
+      (raw as BulkModerationJobPayload).reverseMostVerifiedBonus,
+    ),
   };
 }
 
