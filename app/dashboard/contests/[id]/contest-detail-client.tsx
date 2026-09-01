@@ -2196,6 +2196,18 @@ export default function ContestDetailClient({
   );
   const [isLoadingPostCampaignMetrics, setIsLoadingPostCampaignMetrics] =
     useState(false);
+  /** Preserves creator display fields across PC metrics reloads (overlay has no creator names). */
+  const postCampaignSubmissionEnrichmentRef = useRef<
+    Map<
+      string,
+      {
+        creator_display_name?: string | null;
+        creator_username?: string | null;
+        creator_avatar_url?: string | null;
+        creator?: Submission["creator"];
+      }
+    >
+  >(new Map());
   // PC Submissions overlay is for ended video contests once review is underway
   // (hidden while still in pending_review or before post-contest status is set).
   const showPostCampaignToggle =
@@ -2406,6 +2418,59 @@ export default function ContestDetailClient({
     postCampaignLoadPromiseRef.current = run;
     await run;
   };
+
+  /** Merge only PC overlay rows touched by a scoped refresh (never full replace). */
+  const mergePostCampaignMetricsScope = useCallback(
+    async (options: { submissionId?: string; creatorId?: string }) => {
+      const targetSubmissionIds = new Set<string>();
+      const targetSubmissionId = options.submissionId?.trim();
+      const targetCreatorId = options.creatorId?.trim();
+      if (targetSubmissionId) {
+        targetSubmissionIds.add(targetSubmissionId);
+      } else if (targetCreatorId) {
+        for (const row of Object.values(postCampaignMetricsById)) {
+          if (row.creator_id === targetCreatorId) {
+            targetSubmissionIds.add(row.submission_id);
+          }
+        }
+        for (const sub of currentSubmissions) {
+          if (sub.creator_id === targetCreatorId) {
+            targetSubmissionIds.add(sub.id);
+          }
+        }
+      }
+      if (targetSubmissionIds.size === 0) return;
+
+      const pageSize = POST_CAMPAIGN_METRICS_PAGE_SIZE;
+      const updates: PostCampaignSubmissionSnapshot[] = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const res = await fetch(
+          `/api/contests/${contestId}/post-campaign-submissions?limit=${pageSize}&offset=${offset}`,
+        );
+        if (!res.ok) break;
+        const data = await res.json().catch(() => ({}));
+        const metrics = Array.isArray(data.metrics)
+          ? (data.metrics as PostCampaignSubmissionSnapshot[])
+          : [];
+        for (const row of metrics) {
+          if (targetSubmissionIds.has(row.submission_id)) {
+            updates.push(row);
+          }
+        }
+        hasMore = Boolean(data.hasMore) && metrics.length > 0;
+        offset += pageSize;
+        if (updates.length >= targetSubmissionIds.size) break;
+      }
+
+      if (updates.length > 0) {
+        applyPostCampaignMetricsPayload(updates, { merge: true });
+      }
+    },
+    [contestId, postCampaignMetricsById, currentSubmissions],
+  );
 
   /** Copy all contest submissions into post-campaign table (Refresh on empty state). */
   const syncPostCampaignSubmissions = async () => {
@@ -2927,12 +2992,65 @@ export default function ContestDetailClient({
     const byId = new Map(
       (currentSubmissions || []).map((sub) => [sub.id, sub] as const),
     );
+    const byCreatorId = new Map(
+      (currentSubmissions || [])
+        .filter((sub) => sub.creator_id)
+        .map((sub) => [sub.creator_id!, sub] as const),
+    );
     return Object.values(postCampaignMetricsById).map((snapshot) => {
-      const base = byId.get(snapshot.submission_id);
-      return postCampaignSnapshotToSubmission<Submission>(
-        snapshot,
-        base ?? ({ id: snapshot.submission_id } as Submission),
+      const cached = postCampaignSubmissionEnrichmentRef.current.get(
+        snapshot.submission_id,
       );
+      const base =
+        byId.get(snapshot.submission_id) ??
+        (cached as Submission | undefined);
+      const merged = postCampaignSnapshotToSubmission<Submission>(
+        snapshot,
+        base ??
+          ({
+            id: snapshot.submission_id,
+            creator_id: snapshot.creator_id,
+          } as Submission),
+      );
+      const creatorFallback =
+        cached ??
+        (snapshot.creator_id
+          ? byCreatorId.get(snapshot.creator_id)
+          : undefined);
+      const withCreator = {
+        ...merged,
+        creator_display_name:
+          (merged as any).creator_display_name ??
+          (creatorFallback as any)?.creator_display_name ??
+          creatorFallback?.creator?.full_name ??
+          null,
+        creator_username:
+          (merged as any).creator_username ??
+          (creatorFallback as any)?.creator_username ??
+          creatorFallback?.creator?.username ??
+          null,
+        creator_avatar_url:
+          (merged as any).creator_avatar_url ??
+          (creatorFallback as any)?.creator_avatar_url ??
+          creatorFallback?.creator?.profile_picture_url ??
+          null,
+        creator:
+          (merged as any).creator ??
+          (creatorFallback as any)?.creator ??
+          undefined,
+      } as Submission;
+      if (
+        (withCreator as any).creator_display_name ||
+        (withCreator as any).creator_username
+      ) {
+        postCampaignSubmissionEnrichmentRef.current.set(snapshot.submission_id, {
+          creator_display_name: (withCreator as any).creator_display_name,
+          creator_username: (withCreator as any).creator_username,
+          creator_avatar_url: (withCreator as any).creator_avatar_url,
+          creator: (withCreator as any).creator,
+        });
+      }
+      return withCreator;
     });
   }, [
     isPostCampaignLeaderboard,
@@ -3272,12 +3390,15 @@ export default function ContestDetailClient({
     [sortedSubmissions, safePage, itemsPerPage],
   );
 
-  // Only virtualize while the Submissions tab is active (avoids work on Overview).
+  // Virtualize only in Detailed View (tall inline-player rows); normal table renders all rows.
   const submissionsVirtualTable = useContestSubmissionsVirtualTable(
     paginatedSubmissions,
     {
       estimateSize: useInlineContentPlayer ? 200 : 52,
-      enabled: isSubmissionTableView && activeTab === "submissions",
+      enabled:
+        detailedViewEnabled &&
+        isSubmissionTableView &&
+        activeTab === "submissions",
     },
   );
 
@@ -5965,15 +6086,12 @@ export default function ContestDetailClient({
     [filteredCreatorGroups, safeCreatorWisePage, creatorWiseItemsPerPage],
   );
 
-  // Virtualize the current creator-wise page (same pattern as normal view).
+  // Creator-wise table renders all rows on the current page (no window virtualization).
   const creatorWiseVirtualTable = useContestSubmissionsVirtualTable(
     paginatedCreatorGroups as any[],
     {
       estimateSize: 88,
-      enabled:
-        viewMode === "creator-wise" &&
-        activeTab === "submissions" &&
-        paginatedCreatorGroups.length > 0,
+      enabled: false,
     },
   );
 
@@ -6271,7 +6389,10 @@ export default function ContestDetailClient({
   }, [isDark]);
 
   useEffect(() => {
-    setCurrentSubmissions(initialSubmissions || []);
+    // SSR seeds [] — never wipe client-hydrated rows when this effect re-runs.
+    if ((initialSubmissions?.length ?? 0) > 0) {
+      setCurrentSubmissions(initialSubmissions);
+    }
     setSubmissionTotalCount(
       typeof initialSubmissionTotal === "number"
         ? initialSubmissionTotal
@@ -10313,6 +10434,71 @@ export default function ContestDetailClient({
     return fallback || `Updated ${updatedCount} submission(s)`;
   };
 
+  /** Re-fetch only rows touched by a scoped YouTube analytics refresh (no full reload). */
+  const mergeRefreshedSubmissionsFromApi = useCallback(
+    async (options: { submissionId?: string; creatorId?: string }) => {
+      const targetSubmissionId = options.submissionId?.trim();
+      const targetCreatorId = options.creatorId?.trim();
+      if (!targetSubmissionId && !targetCreatorId) return;
+
+      const pageSize = CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE;
+      const updated = new Map<string, Submission>();
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const res = await fetch(
+          `/api/contests/${contestId}/submissions?limit=${pageSize}&offset=${offset}`,
+        );
+        if (!res.ok) break;
+        const data = await res.json().catch(() => ({}));
+        const rows = Array.isArray(data.submissions)
+          ? (data.submissions as Submission[])
+          : [];
+        for (const row of rows) {
+          if (targetSubmissionId && row.id === targetSubmissionId) {
+            updated.set(row.id, row);
+          } else if (
+            targetCreatorId &&
+            String(row.creator_id || "") === targetCreatorId
+          ) {
+            updated.set(row.id, row);
+          }
+        }
+        hasMore = Boolean(data.hasMore) && rows.length > 0;
+        offset += pageSize;
+        if (targetSubmissionId && updated.has(targetSubmissionId)) break;
+      }
+
+      if (updated.size === 0) return;
+      setCurrentSubmissions((prev) =>
+        prev.map((row) => {
+          if (!updated.has(row.id)) return row;
+          const fresh = updated.get(row.id)!;
+          const existingCreator = (row as any).creator;
+          const freshCreator = (fresh as any).creator;
+          return {
+            ...row,
+            ...fresh,
+            creator_display_name:
+              (fresh as any).creator_display_name ??
+              (row as any).creator_display_name,
+            creator_username:
+              (fresh as any).creator_username ?? (row as any).creator_username,
+            creator_avatar_url:
+              (fresh as any).creator_avatar_url ??
+              (row as any).creator_avatar_url,
+            creator:
+              freshCreator?.username || freshCreator?.full_name
+                ? { ...existingCreator, ...freshCreator }
+                : (existingCreator ?? freshCreator),
+          };
+        }),
+      );
+    },
+    [contestId],
+  );
+
   const handleRefreshDetailedAnalytics = async (
     type: "core" | "traffic" | "demographics" | "all",
     opts?: {
@@ -10337,16 +10523,12 @@ export default function ContestDetailClient({
       return;
     }
 
-    // Post-campaign: refresh overlay for all YouTube scopes (never touch submissions).
-    if (isPostCampaignLeaderboard) {
-      if (isContestLevel) {
-        if (type === "core" || type === "all") setIsRefreshingCore(true);
-        if (type === "traffic" || type === "all") setIsRefreshingTraffic(true);
-        if (type === "demographics" || type === "all")
-          setIsRefreshingDemographics(true);
-      } else {
-        setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: type }));
-      }
+    // Post-campaign contest-wide only — per-row / per-creator use scoped API below.
+    if (isPostCampaignLeaderboard && isContestLevel) {
+      if (type === "core" || type === "all") setIsRefreshingCore(true);
+      if (type === "traffic" || type === "all") setIsRefreshingTraffic(true);
+      if (type === "demographics" || type === "all")
+        setIsRefreshingDemographics(true);
       try {
         await runPostCampaignScopedRefresh(type);
       } catch (error: any) {
@@ -10357,13 +10539,9 @@ export default function ContestDetailClient({
           variant: "destructive",
         });
       } finally {
-        if (isContestLevel) {
-          setIsRefreshingCore(false);
-          setIsRefreshingTraffic(false);
-          setIsRefreshingDemographics(false);
-        } else {
-          setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: null }));
-        }
+        setIsRefreshingCore(false);
+        setIsRefreshingTraffic(false);
+        setIsRefreshingDemographics(false);
       }
       return;
     }
@@ -10381,6 +10559,7 @@ export default function ContestDetailClient({
     try {
       const isYoutubeContest =
         isContestLevel &&
+        !isPostCampaignLeaderboard &&
         (currentContest.platform?.toLowerCase().includes("youtube") ?? false);
 
       if (isYoutubeContest) {
@@ -10566,7 +10745,27 @@ export default function ContestDetailClient({
         });
       }
 
-      setTimeout(() => window.location.reload(), 1200);
+      if (isContestLevel) {
+        schedulePostRefreshReload();
+      } else if (isPostCampaignLeaderboard) {
+        const refreshedAt = new Date().toISOString();
+        applyLocalPostCampaignYoutubeTimestamps(type, refreshedAt);
+        await Promise.all([
+          mergePostCampaignMetricsScope({
+            submissionId: opts?.submissionId,
+            creatorId: opts?.creatorId,
+          }),
+          mergeRefreshedSubmissionsFromApi({
+            submissionId: opts?.submissionId,
+            creatorId: opts?.creatorId,
+          }),
+        ]);
+      } else {
+        await mergeRefreshedSubmissionsFromApi({
+          submissionId: opts?.submissionId,
+          creatorId: opts?.creatorId,
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Refresh Failed",

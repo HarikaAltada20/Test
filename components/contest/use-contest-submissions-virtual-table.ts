@@ -28,12 +28,13 @@ export function useContestSubmissionsVirtualTable<T>(
   rows: T[],
   options: {
     estimateSize: number;
+    /** When false, render every row without window virtualization. */
     enabled?: boolean;
   },
 ) {
-  const enabled = options.enabled !== false;
+  const virtualize = options.enabled !== false;
   const estimateSize = options.estimateSize;
-  const pageRows = enabled ? rows : [];
+  const pageRows = rows;
   const count = pageRows.length;
   const overscan = estimateSize >= 150 ? 5 : 8;
 
@@ -64,7 +65,7 @@ export function useContestSubmissionsVirtualTable<T>(
     estimateSize: () => estimateSize,
     overscan,
     scrollMargin,
-    enabled: enabled && count > 0,
+    enabled: virtualize && count > 0,
     // Ref callbacks run during commit; flushSync there throws.
     useFlushSync: false,
     getItemKey,
@@ -96,7 +97,7 @@ export function useContestSubmissionsVirtualTable<T>(
 
   useLayoutEffect(() => {
     const node = listRef.current;
-    if (!enabled || !node) {
+    if (!virtualize || !node) {
       setScrollMargin(0);
       return;
     }
@@ -113,12 +114,23 @@ export function useContestSubmissionsVirtualTable<T>(
       ro.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [enabled, count, estimateSize]);
+  }, [virtualize, count, estimateSize]);
 
   const virtualItems = virtualizer.getVirtualItems();
 
   // Before measure, TanStack Virtual can return []. Fall back so the tab isn't blank.
   const itemsToRender = useMemo(() => {
+    if (!virtualize) {
+      if (count === 0) return [];
+      return Array.from({ length: count }, (_, index) => ({
+        index,
+        start: index * estimateSize,
+        size: estimateSize,
+        end: (index + 1) * estimateSize,
+        key: getItemKey(index),
+        lane: 0,
+      }));
+    }
     if (virtualItems.length > 0) return virtualItems;
     if (count === 0) return [];
     const fallbackCount = Math.min(count, 30);
@@ -130,14 +142,21 @@ export function useContestSubmissionsVirtualTable<T>(
       key: getItemKey(index),
       lane: 0,
     }));
-  }, [virtualItems, count, estimateSize, scrollMargin, getItemKey]);
-
-  const totalSize = virtualizer.getTotalSize() || count * estimateSize;
-  const { paddingTop, paddingBottom } = getVirtualTablePadding(
-    itemsToRender,
-    totalSize,
+  }, [
+    virtualize,
+    virtualItems,
+    count,
+    estimateSize,
     scrollMargin,
-  );
+    getItemKey,
+  ]);
+
+  const totalSize = virtualize
+    ? virtualizer.getTotalSize() || count * estimateSize
+    : count * estimateSize;
+  const { paddingTop, paddingBottom } = virtualize
+    ? getVirtualTablePadding(itemsToRender, totalSize, scrollMargin)
+    : { paddingTop: 0, paddingBottom: 0 };
 
   const visibleRows = useMemo(() => {
     const out: Array<{
