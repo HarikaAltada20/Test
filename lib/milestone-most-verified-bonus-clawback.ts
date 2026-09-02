@@ -48,6 +48,36 @@ function submissionMetadataRecord(
   return {};
 }
 
+export function mvBonusTrackPaidCentsOnSubmission(
+  row: Pick<
+    MilestoneMostVerifiedSubmissionRow,
+    "milestone_bonus_paid" | "metadata"
+  > | null | undefined,
+  track: MvBonusTrack,
+): number {
+  if (!row) return 0;
+  const fromColumn =
+    row.milestone_bonus_paid && typeof row.milestone_bonus_paid === "object"
+      ? row.milestone_bonus_paid
+      : null;
+  const meta = submissionMetadataRecord(row.metadata);
+  const fromMeta =
+    meta.milestone_bonus_paid && typeof meta.milestone_bonus_paid === "object"
+      ? meta.milestone_bonus_paid
+      : null;
+  const raw = (fromColumn || fromMeta || {}) as { views?: number; reels?: number };
+  const cents = Number(raw[track] || 0);
+  return Number.isFinite(cents) && cents > 0 ? cents : 0;
+}
+
+/** Ledger already clawed back, but the submission row still shows the track as paid. */
+export function shouldReconcileMvBonusTrackWithoutDebit(
+  ledgerNetCents: number,
+  trackPaidOnSubmissionCents: number,
+): boolean {
+  return ledgerNetCents <= 0 && trackPaidOnSubmissionCents > 0;
+}
+
 export function computeMostVerifiedBonusPaidByTrack(
   paidRewards: Array<{ amount?: number | null; metadata?: unknown }> | null | undefined,
   paidRefunds: Array<{
@@ -120,6 +150,8 @@ async function clawbackMostVerifiedBonusTrack(params: {
     metadata?: unknown;
     remarks?: string | null;
   }>;
+  /** Wallet + refund ledger already settled; only repair submission flags. */
+  walletAlreadySettled?: boolean;
 }): Promise<{ ok: boolean; reversedCents: number; error?: string }> {
   const {
     supabaseAdmin,
@@ -131,6 +163,7 @@ async function clawbackMostVerifiedBonusTrack(params: {
     reversalAmount,
     submissions,
     paidRefunds,
+    walletAlreadySettled = false,
   } = params;
 
   if (reversalAmount <= 0) {
@@ -140,6 +173,9 @@ async function clawbackMostVerifiedBonusTrack(params: {
   const creatorSubs = submissions.filter((s) => s.creator_id === creatorId);
   const target = pickTargetSubmission(creatorSubs);
   if (!target) {
+    if (walletAlreadySettled) {
+      return { ok: true, reversedCents: 0 };
+    }
     return {
       ok: false,
       reversedCents: 0,
@@ -147,68 +183,70 @@ async function clawbackMostVerifiedBonusTrack(params: {
     };
   }
 
-  const paidTrackRefundsForCycle = paidRefunds.filter(
-    (tx) =>
-      (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
-      String((tx as { metadata?: { bonus_type?: string } })?.metadata?.bonus_type || "") ===
-        `milestone_most_verified_${track}`,
-  ).length;
-  const nextReversalCycle = paidTrackRefundsForCycle + 1;
+  if (!walletAlreadySettled) {
+    const paidTrackRefundsForCycle = paidRefunds.filter(
+      (tx) =>
+        (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
+        String((tx as { metadata?: { bonus_type?: string } })?.metadata?.bonus_type || "") ===
+          `milestone_most_verified_${track}`,
+    ).length;
+    const nextReversalCycle = paidTrackRefundsForCycle + 1;
 
-  const reversalDebitKey = buildWalletRollbackDebitIdempotencyKey({
-    payoutOperationKey: `milestone_mv_bonus_rev:v1:${contestId}:${creatorId}:${track}:cycle:${nextReversalCycle}`,
-    reason: "milestone_mv_bonus_reversal",
-  });
-  const debitRes = await debitCreatorReversalClawback(creatorId, reversalAmount, {
-    idempotencyKey: reversalDebitKey,
-  });
-  if (!debitRes.success) {
-    return {
-      ok: false,
-      reversedCents: 0,
-      error: debitRes.error || "Failed to debit creator balance",
-    };
-  }
+    const reversalDebitKey = buildWalletRollbackDebitIdempotencyKey({
+      payoutOperationKey: `milestone_mv_bonus_rev:v1:${contestId}:${creatorId}:${track}:cycle:${nextReversalCycle}`,
+      reason: "milestone_mv_bonus_reversal",
+    });
+    const debitRes = await debitCreatorReversalClawback(creatorId, reversalAmount, {
+      idempotencyKey: reversalDebitKey,
+    });
+    if (!debitRes.success) {
+      return {
+        ok: false,
+        reversedCents: 0,
+        error: debitRes.error || "Failed to debit creator balance",
+      };
+    }
 
-  const refundLogged = await logTransactionAsAdmin(
-    creatorId,
-    "refund",
-    reversalAmount,
-    "success",
-    `Reversal: Milestone most verified ${
-      track === "views" ? "views" : "reels"
-    } bonus — ${contestTitle || "Contest"}`,
-    {
-      remarks: REVERSAL_TRANSACTION_REMARK,
-      paymentMethod: "refund",
-      metadata: {
-        contest_id: contestId,
-        bonus_type: `milestone_most_verified_${track}`,
-        submission_id: `${target.id}:milestone_most_verified_${track}:reverse`,
-        source_submission_id: target.id,
-        payout_cycle: nextReversalCycle,
-        wallet_rollback_debit_key: reversalDebitKey,
-        wallet_rollback_already_applied: Boolean(debitRes.alreadyApplied),
-      },
-    },
-  );
-
-  if (!refundLogged) {
-    await creditCreatorWithdrawableBalance(
+    const refundLogged = await logTransactionAsAdmin(
       creatorId,
+      "refund",
       reversalAmount,
-      `Rollback: milestone MV bonus reversal ledger log failed (${contestId} ${track})`,
+      "success",
+      `Reversal: Milestone most verified ${
+        track === "views" ? "views" : "reels"
+      } bonus — ${contestTitle || "Contest"}`,
       {
-        idempotencyKey: `milestone_mv_bonus_rev_log_fail:${contestId}:${creatorId}:${track}:${nextReversalCycle}`,
-        metadata: { contest_id: contestId },
+        remarks: REVERSAL_TRANSACTION_REMARK,
+        paymentMethod: "refund",
+        metadata: {
+          contest_id: contestId,
+          bonus_type: `milestone_most_verified_${track}`,
+          submission_id: `${target.id}:milestone_most_verified_${track}:reverse`,
+          source_submission_id: target.id,
+          payout_cycle: nextReversalCycle,
+          wallet_rollback_debit_key: reversalDebitKey,
+          wallet_rollback_already_applied: Boolean(debitRes.alreadyApplied),
+        },
       },
     );
-    return {
-      ok: false,
-      reversedCents: 0,
-      error:
-        "Could not record the refund transaction; creator balance was restored.",
-    };
+
+    if (!refundLogged) {
+      await creditCreatorWithdrawableBalance(
+        creatorId,
+        reversalAmount,
+        `Rollback: milestone MV bonus reversal ledger log failed (${contestId} ${track})`,
+        {
+          idempotencyKey: `milestone_mv_bonus_rev_log_fail:${contestId}:${creatorId}:${track}:${nextReversalCycle}`,
+          metadata: { contest_id: contestId },
+        },
+      );
+      return {
+        ok: false,
+        reversedCents: 0,
+        error:
+          "Could not record the refund transaction; creator balance was restored.",
+      };
+    }
   }
 
   const prevAmount = Number(target.bonus_amount) || 0;
@@ -286,14 +324,19 @@ async function clawbackMostVerifiedBonusTrack(params: {
     );
     return {
       ok: false,
-      reversedCents: reversalAmount,
+      reversedCents: walletAlreadySettled ? 0 : reversalAmount,
       error:
         updErr.message ||
-        "Wallet was debited and refund logged, but updating the submission failed.",
+        (walletAlreadySettled
+          ? "Could not update submission bonus flags after wallet clawback."
+          : "Wallet was debited and refund logged, but updating the submission failed."),
     };
   }
 
-  return { ok: true, reversedCents: reversalAmount };
+  return {
+    ok: true,
+    reversedCents: walletAlreadySettled ? 0 : reversalAmount,
+  };
 }
 
 /**
@@ -373,8 +416,17 @@ export async function clawbackMostVerifiedBonusForCreator(params: {
   let totalReversed = 0;
 
   for (const track of tracks) {
-    const reversalAmount =
+    const ledgerNet =
       track === "views" ? paidByTrack.views : paidByTrack.reels;
+    const target = pickTargetSubmission(
+      submissions.filter((s) => s.creator_id === params.creatorId),
+    );
+    const rowTrackPaid = mvBonusTrackPaidCentsOnSubmission(target, track);
+    const walletAlreadySettled = shouldReconcileMvBonusTrackWithoutDebit(
+      ledgerNet,
+      rowTrackPaid,
+    );
+    const reversalAmount = walletAlreadySettled ? rowTrackPaid : ledgerNet;
     if (reversalAmount <= 0) continue;
 
     const result = await clawbackMostVerifiedBonusTrack({
@@ -387,6 +439,7 @@ export async function clawbackMostVerifiedBonusForCreator(params: {
       reversalAmount,
       submissions,
       paidRefunds: paidRefunds || [],
+      walletAlreadySettled,
     });
 
     if (!result.ok) {

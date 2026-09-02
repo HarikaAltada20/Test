@@ -156,6 +156,7 @@ REVOKE ALL ON FUNCTION public.creator_payout_debit_idempotent_atomic(uuid, bigin
 GRANT EXECUTE ON FUNCTION public.creator_payout_debit_idempotent_atomic(uuid, bigint, text, boolean) TO service_role;
 
 -- Clearer withdrawal error when creator owes money (negative balance).
+-- Keep pause-check + pending ledger inserts from 20260314_payout_method_type_settings.sql.
 CREATE OR REPLACE FUNCTION public.create_withdrawal_request(
   p_user_id uuid,
   p_payout_method_id uuid,
@@ -167,6 +168,7 @@ CREATE OR REPLACE FUNCTION public.create_withdrawal_request(
 )
 RETURNS SETOF public.withdrawal_requests
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
     v_payout_method_type TEXT := NULL;
@@ -175,6 +177,7 @@ DECLARE
     current_coin_balance integer;
     current_cash_balance integer;
 BEGIN
+    -- 1. Check user's balance
     IF p_amount_type = 'cash' THEN
         SELECT cp.withdrawable_balance INTO current_cash_balance FROM public.creator_profiles cp WHERE cp.id = p_user_id;
         IF current_cash_balance IS NULL THEN
@@ -195,6 +198,7 @@ BEGIN
         RAISE EXCEPTION 'Invalid amount type specified: %', p_amount_type;
     END IF;
 
+    -- 2. Fetch payout method details if ID is provided
     IF p_payout_method_id IS NOT NULL THEN
         SELECT pm.method_type, pm.details INTO v_payout_method_type, v_payout_method_details
         FROM public.payout_methods pm
@@ -203,10 +207,16 @@ BEGIN
         IF v_payout_method_type IS NULL THEN
             RAISE EXCEPTION 'Payout method (ID: %) not found or does not belong to the user.', p_payout_method_id;
         END IF;
+
+        -- 2b. Block if this payout method type is paused by admin
+        IF (SELECT is_paused FROM public.payout_method_type_settings WHERE method_type = v_payout_method_type) = true THEN
+            RAISE EXCEPTION 'This payment method is not available for now. Please try with a different payment method.';
+        END IF;
     ELSIF p_amount_type = 'cash' THEN
         RAISE EXCEPTION 'Payout method ID is required for cash withdrawals.';
     END IF;
 
+    -- 3. Create the withdrawal/redemption request
     INSERT INTO public.withdrawal_requests (
         user_id,
         payout_method_id,
@@ -236,6 +246,7 @@ BEGIN
     )
     RETURNING * INTO new_request;
 
+    -- 4. Deduct from user's balance
     IF p_amount_type = 'cash' THEN
         UPDATE public.creator_profiles
         SET withdrawable_balance = withdrawable_balance - p_amount
@@ -246,6 +257,16 @@ BEGIN
         WHERE id = p_user_id;
     END IF;
 
+    -- 5. Create a transaction record
+    IF p_amount_type = 'cash' THEN
+        INSERT INTO public.money_transactions (user_id, type, status, amount, currency, description, withdrawal_request_id)
+        VALUES (p_user_id, 'withdrawal', 'pending', p_amount, p_currency, 'Cash withdrawal request initiated.', new_request.id);
+    ELSIF p_amount_type = 'coins' THEN
+        INSERT INTO public.coin_transactions (user_id, type, status, coins, description, related_withdrawal_id)
+        VALUES (p_user_id, 'redemption_request', 'pending', p_amount, 'Coin redemption request: ' || COALESCE((p_redeemed_item_description->>'name')::text, 'Item'), new_request.id);
+    END IF;
+
     RETURN NEXT new_request;
+    RETURN;
 END;
 $$;
