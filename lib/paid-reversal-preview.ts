@@ -58,9 +58,10 @@ function paidReversalRowAmounts(sub: SubmissionLike): {
   }
 
   let rewardCents = Math.max(0, Number(sub.earnings) || 0);
-  let bonusCents = sub.bonus_paid
-    ? Math.max(0, Number(sub.bonus_amount) || 0)
-    : 0;
+  let bonusCents =
+    sub.bonus_paid === true
+      ? getMilestoneLadderGrantedCentsFromSubmission(sub)
+      : 0;
   const dualPaid = getDualRewardsSubmissionPaidComponents({
     id: sub.id,
     earnings: sub.earnings,
@@ -72,9 +73,24 @@ function paidReversalRowAmounts(sub: SubmissionLike): {
   const dualTotal = dualPaid.cpmCents + dualPaid.milestoneCents;
   if (dualTotal > rewardCents + bonusCents) {
     rewardCents = dualPaid.cpmCents;
-    bonusCents = dualPaid.milestoneCents;
+    bonusCents = getMilestoneLadderGrantedCentsFromSubmission(sub);
   }
   return { rewardCents, bonusCents };
+}
+
+/** Milestone contests: per-reel payouts are stored in `earnings` when marked Paid. */
+export function sumMilestoneSubmissionRewardCentsForReversal(
+  submissions: readonly SubmissionLike[],
+  ids: string[],
+): number {
+  let sum = 0;
+  for (const id of ids) {
+    const sub = submissions.find((s) => s.id === id);
+    if (!sub || !submissionIsPaidRow(sub)) continue;
+    if (sub.is_twitter_tweet === true) continue;
+    sum += Math.max(0, Number(sub.earnings) || 0);
+  }
+  return sum;
 }
 
 export function submissionIsPaidRow(

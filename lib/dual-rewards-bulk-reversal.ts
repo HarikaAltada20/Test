@@ -60,6 +60,8 @@ function toSpendRow(row: SubmissionRow): DualPoolSpendSubmissionRow {
     bonus_amount: row.bonus_amount,
     bonus_paid: row.bonus_paid,
     dual_rewards_payout: row.dual_rewards_payout,
+    milestone_bonus_paid: row.milestone_bonus_paid,
+    metadata: row.metadata,
   };
 }
 
@@ -558,6 +560,8 @@ export async function applyBulkDualRewardsWalletReversals(params: {
         refundTxns,
         reversalRemark: REVERSAL_TRANSACTION_REMARK,
         wasPaidBeforeReversal: wasPaid,
+        excludeMostVerifiedBonus:
+          contestType === "milestone" || contestType === "dual_rewards",
       });
       perSubDue.set(row.id, due);
       if (due.totalCents <= 0) {

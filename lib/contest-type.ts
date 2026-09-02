@@ -9,6 +9,13 @@ export function isMilestoneContestType(contestType: string | null | undefined) {
   return contestType === "milestone" || contestType === "dual_rewards";
 }
 
+/** Milestone-only campaigns (excludes dual_rewards, which has its own CPM + milestone split). */
+export function isMilestoneOnlyContestType(
+  contestType: string | null | undefined,
+) {
+  return contestType === "milestone";
+}
+
 export function isDualRewardsContestType(
   contestType: string | null | undefined,
 ) {

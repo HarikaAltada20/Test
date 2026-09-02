@@ -3,7 +3,41 @@ import { describe, it } from "node:test";
 import {
   CONTEST_SUBMISSIONS_HYDRATE_ERROR,
   finishContestSubmissionsHydrate,
+  isContestSubmissionsLoadComplete,
 } from "./contest-detail-submissions-hydrate";
+
+describe("isContestSubmissionsLoadComplete", () => {
+  it("is true when the hydrate flag is set", () => {
+    assert.equal(
+      isContestSubmissionsLoadComplete({
+        fullyHydrated: true,
+        loadedCount: 0,
+        totalCount: 998,
+      }),
+      true,
+    );
+  });
+
+  it("is true when loaded rows meet or exceed the server total", () => {
+    assert.equal(
+      isContestSubmissionsLoadComplete({
+        loadedCount: 998,
+        totalCount: 998,
+      }),
+      true,
+    );
+  });
+
+  it("is false while rows are still paging in", () => {
+    assert.equal(
+      isContestSubmissionsLoadComplete({
+        loadedCount: 366,
+        totalCount: 998,
+      }),
+      false,
+    );
+  });
+});
 
 describe("finishContestSubmissionsHydrate", () => {
   it("marks complete only when every page succeeded", () => {

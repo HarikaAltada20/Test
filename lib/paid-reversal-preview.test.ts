@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { summarizePaidReversalPreview } from "./paid-reversal-preview";
+import {
+  sumMilestoneSubmissionRewardCentsForReversal,
+  summarizePaidReversalPreview,
+} from "./paid-reversal-preview";
 
 describe("summarizePaidReversalPreview", () => {
   it("splits milestone ladder from dual_rewards_payout JSON", () => {
@@ -88,6 +91,53 @@ describe("summarizePaidReversalPreview", () => {
     assert.equal(preview.totalCents, 2750);
   });
 
+  it("does not treat most-verified-only bonus_paid as milestone ladder", () => {
+    const submissions = [
+      {
+        id: "sub-mv",
+        status: "paid",
+        paid: true,
+        earnings: 29100,
+        bonus_paid: true,
+        bonus_amount: 1000,
+        milestone_bonus_paid: { views: 1000, reels: 0 },
+        creator_id: "creator-1",
+      },
+    ];
+    const preview = summarizePaidReversalPreview(submissions, ["sub-mv"]);
+    assert.equal(preview.rewardCents, 29100);
+    assert.equal(preview.bonusCents, 0);
+    assert.equal(preview.mostVerifiedBonusCents, 1000);
+  });
+});
+
+describe("sumMilestoneSubmissionRewardCentsForReversal", () => {
+  it("sums earnings only for paid milestone submissions", () => {
+    const submissions = [
+      {
+        id: "a",
+        status: "paid",
+        paid: true,
+        earnings: 10000,
+        bonus_paid: true,
+        bonus_amount: 1000,
+        milestone_bonus_paid: { views: 1000, reels: 0 },
+      },
+      {
+        id: "b",
+        status: "paid",
+        paid: true,
+        earnings: 19100,
+      },
+    ];
+    assert.equal(
+      sumMilestoneSubmissionRewardCentsForReversal(submissions, ["a", "b"]),
+      29100,
+    );
+  });
+});
+
+describe("summarizePaidReversalPreview unpaid rows", () => {
   it("ignores unpaid rows", () => {
     const submissions = [
       {

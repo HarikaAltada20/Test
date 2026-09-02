@@ -169,6 +169,47 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
     assert.equal(due.bonusCents, 0);
   });
 
+  it("excludes most-verified bonus from stored bonus fallback when flagged", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-mv",
+        paid: true,
+        earnings: 0,
+        bonus_paid: true,
+        bonus_amount: 500,
+        milestone_bonus_paid: { views: 0, reels: 1000 },
+      },
+      submissionId: "sub-mv",
+      rewardTxns: [],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+      excludeMostVerifiedBonus: true,
+    });
+    assert.equal(due.bonusCents, 0);
+    assert.equal(due.totalCents, 0);
+  });
+
+  it("includes full bonus_amount in fallback when MV is not excluded", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-mv",
+        paid: true,
+        earnings: 0,
+        bonus_paid: true,
+        bonus_amount: 500,
+        milestone_bonus_paid: { views: 0, reels: 1000 },
+      },
+      submissionId: "sub-mv",
+      rewardTxns: [],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.bonusCents, 500);
+    assert.equal(due.totalCents, 500);
+  });
+
   it("caps due by recorded grant when ledger net exceeds submission row", () => {
     const due = computeDualRewardsSubmissionReversalDue({
       submissionRow: {

@@ -2010,7 +2010,7 @@ export async function processVerifySubmission(
     const { data: freshPaidRow } = await supabaseAdmin
       .from("submissions")
       .select(
-        "earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, status",
+        "earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, milestone_bonus_paid, metadata, status",
       )
       .eq("id", submissionId)
       .maybeSingle();
@@ -2023,6 +2023,9 @@ export async function processVerifySubmission(
       bonus_paid: freshPaidRow?.bonus_paid ?? submissionFull.bonus_paid,
       dual_rewards_payout:
         freshPaidRow?.dual_rewards_payout ?? submissionFull.dual_rewards_payout,
+      milestone_bonus_paid:
+        freshPaidRow?.milestone_bonus_paid ?? submissionFull.milestone_bonus_paid,
+      metadata: freshPaidRow?.metadata ?? submissionFull.metadata,
     };
 
     const shouldRunPaidReversal =
@@ -2104,6 +2107,7 @@ export async function processVerifySubmission(
           refundTxns,
           reversalRemark: REVERSAL_TRANSACTION_REMARK,
           wasPaidBeforeReversal,
+          excludeMostVerifiedBonus: true,
         });
         mainReversalAmount = due.mainCents;
         bonusReversalAmount = due.bonusCents;
@@ -2124,6 +2128,7 @@ export async function processVerifySubmission(
           refundTxns,
           reversalRemark: REVERSAL_TRANSACTION_REMARK,
           wasPaidBeforeReversal,
+          excludeMostVerifiedBonus: isMilestoneContestType(contest.contest_type),
         });
         mainReversalAmount = due.mainCents;
         bonusReversalAmount = due.bonusCents;

@@ -13,6 +13,18 @@ export type ContestSubmissionsHydrateOutcome = {
   error: string | null;
 };
 
+/** True when every contest submission row is available client-side. */
+export function isContestSubmissionsLoadComplete(input: {
+  fullyHydrated?: boolean;
+  loadedCount: number;
+  totalCount: number;
+}): boolean {
+  if (input.fullyHydrated) return true;
+  const total = Number(input.totalCount) || 0;
+  const loaded = Number(input.loadedCount) || 0;
+  return total > 0 && loaded >= total;
+}
+
 /**
  * Incomplete paging must not be treated as a full load.
  * Abort/unmount leaves hydration unfinished without a user-facing error.

@@ -42,6 +42,7 @@ import {
 import { CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE } from "@/lib/fetch-contest-submissions";
 import {
   finishContestSubmissionsHydrate,
+  isContestSubmissionsLoadComplete,
 } from "@/lib/contest-detail-submissions-hydrate";
 
 // Removed global type imports, defining them locally below
@@ -158,9 +159,11 @@ import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { UpdateCampaignStatusDialog } from "@/components/contest/UpdateCampaignStatusDialog";
 import { BudgetProgress } from "@/components/BudgetProgress";
+import { PaidReversalRefundEstimate } from "@/components/PaidReversalRefundEstimate";
+import type { PaidReversalRefundLine } from "@/components/PaidReversalRefundEstimate";
 import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
-  sumMilestoneMostVerifiedBonusGrantedForCreators,
+  getMilestoneMostVerifiedBonusGrantedByTrackForCreators,
 } from "@/lib/milestone-contest-expected-spend";
 import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-contest-expected-spend";
 
@@ -199,6 +202,7 @@ import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
+  sumMilestoneSubmissionRewardCentsForReversal,
   summarizePaidReversalPreview,
 } from "@/lib/paid-reversal-preview";
 import {
@@ -325,6 +329,7 @@ import {
   isCpmContestType,
   isDualRewardsContestType,
   isMilestoneContestType,
+  isMilestoneOnlyContestType,
 } from "@/lib/contest-type";
 
 // YouTube submissions table: configurable column ids (for "Modify headers" feature)
@@ -1504,7 +1509,7 @@ function twitterCpmBonusGrantedDisplay(
 export default function ContestDetailClient({
   contest,
   initialSubmissions,
-  initialSubmissionTotal = null,
+  initialSubmissionTotal,
   initialSubmissionCounts = null,
   initialPostCampaignMetricsCount = null,
   durationDays,
@@ -3173,7 +3178,12 @@ export default function ContestDetailClient({
   const getStatus = (submission: Submission) =>
     getContestDetailRowStatus(submission as any);
 
-  const isHydratingSubmissions = !submissionsFullyHydrated;
+  const submissionsLoadComplete = isContestSubmissionsLoadComplete({
+    fullyHydrated: submissionsFullyHydrated,
+    loadedCount: currentSubmissions.length,
+    totalCount: submissionTotalCount,
+  });
+  const isHydratingSubmissions = !submissionsLoadComplete;
   const isLoadingSubmissionsHydrate =
     isHydratingSubmissions && !submissionsHydrateError;
 
@@ -3189,16 +3199,10 @@ export default function ContestDetailClient({
   );
 
   const liveSubmissionStatusCounts = useMemo(() => {
-    const loadedAll =
-      submissionsFullyHydrated ||
-      (submissionTotalCount > 0 &&
-        currentSubmissions.length >= submissionTotalCount);
-    if (!loadedAll) return submissionStatusCounts;
+    if (!submissionsLoadComplete) return submissionStatusCounts;
     return loadedSubmissionStatusCounts;
   }, [
-    submissionsFullyHydrated,
-    submissionTotalCount,
-    currentSubmissions.length,
+    submissionsLoadComplete,
     submissionStatusCounts,
     loadedSubmissionStatusCounts,
   ]);
@@ -6329,7 +6333,7 @@ export default function ContestDetailClient({
 
   useEffect(() => {
     // SSR seeds [] — never wipe client-hydrated rows when this effect re-runs.
-    if ((initialSubmissions?.length ?? 0) > 0) {
+    if (initialSubmissions && initialSubmissions.length > 0) {
       setCurrentSubmissions(initialSubmissions);
     }
     setSubmissionTotalCount(
@@ -6348,14 +6352,37 @@ export default function ContestDetailClient({
         not_rejected: initialSubmissionCounts.not_rejected,
       });
     }
-    setSubmissionsFullyHydrated(
-      (initialSubmissions?.length ?? 0) >=
-        (typeof initialSubmissionTotal === "number"
-          ? initialSubmissionTotal
-          : (initialSubmissions?.length ?? 0)),
+    const initialTotal =
+      typeof initialSubmissionTotal === "number"
+        ? initialSubmissionTotal
+        : (initialSubmissions?.length ?? 0);
+    setSubmissionsFullyHydrated((prev) =>
+      isContestSubmissionsLoadComplete({
+        fullyHydrated: prev,
+        loadedCount: initialSubmissions?.length ?? 0,
+        totalCount: initialTotal,
+      }),
     );
     setSubmissionsHydrateError(null);
   }, [initialSubmissions, initialSubmissionTotal, initialSubmissionCounts]);
+
+  // Heal stuck hydration when rows are loaded but SSR props re-run reset the flag.
+  useEffect(() => {
+    if (
+      isContestSubmissionsLoadComplete({
+        loadedCount: currentSubmissions.length,
+        totalCount: submissionTotalCount,
+      }) &&
+      !submissionsFullyHydrated
+    ) {
+      setSubmissionsFullyHydrated(true);
+      setSubmissionsHydrateError(null);
+    }
+  }, [
+    currentSubmissions.length,
+    submissionTotalCount,
+    submissionsFullyHydrated,
+  ]);
 
   // Client-hydrate all submission pages in 1000-row chunks (SSR seeds counts only).
   useEffect(() => {
@@ -7780,7 +7807,7 @@ export default function ContestDetailClient({
       action === "reject" ||
       action === "rejected" ||
       action === "pending";
-    if (isModerationBulkAction && !submissionsFullyHydrated) {
+    if (isModerationBulkAction && !submissionsLoadComplete) {
       toast({
         title: submissionsHydrateError
           ? "Submissions failed to load"
@@ -8576,7 +8603,7 @@ export default function ContestDetailClient({
   const handleCreatorWiseBulkPayment = async (
     paymentType: "standard" | "bonus" | "both",
   ) => {
-    if (!submissionsFullyHydrated) {
+    if (!submissionsLoadComplete) {
       toast({
         title: submissionsHydrateError
           ? "Submissions failed to load"
@@ -31987,10 +32014,8 @@ export default function ContestDetailClient({
                 const isDualReversalContest = isDualRewardsContestType(
                   currentContest?.contest_type,
                 );
-                const isMilestoneReversalContest = isMilestoneContestType(
-                  currentContest?.contest_type,
-                );
-                const useSplitReversalBreakdown = isDualReversalContest;
+                const isMilestoneOnlyReversalContest =
+                  isMilestoneOnlyContestType(currentContest?.contest_type);
                 const paidReversalCreatorIds: string[] = [];
                 for (const id of confirmReversal.submissionIds) {
                   const sub = currentSubmissions.find((s) => s.id === id);
@@ -31998,32 +32023,30 @@ export default function ContestDetailClient({
                   const creatorId = milestoneMvCreatorIdKey(sub.creator_id);
                   if (creatorId) paidReversalCreatorIds.push(creatorId);
                 }
-                const mostVerifiedBonusGrantedCents =
-                  isMilestoneReversalContest
-                    ? sumMilestoneMostVerifiedBonusGrantedForCreators(
-                        milestoneReelsBonusByCreator,
-                        paidReversalCreatorIds,
-                      )
-                    : preview.mostVerifiedBonusCents;
+                const hasMvBonusColumns =
+                  showMostVerifiedViewsBonusColumns ||
+                  showMostVerifiedReelsCreatorColumn;
+                const mvBonusByTrack = hasMvBonusColumns
+                  ? getMilestoneMostVerifiedBonusGrantedByTrackForCreators(
+                      milestoneReelsBonusByCreator,
+                      paidReversalCreatorIds,
+                    )
+                  : {
+                      viewsCents: 0,
+                      reelsCents: 0,
+                      totalCents: 0,
+                    };
+                const mostVerifiedBonusGrantedCents = mvBonusByTrack.totalCents;
                 const includeMvBonusReversal = Boolean(
                   confirmReversal.reverseMostVerifiedBonus,
                 );
                 const mvBonusInEstimate = includeMvBonusReversal
                   ? mostVerifiedBonusGrantedCents
                   : 0;
-                const bonusGrantedCents =
-                  preview.bonusCents + mvBonusInEstimate;
-                const reversalRefundTotalCents =
-                  preview.rewardCents + bonusGrantedCents;
-                const showMvBonusReversalCheckbox =
-                  isMilestoneReversalContest &&
-                  (showMostVerifiedViewsBonusColumns ||
-                    showMostVerifiedReelsCreatorColumn) &&
-                  mostVerifiedBonusGrantedCents > 0;
                 let dualReversalCpmCents = 0;
                 let dualReversalMilestoneCents = 0;
                 let dualReversalTotalCents = 0;
-                if (useSplitReversalBreakdown) {
+                if (isDualReversalContest) {
                   for (const id of confirmReversal.submissionIds) {
                     const sub = currentSubmissions.find((s) => s.id === id);
                     if (!sub || !submissionIsPaidRow(sub)) continue;
@@ -32040,6 +32063,88 @@ export default function ContestDetailClient({
                     dualReversalTotalCents += bd.totalCents;
                   }
                 }
+                const milestoneSubmissionRewardCents =
+                  isMilestoneOnlyReversalContest
+                    ? sumMilestoneSubmissionRewardCentsForReversal(
+                        currentSubmissions,
+                        confirmReversal.submissionIds,
+                      )
+                    : 0;
+                const standardReversalTotalCents =
+                  preview.rewardCents + preview.bonusCents;
+                const reversalRefundTotalCents = isDualReversalContest
+                  ? dualReversalTotalCents + mvBonusInEstimate
+                  : isMilestoneOnlyReversalContest
+                    ? milestoneSubmissionRewardCents + mvBonusInEstimate
+                    : standardReversalTotalCents;
+                const showMvBonusReversalCheckbox =
+                  hasMvBonusColumns &&
+                  mostVerifiedBonusGrantedCents > 0 &&
+                  (isMilestoneOnlyReversalContest || isDualReversalContest);
+                const appendMvRefundLines = (
+                  lines: PaidReversalRefundLine[],
+                ) => {
+                  if (
+                    showMostVerifiedViewsBonusColumns &&
+                    mvBonusByTrack.viewsCents > 0
+                  ) {
+                    lines.push({
+                      id: "mv-views",
+                      label: "Most Verified · Views bonus",
+                      description:
+                        "Creator leaderboard bonus for total verified views",
+                      cents: mvBonusByTrack.viewsCents,
+                      included: includeMvBonusReversal,
+                    });
+                  }
+                  if (
+                    showMostVerifiedReelsCreatorColumn &&
+                    mvBonusByTrack.reelsCents > 0
+                  ) {
+                    lines.push({
+                      id: "mv-reels",
+                      label: "Most Verified · Reels bonus",
+                      description:
+                        "Creator leaderboard bonus for verified reel count",
+                      cents: mvBonusByTrack.reelsCents,
+                      included: includeMvBonusReversal,
+                    });
+                  }
+                };
+                const milestoneRefundLines: PaidReversalRefundLine[] = [];
+                if (milestoneSubmissionRewardCents > 0) {
+                  milestoneRefundLines.push({
+                    id: "submission-rewards",
+                    label: "Milestone rewards (paid on submissions)",
+                    description:
+                      "Per-reel payouts credited when those submissions were marked Paid",
+                    cents: milestoneSubmissionRewardCents,
+                    included: true,
+                  });
+                }
+                appendMvRefundLines(milestoneRefundLines);
+                const dualRefundLines: PaidReversalRefundLine[] = [];
+                if (dualReversalCpmCents > 0) {
+                  dualRefundLines.push({
+                    id: "dual-cpm",
+                    label: "CPM rewards (paid on submissions)",
+                    description:
+                      "Per-view payouts credited when those submissions were marked Paid",
+                    cents: dualReversalCpmCents,
+                    included: true,
+                  });
+                }
+                if (dualReversalMilestoneCents > 0) {
+                  dualRefundLines.push({
+                    id: "dual-milestone",
+                    label: "Milestone rewards (paid on submissions)",
+                    description:
+                      "Milestone unlock payouts on those submissions (excludes Most Verified bonus)",
+                    cents: dualReversalMilestoneCents,
+                    included: true,
+                  });
+                }
+                appendMvRefundLines(dualRefundLines);
                 const targetLabel =
                   confirmReversal.target === "verified"
                     ? "Verified"
@@ -32059,109 +32164,93 @@ export default function ContestDetailClient({
                     </p>
                     {(preview.paidNonTwitterCount > 0 ||
                       preview.paidTwitterCount > 0) && (
-                      <div
-                        className={cn(
-                          "rounded-lg border p-3 text-sm space-y-1.5",
-                          isDark
-                            ? "border-gray-600 bg-gray-900/40"
-                            : "border-slate-200 bg-slate-50",
-                        )}
-                      >
-                        <p className="font-medium">
-                          Estimated refund (from paid rows)
-                        </p>
+                      <div className="space-y-3">
                         {preview.paidNonTwitterCount > 0 ? (
-                          <>
-                            <p>
-                              Paid (standard) submissions:{" "}
-                              <span className="font-medium">
-                                {preview.paidNonTwitterCount}
-                              </span>
-                            </p>
-                            {useSplitReversalBreakdown ? (
-                              <>
+                          isDualReversalContest ? (
+                            <PaidReversalRefundEstimate
+                              isDark={isDark}
+                              paidSubmissionCount={preview.paidNonTwitterCount}
+                              lines={dualRefundLines}
+                              totalCents={reversalRefundTotalCents}
+                              formatMoney={formatMoney}
+                              showMvOptionalToggle={showMvBonusReversalCheckbox}
+                              mvOptionalCents={mostVerifiedBonusGrantedCents}
+                              includeMvBonusReversal={includeMvBonusReversal}
+                              onIncludeMvBonusReversalChange={(checked) => {
+                                setConfirmReversal((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        reverseMostVerifiedBonus: checked,
+                                      }
+                                    : prev,
+                                );
+                              }}
+                            />
+                          ) : isMilestoneOnlyReversalContest ? (
+                            <PaidReversalRefundEstimate
+                              isDark={isDark}
+                              paidSubmissionCount={preview.paidNonTwitterCount}
+                              lines={milestoneRefundLines}
+                              totalCents={reversalRefundTotalCents}
+                              formatMoney={formatMoney}
+                              showMvOptionalToggle={showMvBonusReversalCheckbox}
+                              mvOptionalCents={mostVerifiedBonusGrantedCents}
+                              includeMvBonusReversal={includeMvBonusReversal}
+                              onIncludeMvBonusReversalChange={(checked) => {
+                                setConfirmReversal((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        reverseMostVerifiedBonus: checked,
+                                      }
+                                    : prev,
+                                );
+                              }}
+                            />
+                          ) : (
+                            <div
+                              className={cn(
+                                "rounded-lg border p-3 text-sm space-y-1.5",
+                                isDark
+                                  ? "border-gray-600 bg-gray-900/40"
+                                  : "border-slate-200 bg-slate-50",
+                              )}
+                            >
+                              <p className="font-medium">
+                                Estimated refund (from paid rows)
+                              </p>
+                              <p>
+                                Paid submissions:{" "}
+                                <span className="font-medium">
+                                  {preview.paidNonTwitterCount}
+                                </span>
+                              </p>
+                              <p>
+                                {isCpmContestType(currentContest?.contest_type)
+                                  ? "CPM reward (paid on submissions)"
+                                  : "Reward (paid on submissions)"}
+                                : {formatMoney(preview.rewardCents)}
+                              </p>
+                              {preview.bonusCents > 0 ? (
                                 <p>
-                                  {isDualReversalContest
-                                    ? "CPM"
-                                    : "Main reward (CPM)"}
-                                  : {formatMoney(dualReversalCpmCents)}
+                                  Bonus: {formatMoney(preview.bonusCents)}
                                 </p>
-                                <p>
-                                  {isDualReversalContest
-                                    ? "Milestone"
-                                    : "Milestone bonus"}
-                                  :{" "}
-                                  {formatMoney(dualReversalMilestoneCents)}
-                                </p>
-                                <p className="font-semibold">
-                                  Total: {formatMoney(dualReversalTotalCents)}
-                                </p>
-                              </>
-                            ) : (
-                              <>
-                                <p>
-                                  {isMilestoneReversalContest
-                                    ? "Reward granted"
-                                    : "Main reward (CPM)"}
-                                  : {formatMoney(preview.rewardCents)}
-                                </p>
-                                <p>
-                                  {isMilestoneReversalContest
-                                    ? "Bonus granted"
-                                    : "Bonus"}
-                                  : {formatMoney(bonusGrantedCents)}
-                                </p>
-                                {isMilestoneReversalContest &&
-                                preview.bonusCents > 0 &&
-                                mostVerifiedBonusGrantedCents > 0 &&
-                                includeMvBonusReversal ? (
-                                  <p
-                                    className={cn(
-                                      "text-xs",
-                                      isDark
-                                        ? "text-gray-400"
-                                        : "text-slate-500",
-                                    )}
-                                  >
-                                    Includes{" "}
-                                    {formatMoney(preview.bonusCents)} milestone
-                                    ladder and{" "}
-                                    {formatMoney(mostVerifiedBonusGrantedCents)}{" "}
-                                    most-verified bonus.
-                                  </p>
-                                ) : isMilestoneReversalContest &&
-                                  preview.bonusCents > 0 &&
-                                  mostVerifiedBonusGrantedCents > 0 &&
-                                  !includeMvBonusReversal ? (
-                                  <p
-                                    className={cn(
-                                      "text-xs",
-                                      isDark
-                                        ? "text-gray-400"
-                                        : "text-slate-500",
-                                    )}
-                                  >
-                                    Includes{" "}
-                                    {formatMoney(preview.bonusCents)} milestone
-                                    ladder. Most-verified bonus (
-                                    {formatMoney(mostVerifiedBonusGrantedCents)})
-                                    is not included unless you tick the option
-                                    below.
-                                  </p>
-                                ) : null}
-                                <p className="font-semibold">
-                                  Total:{" "}
-                                  {formatMoney(reversalRefundTotalCents)}
-                                </p>
-                              </>
-                            )}
-                          </>
+                              ) : null}
+                              <p className="font-semibold">
+                                Total: {formatMoney(standardReversalTotalCents)}
+                              </p>
+                            </div>
+                          )
                         ) : null}
                         {preview.paidTwitterCount > 0 ? (
                           <p
-                            className={
-                              isDark ? "text-gray-300" : "text-slate-600"
-                            }
+                            className={cn(
+                              "text-sm rounded-lg border px-3 py-2",
+                              isDark
+                                ? "border-gray-600 text-gray-300 bg-gray-900/40"
+                                : "border-slate-200 text-slate-600 bg-slate-50",
+                            )}
                           >
                             Paid Twitter / X row(s):{" "}
                             <span className="font-medium">
@@ -32173,47 +32262,15 @@ export default function ContestDetailClient({
                         ) : null}
                         <p
                           className={cn(
-                            "text-xs pt-1",
+                            "text-xs",
                             isDark ? "text-gray-400" : "text-slate-500",
                           )}
                         >
-                          Amounts above are estimates from current row data;
-                          actual debits may differ slightly from ledger
-                          reconciliation.
+                          Amounts are estimates from current row data; actual
+                          debits may differ slightly from ledger reconciliation.
                         </p>
                       </div>
                     )}
-                    {showMvBonusReversalCheckbox ? (
-                      <label
-                        className={cn(
-                          "flex items-start gap-3 rounded-lg border p-3 text-sm cursor-pointer",
-                          isDark
-                            ? "border-gray-600 bg-gray-900/40"
-                            : "border-slate-200 bg-slate-50",
-                        )}
-                      >
-                        <Checkbox
-                          checked={includeMvBonusReversal}
-                          onCheckedChange={(checked) => {
-                            setConfirmReversal((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    reverseMostVerifiedBonus: checked === true,
-                                  }
-                                : prev,
-                            );
-                          }}
-                          className="mt-0.5"
-                        />
-                        <span>
-                          Also reverse Most Verified bonus (views/reels) —{" "}
-                          <span className="font-medium">
-                            {formatMoney(mostVerifiedBonusGrantedCents)}
-                          </span>
-                        </span>
-                      </label>
-                    ) : null}
                   </>
                 );
               })()}

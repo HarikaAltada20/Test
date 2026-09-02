@@ -602,12 +602,13 @@ export function computeMilestoneContestExpectedSpendCents(
 }
 
 /** Sum paid most-verified views + reels bonus for creators (matches creator-wise table). */
-export function sumMilestoneMostVerifiedBonusGrantedForCreators(
+export function getMilestoneMostVerifiedBonusGrantedByTrackForCreators(
   map: Map<string, MilestoneMostVerifiedBonusCreatorRow>,
   creatorIds: Iterable<string>,
-): number {
+): { viewsCents: number; reelsCents: number; totalCents: number } {
   const seen = new Set<string>();
-  let sum = 0;
+  let viewsCents = 0;
+  let reelsCents = 0;
   for (const rawId of creatorIds) {
     const id = String(rawId ?? "").trim();
     if (!id || seen.has(id)) continue;
@@ -622,7 +623,16 @@ export function sumMilestoneMostVerifiedBonusGrantedForCreators(
       }
     }
     if (!row) continue;
-    sum += (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
+    viewsCents += Number(row.viewsPaidCents) || 0;
+    reelsCents += Number(row.paidCents) || 0;
   }
-  return sum;
+  return { viewsCents, reelsCents, totalCents: viewsCents + reelsCents };
+}
+
+export function sumMilestoneMostVerifiedBonusGrantedForCreators(
+  map: Map<string, MilestoneMostVerifiedBonusCreatorRow>,
+  creatorIds: Iterable<string>,
+): number {
+  return getMilestoneMostVerifiedBonusGrantedByTrackForCreators(map, creatorIds)
+    .totalCents;
 }

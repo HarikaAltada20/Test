@@ -35,11 +35,7 @@ import {
 import { reverseTwitterTweetPayment } from "@/lib/twitter-tweet-payment-reversal";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
 import { clawbackMostVerifiedBonusForCreator } from "@/lib/milestone-most-verified-bonus-clawback";
-import {
-  buildMilestoneMostVerifiedBonusByCreatorMap,
-} from "@/lib/milestone-contest-expected-spend";
 import { isMilestoneContestType } from "@/lib/contest-type";
-import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -423,10 +419,6 @@ async function finalizeBulkModerationWalletReversals(options: {
       .maybeSingle();
 
     if (isMilestoneContestType(contestRow?.contest_type)) {
-      const bonus = (contestRow?.contest_based_details as {
-        milestone_contest?: { bonus?: unknown };
-      } | null)?.milestone_contest?.bonus;
-
       const { data: reversedRows } = await fetchByIdsInChunks({
         ids: toReverse,
         fetchChunk: async (chunkIds) => {
@@ -446,48 +438,26 @@ async function finalizeBulkModerationWalletReversals(options: {
         ),
       ];
 
-      if (creatorIds.length > 0 && bonus) {
-        const { data: allSubs } = await fetchContestSubmissionsAllPages(
+      for (const creatorId of creatorIds) {
+        const clawback = await clawbackMostVerifiedBonusForCreator({
           supabaseAdmin,
           contestId,
-          "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout, bonus_paid_at",
-          { order: { column: "created_at", ascending: true } },
-        );
-        const mvMap = buildMilestoneMostVerifiedBonusByCreatorMap(
-          allSubs || [],
-          bonus as never,
-        );
-
-        for (const creatorId of creatorIds) {
-          const mvRow = mvMap.get(creatorId);
-          if (!mvRow) continue;
-          const tracks: Array<"views" | "reels"> = [];
-          if ((mvRow.viewsPaidCents || 0) > 0) tracks.push("views");
-          if ((mvRow.paidCents || 0) > 0) tracks.push("reels");
-          if (tracks.length === 0) continue;
-
-          const clawback = await clawbackMostVerifiedBonusForCreator({
-            supabaseAdmin,
-            contestId,
-            contestTitle: contestRow?.title || "Contest",
-            contestType: contestRow?.contest_type,
-            creatorId,
-            tracks,
-            submissions: allSubs || [],
-          });
-          if (!clawback.ok) {
-            return {
-              ok: false,
-              error:
-                clawback.error ||
-                `Most Verified bonus clawback failed for creator ${creatorId}`,
-            };
-          }
-          mvBonusRefundedCents += clawback.reversedCents;
-          bonusCents += clawback.reversedCents;
-          totalCents += clawback.reversedCents;
-          milestoneCents += clawback.reversedCents;
+          contestTitle: contestRow?.title || "Contest",
+          contestType: contestRow?.contest_type,
+          creatorId,
+        });
+        if (!clawback.ok) {
+          return {
+            ok: false,
+            error:
+              clawback.error ||
+              `Most Verified bonus clawback failed for creator ${creatorId}`,
+          };
         }
+        mvBonusRefundedCents += clawback.reversedCents;
+        bonusCents += clawback.reversedCents;
+        totalCents += clawback.reversedCents;
+        milestoneCents += clawback.reversedCents;
       }
     }
   }

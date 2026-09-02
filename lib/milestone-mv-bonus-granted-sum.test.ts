@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { sumMilestoneMostVerifiedBonusGrantedForCreators } from "./milestone-contest-expected-spend";
+import {
+  getMilestoneMostVerifiedBonusGrantedByTrackForCreators,
+  sumMilestoneMostVerifiedBonusGrantedForCreators,
+} from "./milestone-contest-expected-spend";
 
 describe("sumMilestoneMostVerifiedBonusGrantedForCreators", () => {
   it("sums views and reels paid bonus per creator once", () => {
@@ -30,18 +33,24 @@ describe("sumMilestoneMostVerifiedBonusGrantedForCreators", () => {
     ]);
 
     assert.equal(
-      sumMilestoneMostVerifiedBonusGrantedForCreators(map, [
+      getMilestoneMostVerifiedBonusGrantedByTrackForCreators(map, [
         "creator-1",
         "creator-1",
-      ]),
+      ]).totalCents,
       1000,
     );
     assert.equal(
-      sumMilestoneMostVerifiedBonusGrantedForCreators(map, [
+      getMilestoneMostVerifiedBonusGrantedByTrackForCreators(map, [
         "creator-1",
         "creator-2",
-      ]),
+      ]).totalCents,
       2000,
     );
+    const byTrack = getMilestoneMostVerifiedBonusGrantedByTrackForCreators(map, [
+      "creator-1",
+      "creator-2",
+    ]);
+    assert.equal(byTrack.reelsCents, 1000);
+    assert.equal(byTrack.viewsCents, 1000);
   });
 });
