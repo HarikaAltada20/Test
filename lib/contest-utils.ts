@@ -482,14 +482,14 @@ export function calculateTwitterCpmBudgetSpent(
         //   }
         // );
       } else if (process.env.NODE_ENV === "development") {
-        console.log(
-          `[Twitter CPM Budget] Creator cap reached for ${creatorId}:`,
-          {
-            maxEarningsPerCreator: maxInDollars.toFixed(2),
-            currentTotal: creatorData.cpmTotal.toFixed(2),
-            submissionEarnings: submissionEarnings.toFixed(2),
-          },
-        );
+        // console.log(
+        //   `[Twitter CPM Budget] Creator cap reached for ${creatorId}:`,
+        //   {
+        //     maxEarningsPerCreator: maxInDollars.toFixed(2),
+        //     currentTotal: creatorData.cpmTotal.toFixed(2),
+        //     submissionEarnings: submissionEarnings.toFixed(2),
+        //   },
+        // );
       }
     } else {
       creatorData.cpmTotal += submissionEarnings;

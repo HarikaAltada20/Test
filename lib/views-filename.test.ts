@@ -9,6 +9,7 @@ describe("buildViewsBasedVideoFilename", () => {
     assert.equal(a < b, true);
     assert.equal(a, "000000000999");
     assert.equal(b, "000000001500");
+    assert.equal(buildViewsBasedVideoFilename(12500), "000000012500");
   });
 
   it("treats missing views as zero", () => {

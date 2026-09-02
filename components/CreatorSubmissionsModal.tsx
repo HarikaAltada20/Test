@@ -54,13 +54,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn, sanitizeFilename } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { buildBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
-  downloadSubmissionVideosInChunks,
-  MAX_BULK_VIDEO_DOWNLOADS,
+  buildBulkDownloadMetaMap,
+  type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
+import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
+import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -85,10 +88,15 @@ import {
   formatDualBulkPaymentToastDescription,
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
+import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
+import {
+  computeSubmissionModerationStatusCounts,
+  getSubmissionModerationBucket,
+} from "@/lib/contest-detail-submission-status-counts";
 import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
@@ -200,8 +208,18 @@ interface CreatorSubmissionsModalProps {
    * When omitted, falls back to `submissions` (per-creator only — wrong cap scope).
    */
   bonusCapSubmissions?: Submission[];
-  /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
+  /** True while a refund or mark-as-paid is processing (Creator modal stays open). */
   parentBulkActionLoading?: boolean;
+  /** Live queue job for verify / pending / rejected — used to disable actions while the toast tracks progress. */
+  bulkModerationJob?: {
+    action: "verified" | "pending" | "rejected";
+    status: "queued" | "running" | "completed" | "failed";
+    total_count: number;
+    processed_count: number;
+    success_count: number;
+    failed_count: number;
+    progressPercent: number;
+  } | null;
   /**
    * Post-campaign overlay: metrics-only — hide verify/reject/pending/paid actions
    * and selection checkboxes (same as PC leaderboard table).
@@ -245,9 +263,18 @@ export function CreatorSubmissionsModal({
   canSeeDemographics = false,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
+  bulkModerationJob = null,
   isPostCampaignView = false,
   onQualityScoreUpdated,
 }: CreatorSubmissionsModalProps) {
+  const {
+    isBusy: isBulkPaymentQueueBusy,
+    startTracking: startBulkPaymentTracking,
+  } = useBulkPaymentProgress();
+  const {
+    downloading: bulkDownloading,
+    startDownload: startBulkVideoDownload,
+  } = useBulkVideoDownloadProgress();
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
   );
@@ -259,7 +286,12 @@ export function CreatorSubmissionsModal({
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
-  const bulkStatusActionsBusy = bulkVerifyLoading || parentBulkActionLoading;
+  const bulkModerationJobActive =
+    !!bulkModerationJob &&
+    (bulkModerationJob.status === "queued" ||
+      bulkModerationJob.status === "running");
+  const bulkStatusActionsBusy =
+    bulkVerifyLoading || parentBulkActionLoading || bulkModerationJobActive;
   type BulkPaymentActiveKey =
     | "standard:0"
     | "standard:1"
@@ -278,11 +310,24 @@ export function CreatorSubmissionsModal({
     payType: "standard" | "bonus" | "both",
     isBulk: boolean,
   ) => bulkPaymentActiveKey === bulkPayKey(payType, isBulk);
-  const isAnyBulkPaymentBusy = bulkPaymentActiveKey !== null;
+  const isAnyBulkPaymentBusy =
+    bulkPaymentActiveKey !== null || isBulkPaymentQueueBusy;
+  const [rowPaymentProcessing, setRowPaymentProcessing] = useState(false);
+  const showProcessingOverlay =
+    parentBulkActionLoading || isAnyBulkPaymentBusy || rowPaymentProcessing;
+
+  const payWithOverlay = async (fn: () => unknown) => {
+    setRowPaymentProcessing(true);
+    try {
+      await Promise.resolve(fn());
+    } finally {
+      setRowPaymentProcessing(false);
+    }
+  };
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
-  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const [bulkDownloadDialogOpen, setBulkDownloadDialogOpen] = useState(false);
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
   const [qualityEditSubmissionIds, setQualityEditSubmissionIds] = useState<
@@ -416,59 +461,60 @@ export function CreatorSubmissionsModal({
       return;
     }
 
-    const submissionIds = Array.from(selectedSubmissions);
-    setBulkDownloading(true);
+    setBulkDownloadDialogOpen(true);
+  };
 
-    toast({
-      title: "Bulk Download Started",
-      description:
-        submissionIds.length > MAX_BULK_VIDEO_DOWNLOADS
-          ? `Downloading ${submissionIds.length} videos in automatic batches of ${MAX_BULK_VIDEO_DOWNLOADS}...`
-          : "Compressing and zipping selected videos. Please wait...",
+  const bulkZipFilenamePrefix = useMemo(
+    () =>
+      buildBulkZipFilenamePrefix({
+        contestTitle: contest.title,
+        sort: sortBy,
+        statusTab: statusFilter,
+      }),
+    [contest.title, sortBy, statusFilter],
+  );
+
+  const runBulkDownloadReels = async (
+    namingPattern: VideoFilenamePattern,
+    videosPerZip: number,
+  ) => {
+    const submissionIds = Array.from(selectedSubmissions);
+    if (submissionIds.length < 2) return;
+    if (!contest?.id) return;
+
+    setBulkDownloadDialogOpen(false);
+
+    const metaById = buildBulkDownloadMetaMap(submissionIds, (id) => {
+      const sub = submissions.find((entry) => entry.id === id);
+      if (!sub) return null;
+      return {
+        username: creator.username,
+        videoTitle: sub.video_title || "Untitled",
+        link: sub.content_link,
+        views: effectiveSubmissionViewsForSort(sub),
+        avatarUrl: creator.profile_picture_url,
+        displayName: creator.full_name,
+        creatorId: creator.id,
+        submissionStatus:
+          String(
+            (sub as { is_twitter_tweet?: boolean }).is_twitter_tweet
+              ? sub.moderation_status || sub.status
+              : sub.status || "pending",
+          ).toLowerCase(),
+        qualityScore:
+          typeof sub.quality_score === "number" ? sub.quality_score : null,
+      };
     });
 
-    try {
-      const result = await downloadSubmissionVideosInChunks({
-        submissionIds,
-        fileNamePrefix: `bulk_submissions_${sanitizeFilename(contest.title || "contest")}`,
-        onProgress: ({ chunkIndex, totalChunks, totalVideos }) => {
-          toast({
-            title: `Downloading batch ${chunkIndex} of ${totalChunks}`,
-            description: `Processing ${totalVideos} selected videos...`,
-          });
-        },
-      });
-
-      if (result.succeededChunks === 0) {
-        throw new Error(result.errors[0] || "Failed to download ZIP archives.");
-      }
-
-      if (result.failedChunks > 0) {
-        toast({
-          title: "Bulk download partially completed",
-          description: `${result.succeededChunks}/${result.totalChunks} ZIP batches downloaded. ${result.errors[0] || "Some batches failed."}`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: "Success",
-        description:
-          result.totalChunks > 1
-            ? `Downloaded ${result.totalVideos} videos as ${result.totalChunks} ZIP files.`
-            : "ZIP file containing videos downloaded successfully.",
-      });
-    } catch (error: any) {
-      console.error("Bulk download failed:", error);
-      toast({
-        title: "Bulk Download Failed",
-        description: error.message || "An error occurred while compiling the ZIP folder.",
-        variant: "destructive",
-      });
-    } finally {
-      setBulkDownloading(false);
-    }
+    await startBulkVideoDownload({
+      contestId: String(contest.id),
+      creatorId: creator.id,
+      submissionIds,
+      namingPattern,
+      videosPerZip,
+      fileNamePrefix: bulkZipFilenamePrefix,
+      metaById,
+    });
   };
 
   const handleCheckboxChange = (submissionId: string, checked: boolean) => {
@@ -642,46 +688,72 @@ export function CreatorSubmissionsModal({
         contest.contest_type === "cpm" &&
         (contest.platform?.toLowerCase() === "twitter" ||
           contest.platform?.toLowerCase() === "x");
+      const isTwitterLeaderboard =
+        contest.contest_type === "leaderboard" &&
+        (contest.platform?.toLowerCase() === "twitter" ||
+          contest.platform?.toLowerCase() === "x");
       const isDual = contest.contest_type === "dual_rewards";
 
       if (isDual) {
         if (isBulkTransaction) {
           try {
-            const response = await fetch("/api/admin/bulk-payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                submission_ids: sortedSubs.map((s) => s.id),
-                payment_type: type,
-                contest_id: contest.id,
-                creator_id: creator.id,
-              }),
-            });
-            const result = await response.json();
-            if (!response.ok) {
+            if (isBulkPaymentQueueBusy) {
               toast({
-                title: "Bulk payment failed",
-                description: result.error || "Unknown error",
+                title: "Bulk payment already running",
+                description:
+                  "Wait for the current bulk payment job to finish before starting a new one.",
                 variant: "destructive",
               });
               return;
             }
-            setSelectedSubmissions(new Set());
-            const dualBulkToast = getBulkPaymentToastMeta(
-              result.data?.paid_count ?? 0,
-              result.data?.skipped_count ?? 0,
-            );
-            toast({
-              title: dualBulkToast.title,
-              description: formatDualBulkPaymentToastDescription({
-                successCount: result.data?.paid_count ?? 0,
-                skippedCount: result.data?.skipped_count ?? 0,
-                totalCpmCents: result.data?.total_cpm ?? 0,
-                totalMilestoneCents: result.data?.total_milestone ?? 0,
+            if (bulkModerationJobActive) {
+              toast({
+                title: "Bulk moderation in progress",
+                description:
+                  "Wait for verify, pending, or reject to finish before starting bulk pay.",
+                variant: "destructive",
+              });
+              return;
+            }
+            const enqueueRes = await fetch("/api/admin/bulk-payment/enqueue", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contestId: contest.id,
+                paymentType: type,
+                payoutChannel: "submissions",
+                items: [
+                  {
+                    creatorId: creator.id,
+                    submissionIds: sortedSubs.map((s) => s.id),
+                  },
+                ],
               }),
-              variant: dualBulkToast.variant,
             });
-            setTimeout(() => window.location.reload(), 700);
+            const enqueueData = await enqueueRes.json().catch(() => ({}));
+            if (!enqueueRes.ok) {
+              toast({
+                title: "Bulk payment failed",
+                description:
+                  enqueueData?.error ||
+                  `Failed to queue bulk payment (HTTP ${enqueueRes.status})`,
+                variant: "destructive",
+              });
+              return;
+            }
+            startBulkPaymentTracking({
+              jobId: String(enqueueData.jobId || ""),
+              paymentType: type,
+              contestId: contest.id,
+              isDual: true,
+              submissionCount: sortedSubs.length,
+            });
+            setSelectedSubmissions(new Set());
+            toast({
+              title: "Bulk payment queued",
+              description: "Paying selected submissions in the background.",
+              variant: "pending",
+            });
           } catch (error) {
             console.error("Dual bulk payment error:", error);
             toast({
@@ -772,75 +844,74 @@ export function CreatorSubmissionsModal({
       const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
       const useTwitterCpmBulkApi =
         isBulkTransaction && hasTwitterTweets && isTwitterCpm;
+      const useTwitterCreatorBulkApi =
+        isBulkTransaction && hasTwitterTweets && isTwitterLeaderboard;
 
-      if (useInstagramBulkApi || useTwitterCpmBulkApi) {
+      if (useInstagramBulkApi || useTwitterCpmBulkApi || useTwitterCreatorBulkApi) {
         try {
-          const response = useTwitterCpmBulkApi
-            ? await fetch(`/api/contests/${contest.id}/bulk-pay-twitter-cpm`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  tweet_ids: sortedSubs.map((s) => s.id),
-                  payment_type: type,
-                  creator_id: creator.id,
-                }),
-              })
-            : await fetch("/api/admin/bulk-payment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  submission_ids: sortedSubs.map((s) => s.id),
-                  payment_type: type,
-                  contest_id: contest.id,
-                  creator_id: creator.id,
-                }),
-              });
-
-          const result = await response.json();
-
-          if (!response.ok) {
+          if (isBulkPaymentQueueBusy) {
             toast({
-              title: "Bulk payment failed",
-              description: result.error || "Unknown error",
+              title: "Bulk payment already running",
+              description:
+                "Wait for the current bulk payment job to finish before starting a new one.",
+              variant: "destructive",
+            });
+            return;
+          }
+          if (bulkModerationJobActive) {
+            toast({
+              title: "Bulk moderation in progress",
+              description:
+                "Wait for verify, pending, or reject to finish before starting bulk pay.",
               variant: "destructive",
             });
             return;
           }
 
-          setSelectedSubmissions(new Set());
-
-          const { data } = result;
-          const isMilestoneContest = contest.contest_type === "milestone";
-          const lines = isMilestoneContest
-            ? [
-                `Paid items: ${data.paid_count}`,
-                `Skipped: ${data.skipped_count}`,
-                ``,
-                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
-              ]
-            : [
-                `Paid items: ${data.paid_count}`,
-                `Skipped: ${data.skipped_count}`,
-                ``,
-                `CPM earnings: $${(data.total_cpm / 100).toFixed(2)}`,
-                `Flat fee bonus: $${(data.total_bonus / 100).toFixed(2)}`,
-                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
-              ];
-
-          if (data.cap_reached) {
-            lines.push(
-              ``,
-              `Earnings cap reached. Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
-            );
+          const enqueueRes = await fetch("/api/admin/bulk-payment/enqueue", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contestId: contest.id,
+              paymentType: type,
+              payoutChannel: useTwitterCpmBulkApi
+                ? "twitter_cpm"
+                : useTwitterCreatorBulkApi
+                  ? "twitter_creator"
+                  : "submissions",
+              items: [
+                {
+                  creatorId: creator.id,
+                  submissionIds: sortedSubs.map((s) => s.id),
+                },
+              ],
+            }),
+          });
+          const enqueueData = await enqueueRes.json().catch(() => ({}));
+          if (!enqueueRes.ok) {
+            toast({
+              title: "Bulk payment failed",
+              description:
+                enqueueData?.error ||
+                `Failed to queue bulk payment (HTTP ${enqueueRes.status})`,
+              variant: "destructive",
+            });
+            return;
           }
 
-          toast({
-            title: "Bulk payment successful",
-            description: lines.join("\n"),
-            variant: "payment",
+          startBulkPaymentTracking({
+            jobId: String(enqueueData.jobId || ""),
+            paymentType: type,
+            contestId: contest.id,
+            isDual: false,
+            submissionCount: sortedSubs.length,
           });
-
-          setTimeout(() => window.location.reload(), 700);
+          setSelectedSubmissions(new Set());
+          toast({
+            title: "Bulk payment queued",
+            description: "Paying selected submissions in the background.",
+            variant: "pending",
+          });
         } catch (error) {
           console.error("Bulk payment error:", error);
           toast({
@@ -886,14 +957,12 @@ export function CreatorSubmissionsModal({
     }
   };
 
-  const getStatusBadge = (status: string, paid: boolean) => {
-    const statusLower = status?.toLowerCase() || "pending";
-
-    if (paid || statusLower === "paid") {
-      return <Badge className="bg-green-600 text-white">Paid</Badge>;
-    }
-
-    switch (statusLower) {
+  const getModerationBucketBadge = (
+    bucket: ReturnType<typeof getSubmissionModerationBucket>,
+  ) => {
+    switch (bucket) {
+      case "paid":
+        return <Badge className="bg-green-600 text-white">Paid</Badge>;
       case "verified":
         return <Badge className="bg-green-500 text-white">Verified</Badge>;
       case "pending":
@@ -901,11 +970,7 @@ export function CreatorSubmissionsModal({
       case "rejected":
         return <Badge className="bg-red-500 text-white">Rejected</Badge>;
       default:
-        return (
-          <Badge variant="outline">
-            {statusLower.charAt(0).toUpperCase() + statusLower.slice(1)}
-          </Badge>
-        );
+        return <Badge variant="outline">Unknown</Badge>;
     }
   };
 
@@ -1622,16 +1687,15 @@ export function CreatorSubmissionsModal({
   // Filter submissions based on status
   // For Twitter tweets, use moderation_status; for others, use status
   const filteredSubmissions = submissions.filter((sub) => {
-    const normalizedStatus = getNormalizedSubmissionStatus(sub);
-    const isPaidSubmission = normalizedStatus === "paid" || sub.paid === true;
+    const bucket = getSubmissionModerationBucket(sub);
 
     if (statusFilter === "all") return true;
     if (statusFilter === "verified_or_paid")
-      return normalizedStatus === "verified" || isPaidSubmission;
-    if (statusFilter === "paid") return isPaidSubmission;
-    if (statusFilter === "verified") return normalizedStatus === "verified";
-    if (statusFilter === "pending") return normalizedStatus === "pending";
-    if (statusFilter === "rejected") return normalizedStatus === "rejected";
+      return bucket === "verified" || bucket === "paid";
+    if (statusFilter === "paid") return bucket === "paid";
+    if (statusFilter === "verified") return bucket === "verified";
+    if (statusFilter === "pending") return bucket === "pending";
+    if (statusFilter === "rejected") return bucket === "rejected";
     return true;
   });
 
@@ -1715,33 +1779,15 @@ export function CreatorSubmissionsModal({
     });
   }
 
-  // Count submissions by status (handle Twitter tweets with moderation_status)
+  const moderationStatusCounts =
+    computeSubmissionModerationStatusCounts(submissions);
   const statusCounts = {
-    all: submissions.length,
-    verifiedOrPaid: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return (
-        normalizedStatus === "verified" ||
-        normalizedStatus === "paid" ||
-        s.paid === true
-      );
-    }).length,
-    pending: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "pending";
-    }).length,
-    verified: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "verified";
-    }).length,
-    rejected: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "rejected";
-    }).length,
-    paid: submissions.filter((s) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(s);
-      return normalizedStatus === "paid" || s.paid === true;
-    }).length,
+    all: moderationStatusCounts.all,
+    verifiedOrPaid: moderationStatusCounts.verified_or_paid,
+    pending: moderationStatusCounts.pending,
+    verified: moderationStatusCounts.verified,
+    rejected: moderationStatusCounts.rejected,
+    paid: moderationStatusCounts.paid,
   };
   const isDark = mode === "dark";
   const creatorDisplayName =
@@ -1761,7 +1807,7 @@ export function CreatorSubmissionsModal({
             {creatorDisplayName}&apos;s Submissions
           </DialogTitle>
           <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden relative">
-            {parentBulkActionLoading && (
+            {showProcessingOverlay && (
               <div
                 className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/45 px-4"
                 aria-live="polite"
@@ -1813,7 +1859,7 @@ export function CreatorSubmissionsModal({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                disabled={parentBulkActionLoading}
+                disabled={showProcessingOverlay}
                 className={cn(
                   isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
                 )}
@@ -2075,18 +2121,6 @@ export function CreatorSubmissionsModal({
                           <Clock className="h-4 w-4 mr-1" />
                           Mark as Pending
                         </Button>
-                        {bulkStatusActionsBusy && (
-                          <span
-                            className={cn(
-                              "text-xs self-center whitespace-nowrap",
-                              isDark ? "text-blue-200" : "text-blue-700",
-                            )}
-                          >
-                            {parentBulkActionLoading
-                              ? "Processing submission updates…"
-                              : "Verifying submissions…"}
-                          </span>
-                        )}
                       </>
                     )}
 
@@ -2096,7 +2130,7 @@ export function CreatorSubmissionsModal({
                       onClick={handleBulkDownloadReels}
                       disabled={bulkDownloading || bulkStatusActionsBusy}
                       loading={bulkDownloading}
-                      loadingText="Downloading batches..."
+                      loadingText="Downloading..."
                       className={cn(
                         "h-8 shrink-0 whitespace-nowrap rounded-md",
                         isDark
@@ -3139,6 +3173,8 @@ export function CreatorSubmissionsModal({
                     </TableRow>
                   ) : (
                     sortedSubmissions.map((submission, index) => {
+                      const moderationBucket =
+                        getSubmissionModerationBucket(submission);
                       const isTwitterTweet =
                         submission.is_twitter_tweet === true;
 
@@ -3372,13 +3408,8 @@ export function CreatorSubmissionsModal({
                         milestoneExpectedForDual < milestoneUncappedForDual;
 
                       // Use ACTUAL earnings for granted reward (includes custom pay amount)
-                      // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
                       // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
-                      const statusForGranted =
-                        getNormalizedSubmissionStatus(submission);
-                      const isPaidForGranted =
-                        submission.paid ||
-                        (isTwitterTweet && statusForGranted === "paid");
+                      const isPaidForGranted = moderationBucket === "paid";
                       const explicitPaidAmount =
                         (submission as any).granted_amount_cents ??
                         (submission as any).paid_amount_cents ??
@@ -3490,18 +3521,18 @@ export function CreatorSubmissionsModal({
                         submission.bonus_paid &&
                         (contest?.contest_type !== "cpm" ||
                           !isTwitterTweet ||
-                          statusForGranted === "paid")
+                          moderationBucket === "paid")
                           ? (submission as any).bonus_amount || flatFeeBonus
                           : 0;
 
                       const normalizedStatus =
                         getNormalizedSubmissionStatus(submission);
                       const isSubmissionVerified =
-                        normalizedStatus === "verified";
+                        moderationBucket === "verified";
                       const isSubmissionRejected =
-                        normalizedStatus === "rejected";
+                        moderationBucket === "rejected";
                       const isSubmissionPending =
-                        normalizedStatus === "pending";
+                        moderationBucket === "pending";
                       const milestoneAssignmentLabel =
                         contest?.contest_type === "milestone" ||
                         contest?.contest_type === "dual_rewards"
@@ -4350,6 +4381,9 @@ export function CreatorSubmissionsModal({
                                         last_basic_update:
                                           youtubeStats.last_basic_update ??
                                           null,
+                                        last_core_update:
+                                          youtubeStats.last_core_update ??
+                                          null,
                                         last_traffic_update:
                                           youtubeStats.last_traffic_update ??
                                           null,
@@ -4852,10 +4886,7 @@ export function CreatorSubmissionsModal({
                             )}
                           {(!isYouTubeContest || showYtColumn("status")) && (
                             <TableCell>
-                              {getStatusBadge(
-                                normalizedStatus,
-                                submission.paid,
-                              )}
+                              {getModerationBucketBadge(moderationBucket)}
                             </TableCell>
                           )}
                           <TableCell
@@ -4976,23 +5007,23 @@ export function CreatorSubmissionsModal({
 
                                 {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
                                 {showPaymentActions &&
-                                  getNormalizedSubmissionStatus(submission) ===
-                                    "verified" &&
-                                  !submission.paid &&
+                                  moderationBucket === "verified" &&
                                   !isTwitterLeaderboardContest && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          isDualRewardsContest
-                                            ? handleDualSubmissionPayment(
-                                                submission,
-                                                "cpm",
-                                              )
-                                            : onPayment(
-                                                submission.id,
-                                                "standard",
-                                              )
+                                          void payWithOverlay(() =>
+                                            isDualRewardsContest
+                                              ? handleDualSubmissionPayment(
+                                                  submission,
+                                                  "cpm",
+                                                )
+                                              : onPayment(
+                                                  submission.id,
+                                                  "standard",
+                                                ),
+                                          )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
@@ -5008,15 +5039,17 @@ export function CreatorSubmissionsModal({
                                               isDualRewardsContest) && (
                                               <DropdownMenuItem
                                                 onClick={() =>
-                                                  isDualRewardsContest
-                                                    ? handleDualSubmissionPayment(
-                                                        submission,
-                                                        "milestone",
-                                                      )
-                                                    : onPayment(
-                                                        submission.id,
-                                                        "bonus",
-                                                      )
+                                                  void payWithOverlay(() =>
+                                                    isDualRewardsContest
+                                                      ? handleDualSubmissionPayment(
+                                                          submission,
+                                                          "milestone",
+                                                        )
+                                                      : onPayment(
+                                                          submission.id,
+                                                          "bonus",
+                                                        ),
+                                                  )
                                                 }
                                               >
                                                 <DollarSign className="h-4 w-4 mr-2" />
@@ -5027,15 +5060,17 @@ export function CreatorSubmissionsModal({
                                             )}
                                             <DropdownMenuItem
                                               onClick={() =>
-                                                isDualRewardsContest
-                                                  ? handleDualSubmissionPayment(
-                                                      submission,
-                                                      "both",
-                                                    )
-                                                  : onPayment(
-                                                      submission.id,
-                                                      "both",
-                                                    )
+                                                void payWithOverlay(() =>
+                                                  isDualRewardsContest
+                                                    ? handleDualSubmissionPayment(
+                                                        submission,
+                                                        "both",
+                                                      )
+                                                    : onPayment(
+                                                        submission.id,
+                                                        "both",
+                                                      ),
+                                                )
                                               }
                                             >
                                               <DollarSign className="h-4 w-4 mr-2" />
@@ -5059,7 +5094,9 @@ export function CreatorSubmissionsModal({
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          onPayment(submission.id, "bonus")
+                                          void payWithOverlay(() =>
+                                            onPayment(submission.id, "bonus"),
+                                          )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
@@ -5077,12 +5114,14 @@ export function CreatorSubmissionsModal({
                                   !isTwitterTweet &&
                                   hasFlatFeeBonus &&
                                   !submission.bonus_paid &&
-                                  submission.paid === true && (
+                                  moderationBucket === "paid" && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          onPayment(submission.id, "bonus")
+                                          void payWithOverlay(() =>
+                                            onPayment(submission.id, "bonus"),
+                                          )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
@@ -5108,8 +5147,8 @@ export function CreatorSubmissionsModal({
 
                                 {canEditQualityScore &&
                                   !isTwitterTweet &&
-                                  (normalizedStatus === "verified" ||
-                                    normalizedStatus === "paid") && (
+                                  (moderationBucket === "verified" ||
+                                    moderationBucket === "paid") && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
@@ -5304,6 +5343,16 @@ export function CreatorSubmissionsModal({
             })()}
         </DialogContent>
       </Dialog>
+
+      <BulkVideoDownloadDialog
+        open={bulkDownloadDialogOpen}
+        onOpenChange={setBulkDownloadDialogOpen}
+        isDark={isDark}
+        videoCount={selectedSubmissions.size}
+        zipFilenamePrefix={bulkZipFilenamePrefix}
+        downloading={bulkDownloading}
+        onConfirm={runBulkDownloadReels}
+      />
 
       <VerifyQualityDialog
         open={qualityEditSubmissionIds.length > 0}

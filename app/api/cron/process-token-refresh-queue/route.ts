@@ -18,7 +18,7 @@ import {
   recoverProcessingJobsToQueue,
 } from "@/lib/queue/token-refresh-queue";
 import {
-  isPlatformAccountDueForWeeklyRefresh,
+  accountNeedsDetailsRefresh,
   withWeeklyRefreshTimestamps,
 } from "@/lib/token-refresh-eligibility";
 import dayjs from "dayjs";
@@ -130,14 +130,14 @@ async function refreshProfileTokensAndDetails(
 
   if (
     profile.tiktok_account &&
-    isPlatformAccountDueForWeeklyRefresh(profile.tiktok_account, now)
+    accountNeedsDetailsRefresh(profile.tiktok_account, now)
   ) {
     await refreshTikTokAccount(supabase, creatorId, profile.tiktok_account, now);
   }
 
   if (
     profile.instagram_account &&
-    isPlatformAccountDueForWeeklyRefresh(profile.instagram_account, now)
+    accountNeedsDetailsRefresh(profile.instagram_account, now)
   ) {
     await refreshInstagramAccount(
       supabase,
@@ -149,7 +149,7 @@ async function refreshProfileTokensAndDetails(
 
   if (
     profile.youtube_account &&
-    isPlatformAccountDueForWeeklyRefresh(profile.youtube_account, now)
+    accountNeedsDetailsRefresh(profile.youtube_account, now)
   ) {
     await refreshYouTubeAccount(
       supabase,

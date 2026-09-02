@@ -1,15 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import {
-  debitCreatorWithdrawableBalance,
-  logTransactionAsAdmin,
-  REVERSAL_TRANSACTION_REMARK,
-} from "@/lib/payment-utils";
-import {
-  buildLedgerScopedReversalDebitIdempotencyKey,
-  sortUniqueTransactionIds,
-} from "@/lib/bulk-payment-rollback";
 import { syncTwitterLeaderboardFromTweets } from "@/lib/twitter/sync-twitter-leaderboard-from-tweets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import {
@@ -17,6 +8,11 @@ import {
   SUBMISSION_MODERATION_LOCKED_MESSAGE,
 } from "@/lib/post-contest-moderation-lock";
 import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
+import {
+  authorizeQueueWorker,
+  readQueuedActorUserId,
+} from "@/lib/queue/queue-worker-auth";
+import { reverseTwitterTweetPayment } from "@/lib/twitter-tweet-payment-reversal";
 
 /**
  * POST /api/contests/[id]/moderate-submission
@@ -35,17 +31,22 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const queueAuth = authorizeQueueWorker(request);
+    if (queueAuth.fromQueue && !queueAuth.authorized) {
+      return queueAuth.response!;
     }
 
     const { id: contestId } = await params;
-    const { tweetId, action, reason } = await request.json();
+    const body = (await request.json()) as {
+      tweetId?: string;
+      action?: string;
+      reason?: string;
+      admin_user_id?: string;
+      actor_user_id?: string;
+      skipWalletReversal?: boolean;
+    };
+    const { tweetId, action, reason } = body;
+    const skipWalletReversal = body.skipWalletReversal === true;
 
     const validActions = ["approve", "reject", "pending", "paid"];
     if (!tweetId || !action || !validActions.includes(action)) {
@@ -64,28 +65,78 @@ export async function POST(
       );
     }
 
-    // Check if user is admin or contest owner
-    const { data: userData } = await supabase
-      .from("users")
-      .select("user_type")
-      .eq("id", user.id)
-      .single();
+    const supabaseAdmin = createAdminClient();
+    let contest: {
+      id: string;
+      advertiser_id: string;
+      platform: string | null;
+      contest_type: string | null;
+      title: string | null;
+      post_contest_status: string | null;
+    } | null = null;
 
-    const isAdmin = userData?.user_type === "admin";
+    if (queueAuth.fromQueue) {
+      const actorId = readQueuedActorUserId(body);
+      if (!actorId) {
+        return NextResponse.json(
+          { error: "admin_user_id is required for queued moderation" },
+          { status: 400 },
+        );
+      }
+      const { data, error } = await supabaseAdmin
+        .from("contests")
+        .select(
+          "id, advertiser_id, platform, contest_type, title, post_contest_status",
+        )
+        .eq("id", contestId)
+        .single();
+      if (error || !data) {
+        return NextResponse.json(
+          { error: "Contest not found or access denied" },
+          { status: 404 },
+        );
+      }
+      contest = data;
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    // Get contest to verify ownership and type (for CPM reversal)
-    let contestQuery = supabase
-      .from("contests")
-      .select("id, advertiser_id, platform, contest_type, title, post_contest_status")
-      .eq("id", contestId);
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
 
-    if (!isAdmin) {
-      contestQuery = contestQuery.eq("advertiser_id", user.id);
+      // Check if user is admin or contest owner
+      const { data: userData } = await supabase
+        .from("users")
+        .select("user_type")
+        .eq("id", user.id)
+        .single();
+
+      const isAdmin = userData?.user_type === "admin";
+
+      // Get contest to verify ownership and type (for CPM reversal)
+      let contestQuery = supabase
+        .from("contests")
+        .select("id, advertiser_id, platform, contest_type, title, post_contest_status")
+        .eq("id", contestId);
+
+      if (!isAdmin) {
+        contestQuery = contestQuery.eq("advertiser_id", user.id);
+      }
+
+      const { data, error: contestError } = await contestQuery.single();
+      if (contestError || !data) {
+        return NextResponse.json(
+          { error: "Contest not found or access denied" },
+          { status: 404 }
+        );
+      }
+      contest = data;
     }
 
-    const { data: contest, error: contestError } = await contestQuery.single();
-
-    if (contestError || !contest) {
+    if (!contest) {
       return NextResponse.json(
         { error: "Contest not found or access denied" },
         { status: 404 }
@@ -101,8 +152,6 @@ export async function POST(
         { status: 400 },
       );
     }
-
-    const supabaseAdmin = createAdminClient();
 
     let refund: {
       cpmCents: number;
@@ -131,299 +180,40 @@ export async function POST(
     }
 
     const platform = (contest as any).platform?.toLowerCase();
+    const isTwitterPlatform = platform === "twitter" || platform === "x";
     const isTwitterCpm =
-      (platform === "twitter" || platform === "x") &&
-      (contest as any).contest_type === "cpm";
+      isTwitterPlatform && (contest as any).contest_type === "cpm";
 
-    // Per-tweet reversal: when changing a paid CPM tweet away from paid, debit creator by that tweet's paid amount
+    // In-batch wallet reverse only when this tweet is currently paid.
+    // Queued bulk jobs skip this and reverse once at job end (same as video).
+    // Never block verified/pending/rejected on a refund debit failure.
     if (
+      !skipWalletReversal &&
       currentTweet.moderation_status === "paid" &&
       action !== "paid" &&
-      isTwitterCpm &&
+      isTwitterPlatform &&
       currentTweet.creator_id
     ) {
-      const creatorId = currentTweet.creator_id;
-
-      // Fetch all rewards and refunds for this tweet so we can split reward-granted vs bonus.
-      // We also fetch contest-level bonus rows (no tweet_id filter) so bulk-pay-twitter-cpm
-      // payouts — where the per-tweet bonus slice lives inside
-      // metadata.twitter_bulk_bonus_breakdown — are included in the bonus reversal calc.
-      const [
-        { data: rewardTxns, error: rewardErr },
-        { data: refundTxns, error: refundErr },
-        { data: contestBonusRewardTxns, error: contestBonusRewardErr },
-        { data: contestBonusRefundTxns, error: contestBonusRefundErr },
-      ] = await Promise.all([
-        supabaseAdmin
-          .from("money_transactions")
-          .select("id, amount, metadata")
-          .eq("user_id", creatorId)
-          .eq("type", "reward")
-          .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
-        supabaseAdmin
-          .from("money_transactions")
-          .select("id, amount, metadata, remarks")
-          .eq("user_id", creatorId)
-          .eq("type", "refund")
-          .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
-        supabaseAdmin
-          .from("money_transactions")
-          .select("id, amount, metadata")
-          .eq("user_id", creatorId)
-          .eq("type", "reward")
-          .contains("metadata", {
-            contest_id: contestId,
-            bonus_type: "flat_fee",
-          }),
-        supabaseAdmin
-          .from("money_transactions")
-          .select("id, amount, metadata, remarks")
-          .eq("user_id", creatorId)
-          .eq("type", "refund")
-          .contains("metadata", {
-            contest_id: contestId,
-            bonus_type: "flat_fee",
-          }),
-      ] as any);
-
-      if (
-        rewardErr ||
-        refundErr ||
-        contestBonusRewardErr ||
-        contestBonusRefundErr
-      ) {
-        const msg =
-          rewardErr?.message ||
-          refundErr?.message ||
-          contestBonusRewardErr?.message ||
-          contestBonusRefundErr?.message ||
-          "unknown";
-        return NextResponse.json(
-          { error: `Failed to fetch transactions for reversal: ${msg}` },
-          { status: 500 }
+      const reversed = await reverseTwitterTweetPayment({
+        supabaseAdmin,
+        contestId,
+        contestTitle: (contest as any)?.title || "Contest",
+        tweetId,
+        creatorId: currentTweet.creator_id,
+        storedCpmCents: currentTweet.earnings,
+        storedBonusCents: (currentTweet as any).bonus_amount,
+        bonusPaid: (currentTweet as any).bonus_paid,
+      });
+      if (!reversed.ok) {
+        console.error(
+          "[moderate-submission] Wallet reversal failed; continuing status update:",
+          reversed.error,
         );
-      }
-
-      // Tweet CPM reward (reward granted) = rewards without bonus_type; exclude flat_fee bonus
-      const tweetRewardTxns = (rewardTxns || []).filter(
-        (tx: any) =>
-          !(tx.metadata && (tx.metadata as any).bonus_type === "flat_fee")
-      );
-      const tweetRefundTxns = (refundTxns || []).filter(
-        (tx: any) =>
-          !(tx.metadata && (tx.metadata as any).bonus_type === "flat_fee") &&
-          (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
-      );
-      const tweetRewardSum = tweetRewardTxns.reduce(
-        (sum: number, tx: any) => sum + (tx.amount || 0),
-        0
-      );
-      const tweetRefundSum = tweetRefundTxns.reduce(
-        (sum: number, tx: any) => sum + (tx.amount || 0),
-        0
-      );
-      const tweetReversalAmount = Math.max(0, tweetRewardSum - tweetRefundSum);
-
-      // CPM to reverse: prefer net from money_transactions (per-tweet metadata).
-      // Fallback: stored twitter_campaign_tweets.earnings when payouts used bulk metadata
-      // without per-tweet tweet_id on the reward row (idempotent after first refund logs tweet_id).
-      const storedCpmCents = Math.round(
-        Number((currentTweet as any).earnings) || 0,
-      );
-      let cpmReversalCents = tweetReversalAmount;
-      if (cpmReversalCents <= 0 && storedCpmCents > 0) {
-        cpmReversalCents = storedCpmCents;
-      }
-
-      // Flat fee bonus for THIS tweet — handle three payout shapes:
-      //   1. pay-twitter-bonus: metadata.tweet_id === tweetId + bonus_type=flat_fee
-      //   2. bulk-pay-twitter-cpm: metadata.twitter_bulk_bonus_breakdown[tweetId] holds
-      //      the per-tweet bonus slice; metadata has no top-level tweet_id.
-      //   3. Prior reversals: refunds logged per-tweet (case 1) OR via bulk rollback
-      //      that carries the breakdown (case 2).
-      const tweetIdStr = String(tweetId);
-      const isFlatFeeBonus = (tx: any) =>
-        tx?.metadata && (tx.metadata as any).bonus_type === "flat_fee";
-      const breakdownAmountForTweet = (tx: any): number => {
-        const breakdown = (tx?.metadata as any)?.twitter_bulk_bonus_breakdown;
-        if (!breakdown || typeof breakdown !== "object") return 0;
-        const cents = Number(breakdown[tweetIdStr]);
-        return Number.isFinite(cents) && cents > 0 ? cents : 0;
-      };
-      const perTweetBonusAmount = (tx: any): number => {
-        if (!isFlatFeeBonus(tx)) return 0;
-        const metaTweetId = (tx.metadata as any).tweet_id;
-        if (metaTweetId != null && String(metaTweetId) === tweetIdStr) {
-          return Number(tx.amount) || 0;
-        }
-        return breakdownAmountForTweet(tx);
-      };
-
-      // Union of per-tweet metadata rows + contest-level bonus rows (which include bulk).
-      const bonusRewardCandidates = new Map<string, any>();
-      [...(rewardTxns || []), ...(contestBonusRewardTxns || [])].forEach(
-        (tx: any) => {
-          if (tx?.id && !bonusRewardCandidates.has(tx.id)) {
-            bonusRewardCandidates.set(tx.id, tx);
-          }
-        }
-      );
-      const bonusRefundCandidates = new Map<string, any>();
-      [...(refundTxns || []), ...(contestBonusRefundTxns || [])].forEach(
-        (tx: any) => {
-          if (
-            tx?.id &&
-            !bonusRefundCandidates.has(tx.id) &&
-            (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
-          ) {
-            bonusRefundCandidates.set(tx.id, tx);
-          }
-        }
-      );
-
-      const bonusRewardSum = Array.from(bonusRewardCandidates.values()).reduce(
-        (sum: number, tx: any) => sum + perTweetBonusAmount(tx),
-        0
-      );
-      const bonusRefundSum = Array.from(bonusRefundCandidates.values()).reduce(
-        (sum: number, tx: any) => sum + perTweetBonusAmount(tx),
-        0
-      );
-      let bonusReversalAmount = Math.max(0, bonusRewardSum - bonusRefundSum);
-
-      // Fallback: if the row says bonus_paid=true but no matching ledger entry was
-      // found (legacy data or an edge bulk metadata shape), trust the stored cents.
-      const storedBonusCents = Math.round(
-        Number((currentTweet as any).bonus_amount) || 0
-      );
-      if (
-        bonusReversalAmount <= 0 &&
-        (currentTweet as any).bonus_paid === true &&
-        storedBonusCents > 0
-      ) {
-        bonusReversalAmount = storedBonusCents;
-      }
-
-      const totalReversalAmount = cpmReversalCents + bonusReversalAmount;
-
-      if (totalReversalAmount > 0) {
-        // Include reward/refund txn ids so a later pay→reverse cycle gets a new
-        // debit key (same pattern as bulk paid reversal).
-        const reversalDebitKey = buildLedgerScopedReversalDebitIdempotencyKey({
-          prefix: "twitter_tweet_reversal:v1",
-          reason: "moderate_submission_reversal",
-          scope: {
-            contestId,
-            creatorId,
-            tweetId,
-          },
-          rewardTransactionIds: [
-            ...sortUniqueTransactionIds(tweetRewardTxns),
-            ...sortUniqueTransactionIds(
-              Array.from(bonusRewardCandidates.values()),
-            ),
-          ],
-          refundTransactionIds: [
-            ...sortUniqueTransactionIds(tweetRefundTxns),
-            ...sortUniqueTransactionIds(
-              Array.from(bonusRefundCandidates.values()),
-            ),
-          ],
-          debitCents: totalReversalAmount,
-        });
-        const debitRes = await debitCreatorWithdrawableBalance(
-          creatorId,
-          totalReversalAmount,
-          { idempotencyKey: reversalDebitKey },
-        );
-        if (!debitRes.success) {
-          return NextResponse.json(
-            { error: `Failed to reverse tweet payment: ${debitRes.error}` },
-            { status: 500 }
-          );
-        }
-
-        const contestTitle = (contest as any)?.title || "Contest";
-
-        // Log reward-granted reversal (CPM tweet reward) so cash transaction shows correct value
-        if (cpmReversalCents > 0) {
-          const logged = await logTransactionAsAdmin(
-            creatorId,
-            "refund",
-            cpmReversalCents,
-            "success",
-            `Reversal of Twitter CPM tweet reward — ${contestTitle}`,
-            {
-              remarks: REVERSAL_TRANSACTION_REMARK,
-              paymentMethod: "refund",
-              metadata: {
-                contest_id: contestId,
-                twitter_creator_id: creatorId,
-                tweet_id: tweetId,
-                payout_type: "twitter_cpm_tweet_reversal",
-              },
-            }
-          );
-          if (!logged) {
-            console.error(
-              "[moderate-submission] Failed to log tweet reward refund for tweet:",
-              tweetId,
-              "amount:",
-              cpmReversalCents
-            );
-            return NextResponse.json(
-              {
-                error:
-                  "Reversal debit succeeded but failed to log reward refund in transaction history.",
-              },
-              { status: 500 }
-            );
-          }
-        }
-
-        // Log bonus reversal separately so cash transaction shows bonus amount correctly
-        if (bonusReversalAmount > 0) {
-          const logged = await logTransactionAsAdmin(
-            creatorId,
-            "refund",
-            bonusReversalAmount,
-            "success",
-            `Reversal of Twitter CPM tweet bonus — ${contestTitle}`,
-            {
-              remarks: REVERSAL_TRANSACTION_REMARK,
-              paymentMethod: "refund",
-              metadata: {
-                contest_id: contestId,
-                twitter_creator_id: creatorId,
-                tweet_id: tweetId,
-                bonus_type: "flat_fee",
-              },
-            }
-          );
-          if (!logged) {
-            console.error(
-              "[moderate-submission] Failed to log bonus refund for tweet:",
-              tweetId,
-              "amount:",
-              bonusReversalAmount
-            );
-            return NextResponse.json(
-              {
-                error:
-                  "Reversal debit succeeded but failed to log bonus refund in transaction history.",
-              },
-              { status: 500 }
-            );
-          }
-        }
-
-        // Leaderboard CPM aggregate is reconciled after the tweet row is updated below
-        // (sum of remaining paid tweet earnings) so we do not rely on additive deltas.
-
+      } else if (reversed.refund.totalCents > 0) {
         refund = {
-          cpmCents: cpmReversalCents,
-          bonusCents: bonusReversalAmount,
-          totalCents: cpmReversalCents + bonusReversalAmount,
+          cpmCents: reversed.refund.cpmCents,
+          bonusCents: reversed.refund.bonusCents,
+          totalCents: reversed.refund.totalCents,
         };
       }
     }
@@ -447,7 +237,8 @@ export async function POST(
     // still reports bonus_paid=true after the wallet refund logged above, which leaves
     // twitter_campaign_tweets out of sync with money_transactions.
     if (
-      isTwitterCpm &&
+      !skipWalletReversal &&
+      isTwitterPlatform &&
       currentTweet.moderation_status === "paid" &&
       action !== "paid"
     ) {
@@ -510,18 +301,6 @@ export async function POST(
             "[moderate-submission] Leaderboard earnings reconcile failed:",
             reconciled.error,
           );
-          if (
-            currentTweet.moderation_status === "paid" &&
-            action !== "paid"
-          ) {
-            return NextResponse.json(
-              {
-                error:
-                  "Reversal processed but failed to update leaderboard earnings. Please retry or contact support.",
-              },
-              { status: 500 },
-            );
-          }
         }
       } catch (reconcileErr) {
         console.error(

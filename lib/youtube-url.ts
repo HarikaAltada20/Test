@@ -10,6 +10,18 @@ export function extractYoutubeId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+/** True when a submission row is a YouTube video, including null/generic platform. */
+export function isYouTubeRefreshTarget(
+  platform: string | null | undefined,
+  contentLink: string | null | undefined,
+): boolean {
+  if (!contentLink) return false;
+  if (extractYoutubeId(contentLink)) return true;
+  const p = String(platform ?? "").toLowerCase();
+  if (!p.includes("youtube")) return false;
+  return /youtube\.com|youtu\.be/i.test(contentLink);
+}
+
 export function isYoutubeShortUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   return /youtube\.com\/shorts\//i.test(url);

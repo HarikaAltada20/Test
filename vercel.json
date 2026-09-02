@@ -55,6 +55,18 @@
     {
       "path": "/api/cron/refresh-stale-contest-stats",
       "schedule": "25 5 * * *"
+    },
+    {
+      "path": "/api/cron/process-video-download-queue",
+      "schedule": "15 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-bulk-payment-queue",
+      "schedule": "20 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-bulk-verify-queue",
+      "schedule": "25 4 * * *"
     }
   ]
 }

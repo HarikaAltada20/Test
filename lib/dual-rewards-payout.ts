@@ -611,6 +611,30 @@ export type SubmissionReversalAmounts = {
 };
 
 /**
+ * Full payment-field reset when moderation status is no longer `paid`.
+ * Used after bulk wallet finalize so rows cannot remain pending+paid.
+ */
+export function buildSubmissionPaidStateClearUpdate(
+  row: SubmissionPaidReversalInput,
+): Record<string, unknown> {
+  const metadata =
+    row.metadata && typeof row.metadata === "object" && row.metadata.type === "payment"
+      ? null
+      : (row.metadata ?? null);
+  return {
+    earnings: null,
+    paid: false,
+    paid_at: null,
+    bonus_paid: false,
+    bonus_paid_at: null,
+    bonus_amount: null,
+    milestone_bonus_paid: null,
+    dual_rewards_payout: null,
+    metadata,
+  };
+}
+
+/**
  * Build submission row fields after paid → verified/pending/rejected reversal.
  * Preserves most-verified views/reels bonus (`milestone_bonus_paid`) unless those
  * tracks were explicitly reversed in `bonusReversals`.

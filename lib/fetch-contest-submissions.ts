@@ -2,6 +2,9 @@
 const DEFAULT_CHUNK_SIZE = 1000;
 const DEFAULT_MAX_ROWS = 50_000;
 
+
+export const CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE = 1000;
+
 const ID_TIEBREAK_ORDER = { column: "id", ascending: true } as const;
 
 export type FetchContestSubmissionsOrder = {
@@ -60,9 +63,14 @@ function buildContestSubmissionsQuery(
   supabase: any,
   select: string,
   contestId: string,
-  options?: FetchContestSubmissionsOptions,
+  options?: FetchContestSubmissionsOptions & { withCount?: boolean },
 ) {
-  let query = supabase.from("submissions").select(select).eq("contest_id", contestId);
+  let query = options?.withCount
+    ? supabase
+        .from("submissions")
+        .select(select, { count: "exact" })
+        .eq("contest_id", contestId)
+    : supabase.from("submissions").select(select).eq("contest_id", contestId);
 
   if (options?.creatorId) {
     query = query.eq("creator_id", options.creatorId);
@@ -86,7 +94,9 @@ function buildContestSubmissionsQuery(
   for (const order of resolveSubmissionOrders(options)) {
     query = query.order(order.column, {
       ascending: order.ascending,
-      ...(order.nullsFirst !== undefined ? { nullsFirst: order.nullsFirst } : {}),
+      ...(order.nullsFirst !== undefined
+        ? { nullsFirst: order.nullsFirst }
+        : {}),
     });
   }
 
@@ -140,6 +150,71 @@ export async function fetchContestSubmissionsAllPages<
   return { data: rows, error: null, truncated };
 }
 
+export type FetchContestSubmissionsPageResult<T> = {
+  data: T[];
+  error: unknown | null;
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
+/**
+ * Single-page submissions fetch with exact count (for contest detail SSR/API).
+ */
+export async function fetchContestSubmissionsPage<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+  select: string,
+  options?: FetchContestSubmissionsOptions & {
+    limit?: number;
+    offset?: number;
+  },
+): Promise<FetchContestSubmissionsPageResult<T>> {
+  const limit = Math.max(
+    1,
+    Math.min(
+      options?.limit ?? CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE,
+      DEFAULT_CHUNK_SIZE,
+    ),
+  );
+  const offset = Math.max(0, options?.offset ?? 0);
+  const rangeTo = offset + limit - 1;
+
+  const { data, error, count } = await buildContestSubmissionsQuery(
+    supabase,
+    select,
+    contestId,
+    { ...options, withCount: true },
+  ).range(offset, rangeTo);
+
+  if (error) {
+    return {
+      data: [],
+      error,
+      total: 0,
+      limit,
+      offset,
+      hasMore: false,
+    };
+  }
+
+  const rows = (data || []) as T[];
+  const total = typeof count === "number" ? count : offset + rows.length;
+
+  return {
+    data: rows,
+    error: null,
+    total,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total,
+  };
+}
+
 export type FetchContestTwitterTweetsOptions = {
   chunkSize?: number;
   maxRows?: number;
@@ -156,12 +231,17 @@ function buildContestTwitterTweetsQuery(
   supabase: any,
   select: string,
   contestId: string,
-  options?: FetchContestTwitterTweetsOptions,
+  options?: FetchContestTwitterTweetsOptions & { withCount?: boolean },
 ) {
-  let query = supabase
-    .from("twitter_campaign_tweets")
-    .select(select)
-    .eq("contest_id", contestId);
+  let query = options?.withCount
+    ? supabase
+        .from("twitter_campaign_tweets")
+        .select(select, { count: "exact" })
+        .eq("contest_id", contestId)
+    : supabase
+        .from("twitter_campaign_tweets")
+        .select(select)
+        .eq("contest_id", contestId);
 
   if (options?.orFilter) {
     query = query.or(options.orFilter);
@@ -189,7 +269,9 @@ function buildContestTwitterTweetsQuery(
   for (const order of orders) {
     query = query.order(order.column, {
       ascending: order.ascending,
-      ...(order.nullsFirst !== undefined ? { nullsFirst: order.nullsFirst } : {}),
+      ...(order.nullsFirst !== undefined
+        ? { nullsFirst: order.nullsFirst }
+        : {}),
     });
   }
 
@@ -241,4 +323,60 @@ export async function fetchContestTwitterTweetsAllPages<
   }
 
   return { data: rows, error: null, truncated };
+}
+
+/**
+ * Single-page twitter_campaign_tweets fetch with exact count.
+ */
+export async function fetchContestTwitterTweetsPage<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contestId: string,
+  select: string,
+  options?: FetchContestTwitterTweetsOptions & {
+    limit?: number;
+    offset?: number;
+  },
+): Promise<FetchContestSubmissionsPageResult<T>> {
+  const limit = Math.max(
+    1,
+    Math.min(
+      options?.limit ?? CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE,
+      DEFAULT_CHUNK_SIZE,
+    ),
+  );
+  const offset = Math.max(0, options?.offset ?? 0);
+  const rangeTo = offset + limit - 1;
+
+  const { data, error, count } = await buildContestTwitterTweetsQuery(
+    supabase,
+    select,
+    contestId,
+    { ...options, withCount: true },
+  ).range(offset, rangeTo);
+
+  if (error) {
+    return {
+      data: [],
+      error,
+      total: 0,
+      limit,
+      offset,
+      hasMore: false,
+    };
+  }
+
+  const rows = (data || []) as T[];
+  const total = typeof count === "number" ? count : offset + rows.length;
+
+  return {
+    data: rows,
+    error: null,
+    total,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total,
+  };
 }

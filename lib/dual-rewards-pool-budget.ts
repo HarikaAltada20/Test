@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import {
+  getMilestoneLadderGrantedCentsFromSubmission,
+  getMostVerifiedBonusPaidCentsFromSubmission,
   parseDualRewardsPayoutJson,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
@@ -13,7 +15,39 @@ export type DualPoolSpendSubmissionRow = {
   bonus_amount?: number | null;
   bonus_paid?: boolean | null;
   dual_rewards_payout?: unknown;
+  milestone_bonus_paid?: unknown;
+  metadata?: { milestone_bonus_paid?: unknown } | null;
 };
+
+const MOST_VERIFIED_BONUS_TYPES = new Set([
+  "milestone_most_verified_views",
+  "milestone_most_verified_reels",
+]);
+
+function isMostVerifiedBonusType(bonusType: string): boolean {
+  return MOST_VERIFIED_BONUS_TYPES.has(bonusType);
+}
+
+function storedBonusCentsForReversal(
+  submissionRow: DualPoolSpendSubmissionRow,
+  excludeMostVerifiedBonus: boolean,
+): number {
+  if (submissionRow.bonus_paid !== true) return 0;
+  if (excludeMostVerifiedBonus) {
+    return getMilestoneLadderGrantedCentsFromSubmission(submissionRow);
+  }
+  return Math.max(0, Number(submissionRow.bonus_amount) || 0);
+}
+
+function recordedGrantCentsForReversal(
+  submissionRow: DualPoolSpendSubmissionRow,
+  excludeMostVerifiedBonus: boolean,
+): number {
+  const base = getDualRewardsRecordedGrantCents(submissionRow);
+  if (!excludeMostVerifiedBonus) return base;
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(submissionRow);
+  return Math.max(0, base - mv.totalCents);
+}
 
 export type DualPoolSpendComponents = {
   cpmCents: number;
@@ -105,6 +139,7 @@ export function getDualRewardsSubmissionPaidComponents(
 }
 
 export type MoneyTxnRow = {
+  id?: string | null;
   amount?: number | null;
   remarks?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -358,6 +393,8 @@ export function computeDualRewardsSubmissionReversalDue(params: {
   refundTxns: MoneyTxnRow[];
   reversalRemark: string;
   wasPaidBeforeReversal: boolean;
+  /** Milestone contests: keep MV bonus out of generic reversal (dedicated clawback). */
+  excludeMostVerifiedBonus?: boolean;
 }): DualRewardsSubmissionReversalDue {
   const {
     submissionRow,
@@ -366,6 +403,7 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     refundTxns,
     reversalRemark,
     wasPaidBeforeReversal,
+    excludeMostVerifiedBonus = false,
   } = params;
   const sid = String(submissionId);
 
@@ -520,15 +558,20 @@ export function computeDualRewardsSubmissionReversalDue(params: {
       amount: Math.max(0, amount),
     }))
     .filter((row) => row.amount > 0);
+  if (excludeMostVerifiedBonus) {
+    bonusReversals = bonusReversals.filter(
+      (row) => !isMostVerifiedBonusType(row.bonusType),
+    );
+  }
   let bonusReversalAmount = bonusReversals.reduce(
     (sum, row) => sum + row.amount,
     0,
   );
 
-  const storedBonusCents =
-    submissionRow.bonus_paid === true
-      ? Math.max(0, Number(submissionRow.bonus_amount) || 0)
-      : 0;
+  const storedBonusCents = storedBonusCentsForReversal(
+    submissionRow,
+    excludeMostVerifiedBonus,
+  );
   if (storedBonusCents > bonusReversalAmount && grossReversalRefundCents <= 0) {
     bonusReversalAmount = storedBonusCents;
     bonusReversals = [
@@ -537,14 +580,20 @@ export function computeDualRewardsSubmissionReversalDue(params: {
   }
 
   const paid = getDualRewardsSubmissionPaidComponents(submissionRow);
-  const paidTotal = paid.cpmCents + paid.milestoneCents;
+  const ladderBonusCents = excludeMostVerifiedBonus
+    ? getMilestoneLadderGrantedCentsFromSubmission(submissionRow)
+    : paid.milestoneCents;
+  const paidTotal = paid.cpmCents + ladderBonusCents;
 
   const grossRewardCents = sumAmount(rewardTxns.filter(isSubTx));
 
   // Wallet ledger net (rewards − reversal refunds) is the primary due amount.
   let dualDueCents = submissionWalletNet;
 
-  const recordedGrantCents = getDualRewardsRecordedGrantCents(submissionRow);
+  const recordedGrantCents = recordedGrantCentsForReversal(
+    submissionRow,
+    excludeMostVerifiedBonus,
+  );
   if (
     wasPaidBeforeReversal &&
     recordedGrantCents > 0 &&
@@ -558,11 +607,22 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     wasPaidBeforeReversal &&
     grossReversalRefundCents <= 0
   ) {
-    dualDueCents = Math.min(
-      paidTotal > 0 ? paidTotal : 0,
-      grossRewardCents,
-      Math.max(mainReversalAmount + bonusReversalAmount, earningsCents + storedBonusCents),
+    const recordedFallback = Math.max(
+      paidTotal,
+      mainReversalAmount + bonusReversalAmount,
+      earningsCents + storedBonusCents,
     );
+    // Unattributed bulk reward rows (contest_id only, no per-submission match)
+    // would otherwise min with grossRewardCents=0 and skip the refund entirely.
+    // Only use the row grant when the submission was actually paid.
+    if (grossRewardCents > 0) {
+      dualDueCents = Math.min(recordedFallback, grossRewardCents);
+    } else if (
+      submissionRow.paid === true ||
+      submissionRow.bonus_paid === true
+    ) {
+      dualDueCents = recordedFallback;
+    }
   }
 
   if (grossRewardCents > 0) {

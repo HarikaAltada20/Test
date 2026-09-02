@@ -65,6 +65,9 @@ import goldSquareLogo from "@/public/images/Group (4).png";
 import logo from "@/public/images/Primary Horizintal.svg";
 import squareLogo from "@/public/images/Group (2).avif";
 import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
+import { BulkModerationProgressProvider } from "@/components/BulkModerationProgressProvider";
+import { BulkPaymentProgressProvider } from "@/components/BulkPaymentProgressProvider";
+import { BulkVideoDownloadProgressProvider } from "@/components/BulkVideoDownloadProgressProvider";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -989,6 +992,12 @@ function DashboardContent({
         /* Ensure smooth transitions for all elements when zoom changes */
         .dashboard-container * {
           transition: all 0.3s ease-in-out;
+        }
+
+        /* Window-virtualized table spacers must not animate height or rows blank. */
+        .dashboard-container tr.contest-virtual-spacer,
+        .dashboard-container tr.contest-virtual-spacer * {
+          transition: none !important;
         }
       `}</style>
 
@@ -2773,7 +2782,13 @@ function DashboardContent({
                   data-mode={currentMode}
                   data-compact={isCompactMode ? "true" : "false"}
                 >
-                  {children}
+                  <BulkModerationProgressProvider>
+                    <BulkPaymentProgressProvider>
+                      <BulkVideoDownloadProgressProvider>
+                        {children}
+                      </BulkVideoDownloadProgressProvider>
+                    </BulkPaymentProgressProvider>
+                  </BulkModerationProgressProvider>
                 </div>
               </Suspense>
 

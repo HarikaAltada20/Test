@@ -47,6 +47,7 @@ export interface YouTubeMetrics {
   bot_flags?: string[];
   analytics_needs_reauth?: boolean;
   last_basic_update?: string | null;
+  last_core_update?: string | null;
   last_traffic_update?: string | null;
   last_demographics_update?: string | null;
 }

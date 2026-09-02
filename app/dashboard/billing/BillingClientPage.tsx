@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -137,10 +137,7 @@ export default function BillingClientPage({
     initialProfile
   );
   const [userData, setUserData] = useState<UserData | null>(initialUserData);
-  // Note: Cash transactions now handled by pagination hook
-  const [coinTransactions, setCoinTransactionsState] = useState<
-    CoinTransaction[]
-  >(initialCoinTransactions);
+  // Note: Cash transactions and coin transactions now handled by pagination hooks
   const [payoutMethods, setPayoutMethods] =
     useState<PayoutMethod[]>(initialPayoutMethods);
   const [withdrawalRequests, setWithdrawalRequests] = useState<
@@ -354,27 +351,19 @@ export default function BillingClientPage({
   }, [mode]);
 
   // Pagination for coin transactions (client-side)
-  const [coinPage, setCoinPage] = useState(1);
-  const [coinLimit, setCoinLimit] = useState(25);
-
-  const totalCoinTransactions = coinTransactions.length;
-  const coinTotalPages =
-    totalCoinTransactions > 0
-      ? Math.ceil(totalCoinTransactions / coinLimit)
-      : 0;
-  const coinHasNextPage = coinPage < coinTotalPages;
-  const coinHasPreviousPage = coinPage > 1;
-
-  const paginatedCoinTransactions = useMemo(
-    () =>
-      coinTransactions.slice((coinPage - 1) * coinLimit, coinPage * coinLimit),
-    [coinTransactions, coinPage, coinLimit]
-  );
-
-  // Reset coin page when data changes
-  useEffect(() => {
-    setCoinPage(1);
-  }, [totalCoinTransactions]);
+  // Pagination for coin transactions
+  const {
+    data: paginatedCoinTransactions,
+    pagination: coinPagination,
+    loading: coinTransactionsLoading,
+    error: coinTransactionsError,
+    setPage: setCoinPage,
+    setLimit: setCoinLimit,
+    refresh: refreshCoinTransactions,
+  } = usePagination<CoinTransaction>({
+    apiEndpoint: "/api/billing/coin-transactions",
+    initialLimit: 25,
+  });
 
   // Pagination for cash transactions
   const {
@@ -431,8 +420,7 @@ export default function BillingClientPage({
     setAuthUser(initialAuthUser);
     setProfile(initialProfile);
     setUserData(initialUserData);
-    // Note: Cash transactions now handled by pagination hook
-    setCoinTransactionsState(initialCoinTransactions);
+    // Note: Cash and coin transactions now handled by pagination hooks
     setPayoutMethods(initialPayoutMethods);
     setWithdrawalRequests(
       initialWithdrawalRequests.map((wr) => ({
@@ -1803,7 +1791,13 @@ export default function BillingClientPage({
             <CardHeader>
               <CardTitle>Coin Transaction History</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {coinTransactionsError && (
+                <div className="text-center text-red-500 p-4">
+                  Error loading transactions: {coinTransactionsError}
+                </div>
+              )}
+
               <Table>
                 <TableHeader
                   className={cn(
@@ -1822,7 +1816,16 @@ export default function BillingClientPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {coinTransactions.length === 0 ? (
+                  {coinTransactionsLoading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center text-muted-foreground h-32"
+                      >
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : paginatedCoinTransactions.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -1896,23 +1899,19 @@ export default function BillingClientPage({
                 </TableBody>
               </Table>
 
-              {coinTotalPages > 0 && (
-                <div className="mt-4">
-                  <PaginationControls
-                    page={coinPage}
-                    limit={coinLimit}
-                    total={totalCoinTransactions}
-                    totalPages={coinTotalPages}
-                    hasNextPage={coinHasNextPage}
-                    hasPreviousPage={coinHasPreviousPage}
-                    onPageChange={setCoinPage}
-                    onLimitChange={(limit) => {
-                      setCoinLimit(limit);
-                      setCoinPage(1);
-                    }}
-                    isDark={isDark}
-                  />
-                </div>
+              {!coinTransactionsLoading && coinPagination.totalPages > 0 && (
+                <PaginationControls
+                  page={coinPagination.page}
+                  limit={coinPagination.limit}
+                  total={coinPagination.total}
+                  totalPages={coinPagination.totalPages}
+                  hasNextPage={coinPagination.hasNextPage}
+                  hasPreviousPage={coinPagination.hasPreviousPage}
+                  onPageChange={setCoinPage}
+                  onLimitChange={setCoinLimit}
+                  loading={coinTransactionsLoading}
+                  isDark={isDark}
+                />
               )}
             </CardContent>
           </div>

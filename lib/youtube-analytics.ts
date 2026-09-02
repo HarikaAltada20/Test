@@ -1,3 +1,4 @@
+import { Redis } from "@upstash/redis";
 import { google } from 'googleapis';
 import {
   YT_ANALYTICS_DEFAULT_WINDOW_DAYS,
@@ -18,11 +19,114 @@ export type { GeoMetricRow, GeoMetricValue } from './youtube-geo-metrics';
 const GEO_ACTIVITY_METRICS =
   'views,estimatedMinutesWatched,averageViewDuration';
 
-/** Creates an authenticated YouTube Analytics v2 client using a bearer token. */
+/**
+ * Shared rate limiter for YouTube Analytics API calls.
+ * Uses Redis when available so all workers/processes share the same 710/min cap.
+ * Fail-fast when the cap is hit — serverless handlers must not sleep until the
+ * next minute.
+ */
+const YT_ANALYTICS_RATE_LIMIT = 710;
+const YT_ANALYTICS_RATE_WINDOW_MS = 60_000;
+const YT_ANALYTICS_RATE_REDIS_PREFIX = "youtube_analytics_rate_limit";
+const analyticsCallTimestamps: number[] = [];
+let analyticsRedisClient: Redis | null | undefined;
+
+export class YoutubeAnalyticsRateLimitError extends Error {
+  readonly status = 429;
+  readonly retryAfterMs: number;
+
+  constructor(retryAfterMs: number) {
+    super(
+      `YouTube Analytics rate limit reached; retry after ${Math.max(0, retryAfterMs)}ms`,
+    );
+    this.name = "YoutubeAnalyticsRateLimitError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function getAnalyticsRedis(): Redis | null {
+  if (analyticsRedisClient !== undefined) {
+    return analyticsRedisClient;
+  }
+
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (!url || !token) {
+    analyticsRedisClient = null;
+    return analyticsRedisClient;
+  }
+
+  try {
+    analyticsRedisClient =
+      typeof process !== "undefined" &&
+      process?.env?.UPSTASH_REDIS_REST_URL === url
+        ? Redis.fromEnv()
+        : new Redis({ url, token });
+  } catch (error) {
+    console.error("[youtube-analytics] Redis client creation failed:", error);
+    analyticsRedisClient = null;
+  }
+
+  return analyticsRedisClient;
+}
+
+function acquireLocalAnalyticsRateLimit(): void {
+  const now = Date.now();
+  while (
+    analyticsCallTimestamps.length > 0 &&
+    analyticsCallTimestamps[0] <= now - YT_ANALYTICS_RATE_WINDOW_MS
+  ) {
+    analyticsCallTimestamps.shift();
+  }
+  if (analyticsCallTimestamps.length < YT_ANALYTICS_RATE_LIMIT) {
+    analyticsCallTimestamps.push(now);
+    return;
+  }
+  const retryAfterMs =
+    analyticsCallTimestamps[0] - (now - YT_ANALYTICS_RATE_WINDOW_MS) + 50;
+  throw new YoutubeAnalyticsRateLimitError(retryAfterMs);
+}
+
+async function acquireAnalyticsRateLimit(): Promise<void> {
+  const redis = getAnalyticsRedis();
+  if (!redis) {
+    acquireLocalAnalyticsRateLimit();
+    return;
+  }
+
+  const now = Date.now();
+  const bucket = Math.floor(now / YT_ANALYTICS_RATE_WINDOW_MS);
+  const key = `${YT_ANALYTICS_RATE_REDIS_PREFIX}:${bucket}`;
+  const count = await redis.incr(key);
+  // Always refresh TTL so a crash between INCR and EXPIRE cannot leak a
+  // permanent counter. The key is per minute-bucket.
+  await redis.expire(key, Math.ceil((YT_ANALYTICS_RATE_WINDOW_MS * 2) / 1000));
+
+  if (count <= YT_ANALYTICS_RATE_LIMIT) {
+    return;
+  }
+
+  await redis.decr(key);
+  const retryAfterMs = Math.max(
+    (bucket + 1) * YT_ANALYTICS_RATE_WINDOW_MS - now + 50,
+    50,
+  );
+  throw new YoutubeAnalyticsRateLimitError(retryAfterMs);
+}
+
+/** Creates an authenticated YouTube Analytics v2 client with per-query rate limiting. */
 function createAnalyticsClient(accessToken: string) {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
-  return google.youtubeAnalytics({ version: 'v2', auth });
+  const client = google.youtubeAnalytics({ version: 'v2', auth });
+
+  const originalQuery = client.reports.query.bind(client.reports);
+  client.reports.query = (async (...args: Parameters<typeof originalQuery>) => {
+    await acquireAnalyticsRateLimit();
+    return originalQuery(...args);
+  }) as unknown as typeof originalQuery;
+
+  return client;
 }
 
 /** Returns YYYY-MM-DD startDate based on the default rolling window. */

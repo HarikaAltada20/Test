@@ -138,6 +138,11 @@ export function isYouTubeAllLikeScope(scope: YouTubeRefreshScope): boolean {
   return scope === "all" || scope === "all_standard";
 }
 
+export {
+  youtubeMetricsWriteTarget,
+  type YouTubeMetricsWriteTarget,
+} from "./youtube-metrics-write-target";
+
 export type YouTubeScopeTimestamps = {
   core?: string;
   traffic?: string;
@@ -253,6 +258,7 @@ function buildYoutubeMetricsFromBasic(
     traffic_sources: existingYT.traffic_sources || undefined,
     traffic_source_details: existingYT.traffic_source_details || undefined,
     subscribed_status: existingYT.subscribed_status || undefined,
+    last_core_update: existingYT.last_core_update || undefined,
     last_traffic_update: existingYT.last_traffic_update || undefined,
     demographics: existingYT.demographics || undefined,
     devices: existingYT.devices || undefined,
@@ -301,6 +307,12 @@ export async function updateYouTubeSubmissionForScope(
           ? e.code
           : undefined;
     const message = `${e?.message ?? ""} ${e?.errors?.map((x) => x.reason ?? x.message ?? "").join(" ")}`.toLowerCase();
+    const isRateLimited =
+      (err as { name?: string })?.name === "YoutubeAnalyticsRateLimitError";
+
+    if (isRateLimited || statusNum === 429) {
+      return "temporary_failure";
+    }
 
     if (
       statusNum === 400 ||
@@ -488,6 +500,7 @@ export async function updateYouTubeSubmissionForScope(
             updates.subscribers_lost = analytics.subscribers_lost;
             updates.videos_added_to_playlists = analytics.videos_added_to_playlists;
             updates.videos_removed_from_playlists = analytics.videos_removed_from_playlists;
+            updates.last_core_update = now;
           }
         } catch (err: unknown) {
           const code = (err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status;

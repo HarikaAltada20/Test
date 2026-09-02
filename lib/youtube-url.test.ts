@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildYouTubeContentViewUrl,
   formatClipDurationSeconds,
+  isYouTubeRefreshTarget,
   parseYouTubeIso8601Duration,
 } from "./youtube-url";
 
@@ -39,6 +40,35 @@ describe("buildYouTubeContentViewUrl", () => {
   it("keeps original link when duration unknown", () => {
     assert.equal(buildYouTubeContentViewUrl(watch, null), watch);
     assert.equal(buildYouTubeContentViewUrl(shorts, undefined), shorts);
+  });
+});
+
+describe("isYouTubeRefreshTarget", () => {
+  it("does not treat a youtube platform plus a non-YouTube URL as a target", () => {
+    assert.equal(
+      isYouTubeRefreshTarget("youtube", "https://example.com/video"),
+      false,
+    );
+  });
+
+  it("matches a YouTube URL when platform is missing", () => {
+    assert.equal(
+      isYouTubeRefreshTarget(
+        null,
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      ),
+      true,
+    );
+    assert.equal(
+      isYouTubeRefreshTarget("YouTube Shorts", "https://youtu.be/dQw4w9WgXcQ"),
+      true,
+    );
+  });
+
+  it("rejects non-YouTube rows", () => {
+    assert.equal(isYouTubeRefreshTarget(null, "https://instagram.com/reel/x"), false);
+    assert.equal(isYouTubeRefreshTarget("instagram", "https://instagram.com/reel/x"), false);
+    assert.equal(isYouTubeRefreshTarget("youtube", ""), false);
   });
 });
 

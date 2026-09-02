@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildSubmissionPaidReversalUpdate,
+  buildSubmissionPaidStateClearUpdate,
   excludeMostVerifiedBonusFromPaidTotalCents,
   getCpmGrantedCentsFromSubmission,
   getMilestoneLadderGrantedCentsFromSubmission,
@@ -82,6 +83,30 @@ describe("excludeMostVerifiedBonusFromPaidTotalCents", () => {
       milestone_bonus_paid: { views: 170, reels: 0 },
     });
     assert.equal(adjusted, 8598);
+  });
+});
+
+describe("buildSubmissionPaidStateClearUpdate", () => {
+  it("clears all payment fields for moderation rollback rows", () => {
+    const update = buildSubmissionPaidStateClearUpdate({
+      paid: true,
+      paid_at: "2026-01-01T00:00:00.000Z",
+      earnings: 353,
+      bonus_paid: true,
+      bonus_paid_at: "2026-01-02T00:00:00.000Z",
+      bonus_amount: 11060,
+      milestone_bonus_paid: { views: 0, reels: 10000 },
+      dual_rewards_payout: { cpm_cents: 353, milestone_cents: 11060 },
+      metadata: { type: "payment", timestamp: "2026-01-01" },
+    });
+
+    assert.equal(update.paid, false);
+    assert.equal(update.earnings, null);
+    assert.equal(update.bonus_paid, false);
+    assert.equal(update.bonus_amount, null);
+    assert.equal(update.milestone_bonus_paid, null);
+    assert.equal(update.dual_rewards_payout, null);
+    assert.equal(update.metadata, null);
   });
 });
 

@@ -44,33 +44,58 @@ export async function POST(
 ) {
   let payoutLease: CreatorContestPayoutLease | null = null;
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const fromQueue =
+      request.headers.get("X-From-Queue") === "1" ||
+      request.headers.get("x-from-queue") === "1";
 
-    const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin) {
-      return NextResponse.json(
-        { error: adminError || "Admin access required" },
-        { status: 403 }
-      );
+    let body: {
+      tweet_ids?: string[];
+      payment_type?: PaymentType;
+      creator_id?: string;
+      admin_user_id?: string;
+    };
+
+    if (fromQueue) {
+      const cronSecret = process.env.CRON_SECRET;
+      const auth = request.headers.get("Authorization");
+      if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      body = (await request.json()) as typeof body;
+      if (
+        typeof body.admin_user_id !== "string" ||
+        !body.admin_user_id.trim()
+      ) {
+        return NextResponse.json(
+          { error: "admin_user_id is required for queued bulk payment" },
+          { status: 400 },
+        );
+      }
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const { isAdmin, error: adminError } = await verifyAdminAccess();
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: adminError || "Admin access required" },
+          { status: 403 }
+        );
+      }
+      body = (await request.json()) as typeof body;
     }
 
     const { id: contestId } = await params;
-    const body = await request.json();
     const {
       tweet_ids: tweetIdsRaw,
       payment_type: paymentType,
       creator_id: creatorId,
-    } = body as {
-      tweet_ids?: string[];
-      payment_type?: PaymentType;
-      creator_id?: string;
-    };
+    } = body;
 
     if (!tweetIdsRaw?.length || !creatorId) {
       return NextResponse.json(
@@ -87,7 +112,9 @@ export async function POST(
 
     const tweetIds = [...new Set(tweetIdsRaw.map(String))];
 
-    const { data: contest, error: contestError } = await supabase
+    const supabaseAdmin = createAdminClient();
+
+    const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
         "id, title, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode"
@@ -163,8 +190,6 @@ export async function POST(
     );
     const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
     const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
-
-    const supabaseAdmin = createAdminClient();
 
     const { data: tweets, error: tweetsError } = await fetchByIdsInChunks({
       ids: (tweetIds as unknown[]).map((value) => String(value)),

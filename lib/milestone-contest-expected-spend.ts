@@ -389,7 +389,8 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
       });
     }
     const agg = creators.get(creatorId)!;
-    if (sub.bonus_paid === true) {
+    const subStatus = normalizeStatus(sub.status);
+    if (sub.bonus_paid === true && isVerifiedLike(subStatus)) {
       agg.totalPaidBonusCents += Number(sub.bonus_amount || 0);
       const milestoneBonusPaid =
         sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid;
@@ -400,7 +401,7 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
       }
     }
 
-    const st = normalizeStatus(sub.status);
+    const st = subStatus;
     if (!isVerifiedLike(st)) continue;
 
     const views = getMilestoneEligibleViewsFromRow({
@@ -510,63 +511,24 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
     const viewsPaidFromMetadata = Number(agg.viewsPaidCentsFromMetadata || 0);
     const reelsPaidFromMetadata = Number(agg.reelsPaidCentsFromMetadata || 0);
 
-    // Infer per-track paid from combined `bonus_amount` when ledger + per-track metadata are absent.
-    // Use adjusted caps (same as wallet credits), not raw config payout_cents, so views+reels split matches reality.
-    const viewsTakenForSplit =
-      creatorId === viewsWinnerId && viewsCap > 0
-        ? Math.min(agg.totalPaidBonusCents, viewsCap)
-        : 0;
-    const fallbackViewsPaid = viewsTakenForSplit;
+    // Granted follows wallet ledger per track only (money_transactions). Submission
+    // milestone_bonus_paid can remain set on pending rows after moderation.
+    const viewsPaidCandidate = useCreatorLedgerResolved ? viewsPaidFromTrack : 0;
+    const reelsPaidCandidate = useCreatorLedgerResolved
+      ? reelsPaidFromTrack
+      : 0;
 
-    let fallbackReelsPaid = 0;
-    if (creatorId === reelsWinnerId && reelsCap > 0) {
-      const remainingAfterViews = Math.max(
-        0,
-        agg.totalPaidBonusCents - viewsTakenForSplit,
-      );
-      fallbackReelsPaid = Math.min(remainingAfterViews, reelsCap);
-    }
+    const hasActiveVerifiedSubs = agg.verifiedReels > 0;
 
-    const metaSum =
-      Number(viewsPaidFromMetadata) + Number(reelsPaidFromMetadata);
-    const totalPaidBonus = Number(agg.totalPaidBonusCents) || 0;
-    const ledgerSum = viewsPaidFromTrack + reelsPaidFromTrack;
-    const ledgerReconcilesWithBonusTotal =
-      useCreatorLedgerResolved &&
-      Math.abs(ledgerSum - totalPaidBonus) <= 1;
-    const metadataReconcilesWithBonusTotal =
-      agg.hasExplicitMilestoneBonusPaidBreakdown &&
-      Math.abs(metaSum - totalPaidBonus) <= 1;
-
-    let viewsPaidCandidate: number;
-    let reelsPaidCandidate: number;
-    if (ledgerReconcilesWithBonusTotal) {
-      viewsPaidCandidate = viewsPaidFromTrack;
-      reelsPaidCandidate = reelsPaidFromTrack;
-    } else if (metadataReconcilesWithBonusTotal) {
-      viewsPaidCandidate = viewsPaidFromMetadata;
-      reelsPaidCandidate = reelsPaidFromMetadata;
-    } else if (useCreatorLedgerResolved) {
-      viewsPaidCandidate = viewsPaidFromTrack;
-      reelsPaidCandidate = reelsPaidFromTrack;
-    } else {
-      viewsPaidCandidate =
-        viewsPaidFromMetadata > 0
-          ? viewsPaidFromMetadata
-          : fallbackViewsPaid;
-      reelsPaidCandidate =
-        reelsPaidFromMetadata > 0
-          ? reelsPaidFromMetadata
-          : fallbackReelsPaid;
-    }
-
+    // Expected follows current leaderboard winner; granted only while creator still has
+    // verified/paid subs in the MV race (pending-only creators must not show stale grants).
     const viewsPaidCents =
-      creatorId === viewsWinnerId && viewsCap > 0
-        ? Math.min(viewsPaidCandidate, viewsCap)
+      hasActiveVerifiedSubs && viewsCap > 0
+        ? Math.min(Math.max(0, viewsPaidCandidate), viewsCap)
         : 0;
     const paidCents =
-      creatorId === reelsWinnerId && reelsCap > 0
-        ? Math.min(reelsPaidCandidate, reelsCap)
+      hasActiveVerifiedSubs && reelsCap > 0
+        ? Math.min(Math.max(0, reelsPaidCandidate), reelsCap)
         : 0;
 
     empty.set(creatorId, {
@@ -637,4 +599,40 @@ export function computeMilestoneContestExpectedSpendCents(
     milestoneContest?.bonus,
   );
   return ladder + bonus;
+}
+
+/** Sum paid most-verified views + reels bonus for creators (matches creator-wise table). */
+export function getMilestoneMostVerifiedBonusGrantedByTrackForCreators(
+  map: Map<string, MilestoneMostVerifiedBonusCreatorRow>,
+  creatorIds: Iterable<string>,
+): { viewsCents: number; reelsCents: number; totalCents: number } {
+  const seen = new Set<string>();
+  let viewsCents = 0;
+  let reelsCents = 0;
+  for (const rawId of creatorIds) {
+    const id = String(rawId ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    let row = map.get(id);
+    if (!row) {
+      for (const [key, value] of map) {
+        if (String(key).trim() === id) {
+          row = value;
+          break;
+        }
+      }
+    }
+    if (!row) continue;
+    viewsCents += Number(row.viewsPaidCents) || 0;
+    reelsCents += Number(row.paidCents) || 0;
+  }
+  return { viewsCents, reelsCents, totalCents: viewsCents + reelsCents };
+}
+
+export function sumMilestoneMostVerifiedBonusGrantedForCreators(
+  map: Map<string, MilestoneMostVerifiedBonusCreatorRow>,
+  creatorIds: Iterable<string>,
+): number {
+  return getMilestoneMostVerifiedBonusGrantedByTrackForCreators(map, creatorIds)
+    .totalCents;
 }

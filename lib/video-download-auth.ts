@@ -14,9 +14,6 @@ export type DownloadAccessResult =
 
 export { MAX_BULK_VIDEO_DOWNLOADS };
 
-/** Soft cap on total downloaded bytes before zipping (~200MB). */
-export const MAX_BULK_DOWNLOAD_BYTES = 200 * 1024 * 1024;
-
 export async function verifyAdminOrBrandDownloadAccess(): Promise<DownloadAccessResult> {
   try {
     const supabase = await createClient();

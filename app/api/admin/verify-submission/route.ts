@@ -3,7 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { NextResponse } from "next/server";
 import {
   creditCreatorWithdrawableBalance,
-  debitCreatorWithdrawableBalance,
+  debitCreatorReversalClawback,
   logTransaction,
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
@@ -59,6 +59,7 @@ import {
   stripDualComponentTagFromRemarks,
   buildDualRewardsSubmissionPayUpdatePayload,
   buildSubmissionPaidReversalUpdate,
+  buildSubmissionPaidStateClearUpdate,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -69,7 +70,6 @@ import {
   moneyTxnAppliesToSubmission,
   getDualRewardsSubmissionPaidComponents,
   rollbackDualRewardsPoolCommitIfNeeded,
-  scaleDualReversalDuesToTotalCap,
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 import {
@@ -84,6 +84,36 @@ import {
   releaseCreatorContestPayoutLease,
   type CreatorContestPayoutLease,
 } from "@/lib/creator-contest-payout-lease";
+import { clawbackMostVerifiedBonusForCreator } from "@/lib/milestone-most-verified-bonus-clawback";
+import { isMilestoneContestType } from "@/lib/contest-type";
+
+export interface VerifySubmissionPayload {
+  submissionId: string;
+  action:
+    | "verified"
+    | "rejected"
+    | "pending"
+    | "paid"
+    | "mark_bonus_paid"
+    | "mark_both_paid";
+  reason?: string;
+  paymentDetails?: any;
+  skipWalletDebit?: boolean;
+  walletDebitBypassToken?: string;
+  qualityScore?: number | null;
+  reverseMostVerifiedBonus?: boolean;
+}
+
+export interface VerifySubmissionActorOverride {
+  actorId: string;
+  isAdmin: boolean;
+  ownershipPrevalidated?: boolean;
+  /**
+   * When true (bulk queue), skip expensive per-row RPCs like
+   * recalculate_creator_total_views. Caller must reconcile once at job end.
+   */
+  deferHeavySideEffects?: boolean;
+}
 
 function isDualRewardsLedgerReward(r: {
   metadata?: Record<string, unknown> | null;
@@ -103,7 +133,10 @@ function getTransactionPayoutCycle(metadata: any): number {
   return Number.isFinite(parsedCycle) && parsedCycle > 0 ? parsedCycle : 1;
 }
 
-export async function POST(request: Request) {
+export async function processVerifySubmission(
+  payload: VerifySubmissionPayload,
+  actorOverride?: VerifySubmissionActorOverride,
+): Promise<Response> {
   const supabase = await createClient();
   let payoutLease: CreatorContestPayoutLease | null = null;
 
@@ -123,7 +156,8 @@ export async function POST(request: Request) {
       skipWalletDebit,
       walletDebitBypassToken,
       qualityScore,
-    } = await request.json();
+      reverseMostVerifiedBonus,
+    } = payload;
 
     if (!submissionId || !action) {
       return NextResponse.json(
@@ -161,43 +195,77 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify admin access first
-    const {
-      isAdmin,
-      error: adminError,
-      user: adminUser,
-    } = await verifyAdminAccess();
+    let isAdmin = !!actorOverride?.isAdmin;
+    let currentUserId: string = actorOverride?.actorId || "";
 
-    let currentUserId: string;
-
-    if (!isAdmin) {
-      // If not admin, check if it's an advertiser managing their own contest
+    if (!actorOverride) {
       const {
-        data: { user: authUser },
-        error: userError,
-      } = await supabase.auth.getUser();
+        isAdmin: resolvedIsAdmin,
+        error: adminError,
+        user: adminUser,
+      } = await verifyAdminAccess();
+      isAdmin = resolvedIsAdmin;
 
-      if (userError || !authUser) {
-        return NextResponse.json(
-          { error: "Authentication required" },
-          { status: 401 },
-        );
+      if (isAdmin) {
+        currentUserId = adminUser?.id || "";
       }
 
-      const { data: userData, error: userDataError } = await supabase
-        .from("users")
-        .select("user_type")
-        .eq("id", authUser.id)
-        .single();
+      if (!isAdmin) {
+        // If not admin, check if it's an advertiser managing their own contest
+        const {
+          data: { user: authUser },
+          error: userError,
+        } = await supabase.auth.getUser();
 
-      if (userDataError || !userData || userData.user_type !== "advertiser") {
-        return NextResponse.json(
-          { error: "Insufficient permissions" },
-          { status: 403 },
-        );
+        if (userError || !authUser) {
+          return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+          );
+        }
+
+        const { data: userData, error: userDataError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", authUser.id)
+          .single();
+
+        if (
+          userDataError ||
+          !userData ||
+          userData.user_type !== "advertiser"
+        ) {
+          return NextResponse.json(
+            { error: adminError || "Insufficient permissions" },
+            { status: 403 },
+          );
+        }
+
+        // For advertisers, verify they own the contest associated with this submission
+        const { data: submission, error: submissionError } = await supabase
+          .from("submissions")
+          .select("contest_id, contests!inner(advertiser_id)")
+          .eq("id", submissionId)
+          .single();
+
+        if (submissionError || !submission) {
+          return NextResponse.json(
+            { error: "Submission not found" },
+            { status: 404 },
+          );
+        }
+
+        if ((submission as any).contests.advertiser_id !== authUser.id) {
+          return NextResponse.json(
+            { error: "You can only manage submissions for your own contests" },
+            { status: 403 },
+          );
+        }
+
+        currentUserId = authUser.id;
       }
-
-      // For advertisers, verify they own the contest associated with this submission
+    } else if (!isAdmin && !actorOverride.ownershipPrevalidated) {
+      // If not admin, check if it's an advertiser managing their own contest
       const { data: submission, error: submissionError } = await supabase
         .from("submissions")
         .select("contest_id, contests!inner(advertiser_id)")
@@ -211,16 +279,19 @@ export async function POST(request: Request) {
         );
       }
 
-      if ((submission as any).contests.advertiser_id !== authUser.id) {
+      if ((submission as any).contests.advertiser_id !== currentUserId) {
         return NextResponse.json(
           { error: "You can only manage submissions for your own contests" },
           { status: 403 },
         );
       }
+    }
 
-      currentUserId = authUser.id;
-    } else {
-      currentUserId = adminUser?.id || "";
+    if (!currentUserId) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 },
+      );
     }
 
     const walletDebitWasHandledByBulk =
@@ -518,9 +589,20 @@ export async function POST(request: Request) {
 
     if (updateError) {
       console.error("Error updating submission status:", updateError);
+      const timedOut =
+        updateError.code === "57014" ||
+        /statement timeout|canceling statement/i.test(
+          String(updateError.message || ""),
+        );
       return NextResponse.json(
-        { error: "Failed to update submission status" },
-        { status: 500 },
+        {
+          error: timedOut
+            ? "Failed to update submission status: statement timeout"
+            : "Failed to update submission status",
+          code: updateError.code ?? undefined,
+          retryable: timedOut,
+        },
+        { status: timedOut ? 503 : 500 },
       );
     }
 
@@ -557,7 +639,10 @@ export async function POST(request: Request) {
         );
       if (snapErr) {
         console.error("Failed to snapshot credited views:", snapErr);
-      } else if (submissionFull.creator_id) {
+      } else if (
+        submissionFull.creator_id &&
+        !actorOverride?.deferHeavySideEffects
+      ) {
         try {
           await reconcileCreatorTotalViews(String(submissionFull.creator_id));
         } catch (reconcileErr) {
@@ -598,7 +683,10 @@ export async function POST(request: Request) {
         .eq("submission_id", submissionId);
       if (uncreditErr) {
         console.error("Failed to uncredit views for submission:", uncreditErr);
-      } else if (submissionFull.creator_id) {
+      } else if (
+        submissionFull.creator_id &&
+        !actorOverride?.deferHeavySideEffects
+      ) {
         try {
           await reconcileCreatorTotalViews(String(submissionFull.creator_id));
         } catch (reconcileErr) {
@@ -1922,7 +2010,7 @@ export async function POST(request: Request) {
     const { data: freshPaidRow } = await supabaseAdmin
       .from("submissions")
       .select(
-        "earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, status",
+        "earnings, paid, bonus_paid, bonus_amount, dual_rewards_payout, milestone_bonus_paid, metadata, status",
       )
       .eq("id", submissionId)
       .maybeSingle();
@@ -1935,6 +2023,9 @@ export async function POST(request: Request) {
       bonus_paid: freshPaidRow?.bonus_paid ?? submissionFull.bonus_paid,
       dual_rewards_payout:
         freshPaidRow?.dual_rewards_payout ?? submissionFull.dual_rewards_payout,
+      milestone_bonus_paid:
+        freshPaidRow?.milestone_bonus_paid ?? submissionFull.milestone_bonus_paid,
+      metadata: freshPaidRow?.metadata ?? submissionFull.metadata,
     };
 
     const shouldRunPaidReversal =
@@ -2016,6 +2107,7 @@ export async function POST(request: Request) {
           refundTxns,
           reversalRemark: REVERSAL_TRANSACTION_REMARK,
           wasPaidBeforeReversal,
+          excludeMostVerifiedBonus: true,
         });
         mainReversalAmount = due.mainCents;
         bonusReversalAmount = due.bonusCents;
@@ -2036,6 +2128,7 @@ export async function POST(request: Request) {
           refundTxns,
           reversalRemark: REVERSAL_TRANSACTION_REMARK,
           wasPaidBeforeReversal,
+          excludeMostVerifiedBonus: isMilestoneContestType(contest.contest_type),
         });
         mainReversalAmount = due.mainCents;
         bonusReversalAmount = due.bonusCents;
@@ -2048,54 +2141,9 @@ export async function POST(request: Request) {
         };
       }
 
+      let walletDebitCents = 0;
       if (reversalAmount > 0 && !walletDebitWasHandledByBulk) {
-        const { data: reversalProfile } = await supabaseAdmin
-          .from("creator_profiles")
-          .select("withdrawable_balance")
-          .eq("id", submissionFull.creator_id)
-          .single();
-        const reversalAvailableCents = Math.max(
-          0,
-          Math.round(Number(reversalProfile?.withdrawable_balance) || 0),
-        );
-
-        let walletDebitCents = reversalAmount;
-        if (reversalAvailableCents < reversalAmount) {
-          if (reversalAvailableCents <= 0) {
-            walletDebitCents = 0;
-          } else {
-            const scaled = scaleDualReversalDuesToTotalCap(
-              new Map([
-                [
-                  submissionId,
-                  {
-                    totalCents: reversalAmount,
-                    mainCents: mainReversalAmount,
-                    bonusCents: bonusReversalAmount,
-                    bonusReversals,
-                  },
-                ],
-              ]),
-              reversalAvailableCents,
-            );
-            const capped = scaled.get(submissionId)!;
-            mainReversalAmount = capped.mainCents;
-            bonusReversalAmount = capped.bonusCents;
-            bonusReversals = capped.bonusReversals;
-            walletDebitCents = capped.totalCents;
-            reversalAmount = capped.totalCents;
-            if (paidStatusReversalSummary) {
-              paidStatusReversalSummary = {
-                ...paidStatusReversalSummary,
-                reward_refunded_cents: mainReversalAmount,
-                bonus_refunded_cents: bonusReversalAmount,
-                total_refunded_cents: reversalAmount,
-                cpm_refunded_cents: mainReversalAmount,
-                milestone_refunded_cents: bonusReversalAmount,
-              };
-            }
-          }
-        }
+        walletDebitCents = reversalAmount;
 
         if (walletDebitCents > 0) {
           // Fingerprint reward/refund txn ids so a later pay→reverse cycle
@@ -2109,11 +2157,15 @@ export async function POST(request: Request) {
               contestId: String(submissionFull.contest_id),
               action: String(action),
             },
-            rewardTransactionIds: sortUniqueTransactionIds(rewardTxns),
-            refundTransactionIds: sortUniqueTransactionIds(refundTxns),
+            rewardTransactionIds: sortUniqueTransactionIds(
+              rewardTxns.map((tx) => ({ id: tx.id ?? null })),
+            ),
+            refundTransactionIds: sortUniqueTransactionIds(
+              refundTxns.map((tx) => ({ id: tx.id ?? null })),
+            ),
             debitCents: walletDebitCents,
           });
-          const debitRes = await debitCreatorWithdrawableBalance(
+          const debitRes = await debitCreatorReversalClawback(
             submissionFull.creator_id,
             walletDebitCents,
             { idempotencyKey: reversalDebitKey },
@@ -2128,7 +2180,7 @@ export async function POST(request: Request) {
 
         if (reversalAmount > 0) {
           if (contest.contest_type === "dual_rewards") {
-            await logDualRewardsReversalRefund({
+            const refundLogged = await logDualRewardsReversalRefund({
               creatorId: submissionFull.creator_id,
               submissionId,
               contestId: submissionFull.contest_id,
@@ -2136,9 +2188,18 @@ export async function POST(request: Request) {
               cpmCents: mainReversalAmount,
               milestoneCents: bonusReversalAmount,
             });
+            if (!refundLogged) {
+              return NextResponse.json(
+                {
+                  error:
+                    "Reversal debit succeeded but failed to log refund in money_transactions. Retry the same moderation action.",
+                },
+                { status: 500 },
+              );
+            }
           } else {
             if (mainReversalAmount > 0) {
-              await logTransactionAsAdmin(
+              const refundLogged = await logTransactionAsAdmin(
                 submissionFull.creator_id,
                 "refund",
                 mainReversalAmount,
@@ -2155,10 +2216,19 @@ export async function POST(request: Request) {
                   },
                 },
               );
+              if (!refundLogged) {
+                return NextResponse.json(
+                  {
+                    error:
+                      "Reversal debit succeeded but failed to log reward refund in money_transactions. Retry the same moderation action.",
+                  },
+                  { status: 500 },
+                );
+              }
             }
             for (const bonus of bonusReversals) {
               if (bonus.amount <= 0) continue;
-              await logTransactionAsAdmin(
+              const refundLogged = await logTransactionAsAdmin(
                 submissionFull.creator_id,
                 "refund",
                 bonus.amount,
@@ -2175,8 +2245,59 @@ export async function POST(request: Request) {
                   },
                 },
               );
+              if (!refundLogged) {
+                return NextResponse.json(
+                  {
+                    error:
+                      "Reversal debit succeeded but failed to log bonus refund in money_transactions. Retry the same moderation action.",
+                  },
+                  { status: 500 },
+                );
+              }
             }
           }
+        }
+      }
+
+      if (
+        reverseMostVerifiedBonus &&
+        !walletDebitWasHandledByBulk &&
+        isMilestoneContestType(contest.contest_type)
+      ) {
+        const mvClawback = await clawbackMostVerifiedBonusForCreator({
+          supabaseAdmin,
+          contestId: submissionFull.contest_id,
+          contestTitle: (contest as { title?: string })?.title || "Contest",
+          contestType: contest.contest_type,
+          creatorId: submissionFull.creator_id,
+        });
+        if (!mvClawback.ok) {
+          return NextResponse.json(
+            {
+              error:
+                mvClawback.error ||
+                "Submission reversal succeeded but Most Verified bonus clawback failed.",
+            },
+            { status: 500 },
+          );
+        }
+        if (mvClawback.reversedCents > 0 && paidStatusReversalSummary) {
+          paidStatusReversalSummary = {
+            ...paidStatusReversalSummary,
+            total_refunded_cents:
+              paidStatusReversalSummary.total_refunded_cents +
+              mvClawback.reversedCents,
+            bonus_refunded_cents:
+              paidStatusReversalSummary.bonus_refunded_cents +
+              mvClawback.reversedCents,
+            ...(paidStatusReversalSummary.milestone_refunded_cents != null
+              ? {
+                  milestone_refunded_cents:
+                    (paidStatusReversalSummary.milestone_refunded_cents ?? 0) +
+                    mvClawback.reversedCents,
+                }
+              : {}),
+          };
         }
       }
 
@@ -2191,18 +2312,41 @@ export async function POST(request: Request) {
         console.error("Metrics update (revert paid) failed:", e);
       }
 
-      // Clear paid / ladder bonus state; preserve most-verified views/reels bonus
-      // unless those tracks were explicitly reversed above.
-      await supabaseAdmin
-        .from("submissions")
-        .update(
-          buildSubmissionPaidReversalUpdate(submissionFull, {
-            mainCents: mainReversalAmount,
-            bonusCents: bonusReversalAmount,
-            bonusReversals,
-          }),
-        )
-        .eq("id", submissionId);
+      // Queue bulk path: keep paid flags until job-end wallet finalize writes
+      // money_transactions refunds. Clearing them here made verified/rejected
+      // refunds compute as $0 after status left `paid`.
+      const shouldClearPaidFlags =
+        !walletDebitWasHandledByBulk &&
+        (reversalAmount <= 0 || walletDebitCents > 0);
+      if (shouldClearPaidFlags) {
+        const paidRowInput = {
+          earnings: submissionFull.earnings,
+          paid: submissionFull.paid,
+          paid_at: submissionFull.paid_at,
+          bonus_paid: submissionFull.bonus_paid,
+          bonus_paid_at: submissionFull.bonus_paid_at,
+          bonus_amount: submissionFull.bonus_amount,
+          milestone_bonus_paid: submissionFull.milestone_bonus_paid as never,
+          metadata: submissionFull.metadata as never,
+          dual_rewards_payout: submissionFull.dual_rewards_payout,
+        };
+        const leftPaidModeration =
+          action === SUBMISSION_STATUS.pending ||
+          action === SUBMISSION_STATUS.rejected ||
+          action === SUBMISSION_STATUS.verified;
+        await supabaseAdmin
+          .from("submissions")
+          .update(
+            leftPaidModeration
+              ? buildSubmissionPaidStateClearUpdate(paidRowInput)
+              : buildSubmissionPaidReversalUpdate(paidRowInput, {
+                  mainCents: mainReversalAmount,
+                  bonusCents: bonusReversalAmount,
+                  bonusReversals,
+                }),
+          )
+          .eq("id", submissionId);
+      }
     }
 
     // Note: With the new system, verified and pending submissions show in leaderboard immediately
@@ -2213,7 +2357,7 @@ export async function POST(request: Request) {
     const { data: latestSubmission } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, status, quality_score, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, views, creator_id, created_at, contest_id, platform, other_stats, metadata, dual_rewards_payout",
+        "id, status, quality_score, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid, views, creator_id, created_at, contest_id, platform, other_stats, metadata, dual_rewards_payout",
       )
       .eq("id", submissionId)
       .single();
@@ -2255,6 +2399,11 @@ export async function POST(request: Request) {
   } finally {
     await releaseCreatorContestPayoutLease(payoutLease);
   }
+}
+
+export async function POST(request: Request) {
+  const payload = (await request.json()) as VerifySubmissionPayload;
+  return processVerifySubmission(payload);
 }
 
 // GET endpoint to fetch submissions for verification based on status filter
