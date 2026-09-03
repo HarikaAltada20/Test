@@ -53,6 +53,27 @@ describe("getChargeableBudgetCents", () => {
     assert.equal(cents, 25_000);
   });
 
+  it("sums per-platform campaigns when multiple platforms are configured", () => {
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "leaderboard",
+      contest_based_details: {
+        leaderboard_contest: { total_prize: 10_000 },
+        platform_campaigns: {
+          youtube: {
+            contest_type: "leaderboard",
+            leaderboard_contest: { total_prize: 10_000 },
+          },
+          instagram: {
+            contest_type: "cpm",
+            cpm_contest: { total_budget: 4_000 },
+          },
+        },
+      },
+    });
+    assert.equal(cents, 14_000);
+  });
+
   it("dual_rewards uses root total_budget_cents", () => {
     const cents = getChargeableBudgetCents({
       id: "c1",
