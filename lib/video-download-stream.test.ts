@@ -40,7 +40,7 @@ describe("video download streaming exports", () => {
   it("rejects invalid YouTube URL gracefully", async () => {
     await assert.rejects(
       async () => {
-        await getYouTubeVideoStream("invalid-url");
+        await getYouTubeVideoStream("https://example.com/not-a-video");
       },
       (err: unknown) => {
         return err instanceof YouTubeDownloadError;
