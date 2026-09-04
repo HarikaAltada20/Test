@@ -12,6 +12,7 @@ import ContestDetailClient from "./contest-detail-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import { flattenContestInspirationLinks } from "@/lib/video-platform-campaigns";
 
 export default async function ContestDetailPage({
   params,
@@ -123,9 +124,9 @@ export default async function ContestDetailPage({
     redirect("/dashboard/contests");
   }
 
-  const finalInspirationLinks = Array.isArray(contestData.inspiration_links)
-    ? contestData.inspiration_links
-    : [];
+  const finalInspirationLinks = flattenContestInspirationLinks(
+    contestData.inspiration_links,
+  );
 
   const isTwitterCampaign =
     (contestData.platform?.toLowerCase() === "twitter" ||

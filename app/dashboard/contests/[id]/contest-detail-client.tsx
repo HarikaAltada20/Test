@@ -124,6 +124,10 @@ import {
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import {
+  flattenContestInspirationLinks,
+  flattenContestResources,
+} from "@/lib/video-platform-campaigns";
+import {
   BulkVideoDownloadContestStatus,
   BulkVideoDownloadSummaryButton,
 } from "@/components/BulkVideoDownloadContestStatus";
@@ -17536,8 +17540,9 @@ export default function ContestDetailClient({
 
                 {/* Render inspiration links for non-Twitter contests */}
                 {currentContest.platform?.toLowerCase() !== "twitter" &&
-                  Array.isArray(currentContest.inspiration_links) &&
-                  currentContest.inspiration_links.length > 0 && (
+                  flattenContestInspirationLinks(
+                    currentContest.inspiration_links,
+                  ).length > 0 && (
                     <div className="space-y-6">
                       <div className="flex items-center gap-3">
                         <h3
@@ -17551,7 +17556,9 @@ export default function ContestDetailClient({
                       </div>
 
                       <div className="grid gap-4">
-                        {currentContest.inspiration_links.map((item, idx) => (
+                        {flattenContestInspirationLinks(
+                          currentContest.inspiration_links,
+                        ).map((item, idx) => (
                           <div
                             key={idx}
                             className={cn(
@@ -17712,11 +17719,8 @@ export default function ContestDetailClient({
                       </div>
                     </div>
                   )}
-                {currentContest.resources &&
-                  ((Array.isArray(currentContest.resources) &&
-                    currentContest.resources.length > 0) ||
-                    (typeof currentContest.resources === "object" &&
-                      Object.keys(currentContest.resources).length > 0)) && (
+                {flattenContestResources(currentContest.resources).length >
+                  0 && (
                     <div className="space-y-6">
                       <div className="flex items-center gap-3">
                         {/* <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -17733,16 +17737,8 @@ export default function ContestDetailClient({
                       </div>
 
                       <div className="grid gap-4">
-                        {(Array.isArray(currentContest.resources)
-                          ? currentContest.resources
-                          : Object.entries(currentContest.resources).map(
-                              ([description, url]) => ({
-                                url,
-                                description,
-                                type: "external",
-                              }),
-                            )
-                        ).map((resource, idx) => {
+                        {flattenContestResources(currentContest.resources).map(
+                          (resource, idx) => {
                           const isImage =
                             resource.url.startsWith("data:image") ||
                             /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(

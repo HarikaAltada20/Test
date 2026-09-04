@@ -4,9 +4,13 @@
  *
  * Persistence:
  * - contests.platform = "youtube,instagram" (comma-separated, first is primary)
- * - contest_based_details.platform_campaigns[platform] = per-platform config
- * - Top-level contest_type / brief / rules / payout mirror the primary platform
- *   so existing readers stay compatible.
+ * - contest_based_details.youtube|instagram|tiktok = per-platform payout JSON
+ *   (contest_type + leaderboard/cpm/milestone blocks only — no brief/rules/
+ *   resources/inspiration). The old nested `platform_campaigns` key is not used.
+ * - Top-level brief_html / rules_html mirror the primary platform for search
+ *   and legacy readers
+ * - Multi-platform brief_json / rules_json / resources / inspiration_links are
+ *   platform-keyed maps: { youtube: ..., instagram: ..., tiktok: ... }
  */
 
 import {
@@ -91,6 +95,69 @@ export function createDefaultAllSectionLive(): Record<
     resources: true,
     inspiration: true,
   };
+}
+
+/** Sections that stay shared across platforms in the create/edit UI. */
+export const SHARED_PLATFORM_SECTION_KEYS: PlatformSectionKey[] = [
+  "campaignType",
+  "contentType",
+];
+
+/** Sections that can differ per selected platform. */
+export const PER_PLATFORM_SECTION_KEYS: PlatformSectionKey[] = [
+  "brief",
+  "rules",
+  "prize",
+  "resources",
+  "inspiration",
+];
+
+/**
+ * Restore tab + allLive state from saved per-platform snapshots.
+ * Divergent sections open in "Selected platforms" mode so a later save
+ * cannot broadcast one editor buffer onto every platform.
+ */
+export function deriveSectionPlatformUiState(
+  selected: VideoContestPlatform[],
+  map: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+): {
+  tabs: Record<PlatformSectionKey, PlatformTabValue>;
+  allLive: Record<PlatformSectionKey, boolean>;
+} {
+  const tabs = createDefaultSectionPlatforms();
+  const allLive = createDefaultAllSectionLive();
+
+  if (selected.length < 2) {
+    const only = selected[0] ?? ALL_PLATFORM_TAB;
+    for (const key of PLATFORM_SECTION_KEYS) {
+      tabs[key] = only === ALL_PLATFORM_TAB ? ALL_PLATFORM_TAB : only;
+      allLive[key] = true;
+    }
+    return { tabs, allLive };
+  }
+
+  for (const key of SHARED_PLATFORM_SECTION_KEYS) {
+    tabs[key] = ALL_PLATFORM_TAB;
+    allLive[key] = true;
+  }
+
+  for (const section of PER_PLATFORM_SECTION_KEYS) {
+    const snaps = selected.map(
+      (platform) => map[platform] ?? createDefaultPlatformCampaignSnapshot(),
+    );
+    const uniform = snaps.every((snap) =>
+      areSectionValuesEqual(section, snaps[0], snap),
+    );
+    if (uniform) {
+      tabs[section] = ALL_PLATFORM_TAB;
+      allLive[section] = true;
+    } else {
+      tabs[section] = selected[0];
+      allLive[section] = false;
+    }
+  }
+
+  return { tabs, allLive };
 }
 
 export function formatPlatformList(platforms: VideoContestPlatform[]): string {
@@ -462,14 +529,94 @@ export function buildFlushedPlatformCampaigns(
   const next: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> =
     { ...existingMap };
   for (const section of PLATFORM_SECTION_KEYS) {
-    if (tabs[section] === ALL_PLATFORM_TAB && allLive[section] === false) {
-      continue;
+    if (tabs[section] === ALL_PLATFORM_TAB) {
+      if (allLive[section] === false) {
+        continue;
+      }
+      // Guard: if platforms already differ for this section, do not wipe them
+      // by broadcasting the current editor buffer (common after draft reload
+      // when tabs were reset to All with allLive=true).
+      if (PER_PLATFORM_SECTION_KEYS.includes(section)) {
+        const existingSnaps = selected
+          .map((platform) => next[platform])
+          .filter((snap): snap is PlatformCampaignSnapshot => Boolean(snap));
+        if (
+          existingSnaps.length >= 2 &&
+          existingSnaps.some(
+            (snap) => !areSectionValuesEqual(section, existingSnaps[0], snap),
+          )
+        ) {
+          continue;
+        }
+      }
     }
     const targets = platformsForTab(tabs[section], selected);
     for (const p of targets) {
       const existing = next[p] ?? createDefaultPlatformCampaignSnapshot();
       next[p] = patchSnapshotSection(existing, section, current);
     }
+  }
+  return next;
+}
+
+/**
+ * Build the per-platform map used when persisting a multi-platform contest.
+ * Campaign type + content type are always shared across selected platforms
+ * (those sections no longer have per-platform tabs in the create UI).
+ * Every selected platform is guaranteed to appear in the result.
+ */
+export function preparePlatformCampaignsForSave(
+  selected: VideoContestPlatform[],
+  tabs: Record<PlatformSectionKey, PlatformTabValue>,
+  current: PlatformCampaignSnapshot,
+  existingMap: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+  allLive: Record<PlatformSectionKey, boolean> = createDefaultAllSectionLive(),
+): Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> {
+  if (selected.length === 0) return {};
+
+  const saveTabs: Record<PlatformSectionKey, PlatformTabValue> = {
+    ...tabs,
+    campaignType: ALL_PLATFORM_TAB,
+    contentType: ALL_PLATFORM_TAB,
+  };
+  const saveLive: Record<PlatformSectionKey, boolean> = {
+    ...allLive,
+    campaignType: true,
+    contentType: true,
+  };
+
+  const flushed = buildFlushedPlatformCampaigns(
+    selected,
+    saveTabs,
+    current,
+    existingMap,
+    saveLive,
+  );
+
+  const primary = selected[0];
+  const fallback =
+    flushed[primary] ??
+    patchSnapshotSection(
+      patchSnapshotSection(
+        createDefaultPlatformCampaignSnapshot(),
+        "campaignType",
+        current,
+      ),
+      "contentType",
+      current,
+    );
+
+  const next: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> =
+    {};
+  for (const platform of selected) {
+    const base = flushed[platform]
+      ? clonePlatformCampaignSnapshot(flushed[platform]!)
+      : clonePlatformCampaignSnapshot(fallback);
+    next[platform] = patchSnapshotSection(
+      patchSnapshotSection(base, "campaignType", current),
+      "contentType",
+      current,
+    );
   }
   return next;
 }
@@ -521,18 +668,12 @@ function buildMilestoneBonus(
 export function snapshotToPersistedPlatformCampaign(
   snapshot: PlatformCampaignSnapshot,
 ): PersistedPlatformCampaign {
+  // Content fields (brief/rules/resources/inspiration) live on top-level contest
+  // columns. content_type lives on contests.content_type. Platform objects only
+  // store contest_type + payout blocks.
   const contestType = snapshot.contestType;
   const persisted: PersistedPlatformCampaign = {
     contest_type: contestType,
-    content_type: snapshot.contentType || null,
-    brief_html: snapshot.briefHtml || snapshot.brief || "",
-    brief_json: snapshot.briefJson ?? null,
-    rules_html: snapshot.rulesHtml || "",
-    rules_json: snapshot.rulesJson ?? null,
-    resources: (snapshot.resources ?? []).map((item) => ({ ...item })),
-    inspiration_links: (snapshot.inspirationLinks ?? []).map((item) => ({
-      ...item,
-    })),
   };
 
   const includeMilestone =
@@ -767,16 +908,58 @@ export function persistedPlatformCampaignToSnapshot(
   return snapshot;
 }
 
+/** Remove legacy `platform_campaigns` and any deselected platform payout keys. */
+export function clearPlatformCampaignKeys(
+  details: Record<string, unknown>,
+  keep: ReadonlySet<VideoContestPlatform> | VideoContestPlatform[] = [],
+): Record<string, unknown> {
+  const next = { ...details };
+  delete next.platform_campaigns;
+  const keepSet = keep instanceof Set ? keep : new Set(keep);
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    if (!keepSet.has(platform)) {
+      delete next[platform];
+    }
+  }
+  return next;
+}
+
+function isPersistedPlatformCampaignShape(
+  value: unknown,
+): value is PersistedPlatformCampaign {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.contest_type === "string" ||
+    "leaderboard_contest" in record ||
+    "cpm_contest" in record ||
+    "milestone_contest" in record ||
+    "total_budget_cents" in record
+  );
+}
+
 export function readPersistedPlatformCampaigns(
   details: Record<string, unknown> | null | undefined,
 ): PlatformCampaignsMap {
-  const raw = details?.platform_campaigns;
-  if (!raw || typeof raw !== "object") return {};
+  if (!details || typeof details !== "object") return {};
   const map: PlatformCampaignsMap = {};
+
+  // Preferred: platform payout objects live directly on contest_based_details.
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    const value = details[platform];
+    if (isPersistedPlatformCampaignShape(value)) {
+      map[platform] = value;
+    }
+  }
+  if (Object.keys(map).length > 0) return map;
+
+  // Legacy fallback: nested under platform_campaigns.
+  const raw = details.platform_campaigns;
+  if (!raw || typeof raw !== "object") return {};
   for (const [key, value] of Object.entries(
     raw as Record<string, PersistedPlatformCampaign>,
   )) {
-    if (!isVideoContestPlatform(key) || !value || typeof value !== "object") {
+    if (!isVideoContestPlatform(key) || !isPersistedPlatformCampaignShape(value)) {
       continue;
     }
     map[key] = value;
@@ -789,20 +972,322 @@ export function attachPlatformCampaignsToDetails(
   platforms: VideoContestPlatform[],
   snapshots: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
 ): Record<string, unknown> {
-  const next = { ...details };
   if (platforms.length < 2) {
-    delete next.platform_campaigns;
-    return next;
+    return clearPlatformCampaignKeys(details);
   }
-  const campaigns: PlatformCampaignsMap = {};
+  const next = clearPlatformCampaignKeys(details, platforms);
   for (const platform of platforms) {
-    const snap = snapshots[platform];
-    if (snap) {
-      campaigns[platform] = snapshotToPersistedPlatformCampaign(snap);
+    const snap =
+      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    next[platform] = snapshotToPersistedPlatformCampaign(snap);
+  }
+  return next;
+}
+
+export type PlatformRichTextPayload = {
+  html: string;
+  json: unknown;
+};
+
+export type PlatformContentColumns = {
+  brief_html: string;
+  brief_json: unknown;
+  rules_html: string;
+  rules_json: unknown;
+  resources:
+    | PlatformResourceItem[]
+    | Partial<Record<VideoContestPlatform, PlatformResourceItem[]>>;
+  inspiration_links:
+    | PlatformInspirationLink[]
+    | Partial<Record<VideoContestPlatform, PlatformInspirationLink[]>>;
+};
+
+/** True when a jsonb column is a platform-keyed map rather than a legacy array/doc. */
+export function isPlatformKeyedContentMap(
+  value: unknown,
+): value is Partial<Record<VideoContestPlatform, unknown>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(value as Record<string, unknown>).some((key) =>
+    isVideoContestPlatform(key),
+  );
+}
+
+function cloneResourceItems(
+  items: PlatformResourceItem[] | undefined,
+): PlatformResourceItem[] {
+  return (items ?? []).map((item) => ({ ...item }));
+}
+
+function cloneInspirationLinks(
+  items: PlatformInspirationLink[] | undefined,
+): PlatformInspirationLink[] {
+  return (items ?? []).map((item) => ({ ...item }));
+}
+
+/**
+ * Build top-level contest content columns from per-platform snapshots.
+ * Multi-platform contests store platform-keyed maps in the jsonb columns.
+ */
+export function buildPlatformContentColumns(
+  platforms: VideoContestPlatform[],
+  snapshots: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+): PlatformContentColumns {
+  const primary = primaryPlatformOf(platforms);
+  const primarySnap =
+    snapshots[primary] ?? createDefaultPlatformCampaignSnapshot();
+
+  if (platforms.length < 2) {
+    return {
+      brief_html: primarySnap.briefHtml || primarySnap.brief || "",
+      brief_json: primarySnap.briefJson ?? null,
+      rules_html: primarySnap.rulesHtml || "",
+      rules_json: primarySnap.rulesJson ?? null,
+      resources: cloneResourceItems(primarySnap.resources),
+      inspiration_links: cloneInspirationLinks(primarySnap.inspirationLinks),
+    };
+  }
+
+  const briefMap: Partial<Record<VideoContestPlatform, PlatformRichTextPayload>> =
+    {};
+  const rulesMap: Partial<Record<VideoContestPlatform, PlatformRichTextPayload>> =
+    {};
+  const resourcesMap: Partial<
+    Record<VideoContestPlatform, PlatformResourceItem[]>
+  > = {};
+  const inspirationMap: Partial<
+    Record<VideoContestPlatform, PlatformInspirationLink[]>
+  > = {};
+
+  for (const platform of platforms) {
+    const snap =
+      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    briefMap[platform] = {
+      html: snap.briefHtml || snap.brief || "",
+      json: snap.briefJson ?? null,
+    };
+    rulesMap[platform] = {
+      html: snap.rulesHtml || "",
+      json: snap.rulesJson ?? null,
+    };
+    resourcesMap[platform] = cloneResourceItems(snap.resources);
+    inspirationMap[platform] = cloneInspirationLinks(snap.inspirationLinks);
+  }
+
+  return {
+    brief_html: primarySnap.briefHtml || primarySnap.brief || "",
+    brief_json: briefMap,
+    rules_html: primarySnap.rulesHtml || "",
+    rules_json: rulesMap,
+    resources: resourcesMap,
+    inspiration_links: inspirationMap,
+  };
+}
+
+function readRichTextPayload(
+  value: unknown,
+): PlatformRichTextPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.html === "string" || "json" in record) {
+    return {
+      html: typeof record.html === "string" ? record.html : "",
+      json: record.json ?? null,
+    };
+  }
+  return null;
+}
+
+/**
+ * Merge top-level content columns (and legacy platform_campaigns content)
+ * into per-platform snapshots used by the create/edit UI.
+ */
+export function applyPlatformContentColumnsToSnapshots(
+  platforms: VideoContestPlatform[],
+  columns: {
+    brief_html?: string | null;
+    brief_json?: unknown;
+    rules_html?: string | null;
+    rules_json?: unknown;
+    resources?: unknown;
+    inspiration_links?: unknown;
+  },
+  existing: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+): Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> {
+  const next: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> =
+    { ...existing };
+  const primary = primaryPlatformOf(platforms);
+  const briefKeyed = isPlatformKeyedContentMap(columns.brief_json);
+  const rulesKeyed = isPlatformKeyedContentMap(columns.rules_json);
+  const resourcesKeyed = isPlatformKeyedContentMap(columns.resources);
+  const inspirationKeyed = isPlatformKeyedContentMap(columns.inspiration_links);
+
+  for (const platform of platforms) {
+    const snap = clonePlatformCampaignSnapshot(
+      next[platform] ?? createDefaultPlatformCampaignSnapshot(),
+    );
+
+    if (briefKeyed) {
+      const payload = readRichTextPayload(
+        (columns.brief_json as Record<string, unknown>)[platform],
+      );
+      if (payload) {
+        snap.briefHtml = payload.html;
+        snap.brief = payload.html;
+        snap.briefJson = payload.json;
+      }
+    } else if (platform === primary) {
+      if (columns.brief_html) {
+        snap.briefHtml = columns.brief_html;
+        snap.brief = columns.brief_html;
+      }
+      if (columns.brief_json !== undefined) {
+        snap.briefJson = columns.brief_json;
+      }
+    }
+
+    if (rulesKeyed) {
+      const payload = readRichTextPayload(
+        (columns.rules_json as Record<string, unknown>)[platform],
+      );
+      if (payload) {
+        snap.rulesHtml = payload.html;
+        snap.rulesJson = payload.json;
+      }
+    } else if (platform === primary) {
+      if (columns.rules_html) {
+        snap.rulesHtml = columns.rules_html;
+      }
+      if (columns.rules_json !== undefined) {
+        snap.rulesJson = columns.rules_json;
+      }
+    }
+
+    if (resourcesKeyed) {
+      const list = (columns.resources as Record<string, unknown>)[platform];
+      if (Array.isArray(list)) {
+        snap.resources = cloneResourceItems(list as PlatformResourceItem[]);
+      }
+    } else if (platform === primary && Array.isArray(columns.resources)) {
+      snap.resources = cloneResourceItems(
+        columns.resources as PlatformResourceItem[],
+      );
+    }
+
+    if (inspirationKeyed) {
+      const list = (columns.inspiration_links as Record<string, unknown>)[
+        platform
+      ];
+      if (Array.isArray(list)) {
+        snap.inspirationLinks = cloneInspirationLinks(
+          list as PlatformInspirationLink[],
+        );
+      }
+    } else if (
+      platform === primary &&
+      Array.isArray(columns.inspiration_links)
+    ) {
+      snap.inspirationLinks = cloneInspirationLinks(
+        columns.inspiration_links as PlatformInspirationLink[],
+      );
+    }
+
+    // Legacy fallback: content previously nested under platform_campaigns.
+    const legacy = existing[platform];
+    if (legacy) {
+      if (!(snap.briefHtml || snap.brief) && (legacy.briefHtml || legacy.brief)) {
+        snap.briefHtml = legacy.briefHtml || legacy.brief;
+        snap.brief = legacy.briefHtml || legacy.brief;
+        snap.briefJson = legacy.briefJson ?? null;
+      }
+      if (!snap.rulesHtml && legacy.rulesHtml) {
+        snap.rulesHtml = legacy.rulesHtml;
+        snap.rulesJson = legacy.rulesJson ?? null;
+      }
+      if (!(snap.resources ?? []).length && (legacy.resources ?? []).length) {
+        snap.resources = cloneResourceItems(legacy.resources);
+      }
+      if (
+        !(snap.inspirationLinks ?? []).length &&
+        (legacy.inspirationLinks ?? []).length
+      ) {
+        snap.inspirationLinks = cloneInspirationLinks(legacy.inspirationLinks);
+      }
+    }
+
+    next[platform] = snap;
+  }
+
+  return next;
+}
+
+/** Flatten platform-keyed or legacy resource lists for display / cleanup. */
+export function flattenContestResources(
+  resources: unknown,
+): PlatformResourceItem[] {
+  if (Array.isArray(resources)) {
+    return cloneResourceItems(resources as PlatformResourceItem[]);
+  }
+  if (!isPlatformKeyedContentMap(resources)) return [];
+  const out: PlatformResourceItem[] = [];
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    const list = resources[platform];
+    if (Array.isArray(list)) {
+      out.push(...cloneResourceItems(list as PlatformResourceItem[]));
     }
   }
-  next.platform_campaigns = campaigns;
-  return next;
+  return out;
+}
+
+/** Flatten platform-keyed or legacy inspiration lists for display. */
+export function flattenContestInspirationLinks(
+  links: unknown,
+): PlatformInspirationLink[] {
+  if (Array.isArray(links)) {
+    return cloneInspirationLinks(links as PlatformInspirationLink[]);
+  }
+  if (!isPlatformKeyedContentMap(links)) return [];
+  const out: PlatformInspirationLink[] = [];
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    const list = links[platform];
+    if (Array.isArray(list)) {
+      out.push(...cloneInspirationLinks(list as PlatformInspirationLink[]));
+    }
+  }
+  return out;
+}
+
+export function resourcesForPlatform(
+  resources: unknown,
+  platform: VideoContestPlatform | string | null | undefined,
+): PlatformResourceItem[] {
+  if (Array.isArray(resources)) {
+    return cloneResourceItems(resources as PlatformResourceItem[]);
+  }
+  if (!isPlatformKeyedContentMap(resources)) return [];
+  const key = isVideoContestPlatform(platform)
+    ? platform
+    : parseVideoContestPlatforms(platform)[0];
+  if (!key) return flattenContestResources(resources);
+  return cloneResourceItems(
+    (resources[key] as PlatformResourceItem[] | undefined) ?? [],
+  );
+}
+
+export function inspirationLinksForPlatform(
+  links: unknown,
+  platform: VideoContestPlatform | string | null | undefined,
+): PlatformInspirationLink[] {
+  if (Array.isArray(links)) {
+    return cloneInspirationLinks(links as PlatformInspirationLink[]);
+  }
+  if (!isPlatformKeyedContentMap(links)) return [];
+  const key = isVideoContestPlatform(platform)
+    ? platform
+    : parseVideoContestPlatforms(platform)[0];
+  if (!key) return flattenContestInspirationLinks(links);
+  return cloneInspirationLinks(
+    (links[key] as PlatformInspirationLink[] | undefined) ?? [],
+  );
 }
 
 export function getSnapshotChargeableCents(

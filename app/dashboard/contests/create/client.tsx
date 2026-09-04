@@ -64,18 +64,24 @@ import {
   attachPlatformCampaignsToDetails,
   areSectionValuesEqual,
   buildFlushedPlatformCampaigns,
+  clearPlatformCampaignKeys,
   clonePlatformCampaignSnapshot,
   createDefaultAllSectionLive,
   createDefaultPlatformCampaignSnapshot,
   createDefaultSectionPlatforms,
+  deriveSectionPlatformUiState,
   parseVideoContestPlatforms,
   patchSnapshotSection,
   persistedPlatformCampaignToSnapshot,
+  PER_PLATFORM_SECTION_KEYS,
   PLATFORM_SECTION_KEYS,
   platformSectionHint,
   platformsForTab,
+  preparePlatformCampaignsForSave,
   primaryPlatformOf,
   readPersistedPlatformCampaigns,
+  buildPlatformContentColumns,
+  applyPlatformContentColumnsToSnapshots,
   sectionCompletionByTab,
   serializeVideoContestPlatforms,
   sumSnapshotChargeableCents,
@@ -863,6 +869,8 @@ export default function CreateContestPage({
   const [platformCampaigns, setPlatformCampaigns] = useState<
     Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>
   >({});
+  const platformCampaignsRef = useRef(platformCampaigns);
+  platformCampaignsRef.current = platformCampaigns;
   const [category, setCategory] = useState<string>("technology");
   const isRaidTwitter = platform === "twitter" && contentType === "raid";
   const isMultiVideoPlatforms =
@@ -1042,7 +1050,7 @@ export default function CreateContestPage({
   };
 
   const peekFlushedCampaigns = (
-    map = platformCampaigns,
+    map = platformCampaignsRef.current,
     tabs = sectionPlatforms,
     live = allSectionLive,
     platforms = selectedPlatforms,
@@ -1056,7 +1064,14 @@ export default function CreateContestPage({
     );
 
   const flushAllSections = () => {
-    const next = peekFlushedCampaigns();
+    const next = preparePlatformCampaignsForSave(
+      selectedPlatforms,
+      sectionPlatforms,
+      captureCurrentPlatformSnapshot(),
+      platformCampaignsRef.current,
+      allSectionLive,
+    );
+    platformCampaignsRef.current = next;
     setPlatformCampaigns(next);
     return next;
   };
@@ -1064,6 +1079,16 @@ export default function CreateContestPage({
   const markAllSectionLive = (section: PlatformSectionKey) => {
     if (applyingSectionRef.current) return;
     if (sectionPlatforms[section] !== ALL_PLATFORM_TAB) return;
+    const current = captureCurrentPlatformSnapshot();
+    setPlatformCampaigns((prev) => {
+      const next = { ...prev };
+      for (const p of selectedPlatforms) {
+        const existing = next[p] ?? createDefaultPlatformCampaignSnapshot();
+        next[p] = patchSnapshotSection(existing, section, current);
+      }
+      platformCampaignsRef.current = next;
+      return next;
+    });
     setAllSectionLive((prev) =>
       prev[section] ? prev : { ...prev, [section]: true },
     );
@@ -1083,6 +1108,7 @@ export default function CreateContestPage({
     if (!flushed[sourcePlatform]) {
       flushed[sourcePlatform] = source;
     }
+    platformCampaignsRef.current = flushed;
     setPlatformCampaigns(flushed);
     applySectionFromSnapshot(section, source);
     setSectionPlatforms((prev) => ({ ...prev, [section]: nextTab }));
@@ -1107,17 +1133,29 @@ export default function CreateContestPage({
       selectedPlatforms,
       sectionPlatforms,
       current,
-      platformCampaigns,
+      platformCampaignsRef.current,
       allSectionLive,
     );
     const nextTabs = { ...sectionPlatforms };
     const nextLive = { ...allSectionLive };
     for (const key of PLATFORM_SECTION_KEYS) {
       const tab = nextTabs[key];
-      if (tab !== ALL_PLATFORM_TAB && !next.includes(tab)) {
+      if (tab !== ALL_PLATFORM_TAB && !next.includes(tab as VideoContestPlatform)) {
         nextTabs[key] = next.length > 1 ? ALL_PLATFORM_TAB : next[0];
         nextLive[key] = next.length > 1;
       }
+    }
+    // Multi-platform: default per-platform sections to the first platform so
+    // users fill each one explicitly instead of silently broadcasting via All.
+    if (next.length > 1 && selectedPlatforms.length < 2) {
+      for (const key of PER_PLATFORM_SECTION_KEYS) {
+        nextTabs[key] = next[0];
+        nextLive[key] = false;
+      }
+      nextTabs.campaignType = ALL_PLATFORM_TAB;
+      nextTabs.contentType = ALL_PLATFORM_TAB;
+      nextLive.campaignType = true;
+      nextLive.contentType = true;
     }
     const nextMap = buildFlushedPlatformCampaigns(
       next,
@@ -1126,6 +1164,21 @@ export default function CreateContestPage({
       flushedCurrent,
       nextLive,
     );
+    // Ensure every newly selected platform exists in the map.
+    for (const p of next) {
+      if (!nextMap[p]) {
+        nextMap[p] = patchSnapshotSection(
+          patchSnapshotSection(
+            createDefaultPlatformCampaignSnapshot(),
+            "campaignType",
+            current,
+          ),
+          "contentType",
+          current,
+        );
+      }
+    }
+    platformCampaignsRef.current = nextMap;
     setPlatformCampaigns(nextMap);
     setSelectedPlatforms(next);
     setPlatform(serializeVideoContestPlatforms(next));
@@ -1214,7 +1267,11 @@ export default function CreateContestPage({
       section === "prize" ||
       section === "resources" ||
       section === "inspiration"
-        ? sectionCompletionByTab(section, selectedPlatforms, flushedPreview)
+        ? sectionCompletionByTab(
+            section,
+            selectedPlatforms,
+            peekFlushedCampaigns(),
+          )
         : undefined,
   });
 
@@ -3938,10 +3995,10 @@ export default function CreateContestPage({
       let saveInspirationLinks = inspirationLinks;
 
       if (contestFormat === "video") {
-        const flushedCampaigns = flushAllSections();
         const platformsForSave: VideoContestPlatform[] =
           selectedPlatforms.length > 0 ? selectedPlatforms : ["youtube"];
         savePlatform = serializeVideoContestPlatforms(platformsForSave);
+        const flushedCampaigns = flushAllSections();
 
         if (platformsForSave.length > 1) {
           if (!isDraft) {
@@ -3951,8 +4008,7 @@ export default function CreateContestPage({
               const platformError = validatePlatformCampaignSnapshot(p, snap, {
                 requireBriefAndRules: true,
                 requirePayout: true,
-                requireResources: true,
-                requireInspiration: !isRaidTwitter,
+                requireResourcesAndInspiration: !isRaidTwitter,
               });
               if (platformError) {
                 setFormFeedback(platformError);
@@ -3978,18 +4034,24 @@ export default function CreateContestPage({
             platformsForSave,
             flushedCampaigns,
           );
-          saveContestType = primarySnap.contestType;
-          saveBriefHtml = primarySnap.briefHtml || primarySnap.brief;
-          saveBriefJson = primarySnap.briefJson;
-          saveRulesHtml = primarySnap.rulesHtml;
-          saveRulesJson = primarySnap.rulesJson;
-          saveContentType = primarySnap.contentType || "";
-          saveResources = (primarySnap.resources ?? []).map((item) => ({
-            ...item,
-          }));
-          saveInspirationLinks = (primarySnap.inspirationLinks ?? []).map(
-            (item) => ({ ...item }),
+          const contentColumns = buildPlatformContentColumns(
+            platformsForSave,
+            flushedCampaigns,
           );
+          saveContestType = primarySnap.contestType;
+          saveContentType = primarySnap.contentType || "";
+          saveBriefHtml = contentColumns.brief_html;
+          saveBriefJson = contentColumns.brief_json;
+          saveRulesHtml = contentColumns.rules_html;
+          saveRulesJson = contentColumns.rules_json;
+          saveResources = contentColumns.resources as typeof saveResources;
+          saveInspirationLinks =
+            contentColumns.inspiration_links as typeof saveInspirationLinks;
+        } else {
+          // Single video platform: do not keep stale multi-platform payloads.
+          if (contestBasedDetails && typeof contestBasedDetails === "object") {
+            contestBasedDetails = clearPlatformCampaignKeys(contestBasedDetails);
+          }
         }
       }
 
@@ -4003,11 +4065,7 @@ export default function CreateContestPage({
         brief_html: saveBriefHtml,
         brief_json: saveBriefJson,
         rules_html: saveRulesHtml,
-        // Only persist the original rulesJson content
-        rules_json:
-          saveRulesJson && typeof saveRulesJson === "object"
-            ? { ...saveRulesJson }
-            : {},
+        rules_json: saveRulesJson ?? {},
         // Twitter data is now stored in contest_based_details.twitter_campaign (JSONB)
         resources: saveResources,
         // For Twitter raids, target tweet is stored in contest_based_details.twitter_campaign.raid_target,
@@ -5063,11 +5121,25 @@ export default function CreateContestPage({
         const primary = primaryPlatformOf(selectedPlatforms);
         const primarySnap = flushedCampaigns[primary];
         if (primarySnap) {
+          const contentColumns = buildPlatformContentColumns(
+            selectedPlatforms,
+            flushedCampaigns,
+          );
           basicsData.contest_type = primarySnap.contestType;
           if (primarySnap.contentType) {
             basicsData.content_type = primarySnap.contentType;
           }
+          basicsData.brief_html = contentColumns.brief_html;
+          basicsData.brief_json = contentColumns.brief_json;
+          basicsData.rules_html = contentColumns.rules_html;
+          basicsData.rules_json = contentColumns.rules_json;
+          basicsData.resources = contentColumns.resources;
+          basicsData.inspiration_links = contentColumns.inspiration_links;
         }
+      } else if (contestFormat === "video") {
+        basicsData.contest_based_details = clearPlatformCampaignKeys({
+          ...(basicsData.contest_based_details || {}),
+        });
       }
 
       // Categories, subcategories, and interests
@@ -5141,10 +5213,25 @@ export default function CreateContestPage({
           existingContest?.contest_based_details &&
           basicsData.contest_based_details
         ) {
-          basicsData.contest_based_details = {
-            ...existingContest.contest_based_details,
-            ...basicsData.contest_based_details,
+          const incoming = basicsData.contest_based_details as Record<
+            string,
+            unknown
+          >;
+          const mergedDetails: Record<string, unknown> = {
+            ...(existingContest.contest_based_details as Record<
+              string,
+              unknown
+            >),
+            ...incoming,
           };
+          // Drop legacy wrapper + any platform keys not present on this save.
+          delete mergedDetails.platform_campaigns;
+          for (const p of ["youtube", "instagram", "tiktok"] as const) {
+            if (!Object.prototype.hasOwnProperty.call(incoming, p)) {
+              delete mergedDetails[p];
+            }
+          }
+          basicsData.contest_based_details = mergedDetails;
         }
 
         const { advertiser_id: _a, ...updatePayload } = basicsData;
@@ -5560,37 +5647,47 @@ export default function CreateContestPage({
         }
         setStep("resources");
       } else if (step === "resources") {
-        // Validate that at least one resource is provided (either uploaded asset or external link)
-        const hasUploadedAssets = resources.some((r) => r.type === "internal");
-        const hasExternalLinks = resources.some((r) => r.type === "external");
-        if (!hasUploadedAssets && !hasExternalLinks) {
-          setError(
-            "Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements",
-          );
-          setIsLoading(false);
-          return;
-        }
-        if (!isRaidTwitter && inspirationLinks.length === 0) {
-          setError(
-            "Please add at least one inspiration link to help creators understand your vision",
-          );
-          setIsLoading(false);
-          return;
-        }
         if (contestFormat === "video" && selectedPlatforms.length > 1) {
           const flushedCampaigns = flushAllSections();
+          const missingMessages: string[] = [];
           for (const p of selectedPlatforms) {
             const snap =
               flushedCampaigns[p] ?? createDefaultPlatformCampaignSnapshot();
             const platformError = validatePlatformCampaignSnapshot(p, snap, {
-              requireResources: true,
-              requireInspiration: !isRaidTwitter,
+              requireResourcesAndInspiration: true,
             });
             if (platformError) {
-              setError(platformError);
-              setIsLoading(false);
-              return;
+              missingMessages.push(platformError);
             }
+          }
+          if (missingMessages.length > 0) {
+            setError(
+              missingMessages.length === 1
+                ? missingMessages[0]
+                : `Fill resources and inspiration for every selected platform. ${missingMessages.join(" ")}`,
+            );
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // Validate that at least one resource is provided (either uploaded asset or external link)
+          const hasUploadedAssets = resources.some(
+            (r) => r.type === "internal",
+          );
+          const hasExternalLinks = resources.some((r) => r.type === "external");
+          if (!hasUploadedAssets && !hasExternalLinks) {
+            setError(
+              "Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements",
+            );
+            setIsLoading(false);
+            return;
+          }
+          if (inspirationLinks.length === 0) {
+            setError(
+              "Please add at least one inspiration link to help creators understand your vision",
+            );
+            setIsLoading(false);
+            return;
           }
         }
         setStep("prize");
@@ -5918,7 +6015,8 @@ export default function CreateContestPage({
     if (
       draft.contest_type === "leaderboard" ||
       draft.contest_type === "cpm" ||
-      draft.contest_type === "milestone"
+      draft.contest_type === "milestone" ||
+      draft.contest_type === "dual_rewards"
     ) {
       setContestType(draft.contest_type);
     }
@@ -5934,8 +6032,6 @@ export default function CreateContestPage({
     ) {
       setSelectedPlatforms(parsedVideoPlatforms);
       setActivePlatform(parsedVideoPlatforms[0]);
-      setSectionPlatforms(createDefaultSectionPlatforms());
-      setAllSectionLive(createDefaultAllSectionLive());
     } else {
       setSelectedPlatforms(["youtube"]);
       setActivePlatform("youtube");
@@ -6104,12 +6200,11 @@ export default function CreateContestPage({
       }
     }
 
-    // Resources
-    if (draft.resources && typeof draft.resources === "object") {
+    // Resources / inspiration — for multi-platform these are hydrated from
+    // platform-keyed top-level columns after platform payouts are loaded below.
+    if (Array.isArray(draft.resources)) {
       setResources(draft.resources);
     }
-
-    // Inspiration links
     if (Array.isArray(draft.inspiration_links)) {
       setInspirationLinks(draft.inspiration_links);
     }
@@ -6590,8 +6685,36 @@ export default function CreateContestPage({
           loadedMap[p] = clonePlatformCampaignSnapshot(loadedMap[primary]!);
         }
       }
-      setPlatformCampaigns(loadedMap);
-      applyPlatformSnapshot(loadedMap[primary]!);
+      const hydratedMap = applyPlatformContentColumnsToSnapshots(
+        draftVideoPlatforms,
+        {
+          brief_html: draft.brief_html,
+          brief_json: draft.brief_json,
+          rules_html: draft.rules_html,
+          rules_json: draft.rules_json,
+          resources: draft.resources,
+          inspiration_links: draft.inspiration_links,
+        },
+        loadedMap,
+      );
+      setPlatformCampaigns(hydratedMap);
+      platformCampaignsRef.current = hydratedMap;
+      const uiState = deriveSectionPlatformUiState(
+        draftVideoPlatforms,
+        hydratedMap,
+      );
+      setSectionPlatforms(uiState.tabs);
+      setAllSectionLive(uiState.allLive);
+      applyPlatformSnapshot(hydratedMap[primary]!);
+      for (const section of PER_PLATFORM_SECTION_KEYS) {
+        const tab = uiState.tabs[section];
+        if (tab === ALL_PLATFORM_TAB || tab === primary) continue;
+        const snap = hydratedMap[tab];
+        if (snap) applySectionFromSnapshot(section, snap);
+      }
+    } else {
+      setSectionPlatforms(createDefaultSectionPlatforms());
+      setAllSectionLive(createDefaultAllSectionLive());
     }
 
     console.log("Draft loaded successfully");
@@ -6960,13 +7083,6 @@ export default function CreateContestPage({
                 )}
               >
                 <h2 className="font-semibold text-xl">Rewards & Timeline</h2>
-                {contestFormat === "video" && (
-                  <div className="pt-2">
-                    <PlatformCampaignTabs
-                      {...videoSectionTabProps("prize")}
-                    />
-                  </div>
-                )}
               </div>
               <div
                 className={cn(
@@ -7958,6 +8074,12 @@ export default function CreateContestPage({
             {/* <Separator className="my-6" /> */}
 
             {/* Conditional UI based on contestType */}
+
+            {contestFormat === "video" && (
+              <div className="border-t-2 border-dashed pt-6">
+                <PlatformCampaignTabs {...videoSectionTabProps("prize")} />
+              </div>
+            )}
 
             {contestType === "leaderboard" ? (
               <>
@@ -9511,6 +9633,11 @@ export default function CreateContestPage({
                     Motivate creators with additional earning opportunities
                     beyond the main prize pool or CPM rate.
                   </p>
+                  {contestFormat === "video" && (
+                    <PlatformCampaignTabs
+                      {...videoSectionTabProps("prize")}
+                    />
+                  )}
                 </div>
 
                 {contestType !== "milestone" && (
@@ -11358,8 +11485,44 @@ export default function CreateContestPage({
               <div className="space-y-2">
                 <Label htmlFor="contentType">Content Type</Label>
                 <Select
-                  value={contentType}
-                  onValueChange={(value: any) => setContentType(value)}
+                    value={contentType}
+                  onValueChange={(value: any) => {
+                    setContentType(value);
+                    if (sectionPlatforms.contentType === ALL_PLATFORM_TAB) {
+                      setAllSectionLive((prev) => ({
+                        ...prev,
+                        contentType: true,
+                      }));
+                    }
+                    const videoContentType: VideoContentType =
+                      value === "ugc" ||
+                      value === "clipping" ||
+                      value === "other"
+                        ? value
+                        : "";
+                    const current = {
+                      ...captureCurrentPlatformSnapshot(),
+                      contentType: videoContentType,
+                    };
+                    setPlatformCampaigns((prev) => {
+                      const next = { ...prev };
+                      for (const p of platformsForTab(
+                        sectionPlatforms.contentType === ALL_PLATFORM_TAB
+                          ? ALL_PLATFORM_TAB
+                          : sectionPlatforms.contentType,
+                        selectedPlatforms,
+                      )) {
+                        const existing =
+                          next[p] ?? createDefaultPlatformCampaignSnapshot();
+                        next[p] = patchSnapshotSection(
+                          existing,
+                          "contentType",
+                          current,
+                        );
+                      }
+                      return next;
+                    });
+                  }}
                 >
                   <SelectTrigger
                     id="contentType"
@@ -13585,17 +13748,10 @@ export default function CreateContestPage({
                 )}
               >
                 <div className="px-6 pt-6">
-                  <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                    <CardTitle>
-                      Resources for Participants{" "}
-                      <span className="text-red-500">*</span>
-                    </CardTitle>
-                    {contestFormat === "video" && (
-                      <PlatformCampaignTabs
-                        {...videoSectionTabProps("resources")}
-                      />
-                    )}
-                  </div>
+                  <CardTitle className="mb-3">
+                    Resources for Participants{" "}
+                    <span className="text-red-500">*</span>
+                  </CardTitle>
                   <CardDescription className="text-[13px]">
                     Provide at least one resource to help participants
                     understand your brand and campaign requirements. You can
@@ -13605,6 +13761,13 @@ export default function CreateContestPage({
                   <span className="text-sm text-red-600 font-medium mt-2">
                     At least one required
                   </span>
+                  {contestFormat === "video" && (
+                    <div className="pt-3">
+                      <PlatformCampaignTabs
+                        {...videoSectionTabProps("resources")}
+                      />
+                    </div>
+                  )}
                 </div>
                 <CardContent className="space-y-6">
                   {/* Asset Upload */}
@@ -14191,22 +14354,22 @@ export default function CreateContestPage({
                 <div>
                   {/* Inspiration / Target Tweet Section */}
                   <div>
-                    <div className="flex flex-wrap items-start justify-between gap-3 px-6 pb-2">
-                      <CardTitle>
-                        {isRaidTwitter ? "Target Tweet" : "Inspiration Content"}{" "}
-                        <span className="text-red-500">*</span>
-                      </CardTitle>
-                      {contestFormat === "video" && !isRaidTwitter && (
-                        <PlatformCampaignTabs
-                          {...videoSectionTabProps("inspiration")}
-                        />
-                      )}
-                    </div>
+                    <CardTitle className="px-6 pb-2">
+                      {isRaidTwitter ? "Target Tweet" : "Inspiration Content"}{" "}
+                      <span className="text-red-500">*</span>
+                    </CardTitle>
                     <CardDescription className="text-[14px] px-6 pb-4">
                       {isRaidTwitter
                         ? "Add the link to the tweet creators should engage with, plus a short description."
                         : "Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok,Twitter etc.) with a description."}
                     </CardDescription>
+                    {contestFormat === "video" && (
+                      <div className="px-6 pb-4">
+                        <PlatformCampaignTabs
+                          {...videoSectionTabProps("inspiration")}
+                        />
+                      </div>
+                    )}
                   </div>
                   <CardContent className="space-y-4">
                     {isRaidTwitter ? (

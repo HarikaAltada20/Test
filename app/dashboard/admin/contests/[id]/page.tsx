@@ -12,6 +12,7 @@ import {
 import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
 import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import { flattenContestInspirationLinks } from "@/lib/video-platform-campaigns";
 
 export default async function AdminContestDetailPage({
   params,
@@ -102,9 +103,9 @@ export default async function AdminContestDetailPage({
         pcRow?.post_campaign_last_metrics_updated ?? null;
     }
 
-    const finalInspirationLinks = Array.isArray(contestData.inspiration_links)
-      ? contestData.inspiration_links
-      : [];
+    const finalInspirationLinks = flattenContestInspirationLinks(
+      contestData.inspiration_links,
+    );
 
     const isTwitterCampaign =
       (contestData.platform?.toLowerCase() === "twitter" ||

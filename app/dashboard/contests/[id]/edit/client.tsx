@@ -141,16 +141,22 @@ import {
   ALL_PLATFORM_TAB,
   attachPlatformCampaignsToDetails,
   areSectionValuesEqual,
+  applyPlatformContentColumnsToSnapshots,
   buildFlushedPlatformCampaigns,
+  buildPlatformContentColumns,
   clonePlatformCampaignSnapshot,
   createDefaultAllSectionLive,
   createDefaultPlatformCampaignSnapshot,
   createDefaultSectionPlatforms,
+  deriveSectionPlatformUiState,
   parseVideoContestPlatforms,
+  patchSnapshotSection,
   persistedPlatformCampaignToSnapshot,
+  PER_PLATFORM_SECTION_KEYS,
   PLATFORM_SECTION_KEYS,
   platformSectionHint,
   platformsForTab,
+  preparePlatformCampaignsForSave,
   primaryPlatformOf,
   readPersistedPlatformCampaigns,
   sectionCompletionByTab,
@@ -565,6 +571,8 @@ export default function EditContestPage({
   const [platformCampaigns, setPlatformCampaigns] = useState<
     Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>
   >({});
+  const platformCampaignsRef = useRef(platformCampaigns);
+  platformCampaignsRef.current = platformCampaigns;
   // YouTube analytics visibility (brand-side)
   const [showBrandCoreAnalytics, setShowBrandCoreAnalytics] =
     useState<boolean>(true);
@@ -999,7 +1007,7 @@ export default function EditContestPage({
   };
 
   const peekFlushedCampaigns = (
-    map = platformCampaigns,
+    map = platformCampaignsRef.current,
     tabs = sectionPlatforms,
     live = allSectionLive,
     platforms = selectedPlatforms,
@@ -1013,7 +1021,14 @@ export default function EditContestPage({
     );
 
   const flushAllSections = () => {
-    const next = peekFlushedCampaigns();
+    const next = preparePlatformCampaignsForSave(
+      selectedPlatforms,
+      sectionPlatforms,
+      captureCurrentPlatformSnapshot(),
+      platformCampaignsRef.current,
+      allSectionLive,
+    );
+    platformCampaignsRef.current = next;
     setPlatformCampaigns(next);
     return next;
   };
@@ -1021,6 +1036,16 @@ export default function EditContestPage({
   const markAllSectionLive = (section: PlatformSectionKey) => {
     if (applyingSectionRef.current) return;
     if (sectionPlatforms[section] !== ALL_PLATFORM_TAB) return;
+    const current = captureCurrentPlatformSnapshot();
+    setPlatformCampaigns((prev) => {
+      const next = { ...prev };
+      for (const p of selectedPlatforms) {
+        const existing = next[p] ?? createDefaultPlatformCampaignSnapshot();
+        next[p] = patchSnapshotSection(existing, section, current);
+      }
+      platformCampaignsRef.current = next;
+      return next;
+    });
     setAllSectionLive((prev) =>
       prev[section] ? prev : { ...prev, [section]: true },
     );
@@ -1040,6 +1065,7 @@ export default function EditContestPage({
     if (!flushed[sourcePlatform]) {
       flushed[sourcePlatform] = source;
     }
+    platformCampaignsRef.current = flushed;
     setPlatformCampaigns(flushed);
     applySectionFromSnapshot(section, source);
     setSectionPlatforms((prev) => ({ ...prev, [section]: nextTab }));
@@ -1064,7 +1090,7 @@ export default function EditContestPage({
       selectedPlatforms,
       sectionPlatforms,
       current,
-      platformCampaigns,
+      platformCampaignsRef.current,
       allSectionLive,
     );
     const nextTabs = { ...sectionPlatforms };
@@ -1076,6 +1102,16 @@ export default function EditContestPage({
         nextLive[key] = next.length > 1;
       }
     }
+    if (next.length > 1 && selectedPlatforms.length < 2) {
+      for (const key of PER_PLATFORM_SECTION_KEYS) {
+        nextTabs[key] = next[0];
+        nextLive[key] = false;
+      }
+      nextTabs.campaignType = ALL_PLATFORM_TAB;
+      nextTabs.contentType = ALL_PLATFORM_TAB;
+      nextLive.campaignType = true;
+      nextLive.contentType = true;
+    }
     const nextMap = buildFlushedPlatformCampaigns(
       next,
       nextTabs,
@@ -1083,6 +1119,20 @@ export default function EditContestPage({
       flushedCurrent,
       nextLive,
     );
+    for (const p of next) {
+      if (!nextMap[p]) {
+        nextMap[p] = patchSnapshotSection(
+          patchSnapshotSection(
+            createDefaultPlatformCampaignSnapshot(),
+            "campaignType",
+            current,
+          ),
+          "contentType",
+          current,
+        );
+      }
+    }
+    platformCampaignsRef.current = nextMap;
     setPlatformCampaigns(nextMap);
     setSelectedPlatforms(next);
     setPlatform(serializeVideoContestPlatforms(next));
@@ -1118,8 +1168,8 @@ export default function EditContestPage({
     rulesHtml: string;
     rulesJson: unknown;
     contentType: string;
-    resources: ResourceItem[];
-    inspirationLinks: { url: string; description: string }[];
+    resources: unknown;
+    inspirationLinks: unknown;
     error?: string;
   } => {
     const isRaidTwitterEdit =
@@ -1173,6 +1223,10 @@ export default function EditContestPage({
       flushed[primary] ?? createDefaultPlatformCampaignSnapshot();
     const twitterCampaign = (details as { twitter_campaign?: unknown })
       .twitter_campaign;
+    const contentColumns = buildPlatformContentColumns(
+      selectedPlatforms,
+      flushed,
+    );
     return {
       details: attachPlatformCampaignsToDetails(
         {
@@ -1184,15 +1238,13 @@ export default function EditContestPage({
       ),
       platform: serializeVideoContestPlatforms(selectedPlatforms),
       contestType: primarySnap.contestType,
-      briefHtml: primarySnap.briefHtml || primarySnap.brief,
-      briefJson: primarySnap.briefJson,
-      rulesHtml: primarySnap.rulesHtml,
-      rulesJson: primarySnap.rulesJson,
+      briefHtml: contentColumns.brief_html,
+      briefJson: contentColumns.brief_json,
+      rulesHtml: contentColumns.rules_html,
+      rulesJson: contentColumns.rules_json,
       contentType: primarySnap.contentType || "",
-      resources: (primarySnap.resources ?? []).map((item) => ({ ...item })),
-      inspirationLinks: (primarySnap.inspirationLinks ?? []).map((item) => ({
-        ...item,
-      })),
+      resources: contentColumns.resources,
+      inspirationLinks: contentColumns.inspiration_links,
     };
   };
   const [bonusEnabled, setBonusEnabled] = useState(false);
@@ -1811,13 +1863,11 @@ export default function EditContestPage({
               setEndTime(timeString);
             }
 
-            // Parse inspiration_links
-            let parsedInspirationLinks: { url: string; description: string }[] =
-              [];
+            // Inspiration / resources: flat arrays only here. Multi-platform
+            // platform-keyed columns hydrate into snapshots further below.
             if (Array.isArray(data.inspiration_links)) {
-              parsedInspirationLinks = data.inspiration_links;
+              setInspirationLinks(data.inspiration_links);
             }
-            setInspirationLinks(parsedInspirationLinks);
 
             // Parse tracking_links
             let parsedTrackingLinks: { url: string; description: string }[] =
@@ -2034,8 +2084,11 @@ export default function EditContestPage({
               ytVisibility.show_demographics_to_brand ?? true,
             );
 
-            // Load existing resources (array format only)
-            setResources(data.resources || []);
+            // Load existing resources (flat array only; multi-platform
+            // platform-keyed columns are hydrated into snapshots below)
+            if (Array.isArray(data.resources)) {
+              setResources(data.resources);
+            }
 
             // Load new features (2025-10-01)
             setMultipleSubmissionsEnabled(
@@ -2556,33 +2609,33 @@ export default function EditContestPage({
                     );
                   }
                 }
-                const fallbackResources = Array.isArray(data.resources)
-                  ? data.resources
-                  : [];
-                const fallbackInspiration = Array.isArray(data.inspiration_links)
-                  ? data.inspiration_links
-                  : [];
-                for (const p of parsedVideoPlatforms) {
-                  const snap = loadedMap[p];
-                  if (!snap) continue;
-                  if (!(snap.resources ?? []).length && fallbackResources.length) {
-                    snap.resources = fallbackResources.map((item: ResourceItem) => ({
-                      ...item,
-                    }));
-                  }
-                  if (
-                    !(snap.inspirationLinks ?? []).length &&
-                    fallbackInspiration.length
-                  ) {
-                    snap.inspirationLinks = fallbackInspiration.map(
-                      (item: { url: string; description: string }) => ({ ...item }),
-                    );
-                  }
+                const hydratedMap = applyPlatformContentColumnsToSnapshots(
+                  parsedVideoPlatforms,
+                  {
+                    brief_html: data.brief_html,
+                    brief_json: data.brief_json,
+                    rules_html: data.rules_html,
+                    rules_json: data.rules_json,
+                    resources: data.resources,
+                    inspiration_links: data.inspiration_links,
+                  },
+                  loadedMap,
+                );
+                setPlatformCampaigns(hydratedMap);
+                platformCampaignsRef.current = hydratedMap;
+                const uiState = deriveSectionPlatformUiState(
+                  parsedVideoPlatforms,
+                  hydratedMap,
+                );
+                setSectionPlatforms(uiState.tabs);
+                setAllSectionLive(uiState.allLive);
+                applyPlatformSnapshot(hydratedMap[primary]!);
+                for (const section of PER_PLATFORM_SECTION_KEYS) {
+                  const tab = uiState.tabs[section];
+                  if (tab === ALL_PLATFORM_TAB || tab === primary) continue;
+                  const snap = hydratedMap[tab];
+                  if (snap) applySectionFromSnapshot(section, snap);
                 }
-                setPlatformCampaigns(loadedMap);
-                setSectionPlatforms(createDefaultSectionPlatforms());
-                setAllSectionLive(createDefaultAllSectionLive());
-                applyPlatformSnapshot(loadedMap[primary]!);
               }
             }
           }
@@ -14379,6 +14432,18 @@ export default function EditContestPage({
                         Motivate creators with bonuses beyond the main prize
                         pool or CPM rate.
                       </p>
+                      {!datesOnly && isVideoEditContest && (
+                        <div className="pt-3">
+                          <PlatformCampaignTabs
+                            platforms={selectedPlatforms}
+                            active={sectionPlatforms.prize}
+                            onChange={(tab) =>
+                              switchSectionPlatform("prize", tab)
+                            }
+                            isDark={isDark}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {prizeViewContestType !== "milestone" && (

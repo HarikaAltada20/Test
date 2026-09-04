@@ -106,6 +106,10 @@ import {
   trackSubmitEntryClick,
   type SubmitEntryButton,
 } from "@/lib/gtag";
+import {
+  flattenContestInspirationLinks,
+  flattenContestResources,
+} from "@/lib/video-platform-campaigns";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -720,11 +724,8 @@ export function ContestClientPage({
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
 
   const hasInspirationLinks = useMemo(() => {
-    const links = Array.isArray(contest?.inspiration_links)
-      ? contest.inspiration_links
-      : [];
-    return links.some(
-      (link: { url?: string }) => typeof link?.url === "string" && link.url.trim() !== "",
+    return flattenContestInspirationLinks(contest?.inspiration_links).some(
+      (link) => typeof link?.url === "string" && link.url.trim() !== "",
     );
   }, [contest?.inspiration_links]);
 
@@ -6818,22 +6819,10 @@ export function ContestClientPage({
                     Resources & Tools
                   </h3>
 
-                  {contest.resources &&
-                  ((Array.isArray(contest.resources) &&
-                    contest.resources.length > 0) ||
-                    (typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0)) ? (
+                  {flattenContestResources(contest.resources).length > 0 ? (
                     <div className="grid gap-4">
-                      {(Array.isArray(contest.resources)
-                        ? contest.resources
-                        : Object.entries(contest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            }),
-                          )
-                      ).map((resource: any, idx: number) => {
+                      {flattenContestResources(contest.resources).map(
+                      (resource: any, idx: number) => {
                         const isImage =
                           resource.url &&
                           (resource.url.startsWith("data:image") ||
@@ -7002,9 +6991,9 @@ export function ContestClientPage({
 
                 {/* Inspiration Links Section */}
                 {(() => {
-                  let links = Array.isArray(contest.inspiration_links)
-                    ? contest.inspiration_links
-                    : [];
+                  let links = flattenContestInspirationLinks(
+                    contest.inspiration_links,
+                  );
                   return links.length > 0 ? (
                     <>
                       <Separator className="my-8" />

@@ -2,13 +2,17 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   attachPlatformCampaignsToDetails,
+  applyPlatformContentColumnsToSnapshots,
   buildFlushedPlatformCampaigns,
+  buildPlatformContentColumns,
   createDefaultAllSectionLive,
   createDefaultPlatformCampaignSnapshot,
   createDefaultSectionPlatforms,
+  deriveSectionPlatformUiState,
   parseVideoContestPlatforms,
   patchSnapshotSection,
   platformsForTab,
+  preparePlatformCampaignsForSave,
   serializeVideoContestPlatforms,
   snapshotToPersistedPlatformCampaign,
   persistedPlatformCampaignToSnapshot,
@@ -42,7 +46,7 @@ describe("serializeVideoContestPlatforms", () => {
 });
 
 describe("multi-platform payout persistence", () => {
-  it("stores platform_campaigns only when two or more platforms are selected", () => {
+  it("stores platform payout keys only when two or more platforms are selected", () => {
     const youtube = createDefaultPlatformCampaignSnapshot();
     youtube.totalPrizePool = 10_000;
     const instagram = createDefaultPlatformCampaignSnapshot();
@@ -51,27 +55,26 @@ describe("multi-platform payout persistence", () => {
     instagram.cpmRate = "2";
 
     const single = attachPlatformCampaignsToDetails(
-      { leaderboard_contest: { total_prize: 10_000 } },
+      { leaderboard_contest: { total_prize: 10_000 }, youtube: { contest_type: "leaderboard" } },
       ["youtube"],
       { youtube },
     );
     assert.equal(single.platform_campaigns, undefined);
+    assert.equal(single.youtube, undefined);
+    assert.equal(single.instagram, undefined);
 
     const multi = attachPlatformCampaignsToDetails({}, ["youtube", "instagram"], {
       youtube,
       instagram,
     }) as {
-      platform_campaigns: Record<
-        string,
-        { contest_type: string; cpm_contest?: { total_budget?: number } }
-      >;
+      youtube: { contest_type: string };
+      instagram: { contest_type: string; cpm_contest?: { total_budget?: number } };
+      platform_campaigns?: unknown;
     };
-    assert.equal(multi.platform_campaigns.youtube.contest_type, "leaderboard");
-    assert.equal(multi.platform_campaigns.instagram.contest_type, "cpm");
-    assert.equal(
-      multi.platform_campaigns.instagram.cpm_contest?.total_budget,
-      5_000,
-    );
+    assert.equal(multi.platform_campaigns, undefined);
+    assert.equal(multi.youtube.contest_type, "leaderboard");
+    assert.equal(multi.instagram.contest_type, "cpm");
+    assert.equal(multi.instagram.cpm_contest?.total_budget, 5_000);
   });
 
   it("sums chargeable cents across platform snapshots", () => {
@@ -89,7 +92,7 @@ describe("multi-platform payout persistence", () => {
     );
   });
 
-  it("sums persisted platform_campaigns for chargeable budget", () => {
+  it("sums persisted platform payout keys for chargeable budget", () => {
     const youtube = snapshotToPersistedPlatformCampaign({
       ...createDefaultPlatformCampaignSnapshot(),
       totalPrizePool: 8_000,
@@ -100,9 +103,125 @@ describe("multi-platform payout persistence", () => {
       totalBudget: "25",
     });
     const cents = sumPersistedPlatformCampaignsChargeableCents({
-      platform_campaigns: { youtube, tiktok },
+      youtube,
+      tiktok,
     });
     assert.equal(cents, 10_500);
+  });
+});
+
+describe("preparePlatformCampaignsForSave", () => {
+  it("forces shared campaign/content type onto every selected platform", () => {
+    const tabs = createDefaultSectionPlatforms();
+    tabs.brief = "instagram";
+    tabs.prize = "youtube";
+    const live = createDefaultAllSectionLive();
+    live.brief = false;
+    live.prize = false;
+
+    const current = createDefaultPlatformCampaignSnapshot();
+    current.contestType = "cpm";
+    current.contentType = "ugc";
+    current.cpmRate = "2.5";
+    current.totalBudget = "100";
+    current.briefHtml = "instagram brief";
+
+    const existingYt = createDefaultPlatformCampaignSnapshot();
+    existingYt.contestType = "leaderboard";
+    existingYt.briefHtml = "youtube brief";
+    existingYt.totalPrizePool = 5000;
+
+    const existingIg = createDefaultPlatformCampaignSnapshot();
+    existingIg.contestType = "leaderboard";
+    existingIg.briefHtml = "old ig brief";
+
+    const prepared = preparePlatformCampaignsForSave(
+      ["youtube", "instagram", "tiktok"],
+      tabs,
+      current,
+      { youtube: existingYt, instagram: existingIg },
+      live,
+    );
+
+    assert.equal(prepared.youtube?.contestType, "cpm");
+    assert.equal(prepared.instagram?.contestType, "cpm");
+    assert.equal(prepared.tiktok?.contestType, "cpm");
+    assert.equal(prepared.youtube?.contentType, "ugc");
+    assert.equal(prepared.instagram?.contentType, "ugc");
+    assert.equal(prepared.tiktok?.contentType, "ugc");
+    assert.equal(prepared.instagram?.briefHtml, "instagram brief");
+    assert.equal(prepared.youtube?.briefHtml, "youtube brief");
+    assert.ok(prepared.tiktok);
+  });
+
+  it("always persists every selected platform in attachPlatformCampaignsToDetails", () => {
+    const youtube = createDefaultPlatformCampaignSnapshot();
+    youtube.totalPrizePool = 1000;
+    const details = attachPlatformCampaignsToDetails({}, ["youtube", "tiktok"], {
+      youtube,
+    }) as {
+      youtube: { contest_type: string };
+      tiktok: { contest_type: string };
+      platform_campaigns?: unknown;
+    };
+    assert.equal(details.platform_campaigns, undefined);
+    assert.equal(details.youtube.contest_type, "leaderboard");
+    assert.equal(details.tiktok.contest_type, "leaderboard");
+  });
+});
+
+describe("deriveSectionPlatformUiState", () => {
+  it("opens divergent sections in selected-platforms mode", () => {
+    const youtube = createDefaultPlatformCampaignSnapshot();
+    youtube.briefHtml = "yt brief";
+    const instagram = createDefaultPlatformCampaignSnapshot();
+    instagram.briefHtml = "ig brief";
+    const { tabs, allLive } = deriveSectionPlatformUiState(
+      ["youtube", "instagram"],
+      { youtube, instagram },
+    );
+    assert.equal(tabs.brief, "youtube");
+    assert.equal(allLive.brief, false);
+    assert.equal(tabs.campaignType, "all");
+    assert.equal(allLive.campaignType, true);
+  });
+
+  it("keeps uniform sections on All", () => {
+    const youtube = createDefaultPlatformCampaignSnapshot();
+    youtube.briefHtml = "same";
+    const instagram = createDefaultPlatformCampaignSnapshot();
+    instagram.briefHtml = "same";
+    const { tabs, allLive } = deriveSectionPlatformUiState(
+      ["youtube", "instagram"],
+      { youtube, instagram },
+    );
+    assert.equal(tabs.brief, "all");
+    assert.equal(allLive.brief, true);
+  });
+});
+
+describe("buildFlushedPlatformCampaigns All-guard", () => {
+  it("does not broadcast All over divergent per-platform briefs", () => {
+    const tabs = createDefaultSectionPlatforms();
+    const live = createDefaultAllSectionLive();
+    const current = createDefaultPlatformCampaignSnapshot();
+    current.briefHtml = "editor buffer";
+
+    const youtube = createDefaultPlatformCampaignSnapshot();
+    youtube.briefHtml = "yt only";
+    const instagram = createDefaultPlatformCampaignSnapshot();
+    instagram.briefHtml = "ig only";
+
+    const flushed = buildFlushedPlatformCampaigns(
+      ["youtube", "instagram"],
+      tabs,
+      current,
+      { youtube, instagram },
+      live,
+    );
+
+    assert.equal(flushed.youtube?.briefHtml, "yt only");
+    assert.equal(flushed.instagram?.briefHtml, "ig only");
   });
 });
 
@@ -209,7 +328,7 @@ describe("buildFlushedPlatformCampaigns resources", () => {
     );
   });
 
-  it("round-trips resources through persisted platform campaigns", () => {
+  it("round-trips content via top-level platform content columns", () => {
     const snapshot = createDefaultPlatformCampaignSnapshot();
     snapshot.resources = [
       { url: "https://cdn.example.com/logo.png", description: "Logo", type: "internal" },
@@ -217,10 +336,45 @@ describe("buildFlushedPlatformCampaigns resources", () => {
     snapshot.inspirationLinks = [
       { url: "https://tiktok.com/@brand", description: "Tone" },
     ];
-    const restored = persistedPlatformCampaignToSnapshot(
-      snapshotToPersistedPlatformCampaign(snapshot),
+    snapshot.briefHtml = "<p>brief</p>";
+    snapshot.rulesHtml = "<p>rules</p>";
+
+    const columns = buildPlatformContentColumns(["youtube"], { youtube: snapshot });
+    assert.deepEqual(columns.resources, snapshot.resources);
+    assert.deepEqual(columns.inspiration_links, snapshot.inspirationLinks);
+
+    const multi = buildPlatformContentColumns(
+      ["youtube", "tiktok"],
+      { youtube: snapshot, tiktok: createDefaultPlatformCampaignSnapshot() },
     );
-    assert.deepEqual(restored.resources, snapshot.resources);
-    assert.deepEqual(restored.inspirationLinks, snapshot.inspirationLinks);
+    assert.ok(!Array.isArray(multi.resources));
+    assert.deepEqual(
+      (multi.resources as Record<string, unknown>).youtube,
+      snapshot.resources,
+    );
+
+    const restored = applyPlatformContentColumnsToSnapshots(
+      ["youtube", "tiktok"],
+      multi,
+      {
+        youtube: createDefaultPlatformCampaignSnapshot(),
+        tiktok: createDefaultPlatformCampaignSnapshot(),
+      },
+    );
+    assert.deepEqual(restored.youtube?.resources, snapshot.resources);
+    assert.deepEqual(
+      restored.youtube?.inspirationLinks,
+      snapshot.inspirationLinks,
+    );
+
+    // Persisted platform payout objects no longer carry content fields.
+    const persisted = snapshotToPersistedPlatformCampaign(snapshot);
+    assert.equal((persisted as { resources?: unknown }).resources, undefined);
+    assert.equal(
+      (persisted as { inspiration_links?: unknown }).inspiration_links,
+      undefined,
+    );
+    assert.equal((persisted as { brief_html?: unknown }).brief_html, undefined);
+    assert.equal((persisted as { content_type?: unknown }).content_type, undefined);
   });
 });

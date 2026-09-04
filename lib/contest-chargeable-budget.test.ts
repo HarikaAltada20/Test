@@ -59,15 +59,13 @@ describe("getChargeableBudgetCents", () => {
       contest_type: "leaderboard",
       contest_based_details: {
         leaderboard_contest: { total_prize: 10_000 },
-        platform_campaigns: {
-          youtube: {
-            contest_type: "leaderboard",
-            leaderboard_contest: { total_prize: 10_000 },
-          },
-          instagram: {
-            contest_type: "cpm",
-            cpm_contest: { total_budget: 4_000 },
-          },
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_prize: 10_000 },
+        },
+        instagram: {
+          contest_type: "cpm",
+          cpm_contest: { total_budget: 4_000 },
         },
       },
     });
