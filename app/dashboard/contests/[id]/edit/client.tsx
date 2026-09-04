@@ -141,14 +141,17 @@ import {
   ALL_PLATFORM_TAB,
   attachPlatformCampaignsToDetails,
   areSectionValuesEqual,
+  applyLegacyCreatorEarningsToSnapshots,
   applyPlatformContentColumnsToSnapshots,
   buildFlushedPlatformCampaigns,
   buildPlatformContentColumns,
+  buildPlatformCreatorEarningsColumns,
   clonePlatformCampaignSnapshot,
   createDefaultAllSectionLive,
   createDefaultPlatformCampaignSnapshot,
   createDefaultSectionPlatforms,
   deriveSectionPlatformUiState,
+  isPlatformKeyedContentMap,
   parseVideoContestPlatforms,
   patchSnapshotSection,
   persistedPlatformCampaignToSnapshot,
@@ -161,7 +164,6 @@ import {
   readPersistedPlatformCampaigns,
   sectionCompletionByTab,
   serializeVideoContestPlatforms,
-  topLevelPayoutDetailsFromSnapshot,
   validatePlatformCampaignSnapshot,
   type PlatformCampaignSnapshot,
   type PlatformSectionKey,
@@ -486,7 +488,7 @@ type ContestData = {
   content_type?: "ugc" | "clipping" | "other" | null;
   contest_format?: string | null; // Text/image vs video campaign format
   bonus_details?: { description_html?: string; description_json?: any } | null;
-  max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
+  max_earnings_per_creator?: number | Record<string, unknown> | null; // cents or platform-keyed map
   // Categories, subcategories, and interests
   categories?: string[] | null;
   subcategories?:
@@ -841,6 +843,8 @@ export default function EditContestPage({
     let nextBriefJson = briefJson;
     let nextRulesHtml = rulesHtml;
     let nextRulesJson = rulesJson;
+    let nextBonusHtml = bonusHtml;
+    let nextBonusJson = bonusJson;
     if (richTextEditorRef.current) {
       const content = richTextEditorRef.current.getContent();
       nextBriefHtml = content.html;
@@ -850,6 +854,11 @@ export default function EditContestPage({
       const content = rulesRichTextEditorRef.current.getContent();
       nextRulesHtml = content.html;
       nextRulesJson = content.json;
+    }
+    if (bonusEnabled && bonusRichTextEditorRef.current) {
+      const content = bonusRichTextEditorRef.current.getContent();
+      nextBonusHtml = content.html;
+      nextBonusJson = content.json;
     }
     const videoContentType: VideoContentType =
       contentType === "ugc" ||
@@ -884,9 +893,27 @@ export default function EditContestPage({
       milestoneBonusTopReelsMin,
       milestoneBonusTopReelsMinViews,
       milestoneBonusTopReelsPayout,
+      maxEarningsPerCreator,
+      bonusEnabled,
+      bonusHtml: nextBonusHtml,
+      bonusJson: nextBonusJson,
       resources: resources.map((item) => ({ ...item })),
       inspirationLinks: inspirationLinks.map((item) => ({ ...item })),
     };
+  };
+
+  const scheduleEditorContent = (
+    editor:
+      | { setContent: (content: unknown) => void }
+      | null
+      | undefined,
+    content: unknown,
+  ) => {
+    if (!editor || content == null || content === "") return;
+    const apply = () => editor.setContent(content);
+    setTimeout(apply, 0);
+    setTimeout(apply, 100);
+    setTimeout(apply, 300);
   };
 
   const applyPlatformSnapshot = (snapshot: PlatformCampaignSnapshot) => {
@@ -918,19 +945,27 @@ export default function EditContestPage({
     setMilestoneBonusTopReelsMin(snapshot.milestoneBonusTopReelsMin);
     setMilestoneBonusTopReelsMinViews(snapshot.milestoneBonusTopReelsMinViews);
     setMilestoneBonusTopReelsPayout(snapshot.milestoneBonusTopReelsPayout);
+    setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator ?? "");
+    setBonusEnabled(Boolean(snapshot.bonusEnabled));
+    setBonusHtml(snapshot.bonusHtml || "");
+    setBonusJson(snapshot.bonusJson ?? null);
     setResources((snapshot.resources ?? []).map((item) => ({ ...item })));
     setInspirationLinks(
       (snapshot.inspirationLinks ?? []).map((item) => ({ ...item })),
     );
-    if (richTextEditorRef.current && snapshot.briefJson) {
-      setTimeout(() => {
-        richTextEditorRef.current?.setContent(snapshot.briefJson);
-      }, 0);
-    }
-    if (rulesRichTextEditorRef.current && snapshot.rulesJson) {
-      setTimeout(() => {
-        rulesRichTextEditorRef.current?.setContent(snapshot.rulesJson);
-      }, 0);
+    scheduleEditorContent(
+      richTextEditorRef.current,
+      snapshot.briefJson ?? snapshot.briefHtml ?? snapshot.brief ?? "",
+    );
+    scheduleEditorContent(
+      rulesRichTextEditorRef.current,
+      snapshot.rulesJson ?? snapshot.rulesHtml ?? "",
+    );
+    if (snapshot.bonusEnabled) {
+      scheduleEditorContent(
+        bonusRichTextEditorRef.current,
+        snapshot.bonusJson ?? snapshot.bonusHtml ?? "",
+      );
     }
   };
 
@@ -949,31 +984,27 @@ export default function EditContestPage({
       case "brief":
         setBriefHtml(snapshot.briefHtml || snapshot.brief || "");
         setBriefJson(snapshot.briefJson ?? null);
-        if (richTextEditorRef.current && snapshot.briefJson) {
-          setTimeout(() => {
-            richTextEditorRef.current?.setContent(snapshot.briefJson);
-          }, 0);
-        }
+        scheduleEditorContent(
+          richTextEditorRef.current,
+          snapshot.briefJson ?? snapshot.briefHtml ?? snapshot.brief ?? "",
+        );
         break;
       case "rules":
         setRulesHtml(snapshot.rulesHtml || "");
         setRulesJson(snapshot.rulesJson ?? null);
-        if (rulesRichTextEditorRef.current && snapshot.rulesJson) {
-          setTimeout(() => {
-            rulesRichTextEditorRef.current?.setContent(snapshot.rulesJson);
-          }, 0);
-        }
+        scheduleEditorContent(
+          rulesRichTextEditorRef.current,
+          snapshot.rulesJson ?? snapshot.rulesHtml ?? "",
+        );
         break;
       case "prize":
         setPrizeViewContestType(snapshot.contestType);
         setWinnerCount(snapshot.winnerCount);
         setWinnerAmounts([...snapshot.winnerAmounts]);
-        setFlatFeeBonus(snapshot.flatFeeBonus);
-        setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
         setCpmRate(snapshot.cpmRate);
         setMinViews(snapshot.minViews);
         setMaxViews(snapshot.maxViews);
-        setTotalBudget(snapshot.totalBudget);
+        // totalBudget is shared across platforms — keep the form value
         setTermsConditions(snapshot.termsConditions);
         setMilestoneRows(
           snapshot.milestoneRows.length > 0
@@ -991,6 +1022,20 @@ export default function EditContestPage({
           snapshot.milestoneBonusTopReelsMinViews,
         );
         setMilestoneBonusTopReelsPayout(snapshot.milestoneBonusTopReelsPayout);
+        break;
+      case "earnings":
+        setFlatFeeBonus(snapshot.flatFeeBonus);
+        setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
+        setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator ?? "");
+        setBonusEnabled(Boolean(snapshot.bonusEnabled));
+        setBonusHtml(snapshot.bonusHtml || "");
+        setBonusJson(snapshot.bonusJson ?? null);
+        if (snapshot.bonusEnabled) {
+          scheduleEditorContent(
+            bonusRichTextEditorRef.current,
+            snapshot.bonusJson ?? snapshot.bonusHtml ?? "",
+          );
+        }
         break;
       case "resources":
         setResources((snapshot.resources ?? []).map((item) => ({ ...item })));
@@ -1170,12 +1215,23 @@ export default function EditContestPage({
     contentType: string;
     resources: unknown;
     inspirationLinks: unknown;
+    maxEarningsPerCreator: number | string;
+    maxEarningsColumn: unknown;
+    bonusEnabled: boolean;
+    bonusHtml: string;
+    bonusJson: unknown;
+    bonusDetails: unknown;
     error?: string;
   } => {
     const isRaidTwitterEdit =
       platform === "twitter" &&
       contentType === "raid" &&
       contest?.contest_format === "text_image";
+    const singleMaxColumn =
+      maxEarningsPerCreator &&
+      parseFloat(maxEarningsPerCreator.toString()) > 0
+        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+        : null;
     if (!isVideoEditContest || selectedPlatforms.length < 2) {
       return {
         details,
@@ -1191,6 +1247,18 @@ export default function EditContestPage({
         contentType: contentType || "",
         resources,
         inspirationLinks,
+        maxEarningsPerCreator,
+        maxEarningsColumn: singleMaxColumn,
+        bonusEnabled,
+        bonusHtml,
+        bonusJson,
+        bonusDetails:
+          bonusEnabled && bonusHtml
+            ? {
+                description_html: bonusHtml,
+                description_json: bonusJson,
+              }
+            : null,
       };
     }
     const flushed = flushAllSections();
@@ -1214,6 +1282,18 @@ export default function EditContestPage({
           contentType: contentType || "",
           resources,
           inspirationLinks,
+          maxEarningsPerCreator,
+          maxEarningsColumn: singleMaxColumn,
+          bonusEnabled,
+          bonusHtml,
+          bonusJson,
+          bonusDetails:
+            bonusEnabled && bonusHtml
+              ? {
+                  description_html: bonusHtml,
+                  description_json: bonusJson,
+                }
+              : null,
           error: platformError,
         };
       }
@@ -1227,10 +1307,13 @@ export default function EditContestPage({
       selectedPlatforms,
       flushed,
     );
+    const earningsColumns = buildPlatformCreatorEarningsColumns(
+      selectedPlatforms,
+      flushed,
+    );
     return {
       details: attachPlatformCampaignsToDetails(
         {
-          ...topLevelPayoutDetailsFromSnapshot(primarySnap),
           ...(twitterCampaign ? { twitter_campaign: twitterCampaign } : {}),
         },
         selectedPlatforms,
@@ -1245,6 +1328,12 @@ export default function EditContestPage({
       contentType: primarySnap.contentType || "",
       resources: contentColumns.resources,
       inspirationLinks: contentColumns.inspiration_links,
+      maxEarningsPerCreator: primarySnap.maxEarningsPerCreator,
+      maxEarningsColumn: earningsColumns.max_earnings_per_creator,
+      bonusEnabled: primarySnap.bonusEnabled,
+      bonusHtml: primarySnap.bonusHtml,
+      bonusJson: primarySnap.bonusJson,
+      bonusDetails: earningsColumns.bonus_details,
     };
   };
   const [bonusEnabled, setBonusEnabled] = useState(false);
@@ -1290,8 +1379,6 @@ export default function EditContestPage({
   }, [
     winnerCount,
     winnerAmounts,
-    flatFeeBonus,
-    flatFeeBonusCap,
     cpmRate,
     minViews,
     maxViews,
@@ -1305,6 +1392,17 @@ export default function EditContestPage({
     milestoneBonusTopReelsMin,
     milestoneBonusTopReelsMinViews,
     milestoneBonusTopReelsPayout,
+  ]);
+
+  useEffect(() => {
+    markAllSectionLive("earnings");
+  }, [
+    flatFeeBonus,
+    flatFeeBonusCap,
+    maxEarningsPerCreator,
+    bonusEnabled,
+    bonusHtml,
+    bonusJson,
   ]);
 
   useEffect(() => {
@@ -1750,8 +1848,23 @@ export default function EditContestPage({
             setTitle(data.title || "");
             setPlatform(data.platform || "");
 
-            // Handle rich text content loading
-            if (data.brief_html && data.brief_json) {
+            const parsedVideoPlatformsEarly = parseVideoContestPlatforms(
+              data.platform,
+            );
+            const isMultiPlatformVideoEdit =
+              data.contest_format !== "text_image" &&
+              parsedVideoPlatformsEarly.length > 1;
+
+            // Handle rich text content loading.
+            // Multi-platform contests store brief_json/rules_json as platform-keyed
+            // maps — those are hydrated into snapshots further below. Applying the
+            // map directly to the editor clears content / races the snapshot apply.
+            if (
+              !isMultiPlatformVideoEdit &&
+              !isPlatformKeyedContentMap(data.brief_json) &&
+              data.brief_html &&
+              data.brief_json
+            ) {
               setBriefHtml(data.brief_html);
               setBriefJson(data.brief_json);
               // Set content in editor if ref is available
@@ -1760,10 +1873,24 @@ export default function EditContestPage({
                   richTextEditorRef.current.setContent(data.brief_json);
                 }
               }, 100);
+            } else if (
+              !isMultiPlatformVideoEdit &&
+              data.brief_html &&
+              !data.brief_json
+            ) {
+              setBriefHtml(data.brief_html);
+              setTimeout(() => {
+                richTextEditorRef.current?.setContent(data.brief_html);
+              }, 100);
             }
 
             // Handle rules rich text content loading
-            if (data.rules_html && data.rules_json) {
+            if (
+              !isMultiPlatformVideoEdit &&
+              !isPlatformKeyedContentMap(data.rules_json) &&
+              data.rules_html &&
+              data.rules_json
+            ) {
               setRulesHtml(data.rules_html);
 
               const rawRulesJson: any = data.rules_json;
@@ -2185,8 +2312,13 @@ export default function EditContestPage({
               }
             }
 
-            // Load bonus details
-            if (data.bonus_details?.description_html) {
+            // Load bonus details (flat shape only; multi-platform hydrates below)
+            if (
+              !isMultiPlatformVideoEdit &&
+              !isPlatformKeyedContentMap(data.bonus_details) &&
+              data.bonus_details?.description_html &&
+              typeof data.bonus_details.description_html === "string"
+            ) {
               setBonusEnabled(true);
               setBonusHtml(data.bonus_details.description_html);
               setBonusJson(data.bonus_details.description_json);
@@ -2199,8 +2331,12 @@ export default function EditContestPage({
               }, 100);
             }
 
-            // Load max earnings per creator
-            if (data.max_earnings_per_creator) {
+            // Load max earnings per creator (flat cents only; multi-platform map hydrates below)
+            if (
+              !isMultiPlatformVideoEdit &&
+              typeof data.max_earnings_per_creator === "number" &&
+              data.max_earnings_per_creator > 0
+            ) {
               setMaxEarningsPerCreator(
                 (data.max_earnings_per_creator / 100).toString(),
               );
@@ -2593,9 +2729,14 @@ export default function EditContestPage({
                     contest_type: resolveContestType(data),
                     content_type: data.content_type,
                     brief_html: data.brief_html,
-                    brief_json: data.brief_json,
+                    // Never seed the TipTap doc with a platform-keyed map.
+                    brief_json: isPlatformKeyedContentMap(data.brief_json)
+                      ? null
+                      : data.brief_json,
                     rules_html: data.rules_html,
-                    rules_json: data.rules_json,
+                    rules_json: isPlatformKeyedContentMap(data.rules_json)
+                      ? null
+                      : data.rules_json,
                     leaderboard_contest: details.leaderboard_contest,
                     cpm_contest: details.cpm_contest,
                     milestone_contest: details.milestone_contest,
@@ -2609,17 +2750,24 @@ export default function EditContestPage({
                     );
                   }
                 }
-                const hydratedMap = applyPlatformContentColumnsToSnapshots(
+                const hydratedMap = applyLegacyCreatorEarningsToSnapshots(
                   parsedVideoPlatforms,
                   {
-                    brief_html: data.brief_html,
-                    brief_json: data.brief_json,
-                    rules_html: data.rules_html,
-                    rules_json: data.rules_json,
-                    resources: data.resources,
-                    inspiration_links: data.inspiration_links,
+                    max_earnings_per_creator: data.max_earnings_per_creator,
+                    bonus_details: data.bonus_details,
                   },
-                  loadedMap,
+                  applyPlatformContentColumnsToSnapshots(
+                    parsedVideoPlatforms,
+                    {
+                      brief_html: data.brief_html,
+                      brief_json: data.brief_json,
+                      rules_html: data.rules_html,
+                      rules_json: data.rules_json,
+                      resources: data.resources,
+                      inspiration_links: data.inspiration_links,
+                    },
+                    loadedMap,
+                  ),
                 );
                 setPlatformCampaigns(hydratedMap);
                 platformCampaignsRef.current = hydratedMap;
@@ -4187,8 +4335,11 @@ export default function EditContestPage({
         updatePayload.inspiration_links = multiSave.inspirationLinks;
       }
 
-      // Capture bonus content before saving
-      if (bonusEnabled && bonusRichTextEditorRef.current) {
+      // Capture bonus / max earnings (multi-platform uses flushed primary snapshot)
+      if (isVideoEditContest && selectedPlatforms.length > 1) {
+        updatePayload.bonus_details = multiSave.bonusDetails;
+        updatePayload.max_earnings_per_creator = multiSave.maxEarningsColumn;
+      } else if (bonusEnabled && bonusRichTextEditorRef.current) {
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
@@ -4198,16 +4349,21 @@ export default function EditContestPage({
               description_json: json,
             }
           : null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       } else {
         updatePayload.bonus_details = null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       }
-
-      // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator =
-        maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
-          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-          : null;
+      // Save resources array directly (files are already uploaded when added)
+      updatePayload.resources = multiSave.resources ?? resources;
     }
     try {
       // Use the already-uploaded thumbnail URL (from thumbnailPreview)
@@ -4216,8 +4372,6 @@ export default function EditContestPage({
         // If a new thumbnail was uploaded, use its URL; otherwise, keep the existing one
         finalThumbnailUrl = thumbnailPreview || contest.thumbnail_url || "";
         updatePayload.thumbnail_url = finalThumbnailUrl;
-        // Save resources array directly (files are already uploaded when added)
-        updatePayload.resources = multiSave.resources ?? resources;
       }
 
       // Debug: Log the update payload
@@ -8763,8 +8917,11 @@ export default function EditContestPage({
         updatePayload.inspiration_links = multiSave.inspirationLinks;
       }
 
-      // Capture bonus content before saving
-      if (bonusEnabled && bonusRichTextEditorRef.current) {
+      // Capture bonus / max earnings (multi-platform uses flushed primary snapshot)
+      if (isVideoEditContest && selectedPlatforms.length > 1) {
+        updatePayload.bonus_details = multiSave.bonusDetails;
+        updatePayload.max_earnings_per_creator = multiSave.maxEarningsColumn;
+      } else if (bonusEnabled && bonusRichTextEditorRef.current) {
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
@@ -8774,16 +8931,21 @@ export default function EditContestPage({
               description_json: json,
             }
           : null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       } else {
         updatePayload.bonus_details = null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       }
-
-      // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator =
-        maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
-          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-          : null;
+      // Save resources array directly (files are already uploaded when added)
+      updatePayload.resources = multiSave.resources ?? resources;
     }
 
     try {
@@ -8791,8 +8953,6 @@ export default function EditContestPage({
         // Use the already-uploaded thumbnail URL (from thumbnailPreview) if it exists, otherwise keep the existing one
         updatePayload.thumbnail_url =
           thumbnailPreview || contest.thumbnail_url || "";
-        // Save resources array directly (files are already uploaded when added)
-        updatePayload.resources = multiSave.resources ?? resources;
       }
 
       if (updatePayload.contest_based_details) {
@@ -12585,9 +12745,9 @@ export default function EditContestPage({
                       placeholder="Maximum amount reserved for this campaign"
                     />
                     <p className="text-xs text-muted-foreground">
-                      This is the pool you fund upfront (similar to a CPM
-                      budget). Payouts are drawn from it as creators hit
-                      milestones.
+                      Shared across all selected platforms. This is the pool you
+                      fund upfront (similar to a CPM budget). Payouts are drawn
+                      from it as creators hit milestones.
                     </p>
                   </div>
                 )}
@@ -14436,9 +14596,9 @@ export default function EditContestPage({
                         <div className="pt-3">
                           <PlatformCampaignTabs
                             platforms={selectedPlatforms}
-                            active={sectionPlatforms.prize}
+                            active={sectionPlatforms.earnings}
                             onChange={(tab) =>
-                              switchSectionPlatform("prize", tab)
+                              switchSectionPlatform("earnings", tab)
                             }
                             isDark={isDark}
                           />

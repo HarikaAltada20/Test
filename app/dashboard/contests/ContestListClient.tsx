@@ -60,13 +60,16 @@ import {
   getEndedOpportunityPhaseLabel,
 } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import {
-  getPoolBudgetCentsFromDetails,
-  isCpmContestType,
-  isMilestoneContestType,
-} from "@/lib/contest-type";
+import { isCpmContestType, isMilestoneContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
-import { getPlatformIconWithFallback } from "@/lib/platform-icons";
+import {
+  formatContestListCpmRatesText,
+  formatContestPlatformLabel,
+  resolveBonusDetails,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+} from "@/lib/video-platform-campaigns";
+import { getContestPlatformIcons } from "@/lib/platform-icons";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
@@ -425,6 +428,42 @@ const getContestBudgetSpentForTracker = (contest: Contest): number =>
     contest_based_details: contest.contest_based_details,
   });
 
+const getContestListPoolBudgetCents = (contest: Contest): number =>
+  resolveContestPoolBudgetCents(
+    contest.contest_type,
+    contest.contest_based_details,
+    contest.platform,
+  );
+
+const isTwitterLikePlatform = (platform?: string | null) => {
+  const lower = platform?.toLowerCase();
+  return lower === "twitter" || lower === "x";
+};
+
+const getContestListCpmRateRow = (
+  contest: Contest,
+): { label: string; value: string } | null => {
+  if (!isCpmContestType(contest.contest_type)) return null;
+
+  if (isTwitterLikePlatform(contest.platform)) {
+    const rate =
+      contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
+    if (rate == null) return null;
+    return {
+      label: "Points Rate: ",
+      value: `${formatMoney(rate * 100)} / 1k points`,
+    };
+  }
+
+  const rates = resolveContestPlatformCpmRates(
+    contest.contest_based_details as Record<string, unknown> | null | undefined,
+    contest.platform,
+  );
+  const value = formatContestListCpmRatesText(rates, formatMoney);
+  if (!value) return null;
+  return { label: "CPM Rate: ", value };
+};
+
 const getContestPrimaryFinancialText = (contest: Contest): string => {
   if (contest.contest_type === "leaderboard") {
     return `Prize: ${formatMoney(
@@ -440,12 +479,7 @@ const getContestPrimaryFinancialText = (contest: Contest): string => {
     contest.contest_type === "cpm" ||
     contest.contest_type === "dual_rewards"
   ) {
-    return `Budget: ${formatMoney(
-      getPoolBudgetCentsFromDetails(
-        contest.contest_type,
-        contest.contest_based_details,
-      ),
-    )}`;
+    return `Budget: ${formatMoney(getContestListPoolBudgetCents(contest))}`;
   }
   return `Budget: ${formatMoney(0)}`;
 };
@@ -1212,7 +1246,7 @@ export function ContestListClient({
                   }
                   return null;
                 })()}
-                {contest.bonus_details?.description_html && (
+                {resolveBonusDetails(contest)?.description_html && (
                   <Badge
                     variant="outline"
                     className={cn(
@@ -1248,12 +1282,12 @@ export function ContestListClient({
               >
                 <div className="flex items-center">
                   <div className="mr-2 flex-shrink-0">
-                    {getPlatformIconWithFallback(contest.platform, "sm")}
+                    {getContestPlatformIcons(contest.platform, "sm")}
                   </div>
                   <span>
                     Platform:{" "}
                     <span className="font-medium ">
-                      {contest.platform || "N/A"}
+                      {formatContestPlatformLabel(contest.platform)}
                     </span>
                   </span>
                 </div>
@@ -1323,44 +1357,28 @@ export function ContestListClient({
                     </span>
                   </span>
                 </div>
-                {isCpmContestType(contest.contest_type) &&
-                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                    null && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                {(() => {
+                  const cpmRow = getContestListCpmRateRow(contest);
+                  if (!cpmRow) return null;
+                  return (
+                    <div className="flex items-start">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                       <span>
-                        {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
-                          ? "Points Rate: "
-                          : "CPM Rate: "}
-                        <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100,
-                          )}{" "}
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "/ 1k points"
-                            : "/ 1k views"}
-                        </span>
+                        {cpmRow.label}
+                        <span className="font-medium">{cpmRow.value}</span>
                       </span>
                     </div>
-                  )}
+                  );
+                })()}
                 {isCpmContestType(contest.contest_type) &&
-                  getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  ) > 0 && (
+                  getContestListPoolBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span>
                         Total Budget:{" "}
                         <span className="font-medium ">
                           {formatMoney(
-                            getPoolBudgetCentsFromDetails(
-                              contest.contest_type,
-                              contest.contest_based_details,
-                            ),
+                            getContestListPoolBudgetCents(contest),
                           )}
                         </span>
                       </span>
@@ -1424,15 +1442,9 @@ export function ContestListClient({
 
               {/* Budget Spent Progress Bar for CPM and dual contests */}
               {isCpmContestType(contest.contest_type) &&
-                getPoolBudgetCentsFromDetails(
-                  contest.contest_type,
-                  contest.contest_based_details,
-                ) > 0 &&
+                getContestListPoolBudgetCents(contest) > 0 &&
                 (() => {
-                  const totalBudget = getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  );
+                  const totalBudget = getContestListPoolBudgetCents(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
                     getContestBudgetSpentForTracker(contest),
@@ -1655,9 +1667,9 @@ export function ContestListClient({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
-                className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
+                className="text-sm  bg-[#7F39EC] text-white py-1"
               >
-                {contest.platform || "Platform"}
+                {formatContestPlatformLabel(contest.platform)}
               </Badge>
               <Badge
                 variant="outline"
@@ -2034,7 +2046,7 @@ export function ContestListClient({
                     </Badge>
                   )}
                   {/* Bonus Available Badge */}
-                  {contest.bonus_details?.description_html && (
+                  {resolveBonusDetails(contest)?.description_html && (
                     <Badge
                       variant="outline"
                       className={cn(
@@ -2064,7 +2076,7 @@ export function ContestListClient({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
                   <div className="flex items-center">
                     <div className="mr-2 flex-shrink-0">
-                      {getPlatformIconWithFallback(contest.platform, "sm")}
+                      {getContestPlatformIcons(contest.platform, "sm")}
                     </div>
                     <span
                       style={{
@@ -2074,7 +2086,7 @@ export function ContestListClient({
                     >
                       Platform:{" "}
                       <span className="font-medium">
-                        {contest.platform || "N/A"}
+                        {formatContestPlatformLabel(contest.platform)}
                       </span>
                     </span>
                   </div>
@@ -2164,39 +2176,26 @@ export function ContestListClient({
                       </span>
                     </span>
                   </div>
-                  {isCpmContestType(contest.contest_type) &&
-                    contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                      null && (
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                  {(() => {
+                    const cpmRow = getContestListCpmRateRow(contest);
+                    if (!cpmRow) return null;
+                    return (
+                      <div className="flex items-start">
+                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                         <span
                           style={{
                             color: isDark ? "white" : "#475569",
                             transition: "none",
                           }}
                         >
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "Points Rate: "
-                            : "CPM Rate: "}
-                          <span className="font-medium">
-                            {formatMoney(
-                              contest.contest_based_details.cpm_contest
-                                .cpm_rate_usd * 100,
-                            )}{" "}
-                            {contest.platform?.toLowerCase() === "twitter" ||
-                            contest.platform?.toLowerCase() === "x"
-                              ? "/ 1k points"
-                              : "/ 1k views"}
-                          </span>
+                          {cpmRow.label}
+                          <span className="font-medium">{cpmRow.value}</span>
                         </span>
                       </div>
-                    )}
+                    );
+                  })()}
                   {isCpmContestType(contest.contest_type) &&
-                    getPoolBudgetCentsFromDetails(
-                      contest.contest_type,
-                      contest.contest_based_details,
-                    ) > 0 && (
+                    getContestListPoolBudgetCents(contest) > 0 && (
                       <div className="flex items-center">
                         <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                         <span
@@ -2208,10 +2207,7 @@ export function ContestListClient({
                           Total Budget:{" "}
                           <span className="font-medium">
                             {formatMoney(
-                              getPoolBudgetCentsFromDetails(
-                                contest.contest_type,
-                                contest.contest_based_details,
-                              ),
+                              getContestListPoolBudgetCents(contest),
                             )}
                           </span>
                         </span>
@@ -2267,15 +2263,9 @@ export function ContestListClient({
 
                 {/* Budget Spent Progress Bar for CPM and dual contests */}
                 {isCpmContestType(contest.contest_type) &&
-                  getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  ) > 0 &&
+                  getContestListPoolBudgetCents(contest) > 0 &&
                   (() => {
-                    const totalBudget = getPoolBudgetCentsFromDetails(
-                      contest.contest_type,
-                      contest.contest_based_details,
-                    );
+                    const totalBudget = getContestListPoolBudgetCents(contest);
                     const tracker = getBudgetTrackerValues(
                       totalBudget,
                       getContestBudgetSpentForTracker(contest),
@@ -2502,9 +2492,9 @@ export function ContestListClient({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
-                className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
+                className="text-sm bg-[#7F39EC] text-white py-1"
               >
-                {contest.platform || "Platform"}
+                {formatContestPlatformLabel(contest.platform)}
               </Badge>
               <Badge
                 variant="outline"

@@ -64,12 +64,31 @@ describe("getChargeableBudgetCents", () => {
           leaderboard_contest: { total_prize: 10_000 },
         },
         instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_prize: 4_000 },
+        },
+      },
+    });
+    assert.equal(cents, 14_000);
+  });
+
+  it("uses shared campaign budget once for multi-platform CPM", () => {
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "cpm",
+      contest_based_details: {
+        cpm_contest: { total_budget: 4_000 },
+        youtube: {
+          contest_type: "cpm",
+          cpm_contest: { total_budget: 4_000 },
+        },
+        instagram: {
           contest_type: "cpm",
           cpm_contest: { total_budget: 4_000 },
         },
       },
     });
-    assert.equal(cents, 14_000);
+    assert.equal(cents, 4_000);
   });
 
   it("dual_rewards uses root total_budget_cents", () => {

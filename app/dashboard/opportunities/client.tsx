@@ -50,7 +50,6 @@ import {
   Submission,
 } from "@/lib/contest-utils-client";
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
@@ -99,7 +98,13 @@ type CpmBudgetSubmissionRow = {
   bonus_paid: boolean;
   bonus_amount?: number | null;
 };
-import { getPlatformIconWithFallback } from "@/lib/platform-icons";
+import { getContestPlatformIcons } from "@/lib/platform-icons";
+import {
+  formatContestListCpmRatesText,
+  formatContestPlatformLabel,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+} from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
@@ -203,6 +208,45 @@ const getBudgetTrackerValues = (
  * without nested `cpm_contest.total_budget` / `milestone_contest.total_budget_cents`.
  * Spend is still computed per-side into `budget_spent` on those nested objects.
  */
+const getContestListPoolBudgetCents = (contest: {
+  contest_type?: string | null;
+  contest_based_details?: Record<string, unknown> | null;
+  platform?: string | null;
+}): number =>
+  resolveContestPoolBudgetCents(
+    contest.contest_type,
+    contest.contest_based_details,
+    contest.platform,
+  );
+
+const isTwitterLikePlatform = (platform?: string | null) => {
+  const lower = platform?.toLowerCase();
+  return lower === "twitter" || lower === "x";
+};
+
+const getContestListCpmRateRow = (
+  contest: any,
+): { label: string; value: string } | null => {
+  if (!isCpmContestType(contest?.contest_type)) return null;
+
+  if (isTwitterLikePlatform(contest.platform)) {
+    const rate = contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
+    if (rate == null) return null;
+    return {
+      label: "Points Rate: ",
+      value: `${formatMoney(rate * 100)} / 1k points`,
+    };
+  }
+
+  const rates = resolveContestPlatformCpmRates(
+    contest.contest_based_details,
+    contest.platform,
+  );
+  const value = formatContestListCpmRatesText(rates, formatMoney);
+  if (!value) return null;
+  return { label: "CPM Rate: ", value };
+};
+
 function getDualUnifiedBudgetMeta(contest: any): {
   total: number;
   spent: number;
@@ -210,7 +254,11 @@ function getDualUnifiedBudgetMeta(contest: any): {
   if (contest?.contest_type !== "dual_rewards") return null;
   const details = contest.contest_based_details;
   if (!details) return null;
-  const total = getPoolBudgetCentsFromDetails("dual_rewards", details);
+  const total = resolveContestPoolBudgetCents(
+    "dual_rewards",
+    details,
+    contest.platform,
+  );
   if (total <= 0) return null;
   const hasNestedCpmBudget =
     typeof details.cpm_contest?.total_budget === "number" &&
@@ -1629,7 +1677,7 @@ export default function OpportunitiesPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
                 <div className="flex items-center">
                   <div className="mr-2 flex-shrink-0">
-                    {getPlatformIconWithFallback(contest.platform, "sm")}
+                    {getContestPlatformIcons(contest.platform, "sm")}
                   </div>
                   <span
                     style={{
@@ -1639,7 +1687,7 @@ export default function OpportunitiesPage({
                   >
                     Platform:{" "}
                     <span className="font-medium">
-                      {contest.platform || "N/A"}
+                      {formatContestPlatformLabel(contest.platform)}
                     </span>
                   </span>
                 </div>
@@ -1808,40 +1856,27 @@ export default function OpportunitiesPage({
                     </span>
                   </span>
                 </div>
-                {isCpmContestType(contest.contest_type) &&
-                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                    null && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                {(() => {
+                  const cpmRow = getContestListCpmRateRow(contest);
+                  if (!cpmRow) return null;
+                  return (
+                    <div className="flex items-start">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                       <span
                         style={{
                           color: isDark ? "white" : "#475569",
                           transition: "none",
                         }}
                       >
-                        {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
-                          ? "Points Rate: "
-                          : "CPM Rate: "}
-                        <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100,
-                          )}{" "}
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "/ 1k points"
-                            : "/ 1k views"}
-                        </span>
+                        {cpmRow.label}
+                        <span className="font-medium">{cpmRow.value}</span>
                       </span>
                     </div>
-                  )}
+                  );
+                })()}
                 {isCpmContestType(contest.contest_type) &&
                   (() => {
-                    const poolCents = getPoolBudgetCentsFromDetails(
-                      contest.contest_type,
-                      contest.contest_based_details,
-                    );
+                    const poolCents = getContestListPoolBudgetCents(contest);
                     if (poolCents <= 0) return null;
                     return (
                       <div className="flex items-center">
@@ -2858,10 +2893,7 @@ export default function OpportunitiesPage({
 
                             <div className="flex items-center">
                               <div className="mr-2 flex-shrink-0">
-                                {getPlatformIconWithFallback(
-                                  contest.platform,
-                                  "sm",
-                                )}
+                                {getContestPlatformIcons(contest.platform, "sm")}
                               </div>
                               <span>
                                 Platform:{" "}
@@ -2871,7 +2903,7 @@ export default function OpportunitiesPage({
                                     isDark ? "text-white" : "text-slate-700",
                                   )}
                                 >
-                                  {contest.platform || "N/A"}
+                                  {formatContestPlatformLabel(contest.platform)}
                                 </span>
                               </span>
                             </div>
@@ -3061,17 +3093,14 @@ export default function OpportunitiesPage({
                                 </span>
                               </span>
                             </div>
-                            {isCpmContestType(contest.contest_type) &&
-                              contest.contest_based_details?.cpm_contest
-                                ?.cpm_rate_usd != null && (
-                                <div className="flex items-center">
-                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                            {(() => {
+                              const cpmRow = getContestListCpmRateRow(contest);
+                              if (!cpmRow) return null;
+                              return (
+                                <div className="flex items-start">
+                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                                   <span>
-                                    {contest.platform?.toLowerCase() ===
-                                      "twitter" ||
-                                    contest.platform?.toLowerCase() === "x"
-                                      ? "Points Rate: "
-                                      : "CPM Rate: "}
+                                    {cpmRow.label}
                                     <span
                                       className={cn(
                                         "font-medium",
@@ -3080,25 +3109,15 @@ export default function OpportunitiesPage({
                                           : "text-slate-700",
                                       )}
                                     >
-                                      {formatMoney(
-                                        contest.contest_based_details
-                                          .cpm_contest.cpm_rate_usd * 100,
-                                      )}{" "}
-                                      {contest.platform?.toLowerCase() ===
-                                        "twitter" ||
-                                      contest.platform?.toLowerCase() === "x"
-                                        ? "/ 1k points"
-                                        : "/ 1k views"}
+                                      {cpmRow.value}
                                     </span>
                                   </span>
                                 </div>
-                              )}
+                              );
+                            })()}
                             {isCpmContestType(contest.contest_type) &&
                               (() => {
-                                const poolCents = getPoolBudgetCentsFromDetails(
-                                  contest.contest_type,
-                                  contest.contest_based_details,
-                                );
+                                const poolCents = getContestListPoolBudgetCents(contest);
                                 if (poolCents <= 0) return null;
                                 return (
                                   <div className="flex items-center">

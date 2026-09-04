@@ -6,11 +6,19 @@
  * - contests.platform = "youtube,instagram" (comma-separated, first is primary)
  * - contest_based_details.youtube|instagram|tiktok = per-platform payout JSON
  *   (contest_type + leaderboard/cpm/milestone blocks only — no brief/rules/
- *   resources/inspiration). The old nested `platform_campaigns` key is not used.
+ *   resources/inspiration/bonus/max-earnings). The old nested
+ *   `platform_campaigns` key is not used.
+ * - Multi-platform saves must NOT also mirror primary payout onto root
+ *   cpm_contest / milestone_contest / leaderboard_contest / total_budget_cents.
+ *   Legacy readers can use withProjectedTopLevelPayout() at read time.
  * - Top-level brief_html / rules_html mirror the primary platform for search
  *   and legacy readers
- * - Multi-platform brief_json / rules_json / resources / inspiration_links are
- *   platform-keyed maps: { youtube: ..., instagram: ..., tiktok: ... }
+ * - Multi-platform brief_json / rules_json / resources / inspiration_links /
+ *   bonus_details / max_earnings_per_creator are platform-keyed maps:
+ *   { youtube: ..., instagram: ..., tiktok: ... }
+ * - max_earnings_per_creator multi shape:
+ *   { youtube: { max_earnings_per_creator: cents }, ... }
+ *   (single-platform stays a plain cents number)
  */
 
 import {
@@ -21,6 +29,7 @@ import {
   MIN_PRIZE_PER_WINNER,
 } from "@/constants/subscriptionPlans";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import type { ContestBasedDetailsForPool } from "@/lib/contest-type";
 
 export const VIDEO_CONTEST_PLATFORMS = [
   "youtube",
@@ -53,6 +62,7 @@ export const PLATFORM_SECTION_KEYS = [
   "brief",
   "rules",
   "prize",
+  "earnings",
   "resources",
   "inspiration",
 ] as const;
@@ -77,6 +87,7 @@ export function createDefaultSectionPlatforms(): Record<
     brief: ALL_PLATFORM_TAB,
     rules: ALL_PLATFORM_TAB,
     prize: ALL_PLATFORM_TAB,
+    earnings: ALL_PLATFORM_TAB,
     resources: ALL_PLATFORM_TAB,
     inspiration: ALL_PLATFORM_TAB,
   };
@@ -92,6 +103,7 @@ export function createDefaultAllSectionLive(): Record<
     brief: true,
     rules: true,
     prize: true,
+    earnings: true,
     resources: true,
     inspiration: true,
   };
@@ -108,6 +120,7 @@ export const PER_PLATFORM_SECTION_KEYS: PlatformSectionKey[] = [
   "brief",
   "rules",
   "prize",
+  "earnings",
   "resources",
   "inspiration",
 ];
@@ -165,6 +178,19 @@ export function formatPlatformList(platforms: VideoContestPlatform[]): string {
   if (labels.length <= 1) return labels[0] ?? "";
   if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
   return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+
+/** Pretty platform label for contest/opportunity list cards (multi-platform aware). */
+export function formatContestPlatformLabel(
+  platform?: string | null,
+): string {
+  const platforms = parseVideoContestPlatforms(platform);
+  if (platforms.length > 0) return formatPlatformList(platforms);
+  const raw = (platform ?? "").trim();
+  if (!raw) return "N/A";
+  const lower = raw.toLowerCase();
+  if (lower === "twitter" || lower === "x") return "Twitter";
+  return raw;
 }
 
 export function platformSectionHint(
@@ -228,6 +254,10 @@ export type PlatformCampaignSnapshot = {
   milestoneBonusTopReelsMin: number | "";
   milestoneBonusTopReelsMinViews: number | "";
   milestoneBonusTopReelsPayout: string;
+  maxEarningsPerCreator: number | string;
+  bonusEnabled: boolean;
+  bonusHtml: string;
+  bonusJson: unknown;
   resources: PlatformResourceItem[];
   inspirationLinks: PlatformInspirationLink[];
 };
@@ -267,6 +297,12 @@ export type PersistedPlatformCampaign = {
     bonus?: Record<string, unknown>;
   };
   total_budget_cents?: number;
+  // Legacy only — no longer written; use top-level contest columns.
+  max_earnings_per_creator?: number | null;
+  bonus_details?: {
+    description_html?: string;
+    description_json?: unknown;
+  } | null;
   resources?: PlatformResourceItem[];
   inspiration_links?: PlatformInspirationLink[];
 };
@@ -356,6 +392,10 @@ export function createDefaultPlatformCampaignSnapshot(): PlatformCampaignSnapsho
     milestoneBonusTopReelsMin: "",
     milestoneBonusTopReelsMinViews: "",
     milestoneBonusTopReelsPayout: "",
+    maxEarningsPerCreator: "",
+    bonusEnabled: false,
+    bonusHtml: "",
+    bonusJson: null,
     resources: [],
     inspirationLinks: [],
   };
@@ -376,6 +416,10 @@ export function clonePlatformCampaignSnapshot(
       snapshot.rulesJson && typeof snapshot.rulesJson === "object"
         ? JSON.parse(JSON.stringify(snapshot.rulesJson))
         : snapshot.rulesJson,
+    bonusJson:
+      snapshot.bonusJson && typeof snapshot.bonusJson === "object"
+        ? JSON.parse(JSON.stringify(snapshot.bonusJson))
+        : snapshot.bonusJson,
     resources: (snapshot.resources ?? []).map((item) => ({ ...item })),
     inspirationLinks: (snapshot.inspirationLinks ?? []).map((item) => ({
       ...item,
@@ -409,8 +453,6 @@ export function patchSnapshotSection(
       next.winnerCount = source.winnerCount;
       next.winnerAmounts = [...source.winnerAmounts];
       next.totalPrizePool = source.totalPrizePool;
-      next.flatFeeBonus = source.flatFeeBonus;
-      next.flatFeeBonusCap = source.flatFeeBonusCap;
       next.cpmRate = source.cpmRate;
       next.minViews = source.minViews;
       next.maxViews = source.maxViews;
@@ -424,6 +466,15 @@ export function patchSnapshotSection(
       next.milestoneBonusTopReelsMin = source.milestoneBonusTopReelsMin;
       next.milestoneBonusTopReelsMinViews = source.milestoneBonusTopReelsMinViews;
       next.milestoneBonusTopReelsPayout = source.milestoneBonusTopReelsPayout;
+      break;
+    case "earnings":
+      // Creator earning opportunities only — keep payout fields untouched.
+      next.flatFeeBonus = source.flatFeeBonus;
+      next.flatFeeBonusCap = source.flatFeeBonusCap;
+      next.maxEarningsPerCreator = source.maxEarningsPerCreator;
+      next.bonusEnabled = source.bonusEnabled;
+      next.bonusHtml = source.bonusHtml;
+      next.bonusJson = source.bonusJson;
       break;
     case "resources":
       next.resources = (source.resources ?? []).map((item) => ({ ...item }));
@@ -456,15 +507,37 @@ export function areSectionValuesEqual(
         left.contestType === right.contestType &&
         left.winnerCount === right.winnerCount &&
         left.totalPrizePool === right.totalPrizePool &&
-        JSON.stringify(left.winnerAmounts) === JSON.stringify(right.winnerAmounts) &&
-        String(left.flatFeeBonus) === String(right.flatFeeBonus) &&
-        String(left.flatFeeBonusCap) === String(right.flatFeeBonusCap) &&
+        JSON.stringify(left.winnerAmounts) ===
+          JSON.stringify(right.winnerAmounts) &&
         String(left.cpmRate) === String(right.cpmRate) &&
         String(left.minViews) === String(right.minViews) &&
         String(left.maxViews) === String(right.maxViews) &&
-        String(left.totalBudget) === String(right.totalBudget) &&
+        // totalBudget is shared across platforms — ignore for divergence checks
         left.termsConditions === right.termsConditions &&
-        JSON.stringify(left.milestoneRows) === JSON.stringify(right.milestoneRows)
+        JSON.stringify(left.milestoneRows) ===
+          JSON.stringify(right.milestoneRows) &&
+        left.milestoneBonusEnabled === right.milestoneBonusEnabled &&
+        String(left.milestoneBonusTopViewsMin) ===
+          String(right.milestoneBonusTopViewsMin) &&
+        String(left.milestoneBonusTopViewsPayout) ===
+          String(right.milestoneBonusTopViewsPayout) &&
+        String(left.milestoneBonusTopViewsMinReels) ===
+          String(right.milestoneBonusTopViewsMinReels) &&
+        String(left.milestoneBonusTopReelsMin) ===
+          String(right.milestoneBonusTopReelsMin) &&
+        String(left.milestoneBonusTopReelsMinViews) ===
+          String(right.milestoneBonusTopReelsMinViews) &&
+        String(left.milestoneBonusTopReelsPayout) ===
+          String(right.milestoneBonusTopReelsPayout)
+      );
+    case "earnings":
+      return (
+        String(left.flatFeeBonus) === String(right.flatFeeBonus) &&
+        String(left.flatFeeBonusCap) === String(right.flatFeeBonusCap) &&
+        String(left.maxEarningsPerCreator) ===
+          String(right.maxEarningsPerCreator) &&
+        left.bonusEnabled === right.bonusEnabled &&
+        left.bonusHtml === right.bonusHtml
       );
     case "resources":
       return JSON.stringify(left.resources ?? []) === JSON.stringify(right.resources ?? []);
@@ -494,6 +567,10 @@ export function isPlatformSectionComplete(
   }
   if (section === "inspiration") {
     return (snapshot.inspirationLinks ?? []).some((link) => link.url?.trim());
+  }
+  if (section === "earnings") {
+    // Optional extras — never block section completion.
+    return true;
   }
   return validatePlatformCampaignSnapshot(platform, snapshot, {
     requirePayout: true,
@@ -556,6 +633,15 @@ export function buildFlushedPlatformCampaigns(
       next[p] = patchSnapshotSection(existing, section, current);
     }
   }
+  // Total Campaign Budget is always shared across selected platforms.
+  for (const platform of selected) {
+    const snap = next[platform];
+    if (!snap) continue;
+    next[platform] = {
+      ...snap,
+      totalBudget: current.totalBudget,
+    };
+  }
   return next;
 }
 
@@ -612,11 +698,28 @@ export function preparePlatformCampaignsForSave(
     const base = flushed[platform]
       ? clonePlatformCampaignSnapshot(flushed[platform]!)
       : clonePlatformCampaignSnapshot(fallback);
-    next[platform] = patchSnapshotSection(
-      patchSnapshotSection(base, "campaignType", current),
-      "contentType",
-      current,
-    );
+    let snap = {
+      ...patchSnapshotSection(
+        patchSnapshotSection(base, "campaignType", current),
+        "contentType",
+        current,
+      ),
+      // Shared across every selected platform / campaign type.
+      totalBudget: current.totalBudget,
+    };
+    // All-tab earnings: always apply creator earnings from the shared editor buffer.
+    if (tabs.earnings === ALL_PLATFORM_TAB) {
+      snap = {
+        ...snap,
+        flatFeeBonus: current.flatFeeBonus,
+        flatFeeBonusCap: current.flatFeeBonusCap,
+        maxEarningsPerCreator: current.maxEarningsPerCreator,
+        bonusEnabled: current.bonusEnabled,
+        bonusHtml: current.bonusHtml,
+        bonusJson: current.bonusJson,
+      };
+    }
+    next[platform] = snap;
   }
   return next;
 }
@@ -668,9 +771,8 @@ function buildMilestoneBonus(
 export function snapshotToPersistedPlatformCampaign(
   snapshot: PlatformCampaignSnapshot,
 ): PersistedPlatformCampaign {
-  // Content fields (brief/rules/resources/inspiration) live on top-level contest
-  // columns. content_type lives on contests.content_type. Platform objects only
-  // store contest_type + payout blocks.
+  // Content + creator earnings live on top-level contest columns.
+  // Platform objects store contest_type + payout blocks only.
   const contestType = snapshot.contestType;
   const persisted: PersistedPlatformCampaign = {
     contest_type: contestType,
@@ -905,7 +1007,41 @@ export function persistedPlatformCampaignToSnapshot(
     }
   }
 
+  if (
+    typeof persisted.max_earnings_per_creator === "number" &&
+    persisted.max_earnings_per_creator > 0
+  ) {
+    snapshot.maxEarningsPerCreator = (
+      persisted.max_earnings_per_creator / 100
+    ).toString();
+  }
+  const bonusDetails = persisted.bonus_details;
+  if (bonusDetails?.description_html) {
+    snapshot.bonusEnabled = true;
+    snapshot.bonusHtml = bonusDetails.description_html;
+    snapshot.bonusJson = bonusDetails.description_json ?? null;
+  }
+
   return snapshot;
+}
+
+/** Top-level payout keys used by single-platform contests / legacy readers. */
+export const TOP_LEVEL_PAYOUT_DETAIL_KEYS = [
+  "leaderboard_contest",
+  "cpm_contest",
+  "milestone_contest",
+  "total_budget_cents",
+] as const;
+
+/** Remove duplicated root payout blocks (multi-platform stores these under youtube|instagram|tiktok). */
+export function clearTopLevelPayoutKeys(
+  details: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...details };
+  for (const key of TOP_LEVEL_PAYOUT_DETAIL_KEYS) {
+    delete next[key];
+  }
+  return next;
 }
 
 /** Remove legacy `platform_campaigns` and any deselected platform payout keys. */
@@ -975,7 +1111,11 @@ export function attachPlatformCampaignsToDetails(
   if (platforms.length < 2) {
     return clearPlatformCampaignKeys(details);
   }
-  const next = clearPlatformCampaignKeys(details, platforms);
+  // Multi-platform: payout lives only under youtube|instagram|tiktok — never
+  // also mirror primary onto root cpm_contest / milestone_contest / etc.
+  const next = clearTopLevelPayoutKeys(
+    clearPlatformCampaignKeys(details, platforms),
+  );
   for (const platform of platforms) {
     const snap =
       snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
@@ -1220,6 +1360,333 @@ export function applyPlatformContentColumnsToSnapshots(
   return next;
 }
 
+export type PlatformBonusPayload = {
+  description_html?: string;
+  description_json?: unknown;
+};
+
+export type PlatformMaxEarningsPayload = {
+  max_earnings_per_creator: number | null;
+};
+
+export type PlatformCreatorEarningsColumns = {
+  /**
+   * Single-platform: cents number (or null).
+   * Multi-platform: { youtube|instagram|tiktok: { max_earnings_per_creator } }.
+   */
+  max_earnings_per_creator:
+    | number
+    | null
+    | Partial<Record<VideoContestPlatform, PlatformMaxEarningsPayload>>;
+  /**
+   * Single-platform: classic { description_html, description_json }.
+   * Multi-platform: { youtube|instagram|tiktok: PlatformBonusPayload }.
+   */
+  bonus_details: PlatformBonusPayload | Partial<
+    Record<VideoContestPlatform, PlatformBonusPayload>
+  > | null;
+};
+
+function bonusTextFromSnapshot(
+  snap: PlatformCampaignSnapshot,
+): PlatformBonusPayload | null {
+  if (!(snap.bonusEnabled && snap.bonusHtml)) return null;
+  return {
+    description_html: snap.bonusHtml,
+    description_json: snap.bonusJson ?? null,
+  };
+}
+
+function readBonusPayload(value: unknown): PlatformBonusPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (isPlatformKeyedContentMap(value) && !("description_html" in record)) {
+    return null;
+  }
+  const html =
+    typeof record.description_html === "string"
+      ? record.description_html
+      : typeof record.description === "string"
+        ? record.description
+        : undefined;
+  if (!html && !("description_json" in record)) return null;
+  return {
+    description_html: html,
+    description_json: record.description_json,
+  };
+}
+
+function readMaxEarningsCents(value: unknown): number | null {
+  if (typeof value === "number" && value > 0) return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.max_earnings_per_creator === "number" &&
+    record.max_earnings_per_creator > 0
+  ) {
+    return record.max_earnings_per_creator;
+  }
+  return null;
+}
+
+function isPlatformKeyedMaxEarningsMap(
+  value: unknown,
+): value is Partial<Record<VideoContestPlatform, unknown>> {
+  return isPlatformKeyedContentMap(value);
+}
+
+/** Build top-level bonus_details + max_earnings_per_creator from snapshots. */
+export function buildPlatformCreatorEarningsColumns(
+  platforms: VideoContestPlatform[],
+  snapshots: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+): PlatformCreatorEarningsColumns {
+  const primary = primaryPlatformOf(platforms);
+  const primarySnap =
+    snapshots[primary] ?? createDefaultPlatformCampaignSnapshot();
+  const primaryMax = dollarsToCents(primarySnap.maxEarningsPerCreator);
+
+  if (platforms.length < 2) {
+    return {
+      max_earnings_per_creator: primaryMax > 0 ? primaryMax : null,
+      bonus_details: bonusTextFromSnapshot(primarySnap),
+    };
+  }
+
+  const bonusMap: Partial<Record<VideoContestPlatform, PlatformBonusPayload>> =
+    {};
+  const maxMap: Partial<
+    Record<VideoContestPlatform, PlatformMaxEarningsPayload>
+  > = {};
+  let anyBonus = false;
+  let anyMax = false;
+
+  for (const platform of platforms) {
+    const snap =
+      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    const bonus = bonusTextFromSnapshot(snap);
+    if (bonus) {
+      bonusMap[platform] = bonus;
+      anyBonus = true;
+    }
+    const maxCents = dollarsToCents(snap.maxEarningsPerCreator);
+    maxMap[platform] = {
+      max_earnings_per_creator: maxCents > 0 ? maxCents : null,
+    };
+    if (maxCents > 0) anyMax = true;
+  }
+
+  return {
+    max_earnings_per_creator: anyMax ? maxMap : null,
+    bonus_details: anyBonus ? bonusMap : null,
+  };
+}
+
+/** Hydrate snapshots from top-level creator-earnings columns. */
+export function applyPlatformCreatorEarningsColumnsToSnapshots(
+  platforms: VideoContestPlatform[],
+  columns: {
+    max_earnings_per_creator?: number | null | unknown;
+    bonus_details?: unknown;
+  },
+  existing: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+): Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> {
+  const next: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> =
+    { ...existing };
+  const primary = primaryPlatformOf(platforms);
+  const bonusKeyed = isPlatformKeyedContentMap(columns.bonus_details);
+  const maxKeyed = isPlatformKeyedMaxEarningsMap(
+    columns.max_earnings_per_creator,
+  );
+  const legacyBonus = !bonusKeyed
+    ? readBonusPayload(columns.bonus_details)
+    : null;
+  const topLevelMax = !maxKeyed
+    ? readMaxEarningsCents(columns.max_earnings_per_creator)
+    : null;
+
+  for (const platform of platforms) {
+    const snap = clonePlatformCampaignSnapshot(
+      next[platform] ?? createDefaultPlatformCampaignSnapshot(),
+    );
+
+    if (bonusKeyed) {
+      const payload = readBonusPayload(
+        (columns.bonus_details as Record<string, unknown>)[platform],
+      );
+      if (payload?.description_html) {
+        snap.bonusEnabled = true;
+        snap.bonusHtml = payload.description_html;
+        snap.bonusJson = payload.description_json ?? null;
+      }
+    } else if (platform === primary || (!snap.bonusEnabled && legacyBonus)) {
+      if (legacyBonus?.description_html) {
+        snap.bonusEnabled = true;
+        snap.bonusHtml = legacyBonus.description_html;
+        snap.bonusJson = legacyBonus.description_json ?? null;
+      }
+    }
+
+    if (maxKeyed) {
+      const cents = readMaxEarningsCents(
+        (columns.max_earnings_per_creator as Record<string, unknown>)[
+          platform
+        ],
+      );
+      if (cents) {
+        snap.maxEarningsPerCreator = (cents / 100).toString();
+      }
+    } else if (topLevelMax) {
+      // Legacy flat int, or max nested inside old bonus_details payloads.
+      if (platform === primary || !snap.maxEarningsPerCreator) {
+        snap.maxEarningsPerCreator = (topLevelMax / 100).toString();
+      }
+    } else if (bonusKeyed) {
+      // Legacy: max was nested under bonus_details[platform].
+      const cents = readMaxEarningsCents(
+        (columns.bonus_details as Record<string, unknown>)[platform],
+      );
+      if (cents) {
+        snap.maxEarningsPerCreator = (cents / 100).toString();
+      }
+    }
+
+    // Legacy fallback: previously nested under platform payout objects.
+    const legacy = existing[platform];
+    if (legacy) {
+      if (!snap.maxEarningsPerCreator && legacy.maxEarningsPerCreator) {
+        snap.maxEarningsPerCreator = legacy.maxEarningsPerCreator;
+      }
+      if (!snap.bonusEnabled && legacy.bonusEnabled && legacy.bonusHtml) {
+        snap.bonusEnabled = true;
+        snap.bonusHtml = legacy.bonusHtml;
+        snap.bonusJson = legacy.bonusJson ?? null;
+      }
+    }
+
+    next[platform] = snap;
+  }
+
+  return next;
+}
+
+/** Resolve bonus HTML/JSON for display (primary or requested platform). */
+export function bonusDetailsForPlatform(
+  bonusDetails: unknown,
+  platform?: VideoContestPlatform | string | null,
+): PlatformBonusPayload | null {
+  if (!bonusDetails || typeof bonusDetails !== "object") return null;
+  if (isPlatformKeyedContentMap(bonusDetails)) {
+    const key = isVideoContestPlatform(platform)
+      ? platform
+      : parseVideoContestPlatforms(platform)[0];
+    if (key) {
+      return readBonusPayload(
+        (bonusDetails as Record<string, unknown>)[key],
+      );
+    }
+    for (const p of VIDEO_CONTEST_PLATFORMS) {
+      const payload = readBonusPayload(
+        (bonusDetails as Record<string, unknown>)[p],
+      );
+      if (payload?.description_html) return payload;
+    }
+    return null;
+  }
+  return readBonusPayload(bonusDetails);
+}
+
+/** Contest-shaped helper used by list cards and similar UI. */
+export function resolveBonusDetails(
+  contest:
+    | {
+        bonus_details?: unknown;
+        platform?: string | null;
+      }
+    | null
+    | undefined,
+): PlatformBonusPayload | null {
+  if (!contest) return null;
+  return bonusDetailsForPlatform(contest.bonus_details, contest.platform);
+}
+
+/** Resolve max earnings cents for a platform (column map, int, or legacy bonus). */
+export function maxEarningsCentsForPlatform(
+  maxEarnings: unknown,
+  bonusDetails: unknown,
+  platform?: VideoContestPlatform | string | null,
+): number | null {
+  const key = isVideoContestPlatform(platform)
+    ? platform
+    : parseVideoContestPlatforms(platform)[0];
+
+  if (isPlatformKeyedMaxEarningsMap(maxEarnings)) {
+    if (key) {
+      const cents = readMaxEarningsCents(
+        (maxEarnings as Record<string, unknown>)[key],
+      );
+      if (cents) return cents;
+    }
+    for (const p of VIDEO_CONTEST_PLATFORMS) {
+      const cents = readMaxEarningsCents(
+        (maxEarnings as Record<string, unknown>)[p],
+      );
+      if (cents) return cents;
+    }
+  }
+
+  if (typeof maxEarnings === "number" && maxEarnings > 0) return maxEarnings;
+
+  // Legacy: max nested under bonus_details platform map / payload.
+  if (isPlatformKeyedContentMap(bonusDetails)) {
+    if (key) {
+      const cents = readMaxEarningsCents(
+        (bonusDetails as Record<string, unknown>)[key],
+      );
+      if (cents) return cents;
+    }
+  }
+  return readMaxEarningsCents(bonusDetails);
+}
+
+/**
+ * Resolve a single cents cap for payout/budget code that still expects a number.
+ * Uses the requested/primary platform when the column is a platform-keyed map.
+ */
+export function resolveMaxEarningsPerCreatorCents(
+  contest:
+    | {
+        max_earnings_per_creator?: unknown;
+        bonus_details?: unknown;
+        platform?: string | null;
+      }
+    | null
+    | undefined,
+  platform?: VideoContestPlatform | string | null,
+): number | null {
+  if (!contest) return null;
+  return maxEarningsCentsForPlatform(
+    contest.max_earnings_per_creator,
+    contest.bonus_details,
+    platform ?? contest.platform,
+  );
+}
+
+/** Seed creator-earning fields from legacy top-level contest columns when missing. */
+export function applyLegacyCreatorEarningsToSnapshots(
+  platforms: VideoContestPlatform[],
+  columns: {
+    max_earnings_per_creator?: number | null | unknown;
+    bonus_details?: unknown;
+  },
+  existing: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
+): Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>> {
+  return applyPlatformCreatorEarningsColumnsToSnapshots(
+    platforms,
+    columns,
+    existing,
+  );
+}
+
 /** Flatten platform-keyed or legacy resource lists for display / cleanup. */
 export function flattenContestResources(
   resources: unknown,
@@ -1290,6 +1757,80 @@ export function inspirationLinksForPlatform(
   );
 }
 
+type ContestContentColumns = {
+  brief_html?: string | null;
+  brief_json?: unknown;
+  rules_html?: string | null;
+  rules_json?: unknown;
+  platform?: string | null;
+};
+
+function resolvePlatformContentKey(
+  contest: ContestContentColumns | null | undefined,
+  platform?: VideoContestPlatform | string | null,
+): VideoContestPlatform | undefined {
+  if (isVideoContestPlatform(platform)) return platform;
+  const fromArg = parseVideoContestPlatforms(platform)[0];
+  if (fromArg) return fromArg;
+  return parseVideoContestPlatforms(contest?.platform)[0];
+}
+
+/** Resolve brief HTML for a platform from keyed brief_json or legacy brief_html. */
+export function briefHtmlForPlatform(
+  contest: ContestContentColumns | null | undefined,
+  platform?: VideoContestPlatform | string | null,
+): string {
+  if (!contest) return "";
+  const key = resolvePlatformContentKey(contest, platform);
+  if (isPlatformKeyedContentMap(contest.brief_json) && key) {
+    const payload = readRichTextPayload(
+      (contest.brief_json as Record<string, unknown>)[key],
+    );
+    if (payload) return payload.html || "";
+  }
+  const primary = parseVideoContestPlatforms(contest.platform)[0];
+  if (!key || key === primary || !isPlatformKeyedContentMap(contest.brief_json)) {
+    return contest.brief_html || "";
+  }
+  return "";
+}
+
+/** Resolve rules HTML for a platform from keyed rules_json or legacy rules_html. */
+export function rulesHtmlForPlatform(
+  contest: ContestContentColumns | null | undefined,
+  platform?: VideoContestPlatform | string | null,
+): string {
+  if (!contest) return "";
+  const key = resolvePlatformContentKey(contest, platform);
+  if (isPlatformKeyedContentMap(contest.rules_json) && key) {
+    const payload = readRichTextPayload(
+      (contest.rules_json as Record<string, unknown>)[key],
+    );
+    if (payload) return payload.html || "";
+  }
+  const primary = parseVideoContestPlatforms(contest.platform)[0];
+  if (!key || key === primary || !isPlatformKeyedContentMap(contest.rules_json)) {
+    return (contest.rules_html as string | null | undefined) || "";
+  }
+  return "";
+}
+
+/** Contest type stored under a platform payout key (falls back to contest.contest_type). */
+export function contestTypeForPlatform(
+  details: Record<string, unknown> | null | undefined,
+  platform?: VideoContestPlatform | string | null,
+  fallback?: string | null,
+): VideoContestType | string | null | undefined {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const key = isVideoContestPlatform(platform)
+    ? platform
+    : parseVideoContestPlatforms(platform)[0];
+  if (key && campaigns[key]?.contest_type) {
+    return campaigns[key]!.contest_type;
+  }
+  return fallback;
+}
+
 export function getSnapshotChargeableCents(
   snapshot: PlatformCampaignSnapshot,
 ): number {
@@ -1306,14 +1847,26 @@ export function sumSnapshotChargeableCents(
   platforms: VideoContestPlatform[],
   snapshots: Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>,
 ): number {
-  return platforms.reduce(
-    (sum, platform) =>
-      sum +
-      getSnapshotChargeableCents(
-        snapshots[platform] ?? createDefaultPlatformCampaignSnapshot(),
-      ),
-    0,
-  );
+  if (platforms.length === 0) return 0;
+  const primary =
+    snapshots[platforms[0]] ?? createDefaultPlatformCampaignSnapshot();
+
+  // Pool-based types share one Total Campaign Budget across platforms.
+  if (primary.contestType !== "leaderboard") {
+    return dollarsToCents(primary.totalBudget);
+  }
+
+  // Leaderboard: sum per-platform prize pools; shared bonus budget once.
+  let prizeSum = 0;
+  let anyFlatFee = false;
+  for (const platform of platforms) {
+    const snap =
+      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    prizeSum += snap.totalPrizePool || 0;
+    if (dollarsToCents(snap.flatFeeBonus) > 0) anyFlatFee = true;
+  }
+  const bonusBudget = anyFlatFee ? dollarsToCents(primary.totalBudget) : 0;
+  return prizeSum + bonusBudget;
 }
 
 export function getPersistedPlatformChargeableCents(
@@ -1343,13 +1896,132 @@ export function sumPersistedPlatformCampaignsChargeableCents(
   details: Record<string, unknown> | null | undefined,
 ): number | null {
   const campaigns = readPersistedPlatformCampaigns(details);
-  const values = Object.values(campaigns).filter(
-    (c): c is PersistedPlatformCampaign => Boolean(c),
+  const entries = VIDEO_CONTEST_PLATFORMS.map((platform) => campaigns[platform])
+    .filter((c): c is PersistedPlatformCampaign => Boolean(c));
+  if (entries.length < 2) return null;
+
+  const primary = entries[0]!;
+  if (primary.contest_type !== "leaderboard") {
+    return getPersistedPlatformChargeableCents(primary);
+  }
+
+  let prizeSum = 0;
+  let anyFlatFee = false;
+  let bonusBudget = 0;
+  for (const campaign of entries) {
+    const lb = campaign.leaderboard_contest;
+    if (!lb) continue;
+    const totalPrize =
+      typeof lb.total_prize === "number" && lb.total_prize > 0
+        ? lb.total_prize
+        : (lb.prizes ?? []).reduce((sum, prize) => sum + (prize.amount || 0), 0);
+    prizeSum += totalPrize;
+    if (Number(lb.flat_fee_bonus) > 0) {
+      anyFlatFee = true;
+      bonusBudget = Math.max(bonusBudget, Number(lb.total_budget) || 0);
+    }
+  }
+  return prizeSum + (anyFlatFee ? bonusBudget : 0);
+}
+
+/**
+ * Resolve display/chargeable pool budget for a contest, including multi-platform
+ * payouts stored under youtube|instagram|tiktok keys.
+ */
+export function resolveContestPoolBudgetCents(
+  contestType: string | null | undefined,
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+): number {
+  const projected = withProjectedTopLevelPayout(details, platformCsv);
+  const fromProjected = getPoolBudgetCentsFromDetails(
+    contestType,
+    projected as ContestBasedDetailsForPool,
   );
-  if (values.length < 2) return null;
-  return values.reduce(
-    (sum, campaign) => sum + getPersistedPlatformChargeableCents(campaign),
-    0,
+  if (fromProjected > 0) return fromProjected;
+
+  const multi = sumPersistedPlatformCampaignsChargeableCents(details);
+  if (multi != null && multi > 0) return multi;
+
+  return getPoolBudgetCentsFromDetails(
+    contestType,
+    (details as ContestBasedDetailsForPool) ?? null,
+  );
+}
+
+export type ContestPlatformCpmRate = {
+  platform: VideoContestPlatform;
+  rateUsd: number;
+};
+
+function readCpmRateUsd(cpm: unknown): number | null {
+  if (!cpm || typeof cpm !== "object") return null;
+  const raw = (cpm as { cpm_rate_usd?: unknown }).cpm_rate_usd;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = parseFloat(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/**
+ * CPM rates for list/detail display. Prefers per-platform payout keys when
+ * present (multi-platform contests clear root cpm_contest on save).
+ */
+export function resolveContestPlatformCpmRates(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+): ContestPlatformCpmRate[] {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const ordered = parseVideoContestPlatforms(platformCsv);
+  const platforms =
+    ordered.length > 0
+      ? ordered
+      : VIDEO_CONTEST_PLATFORMS.filter((p) => campaigns[p]);
+
+  const fromPlatforms: ContestPlatformCpmRate[] = [];
+  for (const platform of platforms) {
+    const rate = readCpmRateUsd(campaigns[platform]?.cpm_contest);
+    if (rate != null) {
+      fromPlatforms.push({ platform, rateUsd: rate });
+    }
+  }
+  if (fromPlatforms.length > 0) return fromPlatforms;
+
+  const projected = withProjectedTopLevelPayout(details, platformCsv);
+  const rootRate =
+    readCpmRateUsd(projected.cpm_contest) ??
+    readCpmRateUsd(
+      details && typeof details === "object"
+        ? (details as { cpm_contest?: unknown }).cpm_contest
+        : null,
+    );
+  if (rootRate == null) return [];
+
+  const platform = platforms[0];
+  if (platform) return [{ platform, rateUsd: rootRate }];
+  return [];
+}
+
+/** Compact CPM text for contest list cards (multi-platform aware). */
+export function formatContestListCpmRatesText(
+  rates: ContestPlatformCpmRate[],
+  formatMoneyFn: (cents: number) => string,
+): string | null {
+  if (rates.length === 0) return null;
+  const first = rates[0]!.rateUsd;
+  const allSame = rates.every((r) => r.rateUsd === first);
+  if (rates.length === 1 || allSame) {
+    return `${formatMoneyFn(first * 100)} / 1k views`;
+  }
+  return (
+    rates
+      .map(
+        (r) =>
+          `${VIDEO_PLATFORM_LABELS[r.platform]} ${formatMoneyFn(r.rateUsd * 100)}`,
+      )
+      .join(" · ") + " / 1k views"
   );
 }
 
@@ -1440,6 +2112,7 @@ export function primaryPlatformOf(
   return platforms[0] ?? "youtube";
 }
 
+/** Build single-platform root payout blocks from a snapshot (not for multi-platform save). */
 export function topLevelPayoutDetailsFromSnapshot(
   snapshot: PlatformCampaignSnapshot,
 ): Record<string, unknown> {
@@ -1458,4 +2131,107 @@ export function topLevelPayoutDetailsFromSnapshot(
     details.total_budget_cents = persisted.total_budget_cents;
   }
   return details;
+}
+
+/**
+ * Read-time helper for legacy UI that still expects root cpm/milestone/leaderboard.
+ * When multi-platform payout keys exist and root payout is missing, project the
+ * primary platform's payout onto the root (does not mutate stored details).
+ * Pass preferPlatform to project a specific platform (detail-page tabs).
+ */
+export function withProjectedTopLevelPayout(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+  preferPlatform?: VideoContestPlatform | null,
+): Record<string, unknown> {
+  if (!details || typeof details !== "object") return {};
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const campaignPlatforms = VIDEO_CONTEST_PLATFORMS.filter((p) => campaigns[p]);
+  if (campaignPlatforms.length < 2) return details;
+
+  const ordered = parseVideoContestPlatforms(platformCsv);
+  const target =
+    (preferPlatform && campaigns[preferPlatform] ? preferPlatform : null) ??
+    ordered.find((p) => campaigns[p]) ??
+    primaryPlatformOf(campaignPlatforms);
+
+  if (!preferPlatform) {
+    const hasMeaningfulTopLevel = (() => {
+      const rootBudget = details.total_budget_cents;
+      if (typeof rootBudget === "number" && rootBudget > 0) return true;
+
+      const cpm = details.cpm_contest as
+        | {
+            total_budget?: number | null;
+            cpm_rate_usd?: number | null;
+          }
+        | null
+        | undefined;
+      if (cpm && typeof cpm === "object") {
+        if (typeof cpm.total_budget === "number" && cpm.total_budget > 0) {
+          return true;
+        }
+        if (typeof cpm.cpm_rate_usd === "number" && cpm.cpm_rate_usd > 0) {
+          return true;
+        }
+      }
+
+      const milestone = details.milestone_contest as
+        | { total_budget_cents?: number | null }
+        | null
+        | undefined;
+      if (
+        milestone &&
+        typeof milestone === "object" &&
+        typeof milestone.total_budget_cents === "number" &&
+        milestone.total_budget_cents > 0
+      ) {
+        return true;
+      }
+
+      const leaderboard = details.leaderboard_contest as
+        | {
+            total_prize?: number | null;
+            prizes?: unknown[] | null;
+          }
+        | null
+        | undefined;
+      if (leaderboard && typeof leaderboard === "object") {
+        if (
+          typeof leaderboard.total_prize === "number" &&
+          leaderboard.total_prize > 0
+        ) {
+          return true;
+        }
+        if (
+          Array.isArray(leaderboard.prizes) &&
+          leaderboard.prizes.length > 0
+        ) {
+          return true;
+        }
+      }
+      return false;
+    })();
+    if (hasMeaningfulTopLevel) return details;
+  }
+
+  const targetCampaign = campaigns[target];
+  if (!targetCampaign) return details;
+
+  const projected: Record<string, unknown> = {};
+  if (targetCampaign.leaderboard_contest) {
+    projected.leaderboard_contest = targetCampaign.leaderboard_contest;
+  }
+  if (targetCampaign.cpm_contest) {
+    projected.cpm_contest = targetCampaign.cpm_contest;
+  }
+  if (targetCampaign.milestone_contest) {
+    projected.milestone_contest = targetCampaign.milestone_contest;
+  }
+  if (typeof targetCampaign.total_budget_cents === "number") {
+    projected.total_budget_cents = targetCampaign.total_budget_cents;
+  }
+
+  const base = preferPlatform ? clearTopLevelPayoutKeys({ ...details }) : details;
+  return { ...base, ...projected };
 }

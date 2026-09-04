@@ -31,7 +31,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  formatContestPlatformLabel,
+  resolveContestPoolBudgetCents,
+} from "@/lib/video-platform-campaigns";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Shield,
@@ -487,9 +490,10 @@ export default function ContestModerationClient({
       contest.contest_type === "leaderboard" &&
       contest.contest_based_details?.leaderboard_contest?.total_prize;
 
-    const poolBudgetCents = getPoolBudgetCentsFromDetails(
+    const poolBudgetCents = resolveContestPoolBudgetCents(
       contest.contest_type,
       contest.contest_based_details,
+      contest.platform,
     );
 
     const budgetSpent =
@@ -641,7 +645,7 @@ export default function ContestModerationClient({
                 <span className="min-w-0">
                   Platform:{" "}
                   <span className="font-medium">
-                    {contest.platform || "N/A"}
+                    {formatContestPlatformLabel(contest.platform)}
                   </span>
                 </span>
               </div>

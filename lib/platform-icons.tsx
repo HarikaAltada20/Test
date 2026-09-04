@@ -1,4 +1,5 @@
 import React from "react";
+import { parseVideoContestPlatforms } from "@/lib/video-platform-campaigns";
 
 export const getPlatformIcon = (
   platform?: string | null,
@@ -98,6 +99,29 @@ export const getPlatformIconWithFallback = (
       >
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
+    </div>
+  );
+};
+
+/** One icon per video platform for multi-platform contest list rows. */
+export const getContestPlatformIcons = (
+  platform?: string | null,
+  size: "sm" | "md" | "lg" = "md",
+) => {
+  const platforms = parseVideoContestPlatforms(platform);
+  if (platforms.length === 0) {
+    return getPlatformIconWithFallback(platform, size);
+  }
+  if (platforms.length === 1) {
+    return getPlatformIconWithFallback(platforms[0], size);
+  }
+  return (
+    <div className="flex items-center gap-0.5 flex-shrink-0">
+      {platforms.map((p) => (
+        <React.Fragment key={p}>
+          {getPlatformIconWithFallback(p, size)}
+        </React.Fragment>
+      ))}
     </div>
   );
 };

@@ -107,9 +107,28 @@ import {
   type SubmitEntryButton,
 } from "@/lib/gtag";
 import {
+  ALL_PLATFORM_TAB,
+  VIDEO_PLATFORM_LABELS,
   flattenContestInspirationLinks,
   flattenContestResources,
+  bonusDetailsForPlatform,
+  briefHtmlForPlatform,
+  contestTypeForPlatform,
+  inspirationLinksForPlatform,
+  isVideoContestPlatform,
+  maxEarningsCentsForPlatform,
+  parseVideoContestPlatforms,
+  readPersistedPlatformCampaigns,
+  resolveContestPoolBudgetCents,
+  resourcesForPlatform,
+  rulesHtmlForPlatform,
+  withProjectedTopLevelPayout,
+  type PlatformTabValue,
+  type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
+import { ContestDetailPlatformTabs } from "@/components/contest/ContestDetailPlatformTabs";
+import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
+import { getPlatformIcon } from "@/lib/platform-icons";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -723,11 +742,125 @@ export function ContestClientPage({
   const [activeSection, setActiveSection] = useState("earning-opportunities");
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
 
+  // Multi-platform Contest Details scoping (mirrors advertiser contest details)
+  const detailVideoPlatforms = useMemo(
+    () => parseVideoContestPlatforms(contest?.platform),
+    [contest?.platform],
+  );
+  const [detailPlatformTab, setDetailPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  useEffect(() => {
+    if (
+      detailPlatformTab !== ALL_PLATFORM_TAB &&
+      !detailVideoPlatforms.includes(detailPlatformTab)
+    ) {
+      setDetailPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [detailVideoPlatforms, detailPlatformTab]);
+  const detailScopedPlatform: VideoContestPlatform | null =
+    detailPlatformTab !== ALL_PLATFORM_TAB &&
+    isVideoContestPlatform(detailPlatformTab)
+      ? detailPlatformTab
+      : null;
+  const detailPersistedCampaigns = useMemo(
+    () =>
+      readPersistedPlatformCampaigns(
+        (contest?.contest_based_details as Record<string, unknown>) || null,
+      ),
+    [contest?.contest_based_details],
+  );
+  const buildDetailPayoutContest = useCallback(
+    (platform: VideoContestPlatform) => {
+      if (!contest) return contest;
+      const raw =
+        (contest.contest_based_details as Record<string, unknown>) || {};
+      const campaign = detailPersistedCampaigns[platform];
+      return {
+        ...contest,
+        platform,
+        contest_type:
+          contestTypeForPlatform(
+            raw,
+            platform,
+            contest.contest_type,
+          ) ??
+          campaign?.contest_type ??
+          contest.contest_type,
+        content_type: campaign?.content_type ?? contest.content_type,
+        brief_html: briefHtmlForPlatform(contest, platform),
+        rules_html: rulesHtmlForPlatform(contest, platform),
+        resources: resourcesForPlatform(contest.resources, platform),
+        inspiration_links: inspirationLinksForPlatform(
+          contest.inspiration_links,
+          platform,
+        ),
+        contest_based_details: withProjectedTopLevelPayout(
+          raw,
+          contest.platform,
+          platform,
+        ),
+      };
+    },
+    [contest, detailPersistedCampaigns],
+  );
+  const detailContest = useMemo(() => {
+    if (!contest) return contest;
+    if (!detailScopedPlatform || detailVideoPlatforms.length < 2) {
+      return contest;
+    }
+    return buildDetailPayoutContest(detailScopedPlatform);
+  }, [
+    contest,
+    detailScopedPlatform,
+    detailVideoPlatforms.length,
+    buildDetailPayoutContest,
+  ]);
+  const detailPayoutPlatformList: Array<VideoContestPlatform | null> =
+    detailVideoPlatforms.length >= 2
+      ? detailPlatformTab === ALL_PLATFORM_TAB
+        ? detailVideoPlatforms
+        : detailScopedPlatform
+          ? [detailScopedPlatform]
+          : detailVideoPlatforms.slice(0, 1)
+      : [null];
+  const showDetailPayoutPlatformLabels =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB;
+  const detailPlatformLabel =
+    detailScopedPlatform != null
+      ? VIDEO_PLATFORM_LABELS[detailScopedPlatform]
+      : detailVideoPlatforms.length > 0
+        ? detailVideoPlatforms
+            .map((p) => VIDEO_PLATFORM_LABELS[p])
+            .join(", ")
+        : contest?.platform || "Not specified";
+
+  const contestPoolBudgetCents = useMemo(() => {
+    if (!contest) return 0;
+    if (contest.contest_type === "leaderboard") {
+      const lb = contest.contest_based_details?.leaderboard_contest;
+      if (lb?.total_prize != null) return Number(lb.total_prize) || 0;
+      return Number(contest.total_prize) || 0;
+    }
+    return resolveContestPoolBudgetCents(
+      contest.contest_type,
+      (contest.contest_based_details as Record<string, unknown>) || null,
+      contest.platform,
+    );
+  }, [contest]);
+
   const hasInspirationLinks = useMemo(() => {
+    if (detailVideoPlatforms.length >= 2) {
+      return detailVideoPlatforms.some((platform) =>
+        inspirationLinksForPlatform(contest?.inspiration_links, platform).some(
+          (link) => typeof link?.url === "string" && link.url.trim() !== "",
+        ),
+      );
+    }
     return flattenContestInspirationLinks(contest?.inspiration_links).some(
       (link) => typeof link?.url === "string" && link.url.trim() !== "",
     );
-  }, [contest?.inspiration_links]);
+  }, [contest?.inspiration_links, detailVideoPlatforms]);
 
   const hasTrackingLinks = useMemo(() => {
     const links = Array.isArray(contest?.tracking_links)
@@ -2896,36 +3029,19 @@ export function ContestClientPage({
                         : "Prize Pool"}
                     </div>
                     <div className="text-4xl lg:text-6xl font-black text-white mb-2 drop-shadow-lg">
-                      {contest.contest_type === "cpm" &&
-                      contest.contest_based_details?.cpm_contest
+                      {contest.contest_type === "leaderboard" &&
+                      contest.contest_based_details?.leaderboard_contest
                         ? formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .total_budget,
+                            contest.contest_based_details.leaderboard_contest
+                              .total_prize,
                           )
-                        : contest.contest_type === "dual_rewards" &&
-                            contest.contest_based_details
-                          ? formatMoney(
-                              getPoolBudgetCentsFromDetails(
-                                contest.contest_type,
-                                contest.contest_based_details,
-                              ),
-                            )
-                          : contest.contest_type === "milestone" &&
-                              contest.contest_based_details?.milestone_contest
-                            ? formatMoney(
-                                contest.contest_based_details.milestone_contest
-                                  .total_budget_cents || 0,
-                              )
-                            : contest.contest_type === "leaderboard" &&
-                                contest.contest_based_details
-                                  ?.leaderboard_contest
-                              ? formatMoney(
-                                  contest.contest_based_details
-                                    .leaderboard_contest.total_prize,
-                                )
-                              : contest.total_prize
-                                ? formatMoney(contest.total_prize || 0)
-                                : "$0.00"}
+                        : contest.contest_type === "cpm" ||
+                            contest.contest_type === "milestone" ||
+                            contest.contest_type === "dual_rewards"
+                          ? formatMoney(contestPoolBudgetCents)
+                          : contest.total_prize
+                            ? formatMoney(contest.total_prize || 0)
+                            : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
@@ -3424,21 +3540,19 @@ export function ContestClientPage({
           <div
             className={cn(
               "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-
               isDark ? "bg-[#170337]" : "bg-white border border-slate-200 ",
             )}
           >
-            <CardContent className="p-6 flex justify-between items-center">
+            <CardContent className="p-6 flex justify-between items-center gap-3">
               <div
                 className={cn(
-                  "flex-1 space-y-2",
+                  "flex-1 min-w-0 space-y-2",
                   isDark ? "text-white" : "text-slate-800",
                 )}
               >
                 <p
                   className={cn(
                     "text-sm font-semibold uppercase tracking-wide",
-
                     isDark ? "text-slate-200" : "text-slate-600",
                   )}
                 >
@@ -3446,37 +3560,73 @@ export function ContestClientPage({
                 </p>
                 <p
                   className={cn(
-                    "text-2xl font-black capitalize",
+                    "font-black leading-snug break-words",
+                    detailVideoPlatforms.length > 1 ? "text-base" : "text-2xl",
                     isDark ? "text-white" : "text-slate-800",
                   )}
                 >
-                  {contest.platform || "Not specified"}
+                  {detailVideoPlatforms.length > 0
+                    ? detailVideoPlatforms
+                        .map((platform) => VIDEO_PLATFORM_LABELS[platform])
+                        .join(", ")
+                    : contest.platform || "Not specified"}
                 </p>
               </div>
-              <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-pink-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                {contest.platform?.toLowerCase() === "youtube" ? (
-                  <Youtube className="h-7 w-7" />
-                ) : contest.platform?.toLowerCase() === "instagram" ? (
-                  <Instagram className="h-7 w-7" />
-                ) : contest.platform?.toLowerCase() === "tiktok" ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-7 w-7"
-                    fill="currentColor"
-                  >
-                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
-                  </svg>
-                ) : contest.platform?.toLowerCase() === "twitter" ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-7 w-7"
-                    fill="currentColor"
-                  >
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                ) : (
-                  <Share2 className="h-7 w-7" />
+              <div
+                className={cn(
+                  "flex items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-pink-600 text-white shadow-lg shrink-0",
+                  detailVideoPlatforms.length > 1
+                    ? "h-12 w-auto px-2.5 gap-1.5"
+                    : "w-14 h-14",
                 )}
+              >
+                {(detailVideoPlatforms.length > 0
+                  ? detailVideoPlatforms
+                  : parseVideoContestPlatforms(contest.platform)
+                ).map((platform) => {
+                  const iconClass =
+                    detailVideoPlatforms.length > 1
+                      ? "h-4 w-4 text-white"
+                      : "h-7 w-7 text-white";
+                  if (platform === "youtube") {
+                    return (
+                      <Youtube
+                        key={`summary-white-${platform}`}
+                        className={iconClass}
+                      />
+                    );
+                  }
+                  if (platform === "instagram") {
+                    return (
+                      <Instagram
+                        key={`summary-white-${platform}`}
+                        className={iconClass}
+                      />
+                    );
+                  }
+                  if (platform === "tiktok") {
+                    return (
+                      <svg
+                        key={`summary-white-${platform}`}
+                        viewBox="0 0 24 24"
+                        className={iconClass}
+                        fill="currentColor"
+                      >
+                        <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
+                      </svg>
+                    );
+                  }
+                  return (
+                    <Share2
+                      key={`summary-white-${platform}`}
+                      className={iconClass}
+                    />
+                  );
+                })}
+                {detailVideoPlatforms.length === 0 &&
+                  !parseVideoContestPlatforms(contest.platform).length && (
+                    <Share2 className="h-7 w-7 text-white" />
+                  )}
               </div>
             </CardContent>
           </div>
@@ -3633,34 +3783,19 @@ export function ContestClientPage({
                     isDark ? "text-white" : "text-slate-800",
                   )}
                 >
-                  {contest.contest_type === "cpm" &&
-                  contest.contest_based_details?.cpm_contest
+                  {contest.contest_type === "leaderboard" &&
+                  contest.contest_based_details?.leaderboard_contest
                     ? formatMoney(
-                        contest.contest_based_details.cpm_contest.total_budget,
+                        contest.contest_based_details.leaderboard_contest
+                          .total_prize,
                       )
-                    : contest.contest_type === "dual_rewards" &&
-                        contest.contest_based_details
-                      ? formatMoney(
-                          getPoolBudgetCentsFromDetails(
-                            contest.contest_type,
-                            contest.contest_based_details,
-                          ),
-                        )
-                      : contest.contest_type === "milestone" &&
-                          contest.contest_based_details?.milestone_contest
-                        ? formatMoney(
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents || 0,
-                          )
-                        : contest.contest_type === "leaderboard" &&
-                            contest.contest_based_details?.leaderboard_contest
-                          ? formatMoney(
-                              contest.contest_based_details.leaderboard_contest
-                                .total_prize,
-                            )
-                          : contest.total_prize // Fallback to old field if necessary for older data
-                            ? formatMoney(contest.total_prize || 0)
-                            : "$0.00"}
+                    : contest.contest_type === "cpm" ||
+                        contest.contest_type === "milestone" ||
+                        contest.contest_type === "dual_rewards"
+                      ? formatMoney(contestPoolBudgetCents)
+                      : contest.total_prize
+                        ? formatMoney(contest.total_prize || 0)
+                        : "$0.00"}
                 </p>
                 <p
                   className={cn(
@@ -4112,15 +4247,24 @@ export function ContestClientPage({
               )}
             >
               <CardHeader className="border-b">
-                <CardTitle
-                  className={cn(
-                    "text-gray-800 flex items-center gap-2",
-                    isDark ? "text-white" : "text-gray-800",
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <CardTitle
+                    className={cn(
+                      "text-gray-800 flex items-center gap-2",
+                      isDark ? "text-white" : "text-gray-800",
+                    )}
+                  >
+                    Contest Details
+                  </CardTitle>
+                  {detailVideoPlatforms.length >= 2 && (
+                    <ContestDetailPlatformTabs
+                      platforms={detailVideoPlatforms}
+                      active={detailPlatformTab}
+                      onChange={setDetailPlatformTab}
+                      isDark={isDark}
+                    />
                   )}
-                >
-                  {/* <ScrollText className="h-5 w-5 text-blue-500" /> */}
-                  Contest Details
-                </CardTitle>
+                </div>
               </CardHeader>
               <CardContent className="space-y-8">
                 {/* 1. EARNINGS OVERVIEW - Clean Card Design */}
@@ -4159,11 +4303,11 @@ export function ContestClientPage({
                               isDark ? "text-gray-300" : "text-slate-600",
                             )}
                           >
-                            {contest.contest_type === "cpm"
+                            {detailContest?.contest_type === "cpm"
                               ? "Performance-based earnings"
-                              : contest.contest_type === "milestone"
+                              : detailContest?.contest_type === "milestone"
                                 ? "Milestone-based rewards"
-                                : contest.contest_type === "dual_rewards"
+                                : detailContest?.contest_type === "dual_rewards"
                                   ? "CPM pay plus milestone unlocks"
                                   : "Competition-based prizes"}
                           </p>
@@ -4178,7 +4322,11 @@ export function ContestClientPage({
                             : "bg-slate-100",
                         )}
                       >
-                        {contest.platform?.toLowerCase() === "youtube" ? (
+                        {detailScopedPlatform ? (
+                          getPlatformIcon(detailScopedPlatform, "sm")
+                        ) : detailVideoPlatforms.length >= 2 ? (
+                          <Monitor className="h-5 w-5 text-slate-600" />
+                        ) : contest.platform?.toLowerCase() === "youtube" ? (
                           <Youtube className="h-5 w-5 text-red-600" />
                         ) : contest.platform?.toLowerCase() === "instagram" ? (
                           <Instagram className="h-5 w-5 text-pink-600" />
@@ -4195,27 +4343,49 @@ export function ContestClientPage({
                         )}
                         <span
                           className={cn(
-                            "text-sm font-medium capitalize",
+                            "text-sm font-medium",
                             isDark ? "text-white" : "text-slate-700",
                           )}
                         >
-                          {contest.platform || "Multi-platform"}
+                          {detailPlatformLabel}
                         </span>
                       </div>
                     </div>
 
+                    {detailVideoPlatforms.length >= 2 && (
+                      <div className="mb-6 space-y-4">
+                        {detailPayoutPlatformList.map((platform) => {
+                          const payoutContest =
+                            platform != null
+                              ? buildDetailPayoutContest(platform)
+                              : detailContest;
+                          if (!payoutContest) return null;
+                          return (
+                            <ContestDetailVideoPayoutSections
+                              key={platform ?? "primary"}
+                              contest={payoutContest}
+                              isDark={isDark}
+                              platform={platform}
+                              showPlatformLabel={showDetailPayoutPlatformLabels}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {detailVideoPlatforms.length < 2 && (
+                      <div className="space-y-6">
                     {/* Main Earning Information */}
                     <div
                       className={`grid grid-cols-1 gap-4 mb-6 ${
-                        // Dynamic grid based on contest type and available data
                         isCpmContestType(contest.contest_type)
                           ? contest.contest_based_details?.cpm_contest
                               ?.min_views != null &&
                             contest.contest_based_details?.cpm_contest
                               ?.max_views != null
-                            ? "md:grid-cols-2 lg:grid-cols-4" // 4 cards: Pay Rate, Total Budget, Min Views, Max Views
-                            : "md:grid-cols-2 lg:grid-cols-3" // 3 cards: Pay Rate, Total Budget, + one view requirement
-                          : "md:grid-cols-2 lg:grid-cols-2" // 2 cards
+                            ? "md:grid-cols-2 lg:grid-cols-4"
+                            : "md:grid-cols-2 lg:grid-cols-3"
+                          : "md:grid-cols-2 lg:grid-cols-2"
                       }`}
                     >
                       {/* Pay Rate / Prize Pool / Total Budget */}
@@ -4747,6 +4917,9 @@ export function ContestClientPage({
                         </div>
                       )}
 
+                    </div>
+                    )}
+
                     {/* Bonus Information */}
                     <div className="space-y-3">
                       {/* Bonus Budget Tracker for Leaderboard with flat_fee_bonus */}
@@ -4866,8 +5039,8 @@ export function ContestClientPage({
                         )}
 
                       {/* Flat Fee Bonus for CPM contests */}
-                      {isCpmContestType(contest.contest_type) &&
-                        contest.contest_based_details?.cpm_contest
+                      {isCpmContestType(detailContest?.contest_type) &&
+                        detailContest?.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus && (
                           <div
                             className={cn(
@@ -4931,7 +5104,7 @@ export function ContestClientPage({
                                   )}
                                 >
                                   {formatMoney(
-                                    contest.contest_based_details.cpm_contest
+                                    detailContest.contest_based_details.cpm_contest
                                       .flat_fee_bonus,
                                   )}
                                 </div>
@@ -4948,7 +5121,7 @@ export function ContestClientPage({
                               </div>
                             </div>
                             {/* Flat Fee Bonus Cap (for CPM contests) */}
-                            {contest.contest_based_details?.cpm_contest
+                            {detailContest.contest_based_details?.cpm_contest
                               ?.flat_fee_bonus_cap && (
                               <div className="mt-3">
                                 <p
@@ -4961,7 +5134,7 @@ export function ContestClientPage({
                                 >
                                   💰 Flat Fee Bonus Cap:{" "}
                                   {formatMoney(
-                                    contest.contest_based_details.cpm_contest
+                                    detailContest.contest_based_details.cpm_contest
                                       .flat_fee_bonus_cap,
                                   )}
                                 </p>
@@ -5042,7 +5215,13 @@ export function ContestClientPage({
                               {(contest as any).max_submissions_per_creator}{" "}
                               entries
                             </div>
-                            {(contest as any).max_earnings_per_creator && (
+                            {(() => {
+                              const cap = maxEarningsCentsForPlatform(
+                                (contest as any).max_earnings_per_creator,
+                                (contest as any).bonus_details,
+                                detailScopedPlatform ?? contest?.platform,
+                              );
+                              return cap ? (
                               <div
                                 className={cn(
                                   "text-[10px] sm:text-xs mt-0.5",
@@ -5052,17 +5231,77 @@ export function ContestClientPage({
                                 )}
                               >
                                 Cap:{" "}
-                                {formatMoney(
-                                  (contest as any).max_earnings_per_creator,
-                                )}
+                                {formatMoney(cap)}
                               </div>
-                            )}
+                              ) : null;
+                            })()}
                           </div>
                         </div>
                       )}
 
                       {/* Additional Bonuses */}
-                      {(contest as any).bonus_details?.description_html && (
+                      {showDetailPayoutPlatformLabels ? (
+                        <div className="space-y-3">
+                          {detailVideoPlatforms.map((platform) => {
+                            const bonus = bonusDetailsForPlatform(
+                              (contest as any).bonus_details,
+                              platform,
+                            );
+                            if (!bonus?.description_html) return null;
+                            return (
+                              <div
+                                key={`bonus-${platform}`}
+                                className={cn(
+                                  "p-3 rounded-lg border transition-all duration-300",
+                                  isDark
+                                    ? "bg-gradient-to-r from-yellow-900/40 to-amber-900/40 border-yellow-400/40"
+                                    : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200",
+                                )}
+                              >
+                                <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                                  {getPlatformIcon(platform, "sm")}
+                                  <span>{VIDEO_PLATFORM_LABELS[platform]}</span>
+                                </div>
+                                <div className="flex items-center gap-3 mb-3">
+                                  <Star
+                                    className={cn(
+                                      "h-5 w-5",
+                                      isDark
+                                        ? "text-amber-400"
+                                        : "text-amber-600",
+                                    )}
+                                  />
+                                  <span
+                                    className={cn(
+                                      "font-medium",
+                                      isDark
+                                        ? "text-slate-100"
+                                        : "text-slate-900",
+                                    )}
+                                  >
+                                    Extra Bonuses
+                                  </span>
+                                </div>
+                                <div
+                                  className={cn(
+                                    "prose prose-sm max-w-none",
+                                    isDark
+                                      ? "prose-invert text-amber-100"
+                                      : "text-amber-900",
+                                  )}
+                                  dangerouslySetInnerHTML={{
+                                    __html: bonus.description_html,
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                      bonusDetailsForPlatform(
+                        (contest as any).bonus_details,
+                        detailScopedPlatform ?? contest?.platform,
+                      )?.description_html && (
                         <div
                           className={cn(
                             "p-3 rounded-lg border transition-all duration-300",
@@ -5116,8 +5355,11 @@ export function ContestClientPage({
                                   : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                               )}
                               dangerouslySetInnerHTML={{
-                                __html: (contest as any).bonus_details
-                                  .description_html,
+                                __html:
+                                  bonusDetailsForPlatform(
+                                    (contest as any).bonus_details,
+                                    detailScopedPlatform ?? contest?.platform,
+                                  )?.description_html || "",
                               }}
                             />
                           </div>
@@ -5142,7 +5384,7 @@ export function ContestClientPage({
                             </p>
                           </div>
                         </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -5647,7 +5889,7 @@ export function ContestClientPage({
                               isDark ? "text-slate-100" : "text-slate-900",
                             )}
                           >
-                            {contest.platform || "Not specified"}
+                            {detailPlatformLabel}
                           </p>
                         </div>
                       </div>
@@ -6541,7 +6783,42 @@ export function ContestClientPage({
                     >
                       📝 Brief
                     </h4>
-                    {contest.brief_html ? (
+                    {detailVideoPlatforms.length >= 2 &&
+                    detailPlatformTab === ALL_PLATFORM_TAB ? (
+                      <div className="space-y-3">
+                        {detailVideoPlatforms.map((platform) => {
+                          const html = briefHtmlForPlatform(contest, platform);
+                          return (
+                            <div key={`brief-${platform}`} className="space-y-2">
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                {getPlatformIcon(platform, "sm")}
+                                <span>{VIDEO_PLATFORM_LABELS[platform]}</span>
+                              </div>
+                              {html ? (
+                                <div
+                                  className={cn(
+                                    "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
+                                    isDark
+                                      ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
+                                      : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
+                                  )}
+                                  dangerouslySetInnerHTML={{ __html: html }}
+                                />
+                              ) : (
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark ? "text-slate-300" : "text-slate-700",
+                                  )}
+                                >
+                                  No brief provided
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : detailContest?.brief_html ? (
                       <div
                         className={cn(
                           "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
@@ -6549,7 +6826,9 @@ export function ContestClientPage({
                             ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
                             : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                         )}
-                        dangerouslySetInnerHTML={{ __html: contest.brief_html }}
+                        dangerouslySetInnerHTML={{
+                          __html: detailContest.brief_html,
+                        }}
                       />
                     ) : (
                       <p
@@ -6564,7 +6843,7 @@ export function ContestClientPage({
                   </div>
 
                   {/* Content Type Info Tag */}
-                  {(contest as any).content_type && (
+                  {(detailContest as any)?.content_type && (
                     <div
                       className={cn(
                         "inline-flex items-center gap-2 rounded-lg px-3 py-2",
@@ -6585,10 +6864,10 @@ export function ContestClientPage({
                           isDark ? "text-blue-100" : "text-blue-900",
                         )}
                       >
-                        {(contest as any).content_type.toUpperCase()} -{" "}
-                        {(contest as any).content_type === "ugc"
+                        {(detailContest as any).content_type.toUpperCase()} -{" "}
+                        {(detailContest as any).content_type === "ugc"
                           ? "Create Face videos"
-                          : (contest as any).content_type === "clipping"
+                          : (detailContest as any).content_type === "clipping"
                             ? "Video editing and clipping"
                             : "Check rules to find out what kind of content you need to create"}
                       </span>
@@ -6630,7 +6909,42 @@ export function ContestClientPage({
                       Rules & Guidelines
                     </h4>
                     {/* Check multiple possible rule fields */}
-                    {(contest as any).rules_html ? (
+                    {detailVideoPlatforms.length >= 2 &&
+                    detailPlatformTab === ALL_PLATFORM_TAB ? (
+                      <div className="space-y-3">
+                        {detailVideoPlatforms.map((platform) => {
+                          const html = rulesHtmlForPlatform(contest, platform);
+                          return (
+                            <div key={`rules-${platform}`} className="space-y-2">
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                {getPlatformIcon(platform, "sm")}
+                                <span>{VIDEO_PLATFORM_LABELS[platform]}</span>
+                              </div>
+                              {html ? (
+                                <div
+                                  className={cn(
+                                    "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
+                                    isDark
+                                      ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_a]:!text-blue-400 [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white"
+                                      : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
+                                  )}
+                                  dangerouslySetInnerHTML={{ __html: html }}
+                                />
+                              ) : (
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark ? "text-slate-300" : "text-slate-700",
+                                  )}
+                                >
+                                  No rules provided
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (detailContest as any)?.rules_html ? (
                       <div
                         className={cn(
                           "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
@@ -6639,7 +6953,7 @@ export function ContestClientPage({
                             : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                         )}
                         dangerouslySetInnerHTML={{
-                          __html: (contest as any).rules_html,
+                          __html: (detailContest as any).rules_html,
                         }}
                       />
                     ) : contest.rules ? (
@@ -6763,8 +7077,8 @@ export function ContestClientPage({
                   </div>
 
                   {/* Terms & Conditions for CPM contests */}
-                  {isCpmContestType(contest.contest_type) &&
-                    contest.contest_based_details?.cpm_contest
+                  {isCpmContestType(detailContest?.contest_type) &&
+                    detailContest?.contest_based_details?.cpm_contest
                       ?.terms_conditions && (
                       <div
                         className={cn(
@@ -6797,7 +7111,7 @@ export function ContestClientPage({
                             )}
                           >
                             {
-                              contest.contest_based_details.cpm_contest
+                              detailContest.contest_based_details.cpm_contest
                                 .terms_conditions
                             }
                           </pre>
@@ -6819,10 +7133,67 @@ export function ContestClientPage({
                     Resources & Tools
                   </h3>
 
-                  {flattenContestResources(contest.resources).length > 0 ? (
-                    <div className="grid gap-4">
-                      {flattenContestResources(contest.resources).map(
-                      (resource: any, idx: number) => {
+                  {(() => {
+                    const resourceGroups =
+                      detailVideoPlatforms.length >= 2
+                        ? detailPlatformTab === ALL_PLATFORM_TAB
+                          ? detailVideoPlatforms.map((platform) => ({
+                              platform,
+                              items: resourcesForPlatform(
+                                contest.resources,
+                                platform,
+                              ),
+                            }))
+                          : [
+                              {
+                                platform: detailScopedPlatform,
+                                items: resourcesForPlatform(
+                                  contest.resources,
+                                  detailScopedPlatform,
+                                ),
+                              },
+                            ]
+                        : [
+                            {
+                              platform: null as VideoContestPlatform | null,
+                              items: flattenContestResources(contest.resources),
+                            },
+                          ];
+                    const hasAny = resourceGroups.some(
+                      (group) => group.items.length > 0,
+                    );
+                    if (!hasAny) {
+                      return (
+                        <p
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-slate-300" : "text-slate-600",
+                          )}
+                        >
+                          No resources provided for this campaign.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div className="space-y-6">
+                        {resourceGroups.map((group) =>
+                          group.items.length === 0 ? null : (
+                            <div
+                              key={group.platform ?? "all"}
+                              className="space-y-3"
+                            >
+                              {group.platform &&
+                                detailPlatformTab === ALL_PLATFORM_TAB && (
+                                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                    {getPlatformIcon(group.platform, "sm")}
+                                    <span>
+                                      {VIDEO_PLATFORM_LABELS[group.platform]}
+                                    </span>
+                                  </div>
+                                )}
+                              <div className="grid gap-4">
+                                {group.items.map(
+                                  (resource: any, idx: number) => {
                         const isImage =
                           resource.url &&
                           (resource.url.startsWith("data:image") ||
@@ -6837,7 +7208,7 @@ export function ContestClientPage({
                         const isInternal = resource.type === "internal";
                         return (
                           <div
-                            key={idx}
+                            key={`${group.platform ?? "all"}-${idx}`}
                             className={cn(
                               "border rounded-xl p-5",
                               isDark ? "border-gray-600" : "border-gray-300",
@@ -6951,50 +7322,64 @@ export function ContestClientPage({
                             </div>
                           </div>
                         );
-                      })}
-                    </div>
-                  ) : (
-                    <div
-                      className={cn(
-                        "text-center py-12 rounded-xl border border-gray-300",
-                        isDark ? "text-gray-300" : "bg-gray-50 text-slate-700",
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center",
-                          isDark ? "bg-blue-500/30" : "bg-blue-100",
+                                  },
+                                )}
+                              </div>
+                            </div>
+                          ),
                         )}
-                      >
-                        <Lightbulb className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <h4
-                        className={cn(
-                          "text-lg font-medium text-gray-900 dark:text-gray-100 mb-2",
-                          isDark ? "text-white" : "text-slate-700",
-                        )}
-                      >
-                        No additional resources provided
-                      </h4>
-                      <p
-                        className={cn(
-                          "text-gray-600 dark:text-gray-400",
-                          isDark ? "text-gray-300" : "text-slate-700",
-                        )}
-                      >
-                        Check the brief and rules above for all contest
-                        requirements.
-                      </p>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* Inspiration Links Section */}
                 {(() => {
-                  let links = flattenContestInspirationLinks(
-                    contest.inspiration_links,
+                  const inspirationGroups =
+                    detailVideoPlatforms.length >= 2
+                      ? detailPlatformTab === ALL_PLATFORM_TAB
+                        ? detailVideoPlatforms.map((platform) => ({
+                            platform,
+                            links: inspirationLinksForPlatform(
+                              contest.inspiration_links,
+                              platform,
+                            ).filter(
+                              (link) =>
+                                typeof link?.url === "string" &&
+                                link.url.trim() !== "",
+                            ),
+                          }))
+                        : [
+                            {
+                              platform: detailScopedPlatform,
+                              links: inspirationLinksForPlatform(
+                                contest.inspiration_links,
+                                detailScopedPlatform,
+                              ).filter(
+                                (link) =>
+                                  typeof link?.url === "string" &&
+                                  link.url.trim() !== "",
+                              ),
+                            },
+                          ]
+                      : [
+                          {
+                            platform: null as VideoContestPlatform | null,
+                            links: flattenContestInspirationLinks(
+                              contest.inspiration_links,
+                            ).filter(
+                              (link) =>
+                                typeof link?.url === "string" &&
+                                link.url.trim() !== "",
+                            ),
+                          },
+                        ];
+                  const hasLinks = inspirationGroups.some(
+                    (group) => group.links.length > 0,
                   );
-                  return links.length > 0 ? (
+                  if (!hasLinks) return null;
+
+                  return (
                     <>
                       <Separator className="my-8" />
                       <div
@@ -7005,9 +7390,6 @@ export function ContestClientPage({
                         className="space-y-6 scroll-mt-48"
                       >
                         <div className="flex items-center gap-3">
-                          {/* <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                            <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                          </div> */}
                           <h3
                             className={cn(
                               "text-xl font-semibold",
@@ -7018,76 +7400,100 @@ export function ContestClientPage({
                           </h3>
                         </div>
 
-                        <div className="grid gap-4">
-                          {links.map(
-                            (
-                              item: { url: string; description: string },
-                              index: number,
-                            ) => {
-                              // Process URL to replace [creator] with username
-                              const username = userProfile?.username || "";
-                              const processedUrl = processUrlWithCreator(
-                                item.url,
-                                username,
-                              );
-
-                              return (
-                                <div
-                                  key={index}
-                                  className={cn(
-                                    "border rounded-xl p-5",
-                                    isDark
-                                      ? "border-gray-600"
-                                      : "bg-white border-gray-300",
-                                  )}
-                                >
-                                  <div className="flex items-start gap-4">
-                                    <div
-                                      className={cn(
-                                        "p-3 rounded-full flex-shrink-0",
-                                        isDark
-                                          ? "bg-[#FFFFFF42] text-white"
-                                          : "bg-purple-100 text-purple-600",
-                                      )}
-                                    >
-                                      <ExternalLink className="h-5 w-5" />
+                        <div className="space-y-6">
+                          {inspirationGroups.map((group) =>
+                            group.links.length === 0 ? null : (
+                              <div
+                                key={group.platform ?? "all"}
+                                className="space-y-3"
+                              >
+                                {group.platform &&
+                                  detailPlatformTab === ALL_PLATFORM_TAB && (
+                                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                      {getPlatformIcon(group.platform, "sm")}
+                                      <span>
+                                        {VIDEO_PLATFORM_LABELS[group.platform]}
+                                      </span>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                      <a
-                                        href={processedUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className={cn(
-                                          "block text-base font-medium text-blue-600 hover:underline mb-2 break-all",
-                                          isDark
-                                            ? "text-purple-300"
-                                            : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
-                                        )}
-                                      >
-                                        {processedUrl}
-                                      </a>
-                                      {item.description && (
-                                        <p
+                                  )}
+                                <div className="grid gap-4">
+                                  {group.links.map(
+                                    (
+                                      item: {
+                                        url: string;
+                                        description: string;
+                                      },
+                                      index: number,
+                                    ) => {
+                                      const username =
+                                        userProfile?.username || "";
+                                      const processedUrl =
+                                        processUrlWithCreator(
+                                          item.url,
+                                          username,
+                                        );
+
+                                      return (
+                                        <div
+                                          key={`${group.platform ?? "all"}-${index}`}
                                           className={cn(
-                                            "text-sm leading-relaxed",
+                                            "border rounded-xl p-5",
                                             isDark
-                                              ? "text-gray-300"
-                                              : "text-gray-700",
+                                              ? "border-gray-600"
+                                              : "bg-white border-gray-300",
                                           )}
                                         >
-                                          {item.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
+                                          <div className="flex items-start gap-4">
+                                            <div
+                                              className={cn(
+                                                "p-3 rounded-full flex-shrink-0",
+                                                isDark
+                                                  ? "bg-[#FFFFFF42] text-white"
+                                                  : "bg-purple-100 text-purple-600",
+                                              )}
+                                            >
+                                              <ExternalLink className="h-5 w-5" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <a
+                                                href={processedUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={cn(
+                                                  "block text-base font-medium text-blue-600 hover:underline mb-2 break-all",
+                                                  isDark
+                                                    ? "text-purple-300"
+                                                    : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
+                                                )}
+                                              >
+                                                {processedUrl}
+                                              </a>
+                                              {item.description && (
+                                                <p
+                                                  className={cn(
+                                                    "text-sm leading-relaxed",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-700",
+                                                  )}
+                                                >
+                                                  {item.description}
+                                                </p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    },
+                                  )}
                                 </div>
-                              );
-                            },
+                              </div>
+                            ),
                           )}
                         </div>
                       </div>
                     </>
-                  ) : null;
+                  );
                 })()}
 
                 {/* Tracking Links Section */}

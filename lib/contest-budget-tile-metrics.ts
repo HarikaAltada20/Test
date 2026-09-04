@@ -14,6 +14,7 @@ import {
   calculateTwitterCpmBudgetSpent,
   type Submission,
 } from "@/lib/contest-utils-client";
+import { resolveMaxEarningsPerCreatorCents } from "@/lib/video-platform-campaigns";
 
 export type BudgetTileMode = "filled" | "paid";
 
@@ -213,7 +214,9 @@ function computeCpmFilledCents(
   const dollars = calculateTwitterCpmBudgetSpent(
     submissions,
     rate,
-    contest.max_earnings_per_creator ?? cpm?.max_earnings_per_creator ?? null,
+    resolveMaxEarningsPerCreatorCents(contest) ??
+      cpm?.max_earnings_per_creator ??
+      null,
     cpm?.min_views,
     cpm?.max_views,
     includeFlatFeeBonus ? cpm?.flat_fee_bonus || 0 : 0,

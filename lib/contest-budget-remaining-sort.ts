@@ -1,11 +1,12 @@
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
 } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
+import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
 
 type ContestBudgetSortInput = {
   contest_type?: string | null;
+  platform?: string | null;
   contest_based_details?: {
     leaderboard_contest?: {
       total_prize?: number;
@@ -64,9 +65,10 @@ export function getContestBudgetRemainingForSort(
   }
 
   if (isCpmContestType(contest.contest_type)) {
-    const total = getPoolBudgetCentsFromDetails(
+    const total = resolveContestPoolBudgetCents(
       contest.contest_type,
       details,
+      contest.platform,
     );
     if (total <= 0) return -1;
 
@@ -120,9 +122,10 @@ export function getContestBudgetSpentForSort(
   }
 
   if (isCpmContestType(contest.contest_type)) {
-    const total = getPoolBudgetCentsFromDetails(
+    const total = resolveContestPoolBudgetCents(
       contest.contest_type,
       details,
+      contest.platform,
     );
     if (total <= 0) return -1;
 
