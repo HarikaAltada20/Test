@@ -27,6 +27,7 @@ import {
   isQStashEnabled,
   triggerProcessYouTubeMetricsQueue,
 } from "@/lib/qstash";
+import { advanceMultiPlatformMetricsChainAfterTerminal } from "@/lib/queue/multi-platform-metrics-chain";
 function getBaseUrlFromRequest(request: Request): string {
   try {
     const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
@@ -190,6 +191,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         })
         .eq("id", job.runId)
         .eq("status", "running");
+      await advanceMultiPlatformMetricsChainAfterTerminal({
+        contestId: job.contestId,
+        platform: "youtube",
+        metricsTarget: job.metricsTarget ?? "submissions",
+        baseUrl,
+      });
     }
     return NextResponse.json(
       {
@@ -225,6 +232,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         })
         .eq("id", job.runId)
         .eq("status", "running");
+      await advanceMultiPlatformMetricsChainAfterTerminal({
+        contestId: job.contestId,
+        platform: "youtube",
+        metricsTarget: job.metricsTarget ?? "submissions",
+        baseUrl,
+      });
     }
     return NextResponse.json(
       { processed: 1, error: "Batch failed", details: batchData, retry: retryResult },
@@ -236,6 +249,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   const hasMore = batchData.hasMore === true && !batchData.cancelled;
   if (batchData.cancelled) {
     await removeFromProcessingYouTube(rawJobString);
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "youtube",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
     return NextResponse.json({
       processed: 1,
       contestId: job.contestId,
@@ -245,6 +264,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   }
   if (runStatus && runStatus !== "running") {
     await removeFromProcessingYouTube(rawJobString);
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "youtube",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
     return NextResponse.json({
       processed: 1,
       contestId: job.contestId,
@@ -360,6 +385,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .eq("id", job.runId)
       .eq("status", "running");
     await removeFromProcessingYouTube(rawJobString);
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "youtube",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
     return NextResponse.json(
       {
         processed: 1,
@@ -396,6 +427,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         await finalizeContestAfterYoutubeRun(supabaseAdmin, job.contestId, job.scope);
         revalidateLeaderboardCache(job.contestId);
       }
+      await advanceMultiPlatformMetricsChainAfterTerminal({
+        contestId: job.contestId,
+        platform: "youtube",
+        metricsTarget: job.metricsTarget ?? "submissions",
+        baseUrl,
+      });
     }
   }
   await removeFromProcessingYouTube(rawJobString);

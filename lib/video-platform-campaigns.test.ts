@@ -557,6 +557,23 @@ describe("platformsForTab", () => {
       "instagram",
     ]);
   });
+
+  it("scopes submissions table column keys to the selected platform tab", () => {
+    const platforms: Array<"youtube" | "instagram" | "tiktok"> = [
+      "youtube",
+      "instagram",
+      "tiktok",
+    ];
+    const instagramKey = platformsForTab("instagram", platforms).join(",");
+    assert.equal(instagramKey.includes("instagram"), true);
+    assert.equal(instagramKey.includes("youtube"), false);
+    assert.equal(instagramKey.includes("tiktok"), false);
+
+    const allKey = platformsForTab("all", platforms).join(",");
+    assert.equal(allKey.includes("instagram"), true);
+    assert.equal(allKey.includes("youtube"), true);
+    assert.equal(allKey.includes("tiktok"), true);
+  });
 });
 
 describe("patchSnapshotSection", () => {

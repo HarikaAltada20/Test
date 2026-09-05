@@ -16,21 +16,43 @@ export type PostCampaignRefreshRunCounts = {
   temporary_failure_count?: number | null;
   permanent_failure_count?: number | null;
   skipped_recent_count?: number | null;
+  total_submissions?: number | null;
+  processed_submissions?: number | null;
+  reviewed_count?: number | null;
+  scope?: string | null;
 };
 
 export function isTrackedPostCampaignRun(
-  run: { id: string; started_at?: string | null },
+  run: {
+    id: string;
+    started_at?: string | null;
+    finished_at?: string | null;
+  },
   options: {
     activeRunId?: string;
     refreshStartedMs: number;
     skewMs?: number;
   },
 ): boolean {
-  const { activeRunId, refreshStartedMs, skewMs = 10_000 } = options;
-  if (activeRunId) return run.id === activeRunId;
-  if (!run.started_at) return false;
-  const runStartMs = new Date(run.started_at).getTime();
-  return !Number.isNaN(runStartMs) && runStartMs >= refreshStartedMs - skewMs;
+  const { activeRunId, refreshStartedMs, skewMs = 120_000 } = options;
+
+  // Time window first: chainContinue / server advance can disagree on runId.
+  // Prefer started_at so an older run that finished recently is not treated as
+  // belonging to a new multi-platform chain (would skip TikTok / later platforms).
+  if (run.started_at) {
+    const runStartMs = new Date(run.started_at).getTime();
+    if (!Number.isNaN(runStartMs) && runStartMs >= refreshStartedMs - skewMs) {
+      return true;
+    }
+  } else if (run.finished_at) {
+    const finishedMs = new Date(run.finished_at).getTime();
+    if (!Number.isNaN(finishedMs) && finishedMs >= refreshStartedMs - skewMs) {
+      return true;
+    }
+  }
+
+  if (activeRunId && run.id === activeRunId) return true;
+  return false;
 }
 
 export function isTerminalPostCampaignRunStatus(
@@ -50,6 +72,49 @@ export function formatPostCampaignRefreshToastDescription(
     return `Scope: ${options.scope} · ${counts}`;
   }
   return counts;
+}
+
+/**
+ * Live Refresh Metrics toast body: totals + success / temp / permanent / skipped.
+ */
+export function formatLiveMetricsRefreshToastDescription(
+  run: PostCampaignRefreshRunCounts,
+  options?: { scope?: string | null; includeReviewed?: boolean },
+): string {
+  const total = run.total_submissions ?? 0;
+  const processed = run.processed_submissions ?? 0;
+  const parts = [
+    `Total submissions ${total}`,
+    `Processed ${processed}`,
+  ];
+  if (options?.includeReviewed) {
+    parts.push(`Reviewed ${run.reviewed_count ?? 0}`);
+  }
+  if (options?.scope) {
+    parts.unshift(`Scope: ${options.scope}`);
+  }
+  parts.push(
+    `Success ${run.success_count ?? 0}`,
+    `Temporary failure ${run.temporary_failure_count ?? 0}`,
+    `Permanent failure ${run.permanent_failure_count ?? 0}`,
+    `Skipped ${run.skipped_recent_count ?? 0}`,
+  );
+  return `${parts.join(" · ")}.`;
+}
+
+export function liveMetricsRefreshToastTitle(
+  platform: "youtube" | "instagram" | "tiktok",
+  status: string | null | undefined,
+): string {
+  const label =
+    platform === "youtube"
+      ? "YouTube"
+      : platform === "instagram"
+        ? "Instagram"
+        : "TikTok";
+  if (status === "failed") return `${label} refresh failed`;
+  if (status === "cancelled") return `${label} refresh cancelled`;
+  return `${label} refresh completed`;
 }
 
 export type PostCampaignStatusPathInfo = {

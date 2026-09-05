@@ -21,6 +21,7 @@ import {
 } from "@/lib/qstash";
 import { refreshContestStats } from "@/lib/contest-stats";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
+import { advanceMultiPlatformMetricsChainAfterTerminal } from "@/lib/queue/multi-platform-metrics-chain";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -184,6 +185,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           error_message: `Failed to enqueue next batch: ${enqueueResult.error}`,
         })
         .eq("id", job.runId);
+      await advanceMultiPlatformMetricsChainAfterTerminal({
+        contestId: job.contestId,
+        platform: "tiktok",
+        metricsTarget: job.metricsTarget ?? "submissions",
+        baseUrl,
+      });
       return NextResponse.json(
         {
           processed: 1,
@@ -248,6 +255,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       })
       .eq("id", job.runId)
       .eq("status", "running");
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "tiktok",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
     return NextResponse.json(
       {
         processed: 1,
@@ -280,6 +293,13 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       await refreshContestStats(job.contestId);
       await persistContestBudgetSpent(job.contestId, supabaseAdmin);
     }
+
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "tiktok",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
   }
 
   return NextResponse.json({

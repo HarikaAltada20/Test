@@ -31,12 +31,32 @@ const STATUS_PATH: Record<MetricsRefreshPlatform, string> = {
 export function resolveMetricsRefreshPlatform(
   platform: string | null | undefined,
 ): MetricsRefreshPlatform | null {
-  const p = (platform ?? "").toLowerCase();
-  if (p.includes("youtube")) return "youtube";
-  if (p.includes("instagram")) return "instagram";
-  if (p === "twitter" || p === "x" || p.includes("twitter")) return "twitter";
-  if (p.includes("tiktok")) return "tiktok";
-  return null;
+  const platforms = resolveMetricsRefreshPlatforms(platform);
+  return platforms[0] ?? null;
+}
+
+/**
+ * All metrics-refresh platforms present on a contest (hybrid-aware).
+ * Order matches multi-platform chain: YouTube → Instagram → TikTok.
+ */
+export function resolveMetricsRefreshPlatforms(
+  platform: string | null | undefined,
+): MetricsRefreshPlatform[] {
+  const p = (platform ?? "").toLowerCase().trim();
+  if (!p) return [];
+
+  const out: MetricsRefreshPlatform[] = [];
+  if (p.includes("youtube")) out.push("youtube");
+  if (p.includes("instagram")) out.push("instagram");
+  if (p.includes("tiktok")) out.push("tiktok");
+
+  if (out.length === 0) {
+    if (p === "twitter" || p === "x" || p.includes("twitter")) {
+      out.push("twitter");
+    }
+  }
+
+  return out;
 }
 
 export type MetricsRefreshTarget = "submissions" | "post_campaign";
@@ -88,6 +108,11 @@ export type StartMetricsRunPollingOptions<T extends MetricsRefreshRun> = {
   intervalMs?: number;
   /** Stop polling after this many ms (manual refresh flows). */
   maxMs?: number;
+  /**
+   * Keep polling when status is null (no run yet). Used for multi-platform
+   * chains where later platforms are not enqueued until earlier ones finish.
+   */
+  waitForRun?: boolean;
   onRun: (run: T | null) => void;
   /** Called when run reaches a terminal status. */
   onTerminal?: (run: T) => void;
@@ -96,7 +121,7 @@ export type StartMetricsRunPollingOptions<T extends MetricsRefreshRun> = {
 
 /**
  * Fetches run status once, then polls every intervalMs only while run is pending/running.
- * Stops interval when run is null, terminal, maxMs exceeded, or tab hidden.
+ * Stops interval when run is null (unless waitForRun), terminal, maxMs exceeded, or tab hidden.
  */
 export function startMetricsRunPolling<T extends MetricsRefreshRun>(
   options: StartMetricsRunPollingOptions<T>,
@@ -107,6 +132,7 @@ export function startMetricsRunPolling<T extends MetricsRefreshRun>(
     metricsTarget = "submissions",
     intervalMs = 3000,
     maxMs,
+    waitForRun = false,
     onRun,
     onTerminal,
     onTimeout,
@@ -157,7 +183,11 @@ export function startMetricsRunPolling<T extends MetricsRefreshRun>(
       onRun(run);
 
       if (!run) {
-        clearIntervalOnly();
+        if (waitForRun) {
+          startInterval();
+        } else {
+          clearIntervalOnly();
+        }
         return;
       }
 

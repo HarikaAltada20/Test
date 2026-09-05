@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  formatLiveMetricsRefreshToastDescription,
   formatPostCampaignRefreshToastDescription,
   getPostCampaignStatusPath,
   getPostCampaignStatusPaths,
   isTerminalPostCampaignRunStatus,
   isTrackedPostCampaignRun,
+  liveMetricsRefreshToastTitle,
 } from "./post-campaign-refresh-client";
 
 describe("isTrackedPostCampaignRun", () => {
-  it("matches by activeRunId when provided", () => {
+  it("matches by activeRunId even when started_at is old", () => {
     assert.equal(
       isTrackedPostCampaignRun(
         { id: "run-1", started_at: "2020-01-01T00:00:00.000Z" },
@@ -17,12 +19,19 @@ describe("isTrackedPostCampaignRun", () => {
       ),
       true,
     );
+  });
+
+  it("prefers the started_at window over a stale activeRunId", () => {
+    const refreshStartedMs = Date.now();
     assert.equal(
       isTrackedPostCampaignRun(
-        { id: "run-2", started_at: new Date().toISOString() },
-        { activeRunId: "run-1", refreshStartedMs: Date.now() },
+        {
+          id: "run-2",
+          started_at: new Date(refreshStartedMs - 1000).toISOString(),
+        },
+        { activeRunId: "run-1", refreshStartedMs },
       ),
-      false,
+      true,
     );
   });
 
@@ -30,7 +39,10 @@ describe("isTrackedPostCampaignRun", () => {
     const refreshStartedMs = Date.now();
     assert.equal(
       isTrackedPostCampaignRun(
-        { id: "run-1", started_at: new Date(refreshStartedMs - 1000).toISOString() },
+        {
+          id: "run-1",
+          started_at: new Date(refreshStartedMs - 1000).toISOString(),
+        },
         { refreshStartedMs },
       ),
       true,
@@ -39,7 +51,22 @@ describe("isTrackedPostCampaignRun", () => {
       isTrackedPostCampaignRun(
         {
           id: "run-old",
-          started_at: new Date(refreshStartedMs - 60_000).toISOString(),
+          started_at: new Date(refreshStartedMs - 180_000).toISOString(),
+        },
+        { refreshStartedMs },
+      ),
+      false,
+    );
+  });
+
+  it("does not treat an old run as tracked just because it finished recently", () => {
+    const refreshStartedMs = Date.now();
+    assert.equal(
+      isTrackedPostCampaignRun(
+        {
+          id: "run-old-tt",
+          started_at: new Date(refreshStartedMs - 180_000).toISOString(),
+          finished_at: new Date(refreshStartedMs - 5_000).toISOString(),
         },
         { refreshStartedMs },
       ),
@@ -54,6 +81,55 @@ describe("isTerminalPostCampaignRunStatus", () => {
     assert.equal(isTerminalPostCampaignRunStatus("failed"), true);
     assert.equal(isTerminalPostCampaignRunStatus("cancelled"), true);
     assert.equal(isTerminalPostCampaignRunStatus("running"), false);
+  });
+});
+
+describe("formatLiveMetricsRefreshToastDescription", () => {
+  it("includes totals and failure counts", () => {
+    const text = formatLiveMetricsRefreshToastDescription({
+      total_submissions: 4,
+      processed_submissions: 4,
+      success_count: 3,
+      temporary_failure_count: 0,
+      permanent_failure_count: 1,
+      skipped_recent_count: 0,
+    });
+    assert.ok(text.includes("Total submissions 4"));
+    assert.ok(text.includes("Success 3"));
+    assert.ok(text.includes("Permanent failure 1"));
+    assert.ok(text.includes("Skipped 0"));
+  });
+
+  it("includes scope and reviewed when requested", () => {
+    const text = formatLiveMetricsRefreshToastDescription(
+      {
+        total_submissions: 2,
+        processed_submissions: 2,
+        reviewed_count: 2,
+        success_count: 2,
+        scope: "all",
+      },
+      { scope: "all", includeReviewed: true },
+    );
+    assert.ok(text.includes("Scope: all"));
+    assert.ok(text.includes("Reviewed 2"));
+  });
+});
+
+describe("liveMetricsRefreshToastTitle", () => {
+  it("labels platforms", () => {
+    assert.equal(
+      liveMetricsRefreshToastTitle("youtube", "completed"),
+      "YouTube refresh completed",
+    );
+    assert.equal(
+      liveMetricsRefreshToastTitle("instagram", "failed"),
+      "Instagram refresh failed",
+    );
+    assert.equal(
+      liveMetricsRefreshToastTitle("tiktok", "completed"),
+      "TikTok refresh completed",
+    );
   });
 });
 

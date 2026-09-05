@@ -25,6 +25,7 @@ import {
   isActiveMetricsRun,
   isTerminalMetricsRunStatus,
   resolveMetricsRefreshPlatform,
+  resolveMetricsRefreshPlatforms,
   startMetricsRunPolling,
   type MetricsRefreshPlatform,
 } from "@/lib/metrics-refresh-polling";
@@ -33,11 +34,13 @@ import {
   type PostCampaignSubmissionSnapshot,
 } from "@/lib/post-campaign-submission-shape";
 import {
+  formatLiveMetricsRefreshToastDescription,
   formatPostCampaignRefreshToastDescription,
   getPostCampaignStatusPath,
   getPostCampaignStatusPaths,
   isTerminalPostCampaignRunStatus,
   isTrackedPostCampaignRun,
+  liveMetricsRefreshToastTitle,
 } from "@/lib/post-campaign-refresh-client";
 import { CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE } from "@/lib/fetch-contest-submissions";
 import {
@@ -133,7 +136,10 @@ import {
   isVideoContestPlatform,
   maxEarningsCentsForPlatform,
   parseVideoContestPlatforms,
+  platformsForTab,
+  formatContestListCpmRatesText,
   readPersistedPlatformCampaigns,
+  resolveContestPlatformCpmRates,
   resourcesForPlatform,
   rulesHtmlForPlatform,
   VIDEO_PLATFORM_LABELS,
@@ -141,6 +147,9 @@ import {
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
+import { platformsForRefreshTab, resolveSequentialRefreshPollIndex, youtubeScopeForMetricsRefresh } from "@/lib/multi-platform-metrics-refresh";
+import { postCampaignEnqueuePathForPlatform } from "@/lib/post-campaign-platforms";
+import type { PostCampaignVideoPlatform } from "@/lib/post-campaign-platforms";
 import { ContestDetailPlatformTabs } from "@/components/contest/ContestDetailPlatformTabs";
 import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
 import {
@@ -198,6 +207,20 @@ function submissionMatchesVideoPlatform(
 ): boolean {
   const raw = String(submission.platform || "").toLowerCase();
   return raw === platform || raw.includes(platform);
+}
+
+function countSubmissionsByVideoPlatform(
+  submissions: Array<{ platform?: string | null }> | undefined,
+  platforms: VideoContestPlatform[],
+): Array<{ platform: VideoContestPlatform; count: number }> {
+  const counts = platforms.map((platform) => ({ platform, count: 0 }));
+  for (const submission of submissions || []) {
+    const match = counts.find((row) =>
+      submissionMatchesVideoPlatform(submission, row.platform),
+    );
+    if (match) match.count += 1;
+  }
+  return counts.filter((row) => row.count > 0);
 }
 import {
   buildDualRewardCreatorCapSplitMaps,
@@ -798,6 +821,7 @@ type InstagramInsightsRefreshRunSummary = {
   updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
+  error_message?: string | null;
 };
 
 type TwitterMetricsRefreshRunSummary = {
@@ -1708,6 +1732,14 @@ export default function ContestDetailClient({
     isVideoContestPlatform(analyticsPlatformTab)
       ? analyticsPlatformTab
       : null;
+  // Multi-platform tabs: show only that platform's metric columns. All tab keeps every selected platform.
+  const submissionsTablePlatform = platformsForTab(
+    submissionsPlatformTab,
+    overviewVideoPlatforms,
+  ).join(",");
+  const showAllTabPlatformColumn =
+    overviewVideoPlatforms.length >= 2 &&
+    submissionsPlatformTab === ALL_PLATFORM_TAB;
   const overviewPersistedCampaigns = useMemo(
     () =>
       readPersistedPlatformCampaigns(
@@ -2277,33 +2309,36 @@ export default function ContestDetailClient({
         id: string;
         status: string;
       } | null,
+      options?: { skipReload?: boolean },
     ) => {
       if (!run) return;
 
-      const shouldReloadWhenComplete = (() => {
-        switch (metricsPlatform) {
-          case "instagram":
-            return shouldReloadAfterHydratedRun(
-              previousInstagramRunRef.current,
-              run,
-            );
-          case "twitter":
-            return shouldReloadAfterHydratedRun(
-              previousTwitterRunRef.current,
-              run,
-            );
-          case "tiktok":
-            return shouldReloadAfterHydratedRun(
-              previousTiktokRunRef.current,
-              run,
-            );
-          case "youtube":
-            return shouldReloadAfterHydratedRun(
-              previousYoutubeRunRef.current,
-              run,
-            );
-        }
-      })();
+      const shouldReloadWhenComplete =
+        !options?.skipReload &&
+        (() => {
+          switch (metricsPlatform) {
+            case "instagram":
+              return shouldReloadAfterHydratedRun(
+                previousInstagramRunRef.current,
+                run,
+              );
+            case "twitter":
+              return shouldReloadAfterHydratedRun(
+                previousTwitterRunRef.current,
+                run,
+              );
+            case "tiktok":
+              return shouldReloadAfterHydratedRun(
+                previousTiktokRunRef.current,
+                run,
+              );
+            case "youtube":
+              return shouldReloadAfterHydratedRun(
+                previousYoutubeRunRef.current,
+                run,
+              );
+          }
+        })();
 
       switch (metricsPlatform) {
         case "instagram":
@@ -2408,25 +2443,53 @@ export default function ContestDetailClient({
   // Rehydrate metrics refresh run on submissions tab; poll only while run is active.
   // PC mode must poll metrics_target=post_campaign so a finished submissions run
   // cannot clear the in-progress PC progress popup.
+  // Multi-platform: poll every video platform and reload only after ALL in-flight
+  // runs finish (do not reload when YouTube alone completes mid-chain).
   useEffect(() => {
-    const metricsPlatform = resolveMetricsRefreshPlatform(
-      currentContest.platform,
-    );
-    if (activeTab !== "submissions" || !metricsPlatform) return;
+    if (activeTab !== "submissions") return;
 
     const metricsTarget = isPostCampaignLeaderboard
       ? "post_campaign"
       : "submissions";
 
-    const stop = startMetricsRunPolling({
-      contestId,
-      platform: metricsPlatform,
-      metricsTarget,
-      onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
-      onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
-    });
+    const platforms = resolveMetricsRefreshPlatforms(currentContest.platform);
+    if (platforms.length === 0) return;
 
-    return stop;
+    if (platforms.length === 1) {
+      const metricsPlatform = platforms[0]!;
+      const stop = startMetricsRunPolling({
+        contestId,
+        platform: metricsPlatform,
+        metricsTarget,
+        onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+        onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+      });
+      return stop;
+    }
+
+    // Multi-platform: hydrate progress UI only. Never schedule a page reload here —
+    // stale completed runs on later platforms (or YouTube finishing mid-chain) would
+    // otherwise reload before Instagram/TikTok of the current chain update. Manual
+    // Refresh Metrics polling owns the final reload for multi-platform contests.
+    const stops = platforms.map((metricsPlatform) =>
+      startMetricsRunPolling({
+        contestId,
+        platform: metricsPlatform,
+        metricsTarget,
+        waitForRun: true,
+        maxMs: 600_000,
+        onRun: (run) => {
+          applyHydratedMetricsRun(metricsPlatform, run, { skipReload: true });
+        },
+        onTerminal: (run) => {
+          applyHydratedMetricsRun(metricsPlatform, run, { skipReload: true });
+        },
+      }),
+    );
+
+    return () => {
+      for (const stop of stops) stop();
+    };
   }, [
     activeTab,
     applyHydratedMetricsRun,
@@ -3067,7 +3130,7 @@ export default function ContestDetailClient({
   const dualPayoutAdjustedVisibleColumnCount = useMemo(() => {
     if (!showDualPayoutAdjustedColumns) return 0;
     if (
-      currentContest.platform?.toLowerCase().includes("youtube") &&
+      submissionsTablePlatform.includes("youtube") &&
       !ytVisibleColumns.includes("adjusted_reward")
     )
       return 0;
@@ -3080,9 +3143,26 @@ export default function ContestDetailClient({
     showDualPayoutAdjustedColumns,
     dualAdjustCpmForDisplay,
     dualAdjustMilestoneForDisplay,
-    currentContest.platform,
+    submissionsTablePlatform,
     ytVisibleColumns,
   ]);
+  const showYoutubeTableColumns =
+    submissionsTablePlatform.includes("youtube");
+  const showInstagramTableColumns =
+    submissionsTablePlatform.includes("instagram");
+  const showTiktokTableColumns = submissionsTablePlatform.includes("tiktok");
+  const showSubmissionsSharesColumn =
+    showTiktokTableColumns ||
+    showInstagramTableColumns ||
+    (showYoutubeTableColumns &&
+      canSeeCore &&
+      ytVisibleColumns.includes("shares"));
+  const showSubmissionsInsightsStatusColumn =
+    isAdminView &&
+    (showTiktokTableColumns ||
+      showInstagramTableColumns ||
+      (showYoutubeTableColumns &&
+        ytVisibleColumns.includes("insights_status")));
   const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [fullReportDialogOpen, setFullReportDialogOpen] = useState(false);
@@ -9730,12 +9810,24 @@ export default function ContestDetailClient({
       }
       setIsRefreshingMetrics(true);
       try {
+        const refreshPlatforms = platformsForRefreshTab(
+          submissionsPlatformTab,
+          overviewVideoPlatforms,
+        );
+        const youtubeScope = youtubeScopeForMetricsRefresh({
+          campaignPlatformCount: overviewVideoPlatforms.length,
+        });
         const response = await fetch(
           `/api/contests/${contestId}/post-campaign-submissions/refresh-metrics`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scope: "basic" }),
+            body: JSON.stringify({
+              scope: youtubeScope,
+              ...(refreshPlatforms.length > 0
+                ? { platforms: refreshPlatforms }
+                : {}),
+            }),
           },
         );
         const result = await response.json().catch(() => ({}));
@@ -9784,33 +9876,39 @@ export default function ContestDetailClient({
           }
 
           for (const run of queuedRuns) {
-            if (run.platform === "youtube") {
-              setYoutubeRun(createPendingYoutubeRefreshRun(run.runId));
-              setShowYoutubeRunPopup(true);
-              setYoutubeRunCompleted(false);
-            } else if (run.platform === "tiktok") {
-              setShowTiktokRunPopup(true);
-              setTiktokRunCompleted(false);
-            } else {
-              setInstagramRun(createPendingInstagramRefreshRun(run.runId));
-              setShowInstagramRunPopup(true);
-              setInstagramRunCompleted(false);
-            }
+            if (run.platform === "youtube") setYoutubeRunCompleted(false);
+            else if (run.platform === "tiktok") setTiktokRunCompleted(false);
+            else setInstagramRunCompleted(false);
+          }
+          setShowYoutubeRunPopup(false);
+          setShowInstagramRunPopup(false);
+          setShowTiktokRunPopup(false);
+          const firstPostQueued = queuedRuns[0];
+          if (firstPostQueued?.platform === "youtube") {
+            setYoutubeRun(
+              createPendingYoutubeRefreshRun(
+                firstPostQueued.runId,
+                youtubeScope,
+              ),
+            );
+            setShowYoutubeRunPopup(true);
+          } else if (firstPostQueued?.platform === "tiktok") {
+            setShowTiktokRunPopup(true);
+          } else if (firstPostQueued) {
+            setInstagramRun(
+              createPendingInstagramRefreshRun(firstPostQueued.runId),
+            );
+            setShowInstagramRunPopup(true);
           }
 
           const previousUpdated = postCampaignLastMetricsUpdated;
           const refreshStartedMs = Date.now();
           const started = Date.now();
           const maxMs = 600000;
-          const pendingRunIds = new Set(
-            queuedRuns
-              .map((r) => r.runId)
-              .filter((id): id is string => typeof id === "string"),
-          );
-          // If enqueue didn't return runIds, wait until every status path is terminal.
-          const pendingStatusPaths = new Set(
-            queuedRuns.map((r) => r.statusPath),
-          );
+          const isChain = Boolean(result.chain) || queuedRuns.length > 1;
+          const STUCK_AFTER_TERMINAL_MS = 45_000;
+          let continueInFlight = false;
+          let waitingForNextSinceMs: number | null = null;
 
           const clearPlatformPopups = () => {
             for (const run of queuedRuns) {
@@ -9834,11 +9932,20 @@ export default function ContestDetailClient({
               | TikTokMetricsRefreshRunSummary
               | null,
             terminalStatus: string,
+            options?: { partial?: boolean },
           ) => {
             clearPlatformPopups();
             await loadPostCampaignMetrics({ force: true });
             setIsRefreshingMetrics(false);
-            if (terminalStatus === "completed" && run) {
+            if (options?.partial) {
+              toast({
+                title: "Post-campaign refresh finished (partial)",
+                description:
+                  "One or more later platforms did not start. Try Refresh Metrics again if needed.",
+                duration: 10000,
+                variant: "destructive",
+              });
+            } else if (terminalStatus === "completed" && run) {
               toast({
                 title: `Post-campaign ${platformLabels || "metrics"} refresh completed`,
                 description: formatPostCampaignRefreshToastDescription(run),
@@ -9849,28 +9956,74 @@ export default function ContestDetailClient({
             schedulePostRefreshReload();
           };
 
+          const tryContinueChain = async (next: QueuedRun) => {
+            if (!isChain || continueInFlight) return;
+            if (
+              next.platform !== "youtube" &&
+              next.platform !== "instagram" &&
+              next.platform !== "tiktok"
+            ) {
+              return;
+            }
+            continueInFlight = true;
+            try {
+              const enqueueUrl = postCampaignEnqueuePathForPlatform(
+                contestId,
+                next.platform as PostCampaignVideoPlatform,
+              );
+              const body: Record<string, unknown> = {
+                metricsTarget: "post_campaign",
+                chainContinue: true,
+              };
+              if (next.platform === "youtube") body.scope = youtubeScope;
+              const eres = await fetch(enqueueUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(body),
+              });
+              const edata = await eres.json().catch(() => ({}));
+              if (eres.ok && typeof edata.runId === "string") {
+                next.runId = edata.runId;
+              }
+            } catch {
+              // server advance may still succeed
+            } finally {
+              continueInFlight = false;
+            }
+          };
+
           let pollTimer: ReturnType<typeof setInterval>;
+          const stopPolling = () => {
+            clearInterval(pollTimer);
+            metricsRefreshManualPollStopRef.current = null;
+          };
+
           const pollOnce = async () => {
             if (Date.now() - started > maxMs) {
-              clearInterval(pollTimer);
+              stopPolling();
               setIsRefreshingMetrics(false);
               return;
             }
             try {
-              let allTerminal = true;
-              let lastCompletedRun:
-                | InstagramInsightsRefreshRunSummary
-                | YouTubeMetricsRefreshRunSummary
-                | TikTokMetricsRefreshRunSummary
-                | null = null;
-              let lastTerminalStatus = "completed";
+              const states: Array<{
+                tracked: boolean;
+                terminal: boolean;
+                run:
+                  | InstagramInsightsRefreshRunSummary
+                  | YouTubeMetricsRefreshRunSummary
+                  | TikTokMetricsRefreshRunSummary
+                  | null;
+              }> = [];
 
-              for (const queued of queuedRuns) {
+              // Sequential: only poll through the first non-terminal platform.
+              for (let i = 0; i < queuedRuns.length; i++) {
+                const queued = queuedRuns[i]!;
                 const statusUrl = `/api/contests/${contestId}/${queued.statusPath}?metricsTarget=post_campaign`;
                 const sres = await fetch(statusUrl);
                 if (!sres.ok) {
-                  allTerminal = false;
-                  continue;
+                  states.push({ tracked: false, terminal: false, run: null });
+                  break;
                 }
                 const sj = await sres.json();
                 const run = sj?.run as
@@ -9878,65 +10031,96 @@ export default function ContestDetailClient({
                   | YouTubeMetricsRefreshRunSummary
                   | TikTokMetricsRefreshRunSummary
                   | null;
-                if (
-                  !run ||
-                  !isTrackedPostCampaignRun(run, {
-                    activeRunId: queued.runId,
-                    refreshStartedMs,
-                  })
-                ) {
-                  allTerminal = false;
-                  continue;
+                const tracked = Boolean(
+                  run &&
+                    isTrackedPostCampaignRun(run, {
+                      activeRunId: queued.runId,
+                      refreshStartedMs,
+                    }),
+                );
+                const terminal =
+                  tracked && isTerminalPostCampaignRunStatus(run?.status);
+
+                if (tracked && run) {
+                  if (queued.platform === "youtube") {
+                    setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                  } else if (queued.platform === "tiktok") {
+                    setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                  } else {
+                    setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                  }
+                  if (!queued.runId && run.id) queued.runId = run.id;
                 }
 
-                if (queued.platform === "youtube") {
-                  setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
-                } else if (queued.platform === "tiktok") {
-                  setTiktokRun(run as TikTokMetricsRefreshRunSummary);
-                } else {
-                  setInstagramRun(run as InstagramInsightsRefreshRunSummary);
-                }
+                states.push({ tracked, terminal, run: tracked ? run : null });
 
-                const st = run.status;
-                if (!isTerminalPostCampaignRunStatus(st)) {
-                  allTerminal = false;
-                  continue;
+                if (!tracked || !terminal) {
+                  break;
                 }
-
-                lastCompletedRun = run;
-                lastTerminalStatus = st;
-                if (queued.runId) pendingRunIds.delete(queued.runId);
-                pendingStatusPaths.delete(queued.statusPath);
               }
 
-              const trackedDone =
-                pendingRunIds.size === 0 &&
-                (queuedRuns.every((r) => r.runId) ||
-                  pendingStatusPaths.size === 0);
+              // Pad remaining as not-yet-started (do not poll them)
+              while (states.length < queuedRuns.length) {
+                states.push({ tracked: false, terminal: false, run: null });
+              }
 
-              if (allTerminal && trackedDone) {
-                clearInterval(pollTimer);
+              const pollIndex = resolveSequentialRefreshPollIndex(states);
+
+              if (pollIndex < queuedRuns.length) {
+                const cur = queuedRuns[pollIndex]!.platform;
+                setShowYoutubeRunPopup(cur === "youtube");
+                setShowInstagramRunPopup(cur === "instagram");
+                setShowTiktokRunPopup(cur === "tiktok");
+              }
+
+              if (pollIndex >= queuedRuns.length) {
+                stopPolling();
+                const last = states[states.length - 1];
                 await finishPostCampaignRefresh(
-                  lastCompletedRun,
-                  lastTerminalStatus,
+                  last?.run ?? null,
+                  last?.run?.status ?? "completed",
                 );
                 return;
               }
 
-              // Fallback: detect overlay timestamp bump
-              const mres = await fetch(
-                `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
-              );
-              if (mres.ok) {
-                const md = await mres.json();
-                const updated = md.post_campaign_last_metrics_updated ?? null;
-                if (updated && updated !== previousUpdated) {
-                  // Only finish early when every queued platform looks terminal.
-                  if (allTerminal) {
-                    clearInterval(pollTimer);
+              const current = states[pollIndex];
+              if (current && !current.tracked && pollIndex > 0) {
+                const prev = states[pollIndex - 1];
+                if (prev?.terminal) {
+                  if (waitingForNextSinceMs == null) {
+                    waitingForNextSinceMs = Date.now();
+                  }
+                  await tryContinueChain(queuedRuns[pollIndex]!);
+                  if (
+                    Date.now() - (waitingForNextSinceMs ?? Date.now()) >
+                    STUCK_AFTER_TERMINAL_MS
+                  ) {
+                    stopPolling();
                     await finishPostCampaignRefresh(
-                      lastCompletedRun,
-                      lastTerminalStatus,
+                      prev.run,
+                      prev.run?.status ?? "completed",
+                      { partial: true },
+                    );
+                    return;
+                  }
+                }
+              } else {
+                waitingForNextSinceMs = null;
+              }
+
+              // Fallback: overlay timestamp bump when last platform is terminal
+              if (pollIndex >= queuedRuns.length - 1 && current?.terminal) {
+                const mres = await fetch(
+                  `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
+                );
+                if (mres.ok) {
+                  const md = await mres.json();
+                  const updated = md.post_campaign_last_metrics_updated ?? null;
+                  if (updated && updated !== previousUpdated) {
+                    stopPolling();
+                    await finishPostCampaignRefresh(
+                      current.run,
+                      current.run?.status ?? "completed",
                     );
                     return;
                   }
@@ -9949,6 +10133,7 @@ export default function ContestDetailClient({
 
           void pollOnce();
           pollTimer = setInterval(() => void pollOnce(), 3000);
+          metricsRefreshManualPollStopRef.current = stopPolling;
           return;
         }
 
@@ -10014,6 +10199,23 @@ export default function ContestDetailClient({
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify(
+            (() => {
+              const refreshPlatforms = platformsForRefreshTab(
+                submissionsPlatformTab,
+                overviewVideoPlatforms,
+              );
+              const youtubeScope = youtubeScopeForMetricsRefresh({
+                campaignPlatformCount: overviewVideoPlatforms.length,
+              });
+              return {
+                ...(refreshPlatforms.length > 0
+                  ? { platforms: refreshPlatforms }
+                  : {}),
+                ...(youtubeScope !== "basic" ? { scope: youtubeScope } : {}),
+              };
+            })(),
+          ),
           signal: controller.signal,
         },
       );
@@ -10026,11 +10228,22 @@ export default function ContestDetailClient({
       }
 
       if (result?.queued) {
-        const metricsPlatform = resolveMetricsRefreshPlatform(
-          currentContest.platform,
-        );
+        type QueuedLiveRun = {
+          platform: string;
+          platformLabel?: string;
+          runId?: string;
+          statusPath?: string;
+        };
+        const queuedRunsFromApi: QueuedLiveRun[] = Array.isArray(
+          (result as { runs?: QueuedLiveRun[] }).runs,
+        )
+          ? ((result as { runs: QueuedLiveRun[] }).runs).filter(
+              (r) => r && typeof r.platform === "string",
+            )
+          : [];
+
         const previousUpdated = currentContest.last_metrics_updated ?? null;
-        const pollMaxMs = metricsPlatform ? 600000 : 120000;
+        const pollMaxMs = 600000;
 
         metricsRefreshManualPollStopRef.current?.();
 
@@ -10068,30 +10281,43 @@ export default function ContestDetailClient({
         const handleManualRefreshTerminal = (
           platform: MetricsRefreshPlatform,
           run: { id: string; status: string } | null,
+          options?: { skipToast?: boolean; skipReload?: boolean },
         ) => {
           finishManualRefreshPoll();
           setIsRefreshingMetrics(false);
           if (!run) {
-            window.location.reload();
+            if (!options?.skipReload) window.location.reload();
             return;
           }
 
           const status = run.status;
+          const skipToast = options?.skipToast === true;
           switch (platform) {
             case "instagram": {
               const igRun = run as InstagramInsightsRefreshRunSummary;
               setInstagramRun(igRun);
               setInstagramRunCompleted(true);
               setShowInstagramRunPopup(false);
-              if (status === "completed") {
+              if (!skipToast && status === "completed") {
                 toast({
-                  title: "Instagram insights refresh completed",
-                  description: `Reviewed ${igRun.reviewed_count ?? 0}, Processed ${igRun.processed_submissions ?? 0}. Success: ${igRun.success_count ?? 0}, Permanent failure: ${igRun.permanent_failure_count ?? 0}, Temporary failure: ${igRun.temporary_failure_count ?? 0}, Skipped: ${igRun.skipped_recent_count ?? 0}.`,
+                  title: liveMetricsRefreshToastTitle("instagram", status),
+                  description: formatLiveMetricsRefreshToastDescription(igRun, {
+                    includeReviewed: true,
+                  }),
                   duration: 10000,
                   variant: "success",
                 });
+              } else if (!skipToast && status === "failed") {
+                toast({
+                  title: liveMetricsRefreshToastTitle("instagram", status),
+                  description:
+                    igRun.error_message?.slice(0, 500) ??
+                    "The refresh run ended with an error.",
+                  duration: 12000,
+                  variant: "destructive",
+                });
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
             case "twitter": {
@@ -10099,14 +10325,14 @@ export default function ContestDetailClient({
               setTwitterRun(twRun);
               setTwitterRunCompleted(true);
               setShowTwitterRunPopup(false);
-              if (status === "completed") {
+              if (!skipToast && status === "completed") {
                 toast({
                   title: "Twitter metrics refresh completed",
                   description: `${twRun.is_raid ? "Raid" : "Awareness"} · Participants ${twRun.processed_participants ?? 0}/${twRun.total_participants ?? 0} · Rows touched ${twRun.tweets_upserted ?? 0}`,
                   duration: 10000,
                   variant: "success",
                 });
-              } else if (status === "failed") {
+              } else if (!skipToast && status === "failed") {
                 toast({
                   title: "Twitter metrics refresh failed",
                   description:
@@ -10116,7 +10342,7 @@ export default function ContestDetailClient({
                   variant: "destructive",
                 });
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
             case "tiktok": {
@@ -10124,15 +10350,24 @@ export default function ContestDetailClient({
               setTiktokRun(ttRun);
               setTiktokRunCompleted(true);
               setShowTiktokRunPopup(false);
-              if (status === "completed") {
+              if (!skipToast && status === "completed") {
                 toast({
-                  title: "TikTok metrics refresh completed",
-                  description: `Processed ${ttRun.processed_submissions ?? 0} submissions. Success: ${ttRun.success_count ?? 0}, Permanent failure: ${ttRun.permanent_failure_count ?? 0}, Temporary failure: ${ttRun.temporary_failure_count ?? 0}.`,
+                  title: liveMetricsRefreshToastTitle("tiktok", status),
+                  description: formatLiveMetricsRefreshToastDescription(ttRun),
                   duration: 10000,
                   variant: "success",
                 });
+              } else if (!skipToast && status === "failed") {
+                toast({
+                  title: liveMetricsRefreshToastTitle("tiktok", status),
+                  description:
+                    ttRun.error_message?.slice(0, 500) ??
+                    "The refresh run ended with an error.",
+                  duration: 12000,
+                  variant: "destructive",
+                });
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
             case "youtube": {
@@ -10140,18 +10375,25 @@ export default function ContestDetailClient({
               setYoutubeRun(ytRun);
               setYoutubeRunCompleted(true);
               setShowYoutubeRunPopup(false);
-              if (ytRun.id && !notifiedYoutubeRunIds.current.has(ytRun.id)) {
+              if (
+                !skipToast &&
+                ytRun.id &&
+                !notifiedYoutubeRunIds.current.has(ytRun.id)
+              ) {
                 notifiedYoutubeRunIds.current.add(ytRun.id);
                 if (status === "completed") {
                   toast({
-                    title: "YouTube refresh completed",
-                    description: `Scope: ${ytRun.scope} · Success ${ytRun.success_count ?? 0} · Temporary Failure ${ytRun.temporary_failure_count ?? 0} · Permanent Failure ${ytRun.permanent_failure_count ?? 0} · Skipped ${ytRun.skipped_recent_count ?? 0}`,
+                    title: liveMetricsRefreshToastTitle("youtube", status),
+                    description: formatLiveMetricsRefreshToastDescription(
+                      ytRun,
+                      { scope: ytRun.scope },
+                    ),
                     duration: 10000,
                     variant: "success",
                   });
                 } else if (status === "failed") {
                   toast({
-                    title: "YouTube refresh failed",
+                    title: liveMetricsRefreshToastTitle("youtube", status),
                     description:
                       ytRun.error_message?.slice(0, 500) ??
                       "The refresh run ended with an error.",
@@ -10160,54 +10402,528 @@ export default function ContestDetailClient({
                   });
                 }
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
           }
         };
 
-        if (metricsPlatform) {
-          metricsRefreshManualPollStopRef.current = startMetricsRunPolling({
-            contestId,
-            platform: metricsPlatform,
-            maxMs: pollMaxMs,
-            onRun: (run) => handleManualRefreshRunUpdate(metricsPlatform, run),
-            onTerminal: (run) =>
-              handleManualRefreshTerminal(metricsPlatform, run),
-            onTimeout: () => {
-              finishManualRefreshPoll();
-              setIsRefreshingMetrics(false);
-            },
+        const toastMultiPlatformRefreshSummaries = (
+          states: Array<{
+            platform: MetricsRefreshPlatform | null;
+            run: { id: string; status: string } | null;
+          }>,
+        ) => {
+          const order: Array<"youtube" | "instagram" | "tiktok"> = [
+            "youtube",
+            "instagram",
+            "tiktok",
+          ];
+          for (const platform of order) {
+            const state = states.find((s) => s.platform === platform);
+            const run = state?.run;
+            if (!run) continue;
+
+            // Allow multi-platform completion toasts even if a YT id was marked earlier.
+            if (platform === "youtube") {
+              notifiedYoutubeRunIds.current.add(run.id);
+            }
+
+            const status = run.status;
+            const countsRun = run as InstagramInsightsRefreshRunSummary &
+              YouTubeMetricsRefreshRunSummary &
+              TikTokMetricsRefreshRunSummary;
+            if (status === "completed") {
+              toast({
+                title: liveMetricsRefreshToastTitle(platform, status),
+                description: formatLiveMetricsRefreshToastDescription(
+                  countsRun,
+                  {
+                    scope: platform === "youtube" ? countsRun.scope : undefined,
+                    includeReviewed: platform === "instagram",
+                  },
+                ),
+                duration: 14000,
+                variant: "success",
+              });
+            } else if (status === "failed" || status === "cancelled") {
+              toast({
+                title: liveMetricsRefreshToastTitle(platform, status),
+                description:
+                  countsRun.error_message?.slice(0, 500) ??
+                  `The ${platform} refresh ended with status: ${status}.`,
+                duration: 14000,
+                variant: "destructive",
+              });
+            }
+          }
+        };
+
+        // Multi-platform chain: poll sequentially (YouTube → Instagram → TikTok).
+        if (queuedRunsFromApi.length > 1) {
+          const refreshStartedMs = Date.now();
+          const platformLabels = queuedRunsFromApi
+            .map((r) => r.platformLabel || r.platform)
+            .join(" → ");
+          const STUCK_AFTER_TERMINAL_MS = 45_000;
+          let continueInFlight = false;
+          let waitingForNextSinceMs: number | null = null;
+          const youtubeScope = youtubeScopeForMetricsRefresh({
+            campaignPlatformCount: overviewVideoPlatforms.length,
           });
-        } else {
-          const startedAt = Date.now();
-          const pollTimer = setInterval(async () => {
-            if (Date.now() - startedAt > pollMaxMs) {
-              clearInterval(pollTimer);
-              finishManualRefreshPoll();
-              setIsRefreshingMetrics(false);
+
+          // One card at a time: YouTube (scope all) → Instagram → TikTok.
+          setShowYoutubeRunPopup(false);
+          setShowInstagramRunPopup(false);
+          setShowTiktokRunPopup(false);
+          for (const run of queuedRunsFromApi) {
+            if (run.platform === "youtube") setYoutubeRunCompleted(false);
+            else if (run.platform === "tiktok") setTiktokRunCompleted(false);
+            else if (run.platform === "instagram")
+              setInstagramRunCompleted(false);
+          }
+          const firstQueued = queuedRunsFromApi[0]!;
+          if (firstQueued.platform === "youtube") {
+            setYoutubeRun(
+              createPendingYoutubeRefreshRun(firstQueued.runId, youtubeScope),
+            );
+            setShowYoutubeRunPopup(true);
+          } else if (firstQueued.platform === "instagram") {
+            setInstagramRun(
+              createPendingInstagramRefreshRun(firstQueued.runId),
+            );
+            setShowInstagramRunPopup(true);
+          } else if (firstQueued.platform === "tiktok") {
+            setShowTiktokRunPopup(true);
+          }
+
+          toast({
+            title: "Multi-platform refresh started",
+            description:
+              (result as { message?: string }).message ||
+              `Refreshing ${platformLabels} in order…`,
+            variant: "success",
+            duration: 6000,
+          });
+
+          const focusPlatformCard = (
+            platform: MetricsRefreshPlatform | null,
+          ) => {
+            setShowYoutubeRunPopup(platform === "youtube");
+            setShowInstagramRunPopup(platform === "instagram");
+            setShowTiktokRunPopup(platform === "tiktok");
+          };
+
+          const applyTrackedRunToUi = (
+            platform: MetricsRefreshPlatform,
+            run: { id: string; status: string },
+            focus: boolean,
+          ) => {
+            switch (platform) {
+              case "instagram":
+                setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                break;
+              case "tiktok":
+                setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                break;
+              case "youtube":
+                setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                break;
+              default:
+                break;
+            }
+            if (focus) focusPlatformCard(platform);
+          };
+
+          const tryContinueChain = async (next: QueuedLiveRun) => {
+            if (continueInFlight) return;
+            if (
+              next.platform !== "youtube" &&
+              next.platform !== "instagram" &&
+              next.platform !== "tiktok"
+            ) {
               return;
             }
+            continueInFlight = true;
             try {
-              const res = await fetch(
-                `/api/contests/${contestId}/last-metrics-updated`,
+              const enqueueUrl = postCampaignEnqueuePathForPlatform(
+                contestId,
+                next.platform as PostCampaignVideoPlatform,
               );
-              if (!res.ok) return;
-              const data = await res.json();
-              const newUpdated = data.last_metrics_updated ?? null;
-              if (newUpdated && newUpdated !== previousUpdated) {
-                clearInterval(pollTimer);
-                finishManualRefreshPoll();
-                setIsRefreshingMetrics(false);
-                window.location.reload();
+              const body: Record<string, unknown> = {
+                metricsTarget: "submissions",
+                chainContinue: true,
+              };
+              if (next.platform === "youtube") body.scope = youtubeScope;
+              const eres = await fetch(enqueueUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(body),
+              });
+              const edata = await eres.json().catch(() => ({}));
+              if (eres.ok && typeof edata.runId === "string") {
+                next.runId = edata.runId;
               }
             } catch {
               // ignore
+            } finally {
+              continueInFlight = false;
             }
-          }, 3000);
-          metricsRefreshManualPollStopRef.current = () => {
-            clearInterval(pollTimer);
           };
+
+          const started = Date.now();
+          let pollTimer: ReturnType<typeof setInterval> | null = null;
+          let finishing = false;
+          let pollInFlight = false;
+
+          const clearPollTimer = () => {
+            if (pollTimer != null) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+            }
+          };
+
+          const finishMultiPlatformChain = (
+            states: Array<{
+              platform: MetricsRefreshPlatform | null;
+              run: { id: string; status: string } | null;
+              terminal?: boolean;
+            }>,
+            options?: { partial?: boolean },
+          ) => {
+            if (finishing) return;
+            finishing = true;
+            clearPollTimer();
+            // Do not call finishManualRefreshPoll() here — it invokes this same
+            // stop ref and used to recurse until the finish path never completed.
+            metricsRefreshManualPollStopRef.current = null;
+            setIsRefreshingMetrics(false);
+            setShowYoutubeRunPopup(false);
+            setShowInstagramRunPopup(false);
+            setShowTiktokRunPopup(false);
+
+            try {
+              toastMultiPlatformRefreshSummaries(states);
+              if (options?.partial) {
+                toast({
+                  title: "Refresh finished (partial)",
+                  description:
+                    "A later platform did not start. Try Refresh Metrics again if needed.",
+                  variant: "destructive",
+                  duration: 10000,
+                });
+              }
+            } catch {
+              // still reload below
+            }
+
+            const last =
+              [...states].reverse().find((s) => s.run) ??
+              states[states.length - 1] ??
+              null;
+            if (last?.platform && last.run) {
+              // Apply terminal UI state without toasts (already shown above).
+              switch (last.platform) {
+                case "instagram":
+                  setInstagramRun(last.run as InstagramInsightsRefreshRunSummary);
+                  setInstagramRunCompleted(true);
+                  break;
+                case "tiktok":
+                  setTiktokRun(last.run as TikTokMetricsRefreshRunSummary);
+                  setTiktokRunCompleted(true);
+                  break;
+                case "youtube":
+                  setYoutubeRun(last.run as YouTubeMetricsRefreshRunSummary);
+                  setYoutubeRunCompleted(true);
+                  break;
+              }
+            }
+            schedulePostRefreshReload();
+          };
+
+          const fetchPlatformStatus = async (queued: QueuedLiveRun) => {
+            const platform = resolveMetricsRefreshPlatform(queued.platform);
+            if (!platform || platform === "twitter") {
+              return {
+                tracked: false,
+                terminal: false,
+                platform: null as MetricsRefreshPlatform | null,
+                run: null as {
+                  id: string;
+                  status: string;
+                  started_at?: string;
+                  finished_at?: string | null;
+                } | null,
+              };
+            }
+            const statusPath =
+              queued.statusPath ||
+              `${platform === "youtube" ? "youtube-metrics-refresh" : platform === "tiktok" ? "tiktok-metrics-refresh" : "instagram-insights-refresh"}/status`;
+            try {
+              const sres = await fetch(
+                `/api/contests/${contestId}/${statusPath}`,
+              );
+              if (!sres.ok) {
+                return {
+                  tracked: false,
+                  terminal: false,
+                  platform,
+                  run: null,
+                };
+              }
+              const sj = await sres.json();
+              const run =
+                (sj?.run as {
+                  id: string;
+                  status: string;
+                  started_at?: string;
+                  finished_at?: string | null;
+                } | null) ?? null;
+              const tracked = Boolean(
+                run &&
+                  isTrackedPostCampaignRun(run, {
+                    activeRunId: queued.runId,
+                    refreshStartedMs,
+                  }),
+              );
+              const terminal =
+                tracked &&
+                Boolean(run && isTerminalPostCampaignRunStatus(run.status));
+              if (run && tracked && !queued.runId) queued.runId = run.id;
+              return { tracked, terminal, platform, run: tracked ? run : null };
+            } catch {
+              return {
+                tracked: false,
+                terminal: false,
+                platform,
+                run: null,
+              };
+            }
+          };
+
+          const pollOnce = async () => {
+            if (finishing || pollInFlight) return;
+            if (Date.now() - started > pollMaxMs) {
+              finishMultiPlatformChain([]);
+              return;
+            }
+            pollInFlight = true;
+            try {
+              // Sequential: only walk through platforms until the first incomplete one
+              // (YouTube → Instagram → TikTok). Later platforms stay un-polled until prior is done.
+              const settled: Array<{
+                tracked: boolean;
+                terminal: boolean;
+                platform: MetricsRefreshPlatform | null;
+                run: {
+                  id: string;
+                  status: string;
+                  started_at?: string;
+                  finished_at?: string | null;
+                } | null;
+              }> = [];
+
+              for (let i = 0; i < queuedRunsFromApi.length; i++) {
+                const queued = queuedRunsFromApi[i]!;
+                const state = await fetchPlatformStatus(queued);
+                settled.push(state);
+                if (state.tracked && state.run && state.platform) {
+                  applyTrackedRunToUi(state.platform, state.run, false);
+                }
+                if (!state.tracked || !state.terminal) {
+                  break;
+                }
+              }
+              while (settled.length < queuedRunsFromApi.length) {
+                const queued = queuedRunsFromApi[settled.length]!;
+                const platform = resolveMetricsRefreshPlatform(queued.platform);
+                settled.push({
+                  tracked: false,
+                  terminal: false,
+                  platform:
+                    platform && platform !== "twitter" ? platform : null,
+                  run: null,
+                });
+              }
+
+              if (finishing) return;
+
+              const pollIndex = resolveSequentialRefreshPollIndex(
+                settled.map((s) => ({
+                  tracked: s.tracked,
+                  terminal: s.terminal,
+                })),
+              );
+
+              if (pollIndex < queuedRunsFromApi.length) {
+                const curPlat = settled[pollIndex]?.platform ?? null;
+                focusPlatformCard(curPlat);
+                if (
+                  curPlat === "youtube" &&
+                  !settled[pollIndex]?.tracked &&
+                  !settled[pollIndex]?.run
+                ) {
+                  setYoutubeRun(
+                    createPendingYoutubeRefreshRun(
+                      queuedRunsFromApi[pollIndex]?.runId,
+                      youtubeScope,
+                    ),
+                  );
+                } else if (
+                  curPlat === "instagram" &&
+                  !settled[pollIndex]?.tracked &&
+                  !settled[pollIndex]?.run
+                ) {
+                  setInstagramRun(
+                    createPendingInstagramRefreshRun(
+                      queuedRunsFromApi[pollIndex]?.runId,
+                    ),
+                  );
+                }
+              }
+
+              // Finish only when every queued platform has a tracked terminal run
+              // for THIS refresh (do not treat missing TikTok as done).
+              if (pollIndex >= queuedRunsFromApi.length) {
+                finishMultiPlatformChain(
+                  settled.map((s) => ({
+                    platform: s.platform,
+                    run: s.run,
+                    terminal: s.terminal,
+                  })),
+                );
+                return;
+              }
+
+              // Timestamp bump mid-chain (YouTube) must not finish early.
+              try {
+                const mres = await fetch(
+                  `/api/contests/${contestId}/last-metrics-updated`,
+                );
+                if (mres.ok) {
+                  const md = await mres.json();
+                  const updated = md.last_metrics_updated ?? null;
+                  if (
+                    updated &&
+                    updated !== previousUpdated &&
+                    pollIndex >= queuedRunsFromApi.length - 1 &&
+                    settled[pollIndex]?.terminal
+                  ) {
+                    const lastStates = await Promise.all(
+                      queuedRunsFromApi.map((q) => fetchPlatformStatus(q)),
+                    );
+                    if (
+                      lastStates.every((s) => s.tracked && s.terminal)
+                    ) {
+                      finishMultiPlatformChain(
+                        lastStates.map((s) => ({
+                          platform: s.platform,
+                          run: s.run,
+                          terminal: s.terminal,
+                        })),
+                      );
+                      return;
+                    }
+                  }
+                }
+              } catch {
+                // ignore timestamp probe errors
+              }
+
+              const current = settled[pollIndex];
+              if (current && !current.tracked && pollIndex > 0) {
+                const prev = settled[pollIndex - 1];
+                if (prev?.terminal) {
+                  if (waitingForNextSinceMs == null) {
+                    waitingForNextSinceMs = Date.now();
+                  }
+                  await tryContinueChain(queuedRunsFromApi[pollIndex]!);
+                  if (
+                    Date.now() - (waitingForNextSinceMs ?? Date.now()) >
+                    STUCK_AFTER_TERMINAL_MS
+                  ) {
+                    finishMultiPlatformChain(
+                      settled
+                        .filter((s) => s.terminal)
+                        .map((s) => ({
+                          platform: s.platform,
+                          run: s.run,
+                          terminal: true,
+                        })),
+                      { partial: true },
+                    );
+                    return;
+                  }
+                }
+              } else {
+                waitingForNextSinceMs = null;
+              }
+            } catch {
+              // ignore poll errors
+            } finally {
+              pollInFlight = false;
+            }
+          };
+
+          void pollOnce();
+          pollTimer = setInterval(() => void pollOnce(), 3000);
+          metricsRefreshManualPollStopRef.current = () => {
+            finishing = true;
+            clearPollTimer();
+            metricsRefreshManualPollStopRef.current = null;
+            setIsRefreshingMetrics(false);
+          };
+        } else {
+          const metricsPlatform =
+            queuedRunsFromApi.length === 1
+              ? resolveMetricsRefreshPlatform(queuedRunsFromApi[0]!.platform)
+              : resolveMetricsRefreshPlatform(currentContest.platform);
+
+          if (metricsPlatform) {
+            metricsRefreshManualPollStopRef.current = startMetricsRunPolling({
+              contestId,
+              platform: metricsPlatform,
+              maxMs: pollMaxMs,
+              onRun: (run) =>
+                handleManualRefreshRunUpdate(metricsPlatform, run),
+              onTerminal: (run) =>
+                handleManualRefreshTerminal(metricsPlatform, run),
+              onTimeout: () => {
+                finishManualRefreshPoll();
+                setIsRefreshingMetrics(false);
+              },
+            });
+          } else {
+            const startedAt = Date.now();
+            const pollTimer = setInterval(async () => {
+              if (Date.now() - startedAt > pollMaxMs) {
+                clearInterval(pollTimer);
+                finishManualRefreshPoll();
+                setIsRefreshingMetrics(false);
+                return;
+              }
+              try {
+                const res = await fetch(
+                  `/api/contests/${contestId}/last-metrics-updated`,
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                const newUpdated = data.last_metrics_updated ?? null;
+                if (newUpdated && newUpdated !== previousUpdated) {
+                  clearInterval(pollTimer);
+                  finishManualRefreshPoll();
+                  setIsRefreshingMetrics(false);
+                  window.location.reload();
+                }
+              } catch {
+                // ignore
+              }
+            }, 3000);
+            metricsRefreshManualPollStopRef.current = () => {
+              clearInterval(pollTimer);
+            };
+          }
         }
       } else {
         toast({
@@ -10322,7 +11038,17 @@ export default function ContestDetailClient({
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope }),
+        body: JSON.stringify({
+          scope,
+          ...(overviewVideoPlatforms.length > 0
+            ? {
+                platforms: platformsForRefreshTab(
+                  submissionsPlatformTab,
+                  overviewVideoPlatforms,
+                ),
+              }
+            : {}),
+        }),
       },
     );
     const result = await response.json().catch(() => ({}));
@@ -13830,25 +14556,24 @@ export default function ContestDetailClient({
                           : "text-gray-600",
                       )}
                     >
-                      {isDualRewardsContestType(currentContest.contest_type) ? (
-                        <>
-                          $
-                          {
-                            currentContest.contest_based_details.cpm_contest
-                              .cpm_rate_usd
-                          }{" "}
-                          CPM
-                        </>
-                      ) : (
-                        <>
-                          $
-                          {
-                            currentContest.contest_based_details.cpm_contest
-                              .cpm_rate_usd
-                          }{" "}
-                          CPM
-                        </>
-                      )}
+                      {(() => {
+                        const platformCpmText = formatContestListCpmRatesText(
+                          resolveContestPlatformCpmRates(
+                            currentContest.contest_based_details as
+                              | Record<string, unknown>
+                              | null
+                              | undefined,
+                            currentContest.platform,
+                          ),
+                          formatMoney,
+                        );
+                        if (platformCpmText) return platformCpmText;
+                        const rootRate =
+                          currentContest.contest_based_details?.cpm_contest
+                            ?.cpm_rate_usd;
+                        if (rootRate == null || rootRate === "") return null;
+                        return `$${rootRate} CPM`;
+                      })()}
                     </p>
                   </div>
                   <div
@@ -18650,9 +19375,13 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         disabledReason ||
-                                        (isPostCampaignLeaderboard
-                                          ? "Refresh post-campaign basic metrics only (does not sync from Submissions)"
-                                          : "Views, likes, comments from YouTube Data API")
+                                        (overviewVideoPlatforms.length > 1
+                                          ? isPostCampaignLeaderboard
+                                            ? "Refresh all platforms in order (YouTube full analytics → Instagram → TikTok)"
+                                            : "Refresh all platforms in order (YouTube full analytics → Instagram → TikTok)"
+                                          : isPostCampaignLeaderboard
+                                            ? "Refresh post-campaign basic metrics only (does not sync from Submissions)"
+                                            : "Views, likes, comments from YouTube Data API")
                                       }
                                     >
                                       {isRefreshingMetrics ? (
@@ -18664,7 +19393,9 @@ export default function ContestDetailClient({
                                         ? "Updating..."
                                         : !cooldownInfo.canRefresh
                                           ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                          : "Refresh Basic Metrics"}
+                                          : overviewVideoPlatforms.length > 1
+                                            ? "Refresh Metrics"
+                                            : "Refresh Basic Metrics"}
                                     </button>
                                     <span className={muteClass}>
                                       Basic:{" "}
@@ -20200,9 +20931,7 @@ export default function ContestDetailClient({
                             </Popover>
                           )}
                           {/* YouTube only: customize table columns */}
-                          {currentContest.platform
-                            ?.toLowerCase()
-                            .includes("youtube") && (
+                          {submissionsTablePlatform.includes("youtube") && (
                             <Dialog
                               open={ytColumnsModalOpen}
                               onOpenChange={setYtColumnsModalOpen}
@@ -20633,6 +21362,11 @@ export default function ContestDetailClient({
                                   </TableHead>
                                 )}
                                 <TableHead>Creator</TableHead>
+                                {showAllTabPlatformColumn && (
+                                  <TableHead className="text-center whitespace-nowrap">
+                                    Platform
+                                  </TableHead>
+                                )}
                                 {/* For Twitter campaigns, show tweet content column */}
                                 {(currentContest.platform?.toLowerCase() ===
                                   "twitter" ||
@@ -20682,36 +21416,28 @@ export default function ContestDetailClient({
                                   </>
                                 ) : (
                                   <>
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes("youtube")
                                       ? ytVisibleColumns.includes("views")
                                       : true) && (
                                       <TableHead className="text-center">
                                         Views
                                       </TableHead>
                                     )}
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes("youtube")
                                       ? ytVisibleColumns.includes("likes")
                                       : true) && (
                                       <TableHead className="text-center">
                                         Likes
                                       </TableHead>
                                     )}
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes("youtube")
                                       ? ytVisibleColumns.includes("comments")
                                       : true) && (
                                       <TableHead className="text-center">
                                         Comments
                                       </TableHead>
                                     )}
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube") &&
+                                    {submissionsTablePlatform.includes("youtube") &&
                                       canSeeCore &&
                                       ytVisibleColumns.includes("dislikes") && (
                                         <TableHead className="text-center">
@@ -20720,34 +21446,24 @@ export default function ContestDetailClient({
                                       )}
                                   </>
                                 )}
+                                {showSubmissionsSharesColumn && (
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                )}
                                 {/* Dynamic headers based on campaign platform */}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("tiktok") && (
+                                {submissionsTablePlatform.includes("tiktok") && (
                                   <>
-                                    <TableHead className="text-center">
-                                      Shares
-                                    </TableHead>
                                     <TableHead className="text-center">
                                       Total engagement
                                     </TableHead>
                                     <TableHead className="text-center">
                                       Engagement rate
                                     </TableHead>
-                                    {isAdminView && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
                                   </>
                                 )}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("instagram") && (
+                                {submissionsTablePlatform.includes("instagram") && (
                                   <>
-                                    <TableHead className="text-center">
-                                      Shares
-                                    </TableHead>
                                     <TableHead className="text-center">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -20821,23 +21537,10 @@ export default function ContestDetailClient({
                                         </TooltipContent>
                                       </Tooltip>
                                     </TableHead>
-                                    {isAdminView && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
                                   </>
                                 )}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube") && (
+                                {submissionsTablePlatform.includes("youtube") && (
                                   <>
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes("shares") && (
-                                        <TableHead className="text-center">
-                                          Shares
-                                        </TableHead>
-                                      )}
                                     {canSeeCore &&
                                       ytVisibleColumns.includes(
                                         "avg_view_pct",
@@ -20909,15 +21612,12 @@ export default function ContestDetailClient({
                                           Top Traffic Source
                                         </TableHead>
                                       )}
-                                    {isAdminView &&
-                                      ytVisibleColumns.includes(
-                                        "insights_status",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Insights status
-                                        </TableHead>
-                                      )}
                                   </>
+                                )}
+                                {showSubmissionsInsightsStatusColumn && (
+                                  <TableHead className="text-center">
+                                    Insights status
+                                  </TableHead>
                                 )}
                                 {/* Show reward columns for leaderboard and CPM campaigns, hide for Twitter CPM campaigns */}
                                 {!(
@@ -20940,9 +21640,7 @@ export default function ContestDetailClient({
                                   currentContest.contest_type,
                                 ) ? (
                                   <>
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes("youtube")
                                       ? ytVisibleColumns.includes(
                                           "expected_reward",
                                         )
@@ -20962,9 +21660,7 @@ export default function ContestDetailClient({
                                               Expected Reward (Milestone)
                                             </TableHead>
                                             {showDualPayoutAdjustedColumns &&
-                                              (currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              (submissionsTablePlatform.includes("youtube")
                                                 ? ytVisibleColumns.includes(
                                                     "adjusted_reward",
                                                   )
@@ -20996,9 +21692,7 @@ export default function ContestDetailClient({
                                           !isDualRewardsContestType(
                                             currentContest.contest_type,
                                           ) &&
-                                          (currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          (submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes(
                                                 "adjusted_reward",
                                               )
@@ -21016,9 +21710,7 @@ export default function ContestDetailClient({
                                         Milestone
                                       </TableHead>
                                     )}
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes("youtube")
                                       ? ytVisibleColumns.includes(
                                           "reward_granted",
                                         )
@@ -21046,9 +21738,7 @@ export default function ContestDetailClient({
                                       </>
                                     )}
                                     {showNormalViewFlatFeeBonusColumns &&
-                                      (currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      (submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes(
                                             "bonus_expected",
                                           ) &&
@@ -21072,27 +21762,21 @@ export default function ContestDetailClient({
                                     Quality Score
                                   </TableHead>
                                 )}
-                                {(currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube")
+                                {(submissionsTablePlatform.includes("youtube")
                                   ? ytVisibleColumns.includes("status")
                                   : true) && (
                                   <TableHead className="text-center">
                                     Status
                                   </TableHead>
                                 )}
-                                {(currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube")
+                                {(submissionsTablePlatform.includes("youtube")
                                   ? ytVisibleColumns.includes("status")
                                   : true) && (
                                   <TableHead className="text-center min-w-[140px]">
                                     Rejection reason
                                   </TableHead>
                                 )}
-                                {(currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube")
+                                {(submissionsTablePlatform.includes("youtube")
                                   ? ytVisibleColumns.includes("submitted")
                                   : true) && (
                                   <TableHead className="text-center">
@@ -22181,6 +22865,15 @@ export default function ContestDetailClient({
                                           </div>
                                         </div>
                                       </TableCell>
+                                      {showAllTabPlatformColumn && (
+                                        <TableCell className="text-center">
+                                          <div className="flex items-center justify-center">
+                                            {getPlatformIcon(
+                                              submission.platform,
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {/* For Twitter tweets, show tweet text */}
                                       {isTwitterTweet && (
                                         <TableCell className="min-w-[200px] max-w-[300px]">
@@ -22603,9 +23296,7 @@ export default function ContestDetailClient({
                                       ) : (
                                         <>
                                           {/* Regular submissions (YouTube/Instagram) */}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes("views")
                                             : true) && (
                                             <TableCell className="text-center">
@@ -22635,9 +23326,7 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes("likes")
                                             : true) && (
                                             <TableCell className="text-center">
@@ -22670,9 +23359,7 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes(
                                                 "comments",
                                               )
@@ -22707,9 +23394,7 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube") &&
+                                          {submissionsTablePlatform.includes("youtube") &&
                                             canSeeCore &&
                                             ytVisibleColumns.includes(
                                               "dislikes",
@@ -22735,19 +23420,17 @@ export default function ContestDetailClient({
                                             )}
                                         </>
                                       )}
+                                      {showSubmissionsSharesColumn && (
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <Share2 className="h-3 w-3 text-purple-500" />
+                                            {formatMetricValue(metrics.shares)}
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {/* Dynamic data cells based on campaign platform */}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("tiktok") && (
+                                      {submissionsTablePlatform.includes("tiktok") && (
                                         <>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex items-center justify-center gap-1">
-                                              <Share2 className="h-3 w-3 text-purple-500" />
-                                              {formatMetricValue(
-                                                metrics.shares,
-                                              )}
-                                            </div>
-                                          </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
                                             {formatMetricValue(
                                               metrics.total_interactions ?? 0,
@@ -22760,55 +23443,10 @@ export default function ContestDetailClient({
                                                 )}%`
                                               : "—"}
                                           </TableCell>
-                                          {isAdminView && (
-                                            <TableCell className="text-center">
-                                              {(() => {
-                                                const meta =
-                                                  getInsightsStatusMeta(
-                                                    submission.insights_status ??
-                                                      null,
-                                                  );
-                                                return (
-                                                  <div className="flex items-center justify-center">
-                                                    <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                        <span
-                                                          className={cn(
-                                                            "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                            meta.pillClass,
-                                                          )}
-                                                        >
-                                                          <span
-                                                            className={cn(
-                                                              "h-2.5 w-2.5 rounded-full",
-                                                              meta.dotClass,
-                                                            )}
-                                                          />
-                                                        </span>
-                                                      </TooltipTrigger>
-                                                      <TooltipContent className="whitespace-pre-line">
-                                                        {meta.help}
-                                                      </TooltipContent>
-                                                    </Tooltip>
-                                                  </div>
-                                                );
-                                              })()}
-                                            </TableCell>
-                                          )}
                                         </>
                                       )}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("instagram") && (
+                                      {submissionsTablePlatform.includes("instagram") && (
                                         <>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex items-center justify-center gap-1">
-                                              <Share2 className="h-3 w-3 text-purple-500" />
-                                              {formatMetricValue(
-                                                metrics.shares,
-                                              )}
-                                            </div>
-                                          </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
                                             {formatMetricValue(
                                               (metrics as any).reposts,
@@ -22952,75 +23590,11 @@ export default function ContestDetailClient({
                                               );
                                             })()}
                                           </TableCell>
-                                          {isAdminView && (
-                                            <TableCell className="text-center">
-                                              {(() => {
-                                                const meta =
-                                                  getInsightsStatusMeta(
-                                                    submission.insights_status ??
-                                                      null,
-                                                  );
-                                                return (
-                                                  <div className="flex items-center justify-center">
-                                                    <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                        <span
-                                                          className={cn(
-                                                            "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                            meta.pillClass,
-                                                          )}
-                                                        >
-                                                          <span
-                                                            className={cn(
-                                                              "h-2.5 w-2.5 rounded-full",
-                                                              meta.dotClass,
-                                                            )}
-                                                          />
-                                                        </span>
-                                                      </TooltipTrigger>
-                                                      <TooltipContent className="whitespace-pre-line">
-                                                        {meta.help}
-                                                      </TooltipContent>
-                                                    </Tooltip>
-                                                  </div>
-                                                );
-                                              })()}
-                                            </TableCell>
-                                          )}
                                         </>
                                       )}
                                       {/* YouTube-specific metric cells */}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube") && (
+                                      {submissionsTablePlatform.includes("youtube") && (
                                         <>
-                                          {canSeeCore &&
-                                            ytVisibleColumns.includes(
-                                              "shares",
-                                            ) && (
-                                              <TableCell className="text-center font-mono text-sm">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <Share2 className="h-3 w-3 text-purple-500" />
-                                                  {(metrics as any).shares >
-                                                  0 ? (
-                                                    formatMetricValue(
-                                                      (metrics as any).shares,
-                                                    )
-                                                  ) : (
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-500"
-                                                          : "text-slate-400",
-                                                      )}
-                                                    >
-                                                      —
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              </TableCell>
-                                            )}
                                           {canSeeCore &&
                                             ytVisibleColumns.includes(
                                               "avg_view_pct",
@@ -23441,45 +24015,41 @@ export default function ContestDetailClient({
                                                 </TableCell>
                                               );
                                             })()}
-                                          {isAdminView &&
-                                            ytVisibleColumns.includes(
-                                              "insights_status",
-                                            ) && (
-                                              <TableCell className="text-center">
-                                                {(() => {
-                                                  const meta =
-                                                    getInsightsStatusMeta(
-                                                      submission.insights_status ??
-                                                        null,
-                                                    );
-                                                  return (
-                                                    <div className="flex items-center justify-center">
-                                                      <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                          <span
-                                                            className={cn(
-                                                              "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                              meta.pillClass,
-                                                            )}
-                                                          >
-                                                            <span
-                                                              className={cn(
-                                                                "h-2.5 w-2.5 rounded-full",
-                                                                meta.dotClass,
-                                                              )}
-                                                            />
-                                                          </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="whitespace-pre-line">
-                                                          {meta.help}
-                                                        </TooltipContent>
-                                                      </Tooltip>
-                                                    </div>
-                                                  );
-                                                })()}
-                                              </TableCell>
-                                            )}
                                         </>
+                                      )}
+                                      {showSubmissionsInsightsStatusColumn && (
+                                        <TableCell className="text-center">
+                                          {(() => {
+                                            const meta = getInsightsStatusMeta(
+                                              submission.insights_status ??
+                                                null,
+                                            );
+                                            return (
+                                              <div className="flex items-center justify-center">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <span
+                                                      className={cn(
+                                                        "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
+                                                        meta.pillClass,
+                                                      )}
+                                                    >
+                                                      <span
+                                                        className={cn(
+                                                          "h-2.5 w-2.5 rounded-full",
+                                                          meta.dotClass,
+                                                        )}
+                                                      />
+                                                    </span>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent className="whitespace-pre-line">
+                                                    {meta.help}
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            );
+                                          })()}
+                                        </TableCell>
                                       )}
                                       {/* Show reward cells for leaderboard and CPM campaigns, hide for Twitter CPM campaigns */}
                                       {!(
@@ -23505,9 +24075,7 @@ export default function ContestDetailClient({
                                         currentContest.contest_type,
                                       ) ? (
                                         <>
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes(
                                                 "expected_reward",
                                               )
@@ -23710,9 +24278,7 @@ export default function ContestDetailClient({
                                                     </div>
                                                   </TableCell>
                                                   {showDualPayoutAdjustedColumns &&
-                                                    (currentContest.platform
-                                                      ?.toLowerCase()
-                                                      .includes("youtube")
+                                                    (submissionsTablePlatform.includes("youtube")
                                                       ? ytVisibleColumns.includes(
                                                           "adjusted_reward",
                                                         )
@@ -24056,9 +24622,7 @@ export default function ContestDetailClient({
                                             !isDualRewardsContestType(
                                               currentContest.contest_type,
                                             ) &&
-                                            (currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("youtube")
+                                            (submissionsTablePlatform.includes("youtube")
                                               ? ytVisibleColumns.includes(
                                                   "adjusted_reward",
                                                 )
@@ -24160,9 +24724,7 @@ export default function ContestDetailClient({
                                               )}
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes(
                                                 "reward_granted",
                                               )
@@ -24286,9 +24848,7 @@ export default function ContestDetailClient({
                                             </>
                                           )}
                                           {showNormalViewFlatFeeBonusColumns &&
-                                            (currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("youtube")
+                                            (submissionsTablePlatform.includes("youtube")
                                               ? ytVisibleColumns.includes(
                                                   "bonus_expected",
                                                 ) &&
@@ -24345,9 +24905,7 @@ export default function ContestDetailClient({
                                           />
                                         </TableCell>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes("status")
                                         : true) && (
                                         <TableCell className="text-center">
@@ -24366,9 +24924,7 @@ export default function ContestDetailClient({
                                         </TableCell>
                                       )}
                                       {/* Rejection reason column - show for same visibility as Status */}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes("status")
                                         : true) && (
                                         <TableCell
@@ -24427,9 +24983,7 @@ export default function ContestDetailClient({
                                           )}
                                         </TableCell>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes("submitted")
                                         : true) && (
                                         <TableCell
@@ -25299,6 +25853,11 @@ export default function ContestDetailClient({
                                   )}
                                   <TableHead className="w-12">#</TableHead>
                                   <TableHead>Creator</TableHead>
+                                  {showAllTabPlatformColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7.5rem]">
+                                      Platform
+                                    </TableHead>
+                                  )}
                                   {showCreatorWiseTrustScoreColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
                                       Trust %
@@ -25337,37 +25896,18 @@ export default function ContestDetailClient({
                                   <TableHead className="text-center">
                                     Total Submissions
                                   </TableHead>
-                                  {(currentContest.platform
-                                    ?.toLowerCase()
-                                    .includes("youtube")
+                                  {(submissionsTablePlatform.includes("youtube")
                                     ? ytVisibleColumns.includes("status")
                                     : true) && (
                                     <TableHead className="text-center">
                                       Status
                                     </TableHead>
                                   )}
-                                  {isAdminView &&
-                                    (currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("instagram") ||
-                                      currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("tiktok")) && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
-                                  {isAdminView &&
-                                    currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube") &&
-                                    ytVisibleColumns.includes(
-                                      "insights_status",
-                                    ) && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
+                                  {showSubmissionsInsightsStatusColumn && (
+                                    <TableHead className="text-center">
+                                      Insights status
+                                    </TableHead>
+                                  )}
                                   {/* For Twitter campaigns, show Twitter-specific metrics */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
@@ -25403,54 +25943,33 @@ export default function ContestDetailClient({
                                     </>
                                   ) : (
                                     <>
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes("views")
                                         : true) && (
                                         <TableHead className="text-center">
                                           Views
                                         </TableHead>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes("likes")
                                         : true) && (
                                         <TableHead className="text-center">
                                           Likes
                                         </TableHead>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes("comments")
                                         : true) && (
                                         <TableHead className="text-center">
                                           Comments
                                         </TableHead>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("instagram") ||
-                                        currentContest.platform
-                                          ?.toLowerCase()
-                                          .includes("tiktok") ||
-                                        (canSeeCore &&
-                                          (currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
-                                            ? ytVisibleColumns.includes(
-                                                "shares",
-                                              )
-                                            : true))) && (
+                                      {showSubmissionsSharesColumn && (
                                         <TableHead className="text-center">
                                           Shares
                                         </TableHead>
                                       )}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("tiktok") && (
+                                      {submissionsTablePlatform.includes("tiktok") && (
                                         <>
                                           <TableHead className="text-center">
                                             Total engagement
@@ -25461,9 +25980,7 @@ export default function ContestDetailClient({
                                         </>
                                       )}
                                       {/* Instagram-specific metrics */}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("instagram") && (
+                                      {submissionsTablePlatform.includes("instagram") && (
                                         <>
                                           <TableHead className="text-center">
                                             Saves
@@ -25505,9 +26022,7 @@ export default function ContestDetailClient({
                                     currentContest.contest_format ===
                                       "text_image") ? (
                                     <>
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes(
                                             "expected_reward",
                                           )
@@ -25527,9 +26042,7 @@ export default function ContestDetailClient({
                                                 Expected Reward (Milestone)
                                               </TableHead>
                                               {showDualPayoutAdjustedColumns &&
-                                                (currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("youtube")
+                                                (submissionsTablePlatform.includes("youtube")
                                                   ? ytVisibleColumns.includes(
                                                       "adjusted_reward",
                                                     )
@@ -25561,9 +26074,7 @@ export default function ContestDetailClient({
                                                 Expected Reward
                                               </TableHead>
                                               {showAdjustedRewardColumn &&
-                                                (currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("youtube")
+                                                (submissionsTablePlatform.includes("youtube")
                                                   ? ytVisibleColumns.includes(
                                                       "adjusted_reward",
                                                     )
@@ -25583,9 +26094,7 @@ export default function ContestDetailClient({
                                           )}
                                         </>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes("youtube")
                                         ? ytVisibleColumns.includes(
                                             "reward_granted",
                                           )
@@ -25692,9 +26201,7 @@ export default function ContestDetailClient({
                                       Rejection Reason
                                     </TableHead>
                                   )}
-                                  {(currentContest.platform
-                                    ?.toLowerCase()
-                                    .includes("youtube")
+                                  {(submissionsTablePlatform.includes("youtube")
                                     ? ytVisibleColumns.includes("submitted")
                                     : true) && (
                                     <TableHead className="text-center">
@@ -25727,11 +26234,10 @@ export default function ContestDetailClient({
                                           ? 2
                                           : 0) +
                                         milestoneMvBonusAdjustedColumnCount +
-                                        (currentContest.platform
-                                          ?.toLowerCase()
-                                          .includes("tiktok")
+                                        (submissionsTablePlatform.includes("tiktok")
                                           ? 2
-                                          : 0)
+                                          : 0) +
+                                        (showAllTabPlatformColumn ? 1 : 0)
                                       }
                                       className="text-center py-8 text-gray-500"
                                     >
@@ -26023,6 +26529,40 @@ export default function ContestDetailClient({
                                               </div>
                                             </div>
                                           </TableCell>
+                                          {showAllTabPlatformColumn && (
+                                            <TableCell className="text-center">
+                                              <div className="inline-flex items-center justify-center gap-2.5 flex-wrap">
+                                                {countSubmissionsByVideoPlatform(
+                                                  group.submissions,
+                                                  overviewVideoPlatforms,
+                                                ).map(({ platform, count }) => (
+                                                  <Tooltip key={platform}>
+                                                    <TooltipTrigger asChild>
+                                                      <span className="inline-flex items-center gap-1">
+                                                        {getPlatformIcon(
+                                                          platform,
+                                                        )}
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs font-semibold tabular-nums",
+                                                            isDark
+                                                              ? "text-white"
+                                                              : "text-slate-800",
+                                                          )}
+                                                        >
+                                                          {count}
+                                                        </span>
+                                                      </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                      {VIDEO_PLATFORM_LABELS[platform]}
+                                                      : {count}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                ))}
+                                              </div>
+                                            </TableCell>
+                                          )}
                                           {showCreatorWiseTrustScoreColumn && (
                                             <TableCell className="text-center whitespace-nowrap">
                                               <CreatorWiseEligibilityText
@@ -26323,9 +26863,7 @@ export default function ContestDetailClient({
                                           <TableCell className="text-center font-semibold">
                                             {group.totalCount}
                                           </TableCell>
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes(
                                                 "status",
                                               )
@@ -26415,110 +26953,7 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {isAdminView &&
-                                            (currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("instagram") ||
-                                              currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("tiktok")) && (
-                                              <TableCell className="text-center">
-                                                {(() => {
-                                                  const counts =
-                                                    group.insightsCounts || {};
-                                                  const okCount =
-                                                    counts.ok || 0;
-                                                  const tempCount =
-                                                    counts.temporary_failure ||
-                                                    0;
-                                                  const permCount =
-                                                    counts.permanent_failure ||
-                                                    0;
-                                                  const neverCount =
-                                                    counts.never || 0;
-                                                  return (
-                                                    <div className="flex flex-wrap items-center justify-center gap-1">
-                                                      {okCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                                                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                                              {okCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            Insights fetched
-                                                            successfully
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {tempCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
-                                                              <span className="h-2 w-2 rounded-full bg-amber-400" />
-                                                              {tempCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent className="whitespace-pre-line">
-                                                            Temporary error
-                                                            fetching insights
-                                                            {"\n"}Will retry
-                                                            later
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {permCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-900">
-                                                              <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                                              {permCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            Insights cannot be
-                                                            fetched for this
-                                                            post
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {okCount === 0 &&
-                                                        tempCount === 0 &&
-                                                        permCount === 0 && (
-                                                          <Tooltip>
-                                                            <TooltipTrigger
-                                                              asChild
-                                                            >
-                                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                                                                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                                                                {neverCount}
-                                                              </span>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                              Never refreshed
-                                                              yet
-                                                            </TooltipContent>
-                                                          </Tooltip>
-                                                        )}
-                                                    </div>
-                                                  );
-                                                })()}
-                                              </TableCell>
-                                            )}
-                                          {isAdminView &&
-                                            currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("youtube") &&
-                                            ytVisibleColumns.includes(
-                                              "insights_status",
-                                            ) && (
+                                          {showSubmissionsInsightsStatusColumn && (
                                               <TableCell className="text-center">
                                                 {(() => {
                                                   const counts =
@@ -26749,9 +27184,7 @@ export default function ContestDetailClient({
                                             </>
                                           ) : (
                                             <>
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              {(submissionsTablePlatform.includes("youtube")
                                                 ? ytVisibleColumns.includes(
                                                     "views",
                                                   )
@@ -26760,9 +27193,7 @@ export default function ContestDetailClient({
                                                   {group.metrics.views.toLocaleString()}
                                                 </TableCell>
                                               )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              {(submissionsTablePlatform.includes("youtube")
                                                 ? ytVisibleColumns.includes(
                                                     "likes",
                                                   )
@@ -26771,9 +27202,7 @@ export default function ContestDetailClient({
                                                   {group.metrics.likes.toLocaleString()}
                                                 </TableCell>
                                               )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              {(submissionsTablePlatform.includes("youtube")
                                                 ? ytVisibleColumns.includes(
                                                     "comments",
                                                   )
@@ -26782,20 +27211,7 @@ export default function ContestDetailClient({
                                                   {group.metrics.comments.toLocaleString()}
                                                 </TableCell>
                                               )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("instagram") ||
-                                                currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("tiktok") ||
-                                                (canSeeCore &&
-                                                  (currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("youtube")
-                                                    ? ytVisibleColumns.includes(
-                                                        "shares",
-                                                      )
-                                                    : true))) && (
+                                              {showSubmissionsSharesColumn && (
                                                 <TableCell className="text-center font-mono text-sm">
                                                   <div className="flex items-center justify-center gap-1">
                                                     <Share2 className="h-3 w-3 text-purple-500" />
@@ -26805,9 +27221,7 @@ export default function ContestDetailClient({
                                                   </div>
                                                 </TableCell>
                                               )}
-                                              {currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("tiktok") &&
+                                              {submissionsTablePlatform.includes("tiktok") &&
                                                 (() => {
                                                   const ttEng =
                                                     (group.metrics.likes || 0) +
@@ -26839,9 +27253,7 @@ export default function ContestDetailClient({
                                                   );
                                                 })()}
                                               {/* Instagram-specific metrics */}
-                                              {currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("instagram") && (
+                                              {submissionsTablePlatform.includes("instagram") && (
                                                 <>
                                                   <TableCell className="text-center font-mono text-sm">
                                                     {formatMetricValue(
@@ -26924,9 +27336,7 @@ export default function ContestDetailClient({
                                               currentContest.contest_type,
                                             )) && (
                                             <>
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              {(submissionsTablePlatform.includes("youtube")
                                                 ? ytVisibleColumns.includes(
                                                     "expected_reward",
                                                   )
@@ -27024,11 +27434,7 @@ export default function ContestDetailClient({
                                                               )}
                                                             </TableCell>
                                                             {showDualPayoutAdjustedColumns &&
-                                                              (currentContest.platform
-                                                                ?.toLowerCase()
-                                                                .includes(
-                                                                  "youtube",
-                                                                )
+                                                              (submissionsTablePlatform.includes("youtube")
                                                                 ? ytVisibleColumns.includes(
                                                                     "adjusted_reward",
                                                                   )
@@ -27214,9 +27620,7 @@ export default function ContestDetailClient({
                                                         </div>
                                                       </TableCell>
                                                       {showAdjustedRewardColumn &&
-                                                        (currentContest.platform
-                                                          ?.toLowerCase()
-                                                          .includes("youtube")
+                                                        (submissionsTablePlatform.includes("youtube")
                                                           ? ytVisibleColumns.includes(
                                                               "adjusted_reward",
                                                             )
@@ -27380,9 +27784,7 @@ export default function ContestDetailClient({
                                                   )}
                                                 </>
                                               )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              {(submissionsTablePlatform.includes("youtube")
                                                 ? ytVisibleColumns.includes(
                                                     "reward_granted",
                                                   )
@@ -27768,9 +28170,7 @@ export default function ContestDetailClient({
                                               )}
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes("youtube")
                                             ? ytVisibleColumns.includes(
                                                 "submitted",
                                               )
@@ -27802,9 +28202,7 @@ export default function ContestDetailClient({
                                                   View All ({group.totalCount})
                                                 </Button>
                                                 {isAdminView &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("instagram") && (
+                                                  submissionsTablePlatform.includes("instagram") && (
                                                     <Button
                                                       size="sm"
                                                       variant="outline"
@@ -27987,9 +28385,7 @@ export default function ContestDetailClient({
                                                     </DropdownMenu>
                                                   )}
                                                 {showCreatorMilestoneVerifiedBonusActions &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("instagram") && (
+                                                  submissionsTablePlatform.includes("instagram") && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -28020,9 +28416,7 @@ export default function ContestDetailClient({
                                                     </DropdownMenu>
                                                   )}
                                                 {showCreatorMilestoneVerifiedBonusActions &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("tiktok") && (
+                                                  submissionsTablePlatform.includes("tiktok") && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -32429,6 +32823,7 @@ export default function ContestDetailClient({
             >["submissions"]
           }
           contest={currentContest}
+          platformTab={submissionsPlatformTab}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
           }

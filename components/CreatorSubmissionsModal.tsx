@@ -115,6 +115,15 @@ import {
   parseSubmissionMetadata,
   getFullRejectionDetails,
 } from "@/lib/submission-metadata";
+import {
+  ALL_PLATFORM_TAB,
+  parseVideoContestPlatforms,
+  platformsForTab,
+  VIDEO_PLATFORM_LABELS,
+  type PlatformTabValue,
+  type VideoContestPlatform,
+} from "@/lib/video-platform-campaigns";
+import { getPlatformIcon } from "@/lib/platform-icons";
 
 interface Creator {
   id: string;
@@ -171,6 +180,14 @@ function effectiveSubmissionViewsForSort(sub: Submission): number {
   return Number(sub.views ?? 0);
 }
 
+function submissionMatchesVideoPlatform(
+  submission: { platform?: string | null },
+  platform: VideoContestPlatform,
+): boolean {
+  const raw = String(submission.platform || "").toLowerCase();
+  return raw === platform || raw.includes(platform);
+}
+
 interface CreatorSubmissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -203,6 +220,11 @@ interface CreatorSubmissionsModalProps {
   canSeeTraffic?: boolean;
   /** Match submission-wise YouTube analytics: demographics when admin or brand allowed */
   canSeeDemographics?: boolean;
+  /**
+   * Contest-detail platform tab (All / Instagram / YouTube / TikTok).
+   * Scopes modal columns and rows on multi-platform campaigns.
+   */
+  platformTab?: PlatformTabValue;
   /**
    * Full contest submission list for flat-fee bonus cap (FCFS by created_at).
    * When omitted, falls back to `submissions` (per-creator only — wrong cap scope).
@@ -261,6 +283,7 @@ export function CreatorSubmissionsModal({
   canSeeCore = true,
   canSeeTraffic = true,
   canSeeDemographics = false,
+  platformTab = ALL_PLATFORM_TAB,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
   bulkModerationJob = null,
@@ -1395,15 +1418,22 @@ export function CreatorSubmissionsModal({
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
 
-  const isInstagramContest =
-    contest?.platform?.toLowerCase().includes("instagram") ?? false;
-
-  const isTikTokContest =
-    contest?.platform?.toLowerCase().includes("tiktok") ?? false;
-
-  const isYouTubeContest =
-    contest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const contestVideoPlatforms = parseVideoContestPlatforms(contest?.platform);
+  const modalTablePlatforms = platformsForTab(
+    platformTab,
+    contestVideoPlatforms,
+  );
+  const modalScopedPlatform =
+    platformTab !== ALL_PLATFORM_TAB && modalTablePlatforms.length === 1
+      ? modalTablePlatforms[0]
+      : null;
+  const isInstagramContest = modalTablePlatforms.includes("instagram");
+  const isTikTokContest = modalTablePlatforms.includes("tiktok");
+  const isYouTubeContest = modalTablePlatforms.includes("youtube");
   const isVideoContest = contest?.contest_format !== "text_image";
+  const showModalPlatformColumn =
+    contestVideoPlatforms.length >= 2 &&
+    platformTab === ALL_PLATFORM_TAB;
 
   const getSubmissionContentViewHref = (submission: Submission) => {
     const link = submission.content_link || "";
@@ -1686,7 +1716,15 @@ export function CreatorSubmissionsModal({
 
   // Filter submissions based on status
   // For Twitter tweets, use moderation_status; for others, use status
-  const filteredSubmissions = submissions.filter((sub) => {
+  const platformScopedSubmissions = modalScopedPlatform
+    ? submissions.filter((sub) =>
+        submissionMatchesVideoPlatform(sub, modalScopedPlatform),
+      )
+    : submissions;
+
+  // Filter submissions based on status
+  // For Twitter tweets, use moderation_status; for others, use status
+  const filteredSubmissions = platformScopedSubmissions.filter((sub) => {
     const bucket = getSubmissionModerationBucket(sub);
 
     if (statusFilter === "all") return true;
@@ -1780,7 +1818,7 @@ export function CreatorSubmissionsModal({
   }
 
   const moderationStatusCounts =
-    computeSubmissionModerationStatusCounts(submissions);
+    computeSubmissionModerationStatusCounts(platformScopedSubmissions);
   const statusCounts = {
     all: moderationStatusCounts.all,
     verifiedOrPaid: moderationStatusCounts.verified_or_paid,
@@ -1794,6 +1832,26 @@ export function CreatorSubmissionsModal({
     creator.username?.trim() ||
     creator.full_name?.trim() ||
     "Unknown";
+  const renderPlatformCell = (submission: Submission) => {
+    if (!showModalPlatformColumn) return null;
+    const platformKey = parseVideoContestPlatforms(submission.platform)[0];
+    return (
+      <TableCell className="text-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center justify-center">
+              {getPlatformIcon(submission.platform, "sm")}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {platformKey
+              ? VIDEO_PLATFORM_LABELS[platformKey]
+              : submission.platform || "Unknown"}
+          </TooltipContent>
+        </Tooltip>
+      </TableCell>
+    );
+  };
 
   return (
     <>
@@ -1850,8 +1908,10 @@ export function CreatorSubmissionsModal({
                       isDark ? "text-gray-400" : "text-gray-600",
                     )}
                   >
-                    {submissions.length} total{" "}
-                    {submissions.length === 1 ? "submission" : "submissions"}
+                    {platformScopedSubmissions.length} total{" "}
+                    {platformScopedSubmissions.length === 1
+                      ? "submission"
+                      : "submissions"}
                   </p>
                 </div>
               </div>
@@ -2386,6 +2446,16 @@ export function CreatorSubmissionsModal({
                         Content
                       </TableHead>
                     )}
+                    {showModalPlatformColumn && (
+                      <TableHead
+                        className={cn(
+                          "text-center whitespace-nowrap",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                      >
+                        Platform
+                      </TableHead>
+                    )}
                     {/* For Twitter text_image contests, show detailed metrics; for others, show simplified (with Instagram extras) */}
                     {isTwitterTextImageContest ? (
                       <>
@@ -2625,7 +2695,10 @@ export function CreatorSubmissionsModal({
                             Dislikes
                           </TableHead>
                         )}
-                        {isYouTubeContest && showYtColumn("shares") && (
+                        {isYouTubeContest &&
+                          showYtColumn("shares") &&
+                          !isInstagramContest &&
+                          !isTikTokContest && (
                           <TableHead
                             className={cn(
                               "text-center",
@@ -2736,8 +2809,9 @@ export function CreatorSubmissionsModal({
                             >
                               Shares
                             </TableHead>
-                            {!isTikTokContest && (
-                              <TableHead
+                            {isInstagramContest && (
+                              <>
+                            <TableHead
                                 className={cn(
                                   "text-center",
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
@@ -2755,10 +2829,7 @@ export function CreatorSubmissionsModal({
                                   </TooltipContent>
                                 </Tooltip>
                               </TableHead>
-                            )}
-                            {/* Saves: Instagram only — not in TikTok Display API */}
-                            {!isTikTokContest && (
-                              <TableHead
+                            <TableHead
                                 className={cn(
                                   "text-center",
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
@@ -2766,10 +2837,6 @@ export function CreatorSubmissionsModal({
                               >
                                 Saves
                               </TableHead>
-                            )}
-                            {/* Reach and Interactions commented out for TikTok per user request */}
-                            {!isTikTokContest && (
-                              <>
                                 <TableHead
                                   className={cn(
                                     "text-center",
@@ -2786,29 +2853,6 @@ export function CreatorSubmissionsModal({
                                 >
                                   Interactions
                                 </TableHead>
-                              </>
-                            )}
-                            {isTikTokContest ? (
-                              <>
-                                <TableHead
-                                  className={cn(
-                                    "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                  )}
-                                >
-                                  Total engagement
-                                </TableHead>
-                                <TableHead
-                                  className={cn(
-                                    "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                  )}
-                                >
-                                  Engagement rate
-                                </TableHead>
-                              </>
-                            ) : (
-                              <>
                                 <TableHead
                                   className={cn(
                                     "text-center",
@@ -2881,6 +2925,26 @@ export function CreatorSubmissionsModal({
                                       for low-view reels.
                                     </TooltipContent>
                                   </Tooltip>
+                                </TableHead>
+                              </>
+                            )}
+                            {isTikTokContest && (
+                              <>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Total engagement
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Engagement rate
                                 </TableHead>
                               </>
                             )}
@@ -3121,6 +3185,7 @@ export function CreatorSubmissionsModal({
                           (showSelectionCheckboxes ? 0 : -1) +
                           (isTwitterTextImageContest
                             ? 18 + // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
+                              (showModalPlatformColumn ? 1 : 0) +
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
                                 : 0) + // Dual: Expected/Granted CPM + Milestone
@@ -3134,12 +3199,11 @@ export function CreatorSubmissionsModal({
                                 ? 1
                                 : 0) // Milestone column
                             : 3 + // Checkbox, #, Content
+                              (showModalPlatformColumn ? 1 : 0) +
                               3 + // Views, Likes, Comments
-                              (isInstagramContest || isTikTokContest
-                                ? isTikTokContest
-                                  ? 3
-                                  : 10
-                                : 0) + // TT: Shares + total engagement + engagement rate; IG: Shares, Reposts, Saves, Reach, Interactions, Avg/Total watch, Reel duration, Avg Watch %, Skip rate
+                              ((isInstagramContest || isTikTokContest) ? 1 : 0) +
+                              (isInstagramContest ? 9 : 0) +
+                              (isTikTokContest ? 2 : 0) +
                               2 + // Expected Reward, Reward Granted
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
@@ -3664,6 +3728,7 @@ export function CreatorSubmissionsModal({
                                   )}
                                 </div>
                               </TableCell>
+                              {renderPlatformCell(submission)}
                               {/* Total Points */}
                               <TableCell className="text-center">
                                 <div className="flex flex-col items-center">
@@ -4147,6 +4212,7 @@ export function CreatorSubmissionsModal({
                                   </div>
                                 </div>
                               </TableCell>
+                              {renderPlatformCell(submission)}
                               {/* Views, Likes, Comments for non-Twitter submissions */}
                               {(!isYouTubeContest || showYtColumn("views")) && (
                                 <TableCell className="text-center font-mono">
@@ -4173,7 +4239,10 @@ export function CreatorSubmissionsModal({
                                   {formatMetricValue(ytDislikes)}
                                 </TableCell>
                               )}
-                              {isYouTubeContest && showYtColumn("shares") && (
+                              {isYouTubeContest &&
+                                showYtColumn("shares") &&
+                                !isInstagramContest &&
+                                !isTikTokContest && (
                                 <TableCell className="text-center font-mono">
                                   {ytShares > 0
                                     ? formatMetricValue(ytShares)
@@ -4444,42 +4513,20 @@ export function CreatorSubmissionsModal({
                                   <TableCell className="text-center font-mono">
                                     {formatMetricValue(shares)}
                                   </TableCell>
-                                  {!isTikTokContest && (
+                                  {isInstagramContest && (
+                                    <>
                                     <TableCell className="text-center font-mono">
                                       {formatMetricValue(igReposts)}
                                     </TableCell>
-                                  )}
-                                  {!isTikTokContest && (
                                     <TableCell className="text-center font-mono">
                                       {formatMetricValue(saves)}
                                     </TableCell>
-                                  )}
-                                  {/* Reach and Interactions commented out for TikTok per user request */}
-                                  {!isTikTokContest && (
-                                    <>
                                       <TableCell className="text-center font-mono">
                                         {formatMetricValue(reach)}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
                                         {formatMetricValue(totalInteractions)}
                                       </TableCell>
-                                    </>
-                                  )}
-                                  {isTikTokContest ? (
-                                    <>
-                                      <TableCell className="text-center font-mono">
-                                        {formatMetricValue(
-                                          tiktokTotalEngagement,
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono">
-                                        {tiktokViewsForRate > 0
-                                          ? `${formatMetricValue(tiktokEngagementRatePct)}%`
-                                          : "—"}
-                                      </TableCell>
-                                    </>
-                                  ) : (
-                                    <>
                                       <TableCell className="text-center font-mono">
                                         <div className="flex flex-col items-center">
                                           <span className="font-bold">
@@ -4531,6 +4578,20 @@ export function CreatorSubmissionsModal({
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
                                         {formatReelsSkipRate(igReelsSkipRate)}
+                                      </TableCell>
+                                    </>
+                                  )}
+                                  {isTikTokContest && (
+                                    <>
+                                      <TableCell className="text-center font-mono">
+                                        {formatMetricValue(
+                                          tiktokTotalEngagement,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {tiktokViewsForRate > 0
+                                          ? `${formatMetricValue(tiktokEngagementRatePct)}%`
+                                          : "—"}
                                       </TableCell>
                                     </>
                                   )}

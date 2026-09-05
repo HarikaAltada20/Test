@@ -29,6 +29,7 @@ import {
   parseMetricsTarget,
   postCampaignCooldownResponse,
 } from "@/lib/post-campaign-enqueue-guards";
+import { claimMultiPlatformChainPlatform } from "@/lib/queue/multi-platform-metrics-chain";
 
 const BATCH_SIZE = 50;
 
@@ -75,7 +76,8 @@ export async function POST(
     if (contestError || !contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
-    if ((contest.platform ?? "").toString().toLowerCase() !== "tiktok") {
+    const platformLower = (contest.platform ?? "").toString().toLowerCase();
+    if (!platformLower.includes("tiktok")) {
       return NextResponse.json(
         { error: "Contest is not a TikTok contest" },
         { status: 400 }
@@ -121,7 +123,21 @@ export async function POST(
     if (accessDenied) return accessDenied;
 
     // Enforce cooldown server-side for both submissions and post-campaign paths.
-    if (!cronAuth && isPostCampaignTarget) {
+    const chainContinue = body?.chainContinue === true;
+    let chainContinueOk = false;
+    if (chainContinue) {
+      const claim = await claimMultiPlatformChainPlatform({
+        contestId,
+        metricsTarget,
+        platform: "tiktok",
+      });
+      chainContinueOk = claim.ok;
+      if (!claim.ok) {
+        return NextResponse.json({ error: claim.error }, { status: 409 });
+      }
+    }
+
+    if (!cronAuth && isPostCampaignTarget && !chainContinueOk) {
       const cooldownDenied = postCampaignCooldownResponse(
         contest.post_campaign_last_metrics_updated,
         isAdmin,
@@ -129,7 +145,7 @@ export async function POST(
       if (cooldownDenied) return cooldownDenied;
     }
 
-    if (!cronAuth && !isPostCampaignTarget) {
+    if (!cronAuth && !isPostCampaignTarget && !chainContinueOk) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
       const cooldownMs = isOpportunitiesRefresh

@@ -23,6 +23,7 @@ import {
   isQStashEnabled,
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
+import { advanceMultiPlatformMetricsChainAfterTerminal } from "@/lib/queue/multi-platform-metrics-chain";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -173,6 +174,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           updated_at: now,
         })
         .eq("id", job.runId);
+      await advanceMultiPlatformMetricsChainAfterTerminal({
+        contestId: job.contestId,
+        platform: "instagram",
+        metricsTarget: job.metricsTarget ?? "submissions",
+        baseUrl,
+      });
       return NextResponse.json(
         {
           processed: 1,
@@ -239,6 +246,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       })
       .eq("id", job.runId)
       .eq("status", "running");
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "instagram",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
     return NextResponse.json(
       {
         processed: 1,
@@ -284,6 +297,13 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
         { contestId: job.contestId, runId: job.runId },
       );
     }
+
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "instagram",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
   }
 
   return NextResponse.json({

@@ -27,6 +27,7 @@ import {
   parseMetricsTarget,
   postCampaignCooldownResponse,
 } from "@/lib/post-campaign-enqueue-guards";
+import { claimMultiPlatformChainPlatform } from "@/lib/queue/multi-platform-metrics-chain";
 
 const BATCH_SIZE = 25;
 
@@ -77,13 +78,6 @@ export async function POST(
       );
     }
 
-    if (!cronAuth && isAnalyticsScope(scope) && !isAdmin) {
-      return NextResponse.json(
-        { error: "Admin access required for this analytics scope" },
-        { status: 403 }
-      );
-    }
-
     const { id: contestId } = await params;
     if (!contestId) {
       return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
@@ -105,6 +99,17 @@ export async function POST(
     if (contestError || !contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
+
+    if (!cronAuth && isAnalyticsScope(scope) && !isAdmin) {
+      // Contest owner may run full analytics refresh (multi-platform Refresh Metrics).
+      if (contest.advertiser_id !== user?.id) {
+        return NextResponse.json(
+          { error: "Admin access required for this analytics scope" },
+          { status: 403 }
+        );
+      }
+    }
+
     const platformLower = (contest.platform ?? "").toString().toLowerCase();
     if (!platformLower.includes("youtube")) {
       return NextResponse.json({ error: "Contest is not a YouTube contest" }, { status: 400 });
@@ -172,7 +177,22 @@ export async function POST(
       }).catch((e) => console.warn("[youtube-metrics-refresh] Trigger processor failed:", e));
 
     // Post-campaign: enforce cooldown server-side (cannot bypass via direct enqueue).
-    if (!cronAuth && isPostCampaignTarget) {
+    // chainContinue: mid-chain step after a prior platform finished (skip cooldown).
+    const chainContinue = body?.chainContinue === true;
+    let chainContinueOk = false;
+    if (chainContinue) {
+      const claim = await claimMultiPlatformChainPlatform({
+        contestId,
+        metricsTarget,
+        platform: "youtube",
+      });
+      chainContinueOk = claim.ok;
+      if (!claim.ok) {
+        return NextResponse.json({ error: claim.error }, { status: 409 });
+      }
+    }
+
+    if (!cronAuth && isPostCampaignTarget && !chainContinueOk) {
       const cooldownDenied = postCampaignCooldownResponse(
         contest.post_campaign_last_metrics_updated,
         isAdmin,
@@ -180,7 +200,7 @@ export async function POST(
       if (cooldownDenied) return cooldownDenied;
     }
 
-    if (!cronAuth && !isPostCampaignTarget) {
+    if (!cronAuth && !isPostCampaignTarget && !chainContinueOk) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
       const cooldownMs = isOpportunitiesRefresh
