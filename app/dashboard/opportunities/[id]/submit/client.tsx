@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,32 @@ import {
   CreatorContestRequirementsGate,
 } from "@/components/CreatorContestRequirementsGate";
 import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
+import { getPlatformIcon } from "@/lib/platform-icons";
+import {
+  parseVideoContestPlatforms,
+  VIDEO_PLATFORM_LABELS,
+  type VideoContestPlatform,
+} from "@/lib/video-platform-campaigns";
+
+function platformDisplayLabel(platform: string | null | undefined): string {
+  if (!platform) return "content";
+  if (platform === "youtube") return "YouTube";
+  if (platform === "instagram") return "Instagram";
+  if (platform === "tiktok") return "TikTok";
+  if (platform === "twitter") return "Twitter";
+  const parsed = parseVideoContestPlatforms(platform);
+  if (parsed.length > 0) {
+    return parsed.map((p) => VIDEO_PLATFORM_LABELS[p]).join(", ");
+  }
+  return platform;
+}
+
+function platformContentDescription(platform: string | null | undefined): string {
+  if (platform === "youtube") return "YouTube video/short";
+  if (platform === "instagram") return "Instagram Reel/video";
+  if (platform === "tiktok") return "TikTok video";
+  return "content";
+}
 
 function formatSubmissionInsertError(error: {
   message?: string;
@@ -475,6 +501,7 @@ export default function SubmitContentPage({
     useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const isSubmittingRef = useRef(false);
   const [isFetchingVideo, setIsFetchingVideo] = useState(false);
@@ -489,6 +516,9 @@ export default function SubmitContentPage({
   ] = useState<string | null>(null);
 
   const [contestPlatform, setContestPlatform] = useState<string | null>(null);
+  const [availablePlatforms, setAvailablePlatforms] = useState<
+    VideoContestPlatform[]
+  >([]);
   const settingsConnectHref = getSettingsUrlWithReturnTo(
     getContestSubmitReturnPath(contestId, contestPlatform),
   );
@@ -1323,6 +1353,7 @@ export default function SubmitContentPage({
           "Failed to load contest details. The contest might not exist or an error occurred.",
         );
         setContestPlatform(null);
+        setAvailablePlatforms([]);
         setContest(null);
         setIsLoadingContest(false);
         // Optionally redirect, or let the UI handle the error state
@@ -1374,11 +1405,27 @@ export default function SubmitContentPage({
       }
 
       if (contestData.platform) {
-        setContestPlatform(contestData.platform.toLowerCase());
+        const videoPlatforms = parseVideoContestPlatforms(contestData.platform);
+        if (videoPlatforms.length > 0) {
+          setAvailablePlatforms(videoPlatforms);
+          const platformFromQuery = searchParams
+            ?.get("platform")
+            ?.toLowerCase()
+            .trim();
+          const queriedPlatform = videoPlatforms.find(
+            (p) => p === platformFromQuery,
+          );
+          setContestPlatform(queriedPlatform ?? videoPlatforms[0]);
+        } else {
+          // Non-video platforms (e.g. Twitter) keep the raw platform string.
+          setAvailablePlatforms([]);
+          setContestPlatform(contestData.platform.toLowerCase());
+        }
       } else {
         setError(
           "This contest does not have a specified platform (e.g., YouTube or Instagram).",
         );
+        setAvailablePlatforms([]);
         setContestPlatform(null);
       }
       // Reset page to 1 when contest platform changes or loads
@@ -1388,7 +1435,20 @@ export default function SubmitContentPage({
     }
 
     fetchData();
-  }, [contestId, user, router, supabase]); // Removed redirect from dependencies as it's called within
+    // Intentionally omit searchParams: platform query is read once on contest load;
+    // later platform switches update local state + URL without re-fetching.
+  }, [contestId, user, router, supabase]);
+
+  const handleSubmitPlatformChange = (platform: VideoContestPlatform) => {
+    if (platform === contestPlatform) return;
+    setContestPlatform(platform);
+    setError(null);
+    setMessage(null);
+    router.replace(
+      `/dashboard/opportunities/${contestId}/submit?platform=${encodeURIComponent(platform)}`,
+      { scroll: false },
+    );
+  };
 
   const handleFetchVideo = async () => {
     if (!contentLink) {
@@ -2782,20 +2842,40 @@ export default function SubmitContentPage({
       }
 
       const isMultipleMode = contest?.multiple_submissions_enabled;
-      const allYoutubeVideos = [...selectedVideosFromTabs, ...selectedVideos];
-      const allInstagramReels = [...selectedReelsFromTabs, ...selectedReels];
-      const allTiktokVideos = [
-        ...selectedTiktokVideosFromTabs,
-        ...selectedTiktokVideosFromLinks,
-      ];
+      const allYoutubeVideos =
+        contestPlatform === "youtube"
+          ? [...selectedVideosFromTabs, ...selectedVideos]
+          : [];
+      const allInstagramReels =
+        contestPlatform === "instagram"
+          ? [...selectedReelsFromTabs, ...selectedReels]
+          : [];
+      const allTiktokVideos =
+        contestPlatform === "tiktok"
+          ? [
+              ...selectedTiktokVideosFromTabs,
+              ...selectedTiktokVideosFromLinks,
+            ]
+          : [];
 
       // Determine which handler to call
       if (
         isMultipleMode &&
-        (allYoutubeVideos.length > 0 || allInstagramReels.length > 0)
+        contestPlatform === "youtube" &&
+        allYoutubeVideos.length > 0
       ) {
-        await handleMultipleSubmissions(allYoutubeVideos, allInstagramReels);
-      } else if (isMultipleMode && allTiktokVideos.length > 0) {
+        await handleMultipleSubmissions(allYoutubeVideos, []);
+      } else if (
+        isMultipleMode &&
+        contestPlatform === "instagram" &&
+        allInstagramReels.length > 0
+      ) {
+        await handleMultipleSubmissions([], allInstagramReels);
+      } else if (
+        isMultipleMode &&
+        contestPlatform === "tiktok" &&
+        allTiktokVideos.length > 0
+      ) {
         await handleMultipleTiktokSubmission(allTiktokVideos);
       } else if (
         contestPlatform === "youtube" &&
@@ -3236,16 +3316,7 @@ export default function SubmitContentPage({
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-xl sm:text-2xl font-bold leading-none">
-          Submit Content from{" "}
-          {contestPlatform === "youtube"
-            ? "YouTube"
-            : contestPlatform === "instagram"
-              ? "Instagram"
-              : contestPlatform === "tiktok"
-                ? "TikTok"
-                : contestPlatform === "twitter"
-                  ? "Twitter"
-                  : contestPlatform}
+          Submit Content from {platformDisplayLabel(contestPlatform)}
         </h1>
       </div>
 
@@ -3280,15 +3351,8 @@ export default function SubmitContentPage({
             <div>
               <CardTitle>Content Submission</CardTitle>
               <CardDescription>
-                Submit your{" "}
-                {contestPlatform === "youtube"
-                  ? "YouTube video/short"
-                  : contestPlatform === "instagram"
-                    ? "Instagram Reel/video"
-                    : contestPlatform === "tiktok"
-                      ? "TikTok video"
-                      : "content"}{" "}
-                for this contest.
+                Submit your {platformContentDescription(contestPlatform)} for
+                this contest.
               </CardDescription>
             </div>
             <div className="flex items-center gap-3 flex-row">
@@ -3309,21 +3373,24 @@ export default function SubmitContentPage({
                   isFetchingInstagramMedia ||
                   isFetchingTiktokVideo ||
                   (contest?.multiple_submissions_enabled
-                    ? selectedVideosFromTabs.length === 0 &&
-                    selectedReelsFromTabs.length === 0 &&
-                    selectedVideos.length === 0 &&
-                    selectedReels.length === 0 &&
-                    selectedTiktokVideosFromTabs.length === 0 &&
-                    selectedTiktokVideosFromLinks.length === 0
+                    ? (contestPlatform === "youtube" &&
+                        selectedVideosFromTabs.length === 0 &&
+                        selectedVideos.length === 0) ||
+                      (contestPlatform === "instagram" &&
+                        selectedReelsFromTabs.length === 0 &&
+                        selectedReels.length === 0) ||
+                      (contestPlatform === "tiktok" &&
+                        selectedTiktokVideosFromTabs.length === 0 &&
+                        selectedTiktokVideosFromLinks.length === 0)
                     : (contestPlatform === "youtube" &&
-                      !selectedVideo &&
-                      !videoPreview) ||
-                    (contestPlatform === "instagram" &&
-                      !selectedReel &&
-                      !instagramMediaPreview) ||
-                    (contestPlatform === "tiktok" &&
-                      !tiktokVideoPreview &&
-                      !selectedTiktokVideo))
+                        !selectedVideo &&
+                        !videoPreview) ||
+                      (contestPlatform === "instagram" &&
+                        !selectedReel &&
+                        !instagramMediaPreview) ||
+                      (contestPlatform === "tiktok" &&
+                        !tiktokVideoPreview &&
+                        !selectedTiktokVideo))
                 }
                 className={cn(
                   "w-full sm:w-auto",
@@ -3338,6 +3405,51 @@ export default function SubmitContentPage({
               </Button>
             </div>
           </div>
+
+          {availablePlatforms.length > 1 && (
+            <div className="mb-6 space-y-2">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-white" : "text-foreground",
+                )}
+              >
+                Choose platform to submit from
+              </p>
+              <div className="flex flex-wrap gap-3 w-full">
+                {availablePlatforms.map((platform) => {
+                  const isActive = contestPlatform === platform;
+                  return (
+                    <button
+                      key={platform}
+                      type="button"
+                      onClick={() => handleSubmitPlatformChange(platform)}
+                      className={cn(
+                        "flex-1 min-w-[7.5rem] min-h-12 inline-flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-medium border transition-colors whitespace-nowrap",
+                        isActive
+                          ? "bg-[#7F39EC] text-white border-[#7F39EC] shadow-sm"
+                          : isDark
+                            ? "bg-transparent text-white border-gray-400 hover:bg-[#D9C0FF26]"
+                            : "bg-white text-[#7F39EC] border-[#7F39EC] hover:bg-purple-50",
+                      )}
+                    >
+                      <span className="shrink-0 inline-flex [&_svg]:text-current">
+                        {getPlatformIcon(platform, "sm", "currentColor")}
+                      </span>
+                      {VIDEO_PLATFORM_LABELS[platform]}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This contest accepts{" "}
+                {availablePlatforms
+                  .map((p) => VIDEO_PLATFORM_LABELS[p])
+                  .join(", ")}
+                . Select one platform to continue.
+              </p>
+            </div>
+          )}
 
           {/* YOUTUBE UI BLOCK */}
           {contestPlatform === "youtube" && (

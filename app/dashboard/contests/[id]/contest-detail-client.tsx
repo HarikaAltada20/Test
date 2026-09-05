@@ -191,6 +191,14 @@ import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-co
 function milestoneMvCreatorIdKey(id: unknown): string {
   return String(id ?? "").trim();
 }
+
+function submissionMatchesVideoPlatform(
+  submission: { platform?: string | null },
+  platform: VideoContestPlatform,
+): boolean {
+  const raw = String(submission.platform || "").toLowerCase();
+  return raw === platform || raw.includes(platform);
+}
 import {
   buildDualRewardCreatorCapSplitMaps,
   splitDualPaidTotalByExpectedWeights,
@@ -1657,6 +1665,10 @@ export default function ContestDetailClient({
   );
   const [overviewPlatformTab, setOverviewPlatformTab] =
     useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const [submissionsPlatformTab, setSubmissionsPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const [analyticsPlatformTab, setAnalyticsPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
   useEffect(() => {
     if (
       overviewPlatformTab !== ALL_PLATFORM_TAB &&
@@ -1665,10 +1677,36 @@ export default function ContestDetailClient({
       setOverviewPlatformTab(ALL_PLATFORM_TAB);
     }
   }, [overviewVideoPlatforms, overviewPlatformTab]);
+  useEffect(() => {
+    if (
+      submissionsPlatformTab !== ALL_PLATFORM_TAB &&
+      !overviewVideoPlatforms.includes(submissionsPlatformTab)
+    ) {
+      setSubmissionsPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [overviewVideoPlatforms, submissionsPlatformTab]);
+  useEffect(() => {
+    if (
+      analyticsPlatformTab !== ALL_PLATFORM_TAB &&
+      !overviewVideoPlatforms.includes(analyticsPlatformTab)
+    ) {
+      setAnalyticsPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [overviewVideoPlatforms, analyticsPlatformTab]);
   const overviewScopedPlatform: VideoContestPlatform | null =
     overviewPlatformTab !== ALL_PLATFORM_TAB &&
     isVideoContestPlatform(overviewPlatformTab)
       ? overviewPlatformTab
+      : null;
+  const submissionsScopedPlatform: VideoContestPlatform | null =
+    submissionsPlatformTab !== ALL_PLATFORM_TAB &&
+    isVideoContestPlatform(submissionsPlatformTab)
+      ? submissionsPlatformTab
+      : null;
+  const analyticsScopedPlatform: VideoContestPlatform | null =
+    analyticsPlatformTab !== ALL_PLATFORM_TAB &&
+    isVideoContestPlatform(analyticsPlatformTab)
+      ? analyticsPlatformTab
       : null;
   const overviewPersistedCampaigns = useMemo(
     () =>
@@ -3337,15 +3375,39 @@ export default function ContestDetailClient({
     setSubmissionsHydrateRetry((n) => n + 1);
   }, []);
 
+  const submissionsForStatusCounts = useMemo(() => {
+    if (!submissionsScopedPlatform) return currentSubmissions;
+    return currentSubmissions.filter((submission) =>
+      submissionMatchesVideoPlatform(submission, submissionsScopedPlatform),
+    );
+  }, [currentSubmissions, submissionsScopedPlatform]);
+
+  const submissionsPlatformTabCounts = useMemo(() => {
+    const counts: Partial<Record<PlatformTabValue, number>> = {
+      [ALL_PLATFORM_TAB]: currentSubmissions.length,
+    };
+    for (const platform of overviewVideoPlatforms) {
+      counts[platform] = currentSubmissions.filter((submission) =>
+        submissionMatchesVideoPlatform(submission, platform),
+      ).length;
+    }
+    return counts;
+  }, [currentSubmissions, overviewVideoPlatforms]);
+
   const loadedSubmissionStatusCounts = useMemo(
-    () => computeContestDetailSubmissionStatusCounts(currentSubmissions),
-    [currentSubmissions],
+    () =>
+      computeContestDetailSubmissionStatusCounts(submissionsForStatusCounts),
+    [submissionsForStatusCounts],
   );
 
   const liveSubmissionStatusCounts = useMemo(() => {
-    if (!submissionsLoadComplete) return submissionStatusCounts;
-    return loadedSubmissionStatusCounts;
+    // Platform-scoped counts must come from loaded rows (server totals are all-platform).
+    if (submissionsScopedPlatform || submissionsLoadComplete) {
+      return loadedSubmissionStatusCounts;
+    }
+    return submissionStatusCounts;
   }, [
+    submissionsScopedPlatform,
     submissionsLoadComplete,
     submissionStatusCounts,
     loadedSubmissionStatusCounts,
@@ -3404,6 +3466,26 @@ export default function ContestDetailClient({
     });
   }, [leaderboardSubmissions, analyticsQualityScoreFilters]);
 
+  const analyticsPlatformScopedSubmissions = useMemo(() => {
+    if (!analyticsScopedPlatform) return analyticsQualityFilteredSubmissions;
+    return analyticsQualityFilteredSubmissions.filter((submission) =>
+      submissionMatchesVideoPlatform(submission, analyticsScopedPlatform),
+    );
+  }, [analyticsQualityFilteredSubmissions, analyticsScopedPlatform]);
+
+  const analyticsPlatformTabCounts = useMemo(() => {
+    const counts: Partial<Record<PlatformTabValue, number>> = {
+      [ALL_PLATFORM_TAB]: analyticsQualityFilteredSubmissions.length,
+    };
+    for (const platform of overviewVideoPlatforms) {
+      counts[platform] = analyticsQualityFilteredSubmissions.filter(
+        (submission) =>
+          submissionMatchesVideoPlatform(submission, platform),
+      ).length;
+    }
+    return counts;
+  }, [analyticsQualityFilteredSubmissions, overviewVideoPlatforms]);
+
   const analyticsQualityScoreFilterButtonLabel = useMemo(() => {
     if (analyticsQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
@@ -3439,6 +3521,17 @@ export default function ContestDetailClient({
       const status = getStatus(submission);
       const isTwitterTweet = (submission as any).is_twitter_tweet === true;
 
+      if (submissionsScopedPlatform) {
+        if (
+          !submissionMatchesVideoPlatform(
+            submission,
+            submissionsScopedPlatform,
+          )
+        ) {
+          return false;
+        }
+      }
+
       if (activeStatusTab !== "all") {
         if (activeStatusTab === "not_rejected") {
           if (status === "rejected") return false;
@@ -3460,7 +3553,12 @@ export default function ContestDetailClient({
 
       return true;
     });
-  }, [qualityFilteredSubmissions, activeStatusTab, activeEligibilityTab]);
+  }, [
+    qualityFilteredSubmissions,
+    activeStatusTab,
+    activeEligibilityTab,
+    submissionsScopedPlatform,
+  ]);
 
   const sortedSubmissions = useMemo(() => {
     return [...filteredSubmissions].sort((a, b) => {
@@ -4028,7 +4126,7 @@ export default function ContestDetailClient({
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
   const filteredAnalyticsSubmissions =
-    analyticsQualityFilteredSubmissions.filter((submission) => {
+    analyticsPlatformScopedSubmissions.filter((submission) => {
       const status = getStatus(submission);
 
       if (activeAnalyticsTab === "all") return true;
@@ -4067,10 +4165,10 @@ export default function ContestDetailClient({
   const analyticsTabCounts = useMemo(
     () =>
       getAnalyticsTabCounts(
-        analyticsQualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
+        analyticsPlatformScopedSubmissions as ContestAnalyticsExportSubmission[],
         (submission) => getStatus(submission as Submission),
       ),
-    [analyticsQualityFilteredSubmissions],
+    [analyticsPlatformScopedSubmissions],
   );
 
   const showsAnalyticsExpectedRewardMetrics =
@@ -6369,7 +6467,13 @@ export default function ContestDetailClient({
     setCurrentPage(1);
     setCreatorWisePage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on filter/sort changes
-  }, [activeStatusTab, viewMode, sortOption, submissionQualityScoreFilters]);
+  }, [
+    activeStatusTab,
+    submissionsPlatformTab,
+    viewMode,
+    sortOption,
+    submissionQualityScoreFilters,
+  ]);
 
   // Keep the table in view when changing page or page size (skip first mount)
   const submissionsPageScrollReadyRef = useRef(false);
@@ -19547,6 +19651,20 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
+                {/* Platform filter (multi-platform video contests) — above reward totals */}
+                {overviewVideoPlatforms.length >= 2 && (
+                  <div className="py-2">
+                    <ContestDetailPlatformTabs
+                      platforms={overviewVideoPlatforms}
+                      active={submissionsPlatformTab}
+                      onChange={setSubmissionsPlatformTab}
+                      isDark={isDark}
+                      fullWidth
+                      counts={submissionsPlatformTabCounts}
+                    />
+                  </div>
+                )}
+
                 {/* Financial totals for selected status tab (leaderboard/CPM/milestone only) */}
                 {(currentContest?.contest_type === "leaderboard" ||
                   isCpmContestType(currentContest?.contest_type) ||
@@ -28650,7 +28768,7 @@ export default function ContestDetailClient({
                             aria-hidden
                           />
                         ) : null}
-                        All ({analyticsQualityFilteredSubmissions.length || 0})
+                        All ({analyticsPlatformScopedSubmissions.length || 0})
                       </TabsTrigger>
                       <TabsTrigger
                         value="not_rejected"
@@ -28669,7 +28787,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Not Rejected (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) !== "rejected",
                         ).length || 0}
                         )
@@ -28691,7 +28809,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Verified (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "verified",
                         ).length || 0}
                         )
@@ -28713,7 +28831,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Paid (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "paid",
                         ).length || 0}
                         )
@@ -28735,7 +28853,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Pending (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "pending",
                         ).length || 0}
                         )
@@ -28757,7 +28875,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Rejected (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "rejected",
                         ).length || 0}
                         )
@@ -28779,7 +28897,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Verified/Paid (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) =>
                             getStatus(s) === "verified" ||
                             getStatus(s) === "paid",
@@ -28789,6 +28907,18 @@ export default function ContestDetailClient({
                     </TabsList>
                   </Tabs>
                 </div>
+                {overviewVideoPlatforms.length >= 2 && (
+                  <div className="mt-3">
+                    <ContestDetailPlatformTabs
+                      platforms={overviewVideoPlatforms}
+                      active={analyticsPlatformTab}
+                      onChange={setAnalyticsPlatformTab}
+                      isDark={isDark}
+                      fullWidth
+                      counts={analyticsPlatformTabCounts}
+                    />
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 {isPostCampaignLeaderboard &&
@@ -30081,7 +30211,7 @@ export default function ContestDetailClient({
                       >
                         <p className="text-lg font-medium">Total Submissions</p>
                         <p className="text-xl font-bold">
-                          {analyticsQualityFilteredSubmissions.length || 0}
+                          {analyticsPlatformScopedSubmissions.length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
@@ -30116,7 +30246,7 @@ export default function ContestDetailClient({
                         <p className="text-lg font-medium">Approved Content</p>
                         <p className="text-xl font-bold">
                           {" "}
-                          {analyticsQualityFilteredSubmissions.filter((s) => {
+                          {analyticsPlatformScopedSubmissions.filter((s) => {
                             const status = getStatus(s);
                             return status === "verified" || status === "paid";
                           }).length || 0}
