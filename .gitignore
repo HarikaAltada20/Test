@@ -36,3 +36,16 @@ SUPABASE/backup-storage.local.ps1
 SUPABASE/supabase-backups/
 SUPABASE_BACKUP/
 db/backups/*.dump
+
+# Desktop downloader (Tauri)
+apps/goc-downloader/node_modules/
+apps/goc-downloader/dist/
+apps/goc-downloader/src-tauri/target/
+apps/goc-downloader/src-tauri/binaries/
+apps/goc-downloader/.keys/
+apps/goc-downloader/*.exe
+apps/goc-downloader/*.msi
+apps/goc-downloader/*.nsis.zip
+apps/goc-downloader/logs/
+**/*.gocdownload.local
+.env.goc-download.local

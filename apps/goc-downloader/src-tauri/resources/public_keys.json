@@ -1,0 +1,9 @@
+{
+  "keys": [
+    {
+      "keyId": "dev-1",
+      "algorithm": "Ed25519",
+      "publicKeyBase64": "JxuVvASQ3pmLCGVgwC9YREV89Z1i5pbysO7PU+RG9oU="
+    }
+  ]
+}

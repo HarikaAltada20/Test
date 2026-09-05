@@ -6,22 +6,16 @@ import { Readable } from "stream";
 import {
   isAdminDownloadUser,
   MAX_BULK_VIDEO_DOWNLOADS,
-  submissionOwnedByDownloadUser,
   verifyAdminOrBrandDownloadAccess,
 } from "@/lib/video-download-auth";
 import {
-  joinedRecordAdvertiserId,
-  joinedRecordUsername,
   parseVideoFilenamePattern,
-  uniqueVideoDownloadFilename,
   bulkZipFilenameFromContestTitle,
-  toBulkZipDownloadFilename,
 } from "@/lib/video-download-filename";
 import {
   createVideoDownloadBatchAndEnqueueFirst,
   isVideoDownloadQueueEnabled,
   type VideoDownloadBatchPart,
-  type VideoDownloadItem,
 } from "@/lib/queue/video-download-queue";
 import { executeQueuedVideoDownloads } from "@/lib/video-download-execute";
 import { kickProcessVideoDownloadQueue } from "@/lib/video-download-kick";
@@ -29,26 +23,12 @@ import {
   chunkArray,
   parseVideosPerZip,
 } from "@/lib/video-download-ui";
-import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import {
+  resolveBulkDownloadItems,
+  zipPartFilename,
+} from "@/lib/bulk-download-resolve-items";
 
 export const maxDuration = 300;
-
-type ResolvedDownloadItem = VideoDownloadItem & { submissionId?: string };
-
-function isSupportedVideoUrl(
-  url: string,
-): { ok: true; isInstagram: boolean } | { ok: false } {
-  const isInstagram = url.includes("instagram.com");
-  const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
-  if (!isInstagram && !isYouTube) return { ok: false };
-  return { ok: true, isInstagram };
-}
-
-function zipPartFilename(base: string, partIndex: number, partTotal: number): string {
-  const cleaned = toBulkZipDownloadFilename(base).replace(/\.zip$/i, "");
-  if (partTotal <= 1) return `${cleaned}.zip`;
-  return `${cleaned}_part_${partIndex}_of_${partTotal}.zip`;
-}
 
 export async function POST(request: Request) {
   const requestId = randomUUID().substring(0, 8);
@@ -127,113 +107,40 @@ export async function POST(request: Request) {
       );
     }
 
-    const resolvedItems: ResolvedDownloadItem[] = [];
-    let contestTitle: string | null = null;
-
     if (submissionIdList.length > 0) {
       console.log(`[BULK-${requestId}] Resolving ${submissionIdList.length} submission IDs`);
-      // PostgREST rejects huge `.in(id, …)` filters (Bad Request). Chunk the lookup.
-      const { data: submissions, error: submissionsError } =
-        await fetchByIdsInChunks<{
-          id: string;
-          content_link: string | null;
-          platform: string | null;
-          views: number | null;
-          status: string | null;
-          quality_score: number | null;
-          contests: unknown;
-          users: unknown;
-        }>({
-          ids: submissionIdList,
-          fetchChunk: (chunkIds) =>
-            supabase
-              .from("submissions")
-              .select(`
-                id,
-                content_link,
-                platform,
-                views,
-                status,
-                quality_score,
-                contests!inner(id, title, advertiser_id),
-                users!creator_id(username)
-              `)
-              .in("id", chunkIds),
-        });
-
-      if (submissionsError) {
-        console.error(`[BULK-${requestId}] Database fetch error:`, submissionsError);
-        return NextResponse.json(
-          { error: "Failed to fetch submissions information" },
-          { status: 500 },
-        );
-      }
-
-      const byId = new Map((submissions || []).map((sub) => [String(sub.id), sub]));
-      const usedFilenames = new Set<string>();
-      const sortTotal = submissionIdList.length;
-
-      // Preserve client selection order so ZIP parts match the UI batches.
-      // Prefix filenames with sort rank so Explorer name order matches the
-      // selected leaderboard sort (e.g. views high → low).
-      for (let index = 0; index < submissionIdList.length; index++) {
-        const submissionId = submissionIdList[index];
-        const sub = byId.get(submissionId);
-        if (!sub) continue;
-        const advertiserId = joinedRecordAdvertiserId(sub.contests);
-        if (!submissionOwnedByDownloadUser(user, advertiserId)) continue;
-
-        if (!contestTitle) {
-          const contest = Array.isArray(sub.contests) ? sub.contests[0] : sub.contests;
-          const title = (contest as { title?: string } | null)?.title;
-          if (typeof title === "string" && title.trim()) contestTitle = title.trim();
-        }
-        if (!sub.content_link) continue;
-        const supported = isSupportedVideoUrl(sub.content_link);
-        if (!supported.ok) continue;
-
-        const filename = uniqueVideoDownloadFilename(
-          usedFilenames,
-          namingPattern,
-          {
-            views: sub.views,
-            username: joinedRecordUsername(sub.users),
-            status: typeof sub.status === "string" ? sub.status : null,
-            qualityScore:
-              sub.quality_score == null ? null : Number(sub.quality_score),
-            uniqueSuffix: String(sub.id).slice(0, 8),
-            sortRank: index + 1,
-            sortTotal,
-          },
-          format,
-        );
-
-        resolvedItems.push({
-          submissionId: String(sub.id),
-          url: sub.content_link,
-          filename,
-          isInstagram: supported.isInstagram,
-        });
-      }
-
-      if (resolvedItems.length === 0) {
-        return NextResponse.json(
-          { error: "No accessible submissions found for download" },
-          { status: 403 },
-        );
-      }
     } else if (urlList.length > 0) {
       console.log(`[BULK-${requestId}] Resolving ${urlList.length} admin custom URLs`);
-      for (let i = 0; i < urlList.length; i++) {
-        const url = urlList[i];
-        const supported = isSupportedVideoUrl(url);
-        if (!supported.ok) continue;
-        resolvedItems.push({
-          url,
-          filename: `video_${i + 1}.${format}`,
-          isInstagram: supported.isInstagram,
-        });
+    }
+
+    const resolved = await resolveBulkDownloadItems({
+      supabase,
+      user,
+      submissionIds: submissionIdList,
+      urls: urlList,
+      namingPattern,
+      format,
+    });
+
+    if (!resolved.ok) {
+      if (resolved.status >= 500) {
+        console.error(`[BULK-${requestId}] Resolve error:`, resolved.error);
       }
+      return NextResponse.json(
+        { error: resolved.error },
+        { status: resolved.status },
+      );
+    }
+
+    // Cloud path: silently skip rejected items (ownership / unsupported / missing).
+    const resolvedItems = resolved.result.items;
+    const contestTitle = resolved.result.contestTitle;
+
+    if (submissionIdList.length > 0 && resolvedItems.length === 0) {
+      return NextResponse.json(
+        { error: "No accessible submissions found for download" },
+        { status: 403 },
+      );
     }
 
     if (resolvedItems.length === 0) {

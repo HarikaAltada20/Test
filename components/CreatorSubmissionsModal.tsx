@@ -5352,6 +5352,16 @@ export function CreatorSubmissionsModal({
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={bulkDownloading}
         onConfirm={runBulkDownloadReels}
+        contestId={contest?.id ? String(contest.id) : undefined}
+        submissionIds={Array.from(selectedSubmissions)}
+        hasInstagramSelection={Array.from(selectedSubmissions).some((id) => {
+          const sub = submissions.find((entry) => entry.id === id);
+          const link = sub?.content_link || "";
+          const platform = String(sub?.platform || "").toLowerCase();
+          return (
+            link.includes("instagram.com") || platform.includes("instagram")
+          );
+        })}
       />
 
       <VerifyQualityDialog

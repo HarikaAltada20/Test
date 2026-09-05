@@ -441,6 +441,11 @@ export type CreateBulkVideoDownloadJobInput = {
   submissionIds: string[];
   zipParts: BulkVideoDownloadZipPart[];
   itemStatuses?: BulkVideoDownloadItemStatus[];
+  /** cloud (default) | desktop — requires 20260905 migration. */
+  source?: "cloud" | "desktop";
+  deliveryMode?: string | null;
+  /** Initial job status; desktop jobs start queued until the app reports started. */
+  status?: BulkVideoDownloadJobStatus;
 };
 
 export async function createBulkVideoDownloadJob(
@@ -449,30 +454,65 @@ export async function createBulkVideoDownloadJob(
   const admin = createAdminClient();
   const submissionIds = input.submissionIds.filter(Boolean);
 
+  const status = input.status ?? "running";
+  const insertRow: Record<string, unknown> = {
+    id: input.id,
+    contest_id: input.contestId,
+    user_id: input.userId,
+    user_type: input.userType,
+    status,
+    total_count: input.totalCount || submissionIds.length,
+    success_count: 0,
+    failed_count: 0,
+    zip_part_index: 1,
+    zip_part_total: Math.max(1, input.zipPartTotal),
+    videos_per_zip: input.videosPerZip,
+    naming_pattern: input.namingPattern ?? null,
+    file_name_prefix: input.fileNamePrefix ?? null,
+    submission_ids: submissionIds,
+    zip_parts: input.zipParts,
+    started_at: status === "queued" ? null : new Date().toISOString(),
+  };
+  if (input.source) insertRow.source = input.source;
+  if (input.deliveryMode !== undefined) {
+    insertRow.delivery_mode = input.deliveryMode;
+  }
+
   const { data, error } = await admin
     .from("bulk_video_download_jobs")
-    .insert({
-      id: input.id,
-      contest_id: input.contestId,
-      user_id: input.userId,
-      user_type: input.userType,
-      status: "running",
-      total_count: input.totalCount || submissionIds.length,
-      success_count: 0,
-      failed_count: 0,
-      zip_part_index: 1,
-      zip_part_total: Math.max(1, input.zipPartTotal),
-      videos_per_zip: input.videosPerZip,
-      naming_pattern: input.namingPattern ?? null,
-      file_name_prefix: input.fileNamePrefix ?? null,
-      submission_ids: submissionIds,
-      zip_parts: input.zipParts,
-      started_at: new Date().toISOString(),
-    })
+    .insert(insertRow)
     .select("*")
     .single();
 
   if (error) {
+    // Retry without desktop-only columns if migration not applied yet.
+    const message = error.message || "";
+    const missingDesktopCols =
+      /source|delivery_mode/i.test(message) &&
+      (input.source || input.deliveryMode !== undefined);
+    if (missingDesktopCols) {
+      delete insertRow.source;
+      delete insertRow.delivery_mode;
+      const retry = await admin
+        .from("bulk_video_download_jobs")
+        .insert(insertRow)
+        .select("*")
+        .single();
+      if (retry.error) {
+        console.error("[bulk-video-download-jobs] create failed:", retry.error);
+        return { data: null, error: retry.error.message };
+      }
+      const job = normalizeJobRow(retry.data as Record<string, unknown>);
+      const itemsResult = await replaceJobItems(
+        job.id,
+        submissionIds,
+        input.itemStatuses,
+      );
+      if (itemsResult.error) {
+        return { data: null, error: itemsResult.error };
+      }
+      return { data: job };
+    }
     console.error("[bulk-video-download-jobs] create failed:", error);
     return { data: null, error: error.message };
   }

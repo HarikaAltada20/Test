@@ -1,0 +1,124 @@
+# Windows NSIS release for Game of Creators Desktop Downloader (apps/goc-downloader).
+# Builds artifacts, prints SHA256 checksums, and documents code-signing secret placeholders.
+#
+# Required repository secrets (configure in GitHub; never commit real values):
+#   GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64  — optional Authenticode PFX (base64)
+#   GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PASSWORD    — optional PFX password
+#   TAURI_SIGNING_PRIVATE_KEY                     — optional Tauri updater key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD            — optional
+#
+# Public verification key for .gocdownload manifests is distributed with the app;
+# server signing private key stays in Vercel/env (GOC_DOWNLOAD_SIGNING_PRIVATE_KEY).
+
+name: goc-downloader-release
+
+on:
+  push:
+    tags:
+      - "goc-downloader-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag override (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: goc-downloader-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build Windows NSIS
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/goc-downloader
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/goc-downloader/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Configure code signing (optional)
+        shell: pwsh
+        env:
+          GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64) {
+            Write-Host "No Authenticode PFX secret configured; building unsigned installer."
+            exit 0
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "goc-downloader-codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64))
+          echo "WINDOWS_CERTIFICATE_PATH=$pfxPath" >> $env:GITHUB_ENV
+          echo "WINDOWS_CERTIFICATE_PASSWORD=$env:GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
+
+      - name: Build Tauri NSIS installer
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri:build
+
+      - name: Collect artifacts and checksums
+        shell: pwsh
+        run: |
+          $bundle = "src-tauri/target/release/bundle"
+          if (-not (Test-Path $bundle)) {
+            Write-Error "Bundle output missing at $bundle"
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path "release-out" | Out-Null
+          Get-ChildItem -Path $bundle -Recurse -Include *.exe,*.msi,*.nsis.zip |
+            ForEach-Object {
+              Copy-Item $_.FullName -Destination "release-out/$($_.Name)" -Force
+            }
+          $checksumFile = "release-out/SHA256SUMS.txt"
+          Get-ChildItem "release-out" -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Add-Content $checksumFile
+            Write-Host "$hash  $($_.Name)"
+          }
+          if (-not (Test-Path $checksumFile)) {
+            Write-Error "No installer artifacts found under $bundle"
+            exit 1
+          }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: goc-downloader-windows
+          path: apps/goc-downloader/release-out/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/goc-downloader/release-out/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

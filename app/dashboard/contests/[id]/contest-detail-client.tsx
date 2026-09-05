@@ -31750,6 +31750,22 @@ export default function ContestDetailClient({
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
         onConfirm={runNormalViewBulkDownload}
+        contestId={
+          currentContest?.id ? String(currentContest.id) : undefined
+        }
+        submissionIds={sortedSubmissions
+          .map((submission) => submission.id)
+          .filter((id) => normalViewSelectedSubmissions.has(id))}
+        hasInstagramSelection={Array.from(normalViewSelectedSubmissions).some(
+          (id) => {
+            const sub = currentSubmissions.find((entry) => entry.id === id);
+            const link = sub?.content_link || "";
+            const platform = String(sub?.platform || "").toLowerCase();
+            return (
+              link.includes("instagram.com") || platform.includes("instagram")
+            );
+          },
+        )}
       />
 
       <BulkVideoDownloadContestStatus

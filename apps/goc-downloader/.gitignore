@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+
+# Sidecar binaries (fetched by scripts)
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
+.sidecar-cache/
+scripts/checksums.local.json
+
+# Dev keys (never commit private keys)
+.keys/
+*.pem
+*.pkcs8
+
+# Logs
+*.log
+logs/
+src-tauri/*.log
+
+# Installers / release artifacts
+*.msi
+*.nsis.zip
+*.exe
+src-tauri/nsis/
+src-tauri/wix/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+coverage/
+*.tsbuildinfo

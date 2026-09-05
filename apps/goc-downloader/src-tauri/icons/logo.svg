@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Game of Creators">
+  <rect width="64" height="64" rx="8" fill="#06021D"/>
+  <path d="M12 40 L32 12 L52 40 Z" fill="none" stroke="#C9A227" stroke-width="3"/>
+  <circle cx="32" cy="36" r="6" fill="#C9A227"/>
+</svg>
