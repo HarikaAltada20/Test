@@ -26,9 +26,14 @@ import {
   SUBMISSION_MODERATION_LOCKED_MESSAGE,
 } from "@/lib/post-contest-moderation-lock";
 import {
-  buildMilestoneSubmissionPayoutCentsMap,
+  buildMilestoneSubmissionPayoutCentsMapFromDetails,
   getMilestoneCappedPayoutCentsForCreatorSubmission,
 } from "@/lib/milestone-contest-expected-spend";
+import {
+  contestHasUsableMilestoneLadder,
+  isKeyedMaxEarningsMap,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
 import {
   loadDualCreatorCapMaps,
   type DualCreatorCapMaps,
@@ -561,7 +566,9 @@ export async function processVerifySubmission(
         ? (contest as any).contest_based_details.milestone_contest.milestones
         : [];
       const cpmCfg = (contest as any)?.contest_based_details?.cpm_contest;
-      const maxCap = Number(maxEarningsPerCreator || 0);
+      const maxCap = Number(
+        typeof maxEarningsPerCreator === "number" ? maxEarningsPerCreator : 0,
+      );
 
       const result = await loadDualCreatorCapMaps(
         supabaseAdmin,
@@ -570,6 +577,12 @@ export async function processVerifySubmission(
         milestones,
         cpmCfg,
         maxCap,
+        {
+          details: (contest as any)?.contest_based_details ?? null,
+          contestPlatformCsv: (contest as any)?.platform ?? null,
+          maxEarningsPerCreator: (contest as any)?.max_earnings_per_creator,
+          bonusDetails: (contest as any)?.bonus_details,
+        },
       );
       if (result.error) {
         dualCreatorCapFetchError = result.error;
@@ -709,14 +722,12 @@ export async function processVerifySubmission(
     // Handle flat fee bonus payments
     if (action === "mark_bonus_paid" || action === "mark_both_paid") {
       if (contest.contest_type === "dual_rewards") {
-        const milestones = Array.isArray(
-          (contest as any)?.contest_based_details?.milestone_contest
-            ?.milestones,
-        )
-          ? (contest as any).contest_based_details.milestone_contest.milestones
-          : [];
-
-        if (milestones.length === 0) {
+        if (
+          !contestHasUsableMilestoneLadder(
+            (contest as any)?.contest_based_details ?? null,
+            (contest as any)?.platform ?? null,
+          )
+        ) {
           return NextResponse.json(
             { error: "No milestones configured for this dual rewards contest" },
             { status: 400 },
@@ -1260,14 +1271,7 @@ export async function processVerifySubmission(
         if (customAmount && customAmount > 0) {
           rewardAmount = customAmount;
         } else if (contest.contest_type === "milestone") {
-          const milestoneDetails = (contest as any)?.contest_based_details
-            ?.milestone_contest;
-          const milestones = Array.isArray(milestoneDetails?.milestones)
-            ? milestoneDetails.milestones
-            : [];
-
-          if (milestones.length > 0) {
-            const { data: payoutEligibleSubs, error: payoutSubsErr } =
+          const { data: payoutEligibleSubs, error: payoutSubsErr } =
               await fetchContestSubmissionsAllPages(
                 supabaseAdmin,
                 submissionFull.contest_id,
@@ -1295,13 +1299,17 @@ export async function processVerifySubmission(
                 other_stats: sub.other_stats,
               }));
               const payoutBySubmissionId =
-                buildMilestoneSubmissionPayoutCentsMap(records, milestones);
+                buildMilestoneSubmissionPayoutCentsMapFromDetails(
+                  records,
+                  (contest as any)?.contest_based_details ?? null,
+                  (contest as any)?.platform ?? null,
+                );
 
               const { data: creatorSubs, error: creatorSubsErr } =
                 await fetchContestSubmissionsAllPages(
                   supabaseAdmin,
                   submissionFull.contest_id,
-                  "id, created_at",
+                  "id, created_at, platform",
                   {
                     creatorId: submissionFull.creator_id,
                     order: { column: "created_at", ascending: true },
@@ -1313,6 +1321,7 @@ export async function processVerifySubmission(
                   ? creatorSubs.map((r: any) => ({
                       id: String(r.id),
                       created_at: r.created_at,
+                      platform: r.platform,
                     }))
                   : [
                       {
@@ -1320,6 +1329,7 @@ export async function processVerifySubmission(
                         created_at:
                           submissionFull.created_at ||
                           new Date(0).toISOString(),
+                        platform: submissionFull.platform,
                       },
                     ];
 
@@ -1327,13 +1337,19 @@ export async function processVerifySubmission(
                 getMilestoneCappedPayoutCentsForCreatorSubmission(
                   payoutBySubmissionId,
                   creatorRows,
-                  maxEarningsPerCreator,
+                  typeof maxEarningsPerCreator === "number"
+                    ? maxEarningsPerCreator
+                    : null,
                   String(submissionFull.id),
+                  (sub) =>
+                    resolveMaxEarningsCentsForSubmission(
+                      contest as any,
+                      sub.platform,
+                    ),
                 );
 
               rewardAmount = cappedBase;
             }
-          }
         } else if (contest.contest_type === "leaderboard" && !customAmount) {
           // Per-submission prize by contest-wide views rank.
           const prizes =
@@ -1357,16 +1373,16 @@ export async function processVerifySubmission(
           }
           rewardAmount = prizeResult.prizeCents;
           // Match bulk-payment + creator-wise Expected Reward: respect max_earnings_per_creator.
-          if (
-            rewardAmount > 0 &&
-            maxEarningsPerCreator &&
-            Number(maxEarningsPerCreator) > 0
-          ) {
+          const leaderboardCap = resolveMaxEarningsCentsForSubmission(
+            contest as any,
+            submissionFull.platform,
+          );
+          if (rewardAmount > 0 && leaderboardCap && leaderboardCap > 0) {
             const { data: paidRowsForCap, error: paidRowsForCapErr } =
               await fetchContestSubmissionsAllPages(
                 supabaseAdmin,
                 submissionFull.contest_id,
-                "earnings, paid",
+                "earnings, paid, platform",
                 {
                   creatorId: submissionFull.creator_id,
                   paid: true,
@@ -1381,16 +1397,27 @@ export async function processVerifySubmission(
                 { status: 500 },
               );
             }
-            const alreadyPaidCents = sumPaidEarningsCents(
+            const alreadyPaidCents = (
               (paidRowsForCap || []) as Array<{
                 earnings?: number | null;
                 paid?: boolean | null;
-              }>,
-            );
+                platform?: string | null;
+              }>
+            ).reduce((sum, row) => {
+              if (row.paid !== true) return sum;
+              if (
+                isKeyedMaxEarningsMap((contest as any).max_earnings_per_creator) &&
+                String(row.platform || "").toLowerCase() !==
+                  String(submissionFull.platform || "").toLowerCase()
+              ) {
+                return sum;
+              }
+              return sum + Math.max(0, Number(row.earnings) || 0);
+            }, 0);
             rewardAmount = applyCreatorMaxEarningsCapCents({
               amountCents: rewardAmount,
               alreadyPaidCents,
-              maxEarningsCents: Number(maxEarningsPerCreator),
+              maxEarningsCents: leaderboardCap,
             });
           }
         } else {
@@ -1419,8 +1446,18 @@ export async function processVerifySubmission(
               
               const rawAmount = Math.round(((effectiveViews * rate) / 1000) * 100); // cents
               let finalCpmCappedAmount = rawAmount;
+              const hasCreatorCap =
+                isKeyedMaxEarningsMap((contest as any).max_earnings_per_creator) ||
+                (typeof maxEarningsPerCreator === "number" &&
+                  maxEarningsPerCreator > 0) ||
+                Number(
+                  resolveMaxEarningsCentsForSubmission(
+                    contest as any,
+                    submissionFull.platform,
+                  ) || 0,
+                ) > 0;
               
-              if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
+              if (hasCreatorCap) {
                 if (contest.contest_type === "dual_rewards") {
                   const capMaps = await ensureDualCreatorCapMaps();
                   if (!dualCreatorCapFetchError) {
@@ -1435,10 +1472,11 @@ export async function processVerifySubmission(
                       id: string;
                       views?: number | null;
                       status?: string;
+                      platform?: string | null;
                     }>(
                     supabaseAdmin,
                     submissionFull.contest_id,
-                    "id, views, status",
+                    "id, views, status, platform",
                     {
                       creatorId: submissionFull.creator_id,
                       statusIn: ["pending", "verified", "paid"],
@@ -1447,8 +1485,18 @@ export async function processVerifySubmission(
                   );
 
                   if (creatorSubs) {
+                    const keyedCap = isKeyedMaxEarningsMap(
+                      (contest as any).max_earnings_per_creator,
+                    );
                     let runningTotal = 0;
                     for (const sub of creatorSubs) {
+                      if (
+                        keyedCap &&
+                        String(sub.platform || "").toLowerCase() !==
+                          String(submissionFull.platform || "").toLowerCase()
+                      ) {
+                        continue;
+                      }
                       let subViews = Number(sub.views) || 0;
                       if (
                         typeof cpm?.min_views === "number" &&
@@ -1463,15 +1511,15 @@ export async function processVerifySubmission(
                       const subRawAmount = Math.round(
                         ((subViews * rate) / 1000) * 100,
                       );
+                      const capCents =
+                        resolveMaxEarningsCentsForSubmission(
+                          contest as any,
+                          keyedCap ? sub.platform : submissionFull.platform,
+                        ) || 0;
 
                       let subCapped = subRawAmount;
-                      if (
-                        runningTotal + subRawAmount > maxEarningsPerCreator
-                      ) {
-                        subCapped = Math.max(
-                          0,
-                          maxEarningsPerCreator - runningTotal,
-                        );
+                      if (capCents > 0 && runningTotal + subRawAmount > capCents) {
+                        subCapped = Math.max(0, capCents - runningTotal);
                       }
 
                       if (String(sub.id) === String(submissionFull.id)) {
@@ -1489,18 +1537,24 @@ export async function processVerifySubmission(
           }
 
           // Keep single-item CPM payout parity with bulk route creator cap logic.
+          const cpmPayCap = resolveMaxEarningsCentsForSubmission(
+            contest as any,
+            submissionFull.platform,
+          );
           if (
             contest.contest_type === "cpm" &&
             !customAmount &&
-            typeof (contest as any).max_earnings_per_creator === "number"
+            cpmPayCap &&
+            cpmPayCap > 0
           ) {
-            const maxEarningsPerCreator = Number(
+            const maxEarningsForCpmPay = cpmPayCap;
+            const keyedCpmCap = isKeyedMaxEarningsMap(
               (contest as any).max_earnings_per_creator,
             );
             const { data: creatorSubmissions } = await fetchContestSubmissionsAllPages(
               supabaseAdmin,
               submissionFull.contest_id,
-              "id, created_at, earnings, views, status",
+              "id, created_at, earnings, views, status, platform",
               {
                 creatorId: submissionFull.creator_id,
                 statusIn: ["verified", "paid"],
@@ -1516,6 +1570,13 @@ export async function processVerifySubmission(
               let cappedForSubmission = 0;
 
               for (const row of creatorSubmissions) {
+                if (
+                  keyedCpmCap &&
+                  String((row as any).platform || "").toLowerCase() !==
+                    String(submissionFull.platform || "").toLowerCase()
+                ) {
+                  continue;
+                }
                 let baseAmount = Number((row as any).earnings) || 0;
                 if (baseAmount <= 0) {
                   let effectiveViews = Number((row as any).views) || 0;
@@ -1537,11 +1598,11 @@ export async function processVerifySubmission(
                 }
 
                 let applied = baseAmount;
-                if (maxEarningsPerCreator > 0) {
-                  if (runningTotal + applied > maxEarningsPerCreator) {
+                if (maxEarningsForCpmPay > 0) {
+                  if (runningTotal + applied > maxEarningsForCpmPay) {
                     const remaining = Math.max(
                       0,
-                      maxEarningsPerCreator - runningTotal,
+                      maxEarningsForCpmPay - runningTotal,
                     );
                     applied = remaining;
                   }

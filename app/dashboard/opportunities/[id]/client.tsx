@@ -58,7 +58,6 @@ import {
 } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
@@ -100,7 +99,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
-import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
+import { buildMilestoneMostVerifiedBonusByCreatorMapFromDetails, buildMilestoneSubmissionPayoutAssignmentsFromDetails, collectMilestoneBonusConfigs, winnerCountsByTargetForPlatform } from "@/lib/milestone-contest-expected-spend";
 import { parsePayoutAdjustment } from "@/lib/payout-rules";
 import {
   trackSubmitEntryClick,
@@ -115,11 +114,13 @@ import {
   briefHtmlForPlatform,
   contestTypeForPlatform,
   inspirationLinksForPlatform,
+  isKeyedMaxEarningsMap,
   isVideoContestPlatform,
   maxEarningsCentsForPlatform,
   parseVideoContestPlatforms,
   readPersistedPlatformCampaigns,
   resolveContestPoolBudgetCents,
+  resolveMaxEarningsCentsForSubmission,
   resourcesForPlatform,
   rulesHtmlForPlatform,
   withProjectedTopLevelPayout,
@@ -1115,10 +1116,25 @@ export function ContestClientPage({
     creatorWiseLeaderboard,
   ]);
 
+  const opportunityMilestoneBonusConfigs = useMemo(
+    () =>
+      collectMilestoneBonusConfigs(
+        (contest?.contest_based_details as Record<string, unknown>) || null,
+        contest?.platform,
+      ),
+    [contest?.contest_based_details, contest?.platform],
+  );
+  const opportunityMostVerifiedViewsBonus =
+    opportunityMilestoneBonusConfigs.find((bonus) => bonus.most_verified_views)
+      ?.most_verified_views;
+  const opportunityMostVerifiedReelsBonus =
+    opportunityMilestoneBonusConfigs.find((bonus) => bonus.most_verified_reels)
+      ?.most_verified_reels;
+
   const shouldLoadMilestoneBonusSubmissions = Boolean(
     contestId &&
       isMilestoneContestType(contest?.contest_type) &&
-      (contest?.contest_based_details as any)?.milestone_contest?.bonus?.enabled,
+      opportunityMilestoneBonusConfigs.length > 0,
   );
 
   useEffect(() => {
@@ -1192,29 +1208,19 @@ export function ContestClientPage({
     creatorMostVerifiedViewsBonusMap: Map<string, number>;
     creatorMostVerifiedReelsBonusMap: Map<string, number>;
     creatorExpectedRewardMap: Map<string, number>;
-    winnerCountsByMilestone: Map<string, number>;
+    winnerCountsByKey: Map<string, number>;
+    winnerCountsByMilestone: Map<number, number>;
   }>(() => {
     const empty = {
       submissionExpectedRewardMap: new Map<string, number>(),
       creatorMostVerifiedViewsBonusMap: new Map<string, number>(),
       creatorMostVerifiedReelsBonusMap: new Map<string, number>(),
       creatorExpectedRewardMap: new Map<string, number>(),
-      winnerCountsByMilestone: new Map<string, number>(),
+      winnerCountsByKey: new Map<string, number>(),
+      winnerCountsByMilestone: new Map<number, number>(),
     };
 
     if (!isMilestoneContestType(contest?.contest_type)) return empty;
-
-    const milestoneContest = (contest?.contest_based_details as any)
-      ?.milestone_contest;
-    const milestones = Array.isArray(milestoneContest?.milestones)
-      ? milestoneContest.milestones
-      : [];
-    if (milestones.length === 0) return empty;
-
-    const sortedMilestones = [...milestones].sort(
-      (a: any, b: any) =>
-        Number(b?.target_views || 0) - Number(a?.target_views || 0),
-    );
 
     const allSubmissionCandidates: any[] = [
       ...(Array.isArray(allMilestoneBonusSubmissions)
@@ -1241,95 +1247,117 @@ export function ContestClientPage({
       return st;
     };
 
-    const eligibleSubmissions = uniqueSubmissions
-      .filter((s: any) => {
-        const st = normalizeMilestoneStatus(s?.status);
-        return st === "pending" || st === "verified" || st === "paid";
-      })
-      .sort((a: any, b: any) => {
-        const at = new Date(a?.created_at || 0).getTime();
-        const bt = new Date(b?.created_at || 0).getTime();
-        return at - bt;
-      });
+    const assignmentRows = uniqueSubmissions.map((sub: any) => ({
+      id: String(sub?.id || ""),
+      creator_id: String(sub?.creator_id || ""),
+      created_at: String(sub?.created_at || ""),
+      status: normalizeMilestoneStatus(sub?.status),
+      deleted_at: sub?.deleted_at ?? null,
+      views: sub?.views != null ? Number(sub.views) : null,
+      platform: sub?.platform ?? null,
+      other_stats: sub?.other_stats ?? null,
+      bonus_paid: Boolean(sub?.bonus_paid),
+      bonus_amount:
+        sub?.bonus_amount != null ? Number(sub?.bonus_amount || 0) : null,
+      milestone_bonus_paid:
+        sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid,
+      metadata: sub?.metadata ?? null,
+    }));
 
-    // Winner-limit and expected payout assignment:
-    // count only verified/paid submissions (pending does not consume slots).
-    const eligibleForExpectedPayout = eligibleSubmissions.filter(
-      (s: any) => {
-        const st = normalizeMilestoneStatus(s?.status);
-        return st === "verified" || st === "paid";
-      },
+    const assignments = buildMilestoneSubmissionPayoutAssignmentsFromDetails(
+      assignmentRows,
+      (contest?.contest_based_details as Record<string, unknown>) || null,
+      contest?.platform,
     );
 
-    const winnerCountsByMilestone = new Map<string, number>();
-    const submissionExpectedRewardMap = new Map<string, number>();
-    const creatorExpectedRewardMap = new Map<string, number>();
-
-    eligibleForExpectedPayout.forEach((sub: any) => {
-      const subViews = Number(sub?.views || 0);
-      let payoutCents = 0;
-
-      for (const milestone of sortedMilestones) {
-        const targetViews = Number(milestone?.target_views || 0);
-        if (subViews < targetViews) continue;
-
-        const winnerLimit = milestone?.winner_limit;
-        const milestoneKey = `${Number(milestone?.order || 0)}:${targetViews}`;
-        if (winnerLimit != null) {
-          const used = winnerCountsByMilestone.get(milestoneKey) || 0;
-          if (used >= Number(winnerLimit)) continue;
-          winnerCountsByMilestone.set(milestoneKey, used + 1);
+    const submissionExpectedRewardMap = new Map(assignments.payoutMap);
+    const keyedMax = isKeyedMaxEarningsMap(
+      (contest as any)?.max_earnings_per_creator,
+    );
+    const contestWideMax = keyedMax
+      ? 0
+      : Number(
+          resolveMaxEarningsCentsForSubmission(
+            contest as any,
+            contest?.platform,
+          ) || 0,
+        );
+    if (keyedMax || contestWideMax > 0) {
+      const byCreator = new Map<string, typeof assignmentRows>();
+      for (const sub of assignmentRows) {
+        const creatorId = String(sub.creator_id || "");
+        if (!creatorId) continue;
+        const list = byCreator.get(creatorId) || [];
+        list.push(sub);
+        byCreator.set(creatorId, list);
+      }
+      for (const list of byCreator.values()) {
+        list.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+        const running = new Map<string, number>();
+        for (const sub of list) {
+          const base = Number(submissionExpectedRewardMap.get(sub.id) || 0);
+          const max = keyedMax
+            ? Number(
+                resolveMaxEarningsCentsForSubmission(
+                  contest as any,
+                  sub.platform,
+                ) || 0,
+              )
+            : contestWideMax;
+          if (!max || max <= 0) continue;
+          const runKey = keyedMax
+            ? String(sub.platform || "").toLowerCase() || "_"
+            : "_";
+          const used = running.get(runKey) || 0;
+          const remaining = max - used;
+          const capped =
+            remaining <= 0 ? 0 : Math.min(base, Math.max(0, remaining));
+          submissionExpectedRewardMap.set(sub.id, capped);
+          running.set(runKey, used + Math.min(base, Math.max(0, remaining)));
         }
-
-        payoutCents = Number(milestone?.payout_cents || 0);
-        break;
       }
+    }
 
-      const submissionId = String(sub?.id || "");
-      if (submissionId) {
-        submissionExpectedRewardMap.set(submissionId, payoutCents);
-      }
+    const creatorExpectedRewardMap = new Map<string, number>();
+    for (const sub of assignmentRows) {
+      const st = normalizeMilestoneStatus(sub.status);
+      if (st !== "verified" && st !== "paid") continue;
+      const payoutCents = submissionExpectedRewardMap.get(sub.id) || 0;
+      const creatorId = String(sub.creator_id || "");
+      if (!creatorId) continue;
+      creatorExpectedRewardMap.set(
+        creatorId,
+        (creatorExpectedRewardMap.get(creatorId) || 0) + payoutCents,
+      );
+    }
 
-      const creatorId = String(sub?.creator_id || "");
-      if (creatorId) {
-        const current = creatorExpectedRewardMap.get(creatorId) || 0;
-        creatorExpectedRewardMap.set(creatorId, current + payoutCents);
-      }
-    });
+    const winnerCountsByMilestone = winnerCountsByTargetForPlatform(
+      assignments.winnerCountsByKey,
+      contest?.platform,
+    );
 
     const creatorMostVerifiedViewsBonusMap = new Map<string, number>();
     const creatorMostVerifiedReelsBonusMap = new Map<string, number>();
-    const bonus = milestoneContest?.bonus;
     const mvBonusAdj = parsePayoutAdjustment(
       (contest as any)?.payout_adjustment_percentage,
       (contest as any)?.payout_adjustment_mode,
       { contestType: contest?.contest_type ?? null },
     );
-    const mostVerifiedBonusByCreator = buildMilestoneMostVerifiedBonusByCreatorMap(
-      uniqueSubmissions.map((sub: any) => ({
-        id: String(sub?.id || ""),
-        creator_id: String(sub?.creator_id || ""),
-        created_at: String(sub?.created_at || ""),
-        status: normalizeMilestoneStatus(sub?.status),
-        deleted_at: sub?.deleted_at ?? null,
-        views: Number(sub?.views || 0),
-        bonus_paid: Boolean(sub?.bonus_paid),
-        bonus_amount:
-          sub?.bonus_amount != null ? Number(sub?.bonus_amount || 0) : null,
-        milestone_bonus_paid:
-          sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid,
-        metadata: sub?.metadata ?? null,
-        platform: contest?.platform ?? null,
-        other_stats: sub?.other_stats ?? null,
-      })),
-      bonus,
-      undefined,
-      {
-        shouldAdjustMostVerifiedMilestoneBonus:
-          mvBonusAdj.shouldAdjustMostVerifiedMilestoneBonus,
-        percentage: mvBonusAdj.percentage,
-      },
-    );
+    const mostVerifiedBonusByCreator =
+      buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
+        assignmentRows,
+        (contest?.contest_based_details as Record<string, unknown>) || null,
+        contest?.platform,
+        undefined,
+        {
+          shouldAdjustMostVerifiedMilestoneBonus:
+            mvBonusAdj.shouldAdjustMostVerifiedMilestoneBonus,
+          percentage: mvBonusAdj.percentage,
+        },
+      );
 
     mostVerifiedBonusByCreator.forEach((row, creatorId) => {
       if (Number(row.viewsExpectedCents || 0) > 0) {
@@ -1351,11 +1379,15 @@ export function ContestClientPage({
       creatorMostVerifiedViewsBonusMap,
       creatorMostVerifiedReelsBonusMap,
       creatorExpectedRewardMap,
+      winnerCountsByKey: assignments.winnerCountsByKey,
       winnerCountsByMilestone,
     };
   }, [
     contest?.contest_type,
     contest?.contest_based_details,
+    contest?.platform,
+    (contest as any)?.max_earnings_per_creator,
+    (contest as any)?.bonus_details,
     (contest as any)?.payout_adjustment_percentage,
     (contest as any)?.payout_adjustment_mode,
     allMilestoneBonusSubmissions,
@@ -4367,6 +4399,10 @@ export function ContestClientPage({
                               isDark={isDark}
                               platform={platform}
                               showPlatformLabel={showDetailPayoutPlatformLabels}
+                              winnerCountsByMilestone={winnerCountsByTargetForPlatform(
+                                milestoneDerivedData.winnerCountsByKey,
+                                platform,
+                              )}
                             />
                           );
                         })}
@@ -4427,12 +4463,7 @@ export function ContestClientPage({
                               )
                             : contest.contest_type === "dual_rewards" &&
                                 contest.contest_based_details
-                              ? formatMoney(
-                                  getPoolBudgetCentsFromDetails(
-                                    contest.contest_type,
-                                    contest.contest_based_details,
-                                  ),
-                                )
+                              ? formatMoney(contestPoolBudgetCents)
                               : contest.contest_type === "milestone" &&
                                   contest.contest_based_details?.milestone_contest
                                 ? formatMoney(
@@ -4480,11 +4511,8 @@ export function ContestClientPage({
                             "number" &&
                           (details.cpm_contest?.total_budget ?? 0) > 0;
                         const dualUnifiedCents =
-                          contest.contest_type === "dual_rewards" && details
-                            ? getPoolBudgetCentsFromDetails(
-                                "dual_rewards",
-                                details,
-                              )
+                          contest.contest_type === "dual_rewards"
+                            ? contestPoolBudgetCents
                             : 0;
                         const showDualUnifiedTotal =
                           contest.contest_type === "dual_rewards" &&
@@ -4653,7 +4681,8 @@ export function ContestClientPage({
 
                     {/* Milestone Details */}
                     {isMilestoneContestType(contest.contest_type) &&
-                      contest.contest_based_details?.milestone_contest && (
+                      (contest.contest_based_details?.milestone_contest ||
+                        opportunityMilestoneBonusConfigs.length > 0) && (
                         <div className="space-y-6">
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
@@ -4706,7 +4735,7 @@ export function ContestClientPage({
                                         {milestone.winner_limit != null && (
                                           (() => {
                                             const reachedCount = milestoneDerivedData.winnerCountsByMilestone?.get(
-                                              `${Number(milestone.order || 0)}:${Number(milestone.target_views || 0)}`,
+                                              Number(milestone.target_views || 0),
                                             ) || 0;
                                             const isFull = reachedCount >= Number(milestone.winner_limit);
                                             return (
@@ -4771,8 +4800,8 @@ export function ContestClientPage({
                             </Alert>
                           </div>
 
-                          {contest.contest_based_details.milestone_contest.bonus
-                            ?.enabled && (
+                          {(opportunityMostVerifiedViewsBonus ||
+                            opportunityMostVerifiedReelsBonus) && (
                             <div className="space-y-4">
                               <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                                 <Gift className="h-5 w-5 text-pink-500" />
@@ -4780,8 +4809,7 @@ export function ContestClientPage({
                               </h3>
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {contest.contest_based_details.milestone_contest
-                                  .bonus.most_verified_views && (
+                                {opportunityMostVerifiedViewsBonus && (
                                   <div
                                     className={cn(
                                       "rounded-lg border p-4",
@@ -4806,9 +4834,7 @@ export function ContestClientPage({
                                       </div>
                                       <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
                                         {formatMoney(
-                                          contest.contest_based_details
-                                            .milestone_contest.bonus
-                                            .most_verified_views.payout_cents ||
+                                          opportunityMostVerifiedViewsBonus.payout_cents ||
                                             0,
                                         )}
                                       </Badge>
@@ -4821,24 +4847,20 @@ export function ContestClientPage({
                                           : "text-blue-800",
                                       )}
                                     >
-                                      {typeof contest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_views.min_total_views ===
+                                      {typeof opportunityMostVerifiedViewsBonus.min_total_views ===
                                         "number" && (
                                         <>
                                           Min.{" "}
-                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
+                                          {opportunityMostVerifiedViewsBonus.min_total_views.toLocaleString()}{" "}
                                           views required.
                                         </>
                                       )}
-                                      {typeof contest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_views
-                                        .min_verified_reels === "number" && (
+                                      {typeof opportunityMostVerifiedViewsBonus.min_verified_reels ===
+                                        "number" && (
                                         <>
                                           <br />
                                           Min.{" "}
-                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
+                                          {opportunityMostVerifiedViewsBonus.min_verified_reels.toLocaleString()}{" "}
                                           verified reels required.
                                         </>
                                       )}
@@ -4846,8 +4868,7 @@ export function ContestClientPage({
                                   </div>
                                 )}
 
-                                {contest.contest_based_details.milestone_contest
-                                  .bonus.most_verified_reels && (
+                                {opportunityMostVerifiedReelsBonus && (
                                   <div
                                     className={cn(
                                       "rounded-lg border p-4",
@@ -4872,9 +4893,7 @@ export function ContestClientPage({
                                       </div>
                                       <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
                                         {formatMoney(
-                                          contest.contest_based_details
-                                            .milestone_contest.bonus
-                                            .most_verified_reels.payout_cents ||
+                                          opportunityMostVerifiedReelsBonus.payout_cents ||
                                             0,
                                         )}
                                       </Badge>
@@ -4887,24 +4906,20 @@ export function ContestClientPage({
                                           : "text-pink-800",
                                       )}
                                     >
-                                      {typeof contest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_reels
-                                        .min_verified_reels === "number" && (
+                                      {typeof opportunityMostVerifiedReelsBonus.min_verified_reels ===
+                                        "number" && (
                                         <>
                                           Min.{" "}
-                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
+                                          {opportunityMostVerifiedReelsBonus.min_verified_reels.toLocaleString()}{" "}
                                           verified reels required.
                                         </>
                                       )}
-                                      {typeof contest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_reels.min_total_views ===
+                                      {typeof opportunityMostVerifiedReelsBonus.min_total_views ===
                                         "number" && (
                                         <>
                                           <br />
                                           Min.{" "}
-                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
+                                          {opportunityMostVerifiedReelsBonus.min_total_views.toLocaleString()}{" "}
                                           views required.
                                         </>
                                       )}
@@ -7807,12 +7822,10 @@ export function ContestClientPage({
                         contest.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus ||
                         (contest as any).bonus_details?.description_html ||
-                        ((contest.contest_based_details as any)
-                          ?.milestone_contest?.bonus?.most_verified_views
-                          ?.payout_cents || 0) > 0 ||
-                        ((contest.contest_based_details as any)
-                          ?.milestone_contest?.bonus?.most_verified_reels
-                          ?.payout_cents || 0) > 0) &&
+                        (opportunityMostVerifiedViewsBonus?.payout_cents ||
+                          0) > 0 ||
+                        (opportunityMostVerifiedReelsBonus?.payout_cents ||
+                          0) > 0) &&
                       contest?.status?.toLowerCase() === "ended" &&
                       contest?.post_contest_status === "payouts_processed" && (
                         <div

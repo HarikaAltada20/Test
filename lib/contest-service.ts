@@ -1,9 +1,9 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
   calculateLeaderboardBudgetSpent,
-  calculateTwitterCpmBudgetSpent,
   Submission,
 } from "@/lib/contest-utils";
+import { calculateTwitterCpmBudgetSpent } from "@/lib/contest-utils-client";
 import { createClient } from "@/utils/supabase/server";
 import {
   contestCache,
@@ -27,7 +27,7 @@ import {
   fetchContestSubmissionsAllPages,
   fetchContestTwitterTweetsAllPages,
 } from "@/lib/fetch-contest-submissions";
-import { resolveMaxEarningsPerCreatorCents, withProjectedTopLevelPayout } from "@/lib/video-platform-campaigns";
+import { resolveMaxEarningsPerCreatorCents, withProjectedTopLevelPayout, contestHasUsableCpmRate, contestHasUsableMilestoneLadder, resolveCpmContestConfigForPlatform } from "@/lib/video-platform-campaigns";
 
 type ContestWithDetails = {
   id: string;
@@ -46,6 +46,25 @@ const normalizeContestDetails = (contest: ContestWithDetails) =>
     contest.contest_based_details || {},
     contest.platform,
   );
+
+function resolveCpmConfigForBudgetSub(
+  details: Record<string, unknown> | null,
+  platformCsv?: string | null,
+) {
+  return (sub: { platform?: string | null }) => {
+    const cfg = resolveCpmContestConfigForPlatform(
+      details,
+      sub.platform,
+      platformCsv,
+    );
+    if (!cfg) return null;
+    return {
+      cpmRate: cfg.cpm_rate_usd,
+      minViews: cfg.min_views,
+      maxViews: cfg.max_views,
+    };
+  };
+}
 
 const DEFAULT_SELECT = "*, contest_based_details";
 const SELECT_WITH_ADVERTISER_PROFILE = `${DEFAULT_SELECT}, advertiser_profiles!advertiser_id(company_name)`;
@@ -233,7 +252,9 @@ export async function enrichContestWithCalculatedBudgets(
   }
 
   const platformSlug = (contest.platform || "").toLowerCase();
-  const hasCpmRate = cpmDetails?.cpm_rate_usd > 0;
+  const hasCpmRate =
+    cpmDetails?.cpm_rate_usd > 0 ||
+    contestHasUsableCpmRate(contestDetails, contest.platform);
   const isTwitterPlatform = platformSlug === "twitter" || platformSlug === "x";
 
   if (contest.contest_type === "cpm" && isTwitterPlatform && hasCpmRate) {
@@ -315,8 +336,9 @@ export async function enrichContestWithCalculatedBudgets(
     const tileInput = {
       contest_type: contest.contest_type,
       post_contest_status: contest.post_contest_status,
-      max_earnings_per_creator: resolvedMaxEarnings,
+      max_earnings_per_creator: contest.max_earnings_per_creator,
       contest_based_details: contestDetails,
+      platform: contest.platform,
     };
     const budgetSubs: BudgetTileSubmission[] = submissions.map((s) => ({
       ...s,
@@ -338,6 +360,7 @@ export async function enrichContestWithCalculatedBudgets(
               cpmDetails.flat_fee_bonus || 0,
               cpmDetails.flat_fee_bonus_cap || null,
               manualAdjustmentMap,
+              resolveCpmConfigForBudgetSub(contestDetails, contest.platform),
             ) * 100,
           );
 
@@ -415,8 +438,9 @@ export async function enrichContestWithCalculatedBudgets(
       const tileInput = {
         contest_type: contest.contest_type,
         post_contest_status: contest.post_contest_status,
-        max_earnings_per_creator: resolvedMaxEarnings,
+        max_earnings_per_creator: contest.max_earnings_per_creator,
         contest_based_details: contestDetails,
+        platform: contest.platform,
       };
       const mode = getBudgetTileMode(contest.post_contest_status);
       const budgetSpentCents =
@@ -428,7 +452,7 @@ export async function enrichContestWithCalculatedBudgets(
           : Math.round(
               calculateTwitterCpmBudgetSpent(
                 submissionRecords,
-                cpmDetails.cpm_rate_usd,
+                cpmDetails.cpm_rate_usd || 0,
                 resolvedMaxEarnings ||
                   cpmDetails.max_earnings_per_creator ||
                   null,
@@ -437,6 +461,7 @@ export async function enrichContestWithCalculatedBudgets(
                 cpmDetails.flat_fee_bonus || 0,
                 cpmDetails.flat_fee_bonus_cap || null,
                 manualAdjustmentMap,
+                resolveCpmConfigForBudgetSub(contestDetails, contest.platform),
               ) * 100,
             );
 
@@ -463,9 +488,13 @@ export async function enrichContestWithCalculatedBudgets(
     normalizeContestDetails(updatedContest).milestone_contest;
   if (
     isMilestoneContestType(contest.contest_type) &&
-    milestoneContestDetails &&
-    Array.isArray(milestoneContestDetails.milestones) &&
-    milestoneContestDetails.milestones.length > 0
+    (contestHasUsableMilestoneLadder(
+      contest.contest_based_details,
+      contest.platform,
+    ) ||
+      (milestoneContestDetails &&
+        Array.isArray(milestoneContestDetails.milestones) &&
+        milestoneContestDetails.milestones.length > 0))
   ) {
     const { data: milestoneSubmissions, error: milestoneSubErr } =
       await fetchContestSubmissionsAllPages(
@@ -514,12 +543,9 @@ export async function enrichContestWithCalculatedBudgets(
       const tileInput = {
         contest_type: contest.contest_type,
         post_contest_status: contest.post_contest_status,
-        max_earnings_per_creator: resolveMaxEarningsPerCreatorCents({
-          platform: contest.platform,
-          max_earnings_per_creator: contest.max_earnings_per_creator,
-          contest_based_details: normalizeContestDetails(updatedContest),
-        }),
+        max_earnings_per_creator: contest.max_earnings_per_creator,
         contest_based_details: normalizeContestDetails(updatedContest),
+        platform: contest.platform,
       };
       const mode = getBudgetTileMode(contest.post_contest_status);
       const milestoneBudgetSpentCents =
@@ -594,12 +620,9 @@ export async function enrichContestWithCalculatedBudgets(
       const tileInput = {
         contest_type: contest.contest_type,
         post_contest_status: contest.post_contest_status,
-        max_earnings_per_creator: resolveMaxEarningsPerCreatorCents({
-          platform: contest.platform,
-          max_earnings_per_creator: contest.max_earnings_per_creator,
-          contest_based_details: normalizeContestDetails(updatedContest),
-        }),
+        max_earnings_per_creator: contest.max_earnings_per_creator,
         contest_based_details: normalizeContestDetails(updatedContest),
+        platform: contest.platform,
       };
       const mode = getBudgetTileMode(contest.post_contest_status);
       const poolSpentCents =

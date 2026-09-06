@@ -72,7 +72,7 @@ import {
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
 import {
-  buildDualRewardCreatorCapSplitMaps,
+  buildDualRewardCreatorCapSplitMapsByPlatform,
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
@@ -117,12 +117,15 @@ import {
 } from "@/lib/submission-metadata";
 import {
   ALL_PLATFORM_TAB,
+  isKeyedMaxEarningsMap,
   parseVideoContestPlatforms,
   platformsForTab,
+  resolveMaxEarningsCentsForSubmission,
   VIDEO_PLATFORM_LABELS,
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import { getPlatformIcon } from "@/lib/platform-icons";
 
 interface Creator {
@@ -1015,44 +1018,28 @@ export function CreatorSubmissionsModal({
 
   /** Base expected reward. When useStoredEarnings is false, always compute from formula so Expected column does not equal Granted after payment. */
   const calculateRawSubmissionCpmExpectedReward = (submission: Submission) => {
-    const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-    const cpmRateUsd = cpmConfig?.cpm_rate_usd;
-    if (!cpmRateUsd) return 0;
-
-    const platform = (submission.platform || "").toLowerCase();
-    const isTwitterSubmission =
-      submission.is_twitter_tweet === true ||
-      platform === "twitter" ||
-      platform === "x";
-
-    if (isTwitterSubmission) {
-      const basePoints = submission.other_stats?.base_points || 0;
-      const manualAdjustment = submission.manual_points_adjustment || 0;
-      const totalPoints = Math.max(basePoints + manualAdjustment, 0);
-      return Math.max(Math.round((totalPoints * cpmRateUsd * 100) / 1000), 0);
-    }
-
-    let effectiveViews = submission.views || 0;
-    if (cpmConfig?.min_views != null && effectiveViews < cpmConfig.min_views) {
-      effectiveViews = 0;
-    }
-    if (cpmConfig?.max_views != null && effectiveViews > cpmConfig.max_views) {
-      effectiveViews = cpmConfig.max_views;
-    }
-    return Math.max(Math.round((effectiveViews * cpmRateUsd * 100) / 1000), 0);
+    return computeCpmRawCentsForRow(
+      submission,
+      (contest?.contest_based_details as Record<string, unknown>) || null,
+      contest?.platform,
+    );
   };
 
   const dualAndCpmCapMaps = useMemo(() => {
     const cpmMap = new Map<string, number>();
     const dualMilestoneCappedMap = new Map<string, number>();
     const details = contest?.contest_based_details as any;
-    const maxResolved =
-      contest?.max_earnings_per_creator ??
-      details?.cpm_contest?.max_earnings_per_creator ??
-      (contest?.contest_type === "leaderboard"
-        ? details?.leaderboard_contest?.max_earnings_per_creator
-        : null) ??
-      null;
+    const maxKeyed = isKeyedMaxEarningsMap(
+      (contest as any)?.max_earnings_per_creator,
+    );
+    const maxResolved = maxKeyed
+      ? null
+      : resolveMaxEarningsCentsForSubmission(contest as any, contest?.platform) ??
+        details?.cpm_contest?.max_earnings_per_creator ??
+        (contest?.contest_type === "leaderboard"
+          ? details?.leaderboard_contest?.max_earnings_per_creator
+          : null) ??
+        null;
     const maxEarningsPerCreator = Number(maxResolved);
 
     const fillUncappedMilestoneForAllSubs = () => {
@@ -1076,7 +1063,10 @@ export function CreatorSubmissionsModal({
       return grouped;
     };
 
-    if (!Number.isFinite(maxEarningsPerCreator) || maxEarningsPerCreator <= 0) {
+    if (
+      (!Number.isFinite(maxEarningsPerCreator) || maxEarningsPerCreator <= 0) &&
+      !maxKeyed
+    ) {
       submissions.forEach((sub) => {
         cpmMap.set(sub.id, calculateRawSubmissionCpmExpectedReward(sub));
       });
@@ -1094,13 +1084,19 @@ export function CreatorSubmissionsModal({
         const rows = list.map((sub) => ({
           id: sub.id,
           created_at: String(sub.created_at || ""),
+          platform: sub.platform,
           mRawCents: Number(
             milestoneExpectedPayoutBySubmissionId?.get(sub.id) || 0,
           ),
           cRawCents: calculateRawSubmissionCpmExpectedReward(sub),
         }));
         const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
-          buildDualRewardCreatorCapSplitMaps(rows, maxEarningsPerCreator);
+          buildDualRewardCreatorCapSplitMapsByPlatform(
+            rows,
+            (platform) =>
+              resolveMaxEarningsCentsForSubmission(contest as any, platform),
+            { keyedCaps: maxKeyed },
+          );
         for (const row of rows) {
           cpmMap.set(row.id, cpmCappedBySubmissionId.get(row.id) ?? 0);
           dualMilestoneCappedMap.set(
@@ -1126,15 +1122,25 @@ export function CreatorSubmissionsModal({
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      let runningTotal = 0;
+      const runningByPlatform = new Map<string, number>();
       for (const sub of list) {
         const rawCpm = calculateRawSubmissionCpmExpectedReward(sub);
+        const subMax = maxKeyed
+          ? Number(
+              resolveMaxEarningsCentsForSubmission(contest as any, sub.platform) ||
+                0,
+            )
+          : maxEarningsPerCreator;
+        const runKey = maxKeyed
+          ? String(sub.platform || "").toLowerCase() || "_"
+          : "_";
+        const runningTotal = runningByPlatform.get(runKey) || 0;
         let cappedCpm = rawCpm;
-        if (runningTotal + rawCpm > maxEarningsPerCreator) {
-          cappedCpm = Math.max(0, maxEarningsPerCreator - runningTotal);
+        if (subMax > 0 && runningTotal + rawCpm > subMax) {
+          cappedCpm = Math.max(0, subMax - runningTotal);
         }
         cpmMap.set(sub.id, cappedCpm);
-        runningTotal += cappedCpm;
+        runningByPlatform.set(runKey, runningTotal + cappedCpm);
       }
     }
     submissions.forEach((sub) => {
@@ -1312,42 +1318,11 @@ export function CreatorSubmissionsModal({
     }
 
     if (contest?.contest_type === "cpm" && !baseExpectedReward) {
-      const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-      const cpmRateUsd = cpmConfig?.cpm_rate_usd;
-      if (cpmRateUsd) {
-        const platform = (submission.platform || "").toLowerCase();
-        const isTwitterSubmission =
-          submission.is_twitter_tweet === true ||
-          platform === "twitter" ||
-          platform === "x";
-
-        if (isTwitterSubmission) {
-          const basePoints = submission.other_stats?.base_points || 0;
-          const manualAdjustment = submission.manual_points_adjustment || 0;
-          const totalPoints = Math.max(basePoints + manualAdjustment, 0);
-          const calculatedEarnings = (totalPoints * cpmRateUsd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        } else {
-          let effectiveViews =
-            isTikTokContest && !isTwitterSubmission
-              ? effectiveTikTokSubmissionViews(submission)
-              : (submission.views ?? 0);
-          if (
-            cpmConfig?.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
-          }
-          if (
-            cpmConfig?.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-          const calculatedEarnings = (effectiveViews * cpmRateUsd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        }
-      }
+      baseExpectedReward = computeCpmRawCentsForRow(
+        submission,
+        (contest?.contest_based_details as Record<string, unknown>) || null,
+        contest?.platform,
+      );
     }
 
     return Math.max(baseExpectedReward, 0);
@@ -1760,8 +1735,15 @@ export function CreatorSubmissionsModal({
 
   // Pre-calculate expected rewards with cap logic (in submission time order)
   const expectedRewardsMap = new Map<string, number>();
-  const maxEarningsPerCreator =
-    (contest as any)?.max_earnings_per_creator || null;
+  const maxEarningsKeyed = isKeyedMaxEarningsMap(
+    (contest as any)?.max_earnings_per_creator,
+  );
+  const maxEarningsPerCreator = maxEarningsKeyed
+    ? 0
+    : Number(
+        resolveMaxEarningsCentsForSubmission(contest as any, contest?.platform) ||
+          0,
+      );
 
   const expectedBonusMap = useMemo(
     () =>
@@ -1774,37 +1756,47 @@ export function CreatorSubmissionsModal({
 
   // Apply creator max-earnings cap for all contest types (including leaderboard)
   // so Expected Reward matches bulk-payment / verify-submission pay amounts.
-  if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
-    // Sort by created_at to apply creator cap in submission order
+  if (maxEarningsKeyed || (maxEarningsPerCreator && maxEarningsPerCreator > 0)) {
     const submissionsByTime = [...submissions].sort((a, b) => {
       return (
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     });
 
-    let runningTotal = 0;
+    const runningByPlatform = new Map<string, number>();
 
     submissionsByTime.forEach((sub) => {
-      // Formula-only so Expected Reward column does not become equal to Reward Granted after payment
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(
         sub,
         false,
       );
-      const remainingCap = maxEarningsPerCreator - runningTotal;
+      const subMax = maxEarningsKeyed
+        ? Number(
+            resolveMaxEarningsCentsForSubmission(contest as any, sub.platform) ||
+              0,
+          )
+        : maxEarningsPerCreator;
+      const runKey = maxEarningsKeyed
+        ? String(sub.platform || "").toLowerCase() || "_"
+        : "_";
+      const runningTotal = runningByPlatform.get(runKey) || 0;
+      const remainingCap = subMax > 0 ? subMax - runningTotal : baseExpectedReward;
       let cappedExpectedReward = baseExpectedReward;
 
-      if (remainingCap <= 0) {
-        cappedExpectedReward = 0;
-      } else if (baseExpectedReward > remainingCap) {
-        cappedExpectedReward = remainingCap;
+      if (subMax > 0) {
+        if (remainingCap <= 0) {
+          cappedExpectedReward = 0;
+        } else if (baseExpectedReward > remainingCap) {
+          cappedExpectedReward = remainingCap;
+        }
       }
 
       expectedRewardsMap.set(sub.id, cappedExpectedReward);
-      const amountApplied = Math.min(
-        baseExpectedReward,
-        Math.max(0, remainingCap),
-      );
-      runningTotal += amountApplied;
+      const amountApplied =
+        subMax > 0
+          ? Math.min(baseExpectedReward, Math.max(0, remainingCap))
+          : baseExpectedReward;
+      runningByPlatform.set(runKey, runningTotal + amountApplied);
     });
   } else {
     // No max_earnings_per_creator configured: use formula-only expected per submission
@@ -3431,15 +3423,11 @@ export function CreatorSubmissionsModal({
                               )
                             : rawCpmUncappedForDual
                           : 0;
-                      const detailsForCap = contest?.contest_based_details as any;
                       const activeCreatorCapCents = Number(
-                        (contest as any)?.max_earnings_per_creator ??
-                          detailsForCap?.cpm_contest?.max_earnings_per_creator ??
-                          (contest?.contest_type === "leaderboard"
-                            ? detailsForCap?.leaderboard_contest
-                                ?.max_earnings_per_creator
-                            : 0) ??
-                          0,
+                        resolveMaxEarningsCentsForSubmission(
+                          contest as any,
+                          submission.platform,
+                        ) || 0,
                       );
                       const dualCreatorCapWarning =
                         contest?.contest_type === "dual_rewards" &&

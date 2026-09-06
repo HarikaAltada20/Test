@@ -4,7 +4,10 @@ import {
   creditCreatorWithdrawableBalance,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
-import { isTwitterTextImageLeaderboardContest } from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  isKeyedMaxEarningsMap,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
 import {
   acquireCreatorContestPayoutLease,
   releaseCreatorContestPayoutLease,
@@ -61,7 +64,7 @@ export async function processQueuedPayouts(
       // Load submission + contest
       const { data: sub, error: subErr } = await supabaseAdmin
         .from("submissions")
-        .select("id, contest_id, creator_id, status, earnings, views")
+        .select("id, contest_id, creator_id, status, earnings, views, platform")
         .eq("id", job.submission_id)
         .single();
       if (subErr || !sub)
@@ -157,7 +160,6 @@ export async function processQueuedPayouts(
           const {
             applyCreatorMaxEarningsCapCents,
             computeNonTwitterLeaderboardSubmissionPrizeCents,
-            sumPaidEarningsCents,
           } = await import("@/lib/non-twitter-leaderboard-creator-prize");
           const { fetchContestSubmissionsAllPages } =
             await import("@/lib/fetch-contest-submissions");
@@ -178,19 +180,16 @@ export async function processQueuedPayouts(
             );
           }
           rewardAmount = prizeResult.prizeCents;
-          const maxEarningsPerCreator =
-            Number((contest as any).max_earnings_per_creator) ||
-            Number(
-              (contest as any)?.contest_based_details?.leaderboard_contest
-                ?.max_earnings_per_creator,
-            ) ||
-            0;
-          if (rewardAmount > 0 && maxEarningsPerCreator > 0) {
+          const maxEarningsPerCreator = resolveMaxEarningsCentsForSubmission(
+            contest as any,
+            (sub as any).platform,
+          );
+          if (rewardAmount > 0 && maxEarningsPerCreator && maxEarningsPerCreator > 0) {
             const { data: paidRowsForCap, error: paidRowsForCapErr } =
               await fetchContestSubmissionsAllPages(
                 supabaseAdmin,
                 sub.contest_id,
-                "earnings, paid",
+                "earnings, paid, platform",
                 {
                   creatorId: sub.creator_id,
                   paid: true,
@@ -205,14 +204,26 @@ export async function processQueuedPayouts(
                 )}`,
               );
             }
+            const alreadyPaidCents = (
+              (paidRowsForCap || []) as Array<{
+                earnings?: number | null;
+                paid?: boolean | null;
+                platform?: string | null;
+              }>
+            ).reduce((sum, row) => {
+              if (row.paid !== true) return sum;
+              if (
+                isKeyedMaxEarningsMap((contest as any).max_earnings_per_creator) &&
+                String(row.platform || "").toLowerCase() !==
+                  String((sub as any).platform || "").toLowerCase()
+              ) {
+                return sum;
+              }
+              return sum + Math.max(0, Number(row.earnings) || 0);
+            }, 0);
             rewardAmount = applyCreatorMaxEarningsCapCents({
               amountCents: rewardAmount,
-              alreadyPaidCents: sumPaidEarningsCents(
-                (paidRowsForCap || []) as Array<{
-                  earnings?: number | null;
-                  paid?: boolean | null;
-                }>,
-              ),
+              alreadyPaidCents,
               maxEarningsCents: maxEarningsPerCreator,
             });
           }

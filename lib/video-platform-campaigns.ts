@@ -1671,6 +1671,81 @@ export function resolveMaxEarningsPerCreatorCents(
   );
 }
 
+export type MaxEarningsContestInput = {
+  max_earnings_per_creator?: unknown;
+  bonus_details?: unknown;
+  platform?: string | null;
+  contest_based_details?: Record<string, unknown> | null;
+};
+
+export function isKeyedMaxEarningsMap(value: unknown): boolean {
+  return isPlatformKeyedMaxEarningsMap(value);
+}
+
+/**
+ * Cap for one submission's platform. Keyed maps do not fall back to another
+ * platform's cap. A legacy number applies contest-wide.
+ */
+export function resolveMaxEarningsCentsForSubmission(
+  contest: MaxEarningsContestInput | null | undefined,
+  submissionPlatform?: string | null,
+): number | null {
+  if (!contest) return null;
+  const platform = videoContestPlatformFromValue(submissionPlatform);
+
+  if (isPlatformKeyedMaxEarningsMap(contest.max_earnings_per_creator)) {
+    if (!platform) return null;
+    const fromColumn = readMaxEarningsCents(
+      (contest.max_earnings_per_creator as Record<string, unknown>)[platform],
+    );
+    if (fromColumn) return fromColumn;
+    const campaigns = readPersistedPlatformCampaigns(
+      contest.contest_based_details,
+    );
+    const fromCampaign = readMaxEarningsCents(
+      campaigns[platform]?.max_earnings_per_creator,
+    );
+    if (fromCampaign) return fromCampaign;
+    const cpm = resolveCpmContestConfigForPlatform(
+      contest.contest_based_details,
+      platform,
+      contest.platform,
+    );
+    const fromCpm = Number(cpm?.max_earnings_per_creator || 0);
+    return fromCpm > 0 ? fromCpm : null;
+  }
+
+  if (
+    typeof contest.max_earnings_per_creator === "number" &&
+    contest.max_earnings_per_creator > 0
+  ) {
+    return contest.max_earnings_per_creator;
+  }
+
+  if (platform) {
+    const campaigns = readPersistedPlatformCampaigns(
+      contest.contest_based_details,
+    );
+    const fromCampaign = readMaxEarningsCents(
+      campaigns[platform]?.max_earnings_per_creator,
+    );
+    if (fromCampaign) return fromCampaign;
+    const cpm = resolveCpmContestConfigForPlatform(
+      contest.contest_based_details,
+      platform,
+      contest.platform,
+    );
+    const fromCpm = Number(cpm?.max_earnings_per_creator || 0);
+    if (fromCpm > 0) return fromCpm;
+  }
+
+  return maxEarningsCentsForPlatform(
+    contest.max_earnings_per_creator,
+    contest.bonus_details,
+    platform ?? contest.platform,
+  );
+}
+
 /** Seed creator-earning fields from legacy top-level contest columns when missing. */
 export function applyLegacyCreatorEarningsToSnapshots(
   platforms: VideoContestPlatform[],
@@ -1963,6 +2038,191 @@ function readCpmRateUsd(cpm: unknown): number | null {
     if (Number.isFinite(n)) return n;
   }
   return null;
+}
+
+export type ResolvedCpmContestConfig = {
+  cpm_rate_usd: number;
+  min_views?: number | null;
+  max_views?: number | null;
+  flat_fee_bonus?: number;
+  flat_fee_bonus_cap?: number | null;
+  max_earnings_per_creator?: number | null;
+  total_budget?: number;
+};
+
+export function videoContestPlatformFromValue(
+  value?: string | null,
+): VideoContestPlatform | null {
+  const raw = String(value || "").toLowerCase();
+  if (raw.includes("youtube")) return "youtube";
+  if (raw.includes("instagram")) return "instagram";
+  if (raw.includes("tiktok")) return "tiktok";
+  return null;
+}
+
+function asResolvedCpmConfig(cpm: unknown): ResolvedCpmContestConfig | null {
+  const rate = readCpmRateUsd(cpm);
+  if (rate == null) return null;
+  const obj = cpm as {
+    min_views?: number | null;
+    max_views?: number | null;
+    flat_fee_bonus?: number;
+    flat_fee_bonus_cap?: number | null;
+    max_earnings_per_creator?: number | null;
+    total_budget?: number;
+  };
+  return {
+    cpm_rate_usd: rate,
+    min_views: obj.min_views,
+    max_views: obj.max_views,
+    flat_fee_bonus: obj.flat_fee_bonus,
+    flat_fee_bonus_cap: obj.flat_fee_bonus_cap,
+    max_earnings_per_creator: obj.max_earnings_per_creator,
+    total_budget: obj.total_budget,
+  };
+}
+
+function rootCpmFromDetails(
+  details: Record<string, unknown> | null | undefined,
+): unknown {
+  if (!details || typeof details !== "object") return null;
+  return (details as { cpm_contest?: unknown }).cpm_contest;
+}
+
+/**
+ * CPM payout config for one submission/platform. Multi-platform contests store
+ * rates under youtube|instagram|tiktok; root cpm_contest is often empty.
+ */
+export function resolveCpmContestConfigForPlatform(
+  details: Record<string, unknown> | null | undefined,
+  submissionPlatform?: string | null,
+  contestPlatformCsv?: string | null,
+): ResolvedCpmContestConfig | null {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const platform = videoContestPlatformFromValue(submissionPlatform);
+  if (platform) {
+    const fromPlatform = asResolvedCpmConfig(campaigns[platform]?.cpm_contest);
+    if (fromPlatform) return fromPlatform;
+  }
+
+  const fromRoot = asResolvedCpmConfig(rootCpmFromDetails(details));
+  if (fromRoot) return fromRoot;
+
+  const projected = withProjectedTopLevelPayout(details, contestPlatformCsv);
+  return asResolvedCpmConfig(projected.cpm_contest);
+}
+
+export function contestHasUsableCpmRate(
+  details: Record<string, unknown> | null | undefined,
+  contestPlatformCsv?: string | null,
+): boolean {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    if (readCpmRateUsd(campaigns[platform]?.cpm_contest) != null) return true;
+  }
+  return resolveCpmContestConfigForPlatform(details, null, contestPlatformCsv) !=
+    null;
+}
+
+export type ResolvedMilestoneContestConfig = {
+  milestones: Array<{
+    order?: number;
+    target_views: number;
+    payout_cents: number;
+    winner_limit: number | null;
+  }>;
+  total_budget_cents?: number;
+  bonus?: Record<string, unknown>;
+};
+
+function asResolvedMilestoneConfig(
+  milestone: unknown,
+): ResolvedMilestoneContestConfig | null {
+  if (!milestone || typeof milestone !== "object") return null;
+  const obj = milestone as {
+    milestones?: unknown;
+    total_budget_cents?: number;
+    bonus?: Record<string, unknown>;
+  };
+  if (!Array.isArray(obj.milestones) || obj.milestones.length === 0) {
+    return null;
+  }
+  const milestones: ResolvedMilestoneContestConfig["milestones"] = [];
+  for (const row of obj.milestones) {
+    if (!row || typeof row !== "object") continue;
+    const m = row as {
+      order?: number;
+      target_views?: number;
+      payout_cents?: number;
+      winner_limit?: number | null;
+    };
+    const target = Number(m.target_views || 0);
+    if (!(target > 0)) continue;
+    const rawLimit = m.winner_limit;
+    const parsedLimit =
+      rawLimit == null || rawLimit === ("" as unknown)
+        ? null
+        : Number(rawLimit);
+    milestones.push({
+      order: typeof m.order === "number" ? m.order : undefined,
+      target_views: target,
+      payout_cents: Number(m.payout_cents || 0),
+      winner_limit:
+        parsedLimit != null && Number.isFinite(parsedLimit) ? parsedLimit : null,
+    });
+  }
+  if (milestones.length === 0) return null;
+  return {
+    milestones,
+    total_budget_cents: obj.total_budget_cents,
+    bonus: obj.bonus,
+  };
+}
+
+function rootMilestoneFromDetails(
+  details: Record<string, unknown> | null | undefined,
+): unknown {
+  if (!details || typeof details !== "object") return null;
+  return (details as { milestone_contest?: unknown }).milestone_contest;
+}
+
+/**
+ * Milestone ladder for one submission/platform. Multi-platform contests store
+ * ladders under youtube|instagram|tiktok; root milestone_contest is often empty.
+ */
+export function resolveMilestoneContestForPlatform(
+  details: Record<string, unknown> | null | undefined,
+  submissionPlatform?: string | null,
+  contestPlatformCsv?: string | null,
+): ResolvedMilestoneContestConfig | null {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const platform = videoContestPlatformFromValue(submissionPlatform);
+  if (platform) {
+    const fromPlatform = asResolvedMilestoneConfig(
+      campaigns[platform]?.milestone_contest,
+    );
+    if (fromPlatform) return fromPlatform;
+  }
+
+  const fromRoot = asResolvedMilestoneConfig(rootMilestoneFromDetails(details));
+  if (fromRoot) return fromRoot;
+
+  const projected = withProjectedTopLevelPayout(details, contestPlatformCsv);
+  return asResolvedMilestoneConfig(projected.milestone_contest);
+}
+
+export function contestHasUsableMilestoneLadder(
+  details: Record<string, unknown> | null | undefined,
+  contestPlatformCsv?: string | null,
+): boolean {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    if (asResolvedMilestoneConfig(campaigns[platform]?.milestone_contest)) {
+      return true;
+    }
+  }
+  return resolveMilestoneContestForPlatform(details, null, contestPlatformCsv) !=
+    null;
 }
 
 /**

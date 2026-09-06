@@ -135,11 +135,14 @@ import {
   inspirationLinksForPlatform,
   isVideoContestPlatform,
   maxEarningsCentsForPlatform,
+  isKeyedMaxEarningsMap,
   parseVideoContestPlatforms,
   platformsForTab,
   formatContestListCpmRatesText,
   readPersistedPlatformCampaigns,
   resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+  resolveMaxEarningsCentsForSubmission,
   resourcesForPlatform,
   rulesHtmlForPlatform,
   VIDEO_PLATFORM_LABELS,
@@ -191,8 +194,11 @@ import { BudgetProgress } from "@/components/BudgetProgress";
 import { PaidReversalRefundEstimate } from "@/components/PaidReversalRefundEstimate";
 import type { PaidReversalRefundLine } from "@/components/PaidReversalRefundEstimate";
 import {
-  buildMilestoneMostVerifiedBonusByCreatorMap,
+  buildMilestoneMostVerifiedBonusByCreatorMapFromDetails,
+  collectMilestoneBonusConfigs,
   getMilestoneMostVerifiedBonusGrantedByTrackForCreators,
+  buildMilestoneSubmissionPayoutAssignmentsFromDetails,
+  winnerCountsByTargetForPlatform,
 } from "@/lib/milestone-contest-expected-spend";
 import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-contest-expected-spend";
 
@@ -223,7 +229,7 @@ function countSubmissionsByVideoPlatform(
   return counts.filter((row) => row.count > 0);
 }
 import {
-  buildDualRewardCreatorCapSplitMaps,
+  buildDualRewardCreatorCapSplitMapsByPlatform,
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
@@ -269,6 +275,7 @@ import { LazyInlineSubmissionVideoPlayer } from "@/components/LazyInlineSubmissi
 import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
 import { FullCampaignReportExportDialog } from "@/components/contests/FullCampaignReportExportDialog";
 import { getCpmRateFromContest } from "@/lib/report-export-context";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import type {
   BrandProfile,
   ReportSubmissionFilter,
@@ -376,7 +383,6 @@ import {
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
   isDualRewardsContestType,
   isMilestoneContestType,
@@ -4096,8 +4102,6 @@ export default function ContestDetailClient({
       const rawStatus = (submission.status || "pending").toLowerCase();
       const normalizedStatus =
         rawStatus === "approved" ? "verified" : rawStatus;
-      const metrics = extractPlatformMetrics(submission);
-      const views = Number(metrics?.views ?? submission.views ?? 0);
 
       return {
         id: submission.id,
@@ -4105,7 +4109,9 @@ export default function ContestDetailClient({
         created_at: submission.created_at,
         status: normalizedStatus,
         deleted_at: submission.deleted_at,
-        views: Number.isFinite(views) ? views : 0,
+        views: submission.views,
+        platform: submission.platform ?? null,
+        other_stats: submission.other_stats,
       };
     });
   }, [leaderboardSubmissions]);
@@ -4113,89 +4119,27 @@ export default function ContestDetailClient({
   const milestoneSubmissionAssignments = useMemo<{
     payoutMap: Map<string, number>;
     labelMap: Map<string, string>;
-    winnerCountsByMilestone: Map<number, number>;
+    winnerCountsByKey: Map<string, number>;
   }>(() => {
+    const empty = {
+      payoutMap: new Map<string, number>(),
+      labelMap: new Map<string, string>(),
+      winnerCountsByKey: new Map<string, number>(),
+    };
     const isMilestoneLike =
       isMilestoneContestType(currentContest?.contest_type) ||
       isDualRewardsContestType(currentContest?.contest_type);
-    if (!isMilestoneLike) {
-      return {
-        payoutMap: new Map<string, number>(),
-        labelMap: new Map<string, string>(),
-        winnerCountsByMilestone: new Map<number, number>(),
-      };
-    }
-    const milestones =
-      currentContest?.contest_based_details?.milestone_contest?.milestones;
-    if (!Array.isArray(milestones) || milestones.length === 0) {
-      return {
-        payoutMap: new Map<string, number>(),
-        labelMap: new Map<string, string>(),
-        winnerCountsByMilestone: new Map<number, number>(),
-      };
-    }
-    const sortedMilestones = [...milestones].sort(
-      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
+    if (!isMilestoneLike) return empty;
+    return buildMilestoneSubmissionPayoutAssignmentsFromDetails(
+      milestonePayoutEligibleSubmissions,
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
     );
-    const winnerCountsByMilestone = new Map<number, number>();
-    const submissionPayoutMap = new Map<string, number>();
-    const submissionMilestoneLabelMap = new Map<string, string>();
-
-    const eligible = milestonePayoutEligibleSubmissions
-      .filter(
-        (submission: any) =>
-          (submission.status === "pending" ||
-            submission.status === "verified" ||
-            submission.status === "paid") &&
-          submission.deleted_at == null,
-      )
-      .sort((a: any, b: any) => {
-        const at = new Date(a.created_at || 0).getTime();
-        const bt = new Date(b.created_at || 0).getTime();
-        return at - bt;
-      });
-
-    eligible.forEach((submission: any) => {
-      let payoutCents = 0;
-      let milestoneLabel = "—";
-      const submissionViews = Number(submission.views || 0);
-
-      for (const milestone of sortedMilestones) {
-        const targetViews = Number(milestone.target_views || 0);
-        if (submissionViews < targetViews) continue;
-
-        if (milestone.winner_limit != null) {
-          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
-          if (currentWinners >= milestone.winner_limit) {
-            continue;
-          }
-          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
-        }
-
-        payoutCents = Number(milestone.payout_cents || 0);
-        const milestoneOrder = Number(milestone.order);
-        const hasMilestoneOrder =
-          Number.isFinite(milestoneOrder) && milestoneOrder > 0;
-        const targetLabel = `${targetViews.toLocaleString()} views`;
-        const payoutLabel = `$${(payoutCents / 100).toFixed(2)}`;
-        milestoneLabel = hasMilestoneOrder
-          ? `Milestone ${milestoneOrder} • ${targetLabel} • ${payoutLabel}`
-          : `Milestone • ${targetLabel} • ${payoutLabel}`;
-        break;
-      }
-
-      submissionPayoutMap.set(submission.id, payoutCents);
-      submissionMilestoneLabelMap.set(submission.id, milestoneLabel);
-    });
-
-    return {
-      payoutMap: submissionPayoutMap,
-      labelMap: submissionMilestoneLabelMap,
-      winnerCountsByMilestone,
-    };
   }, [
     currentContest?.contest_type,
     currentContest?.contest_based_details,
+    currentContest?.platform,
     milestonePayoutEligibleSubmissions,
   ]);
   const milestoneSubmissionExpectedPayoutCents =
@@ -4275,11 +4219,19 @@ export default function ContestDetailClient({
     }
 
     const cpmCfg = currentContest?.contest_based_details?.cpm_contest;
+    const maxKeyed = isKeyedMaxEarningsMap(
+      (currentContest as any)?.max_earnings_per_creator,
+    );
     const maxEarningsPerCreator = Number(
-      (currentContest as any)?.max_earnings_per_creator ??
+      resolveMaxEarningsCentsForSubmission(
+        currentContest as any,
+        currentContest?.platform,
+      ) ??
         (cpmCfg as any)?.max_earnings_per_creator ??
         0,
     );
+    const getMaxForSub = (platform?: string | null) =>
+      resolveMaxEarningsCentsForSubmission(currentContest as any, platform);
 
     const grouped = new Map<string, Submission[]>();
     for (const sub of leaderboardSubmissions || []) {
@@ -4298,11 +4250,12 @@ export default function ContestDetailClient({
 
       if (
         isDualRewardsContestType(currentContest?.contest_type) &&
-        maxEarningsPerCreator > 0
+        (maxKeyed || maxEarningsPerCreator > 0)
       ) {
         const rows = list.map((sub) => ({
           id: sub.id,
           created_at: sub.created_at,
+          platform: sub.platform,
           mRawCents: Number(
             milestoneSubmissionExpectedPayoutCents.get(sub.id) || 0,
           ),
@@ -4312,7 +4265,9 @@ export default function ContestDetailClient({
           ),
         }));
         const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
-          buildDualRewardCreatorCapSplitMaps(rows, maxEarningsPerCreator);
+          buildDualRewardCreatorCapSplitMapsByPlatform(rows, getMaxForSub, {
+            keyedCaps: maxKeyed,
+          });
         for (const r of rows) {
           preAdjustmentUncappedMap.set(r.id, r.cRawCents);
           preAdjustmentCappedMap.set(
@@ -4327,7 +4282,7 @@ export default function ContestDetailClient({
         continue;
       }
 
-      let runningTotal = 0;
+      const runningByPlatform = new Map<string, number>();
       for (const sub of list) {
         const baseExpectedReward = Math.max(
           0,
@@ -4342,12 +4297,19 @@ export default function ContestDetailClient({
           );
         }
 
-        if (!maxEarningsPerCreator || maxEarningsPerCreator <= 0) {
+        const subMax = maxKeyed
+          ? Number(getMaxForSub(sub.platform) || 0)
+          : maxEarningsPerCreator;
+        if (!subMax || subMax <= 0) {
           preAdjustmentCappedMap.set(sub.id, baseExpectedReward);
           continue;
         }
 
-        const remainingCap = maxEarningsPerCreator - runningTotal;
+        const runKey = maxKeyed
+          ? String(sub.platform || "").toLowerCase() || "_"
+          : "_";
+        const runningTotal = runningByPlatform.get(runKey) || 0;
+        const remainingCap = subMax - runningTotal;
         let cappedExpectedReward = baseExpectedReward;
         if (remainingCap <= 0) {
           cappedExpectedReward = 0;
@@ -4359,7 +4321,7 @@ export default function ContestDetailClient({
           baseExpectedReward,
           Math.max(0, remainingCap),
         );
-        runningTotal += amountApplied;
+        runningByPlatform.set(runKey, runningTotal + amountApplied);
       }
     }
     return {
@@ -5165,11 +5127,9 @@ export default function ContestDetailClient({
             ? (milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0)
             : 0;
         const cpmCents = isCpmContestType(currentContest?.contest_type)
-          ? isDualRew
-            ? (cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                submission.id,
-              ) ?? 0)
-            : calculateSubmissionExpectedEarnings(submission, false)
+          ? (cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              submission.id,
+            ) ?? calculateSubmissionExpectedEarnings(submission, false))
           : 0;
         const submissionEarnings = milestoneCents + cpmCents;
         group.earnings.expected += submissionEarnings;
@@ -5237,6 +5197,12 @@ export default function ContestDetailClient({
         group.metrics.manual_points_reason;
     });
 
+    const isTwitterCpmContest =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image" &&
+      isCpmContestType(currentContest?.contest_type);
+
     if (isDualRewardsContestType(currentContest?.contest_type)) {
       Object.values(grouped).forEach((group: any) => {
         let rawTotal = 0;
@@ -5259,6 +5225,30 @@ export default function ContestDetailClient({
               sub.id,
             ) ?? rawM;
           cappedTotal += capC + capM;
+        }
+        if (rawTotal > cappedTotal + 1) {
+          group.isCapped = true;
+          group.earningsBeforeCap = rawTotal;
+        }
+      });
+    } else if (
+      isCpmContestType(currentContest?.contest_type) &&
+      !isTwitterCpmContest
+    ) {
+      Object.values(grouped).forEach((group: any) => {
+        let rawTotal = 0;
+        let cappedTotal = 0;
+        for (const sub of group.submissions || []) {
+          const tw =
+            sub.is_twitter_tweet ||
+            String(sub.platform || "").toLowerCase() === "twitter";
+          if (tw) continue;
+          const rawC = calculateSubmissionExpectedEarnings(sub, false);
+          rawTotal += rawC;
+          cappedTotal +=
+            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              sub.id,
+            ) ?? rawC;
         }
         if (rawTotal > cappedTotal + 1) {
           group.isCapped = true;
@@ -5347,12 +5337,6 @@ export default function ContestDetailClient({
     }
 
     // Calculate earnings for Twitter CPM campaigns based on CPM rate and points
-    const isTwitterCpmContest =
-      (currentContest?.platform?.toLowerCase() === "twitter" ||
-        currentContest?.platform?.toLowerCase() === "x") &&
-      currentContest?.contest_format === "text_image" &&
-      isCpmContestType(currentContest?.contest_type);
-
     if (isTwitterCpmContest) {
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
@@ -5537,11 +5521,8 @@ export default function ContestDetailClient({
       isMilestoneContestType(currentContest?.contest_type) &&
       !isCpmContestType(currentContest?.contest_type)
     ) {
-      const milestoneDetails =
-        currentContest?.contest_based_details?.milestone_contest;
-      const milestones = milestoneDetails?.milestones || [];
-      if (milestones.length > 0) {
-        const payoutMap = milestoneSubmissionExpectedPayoutCents;
+      const payoutMap = milestoneSubmissionExpectedPayoutCents;
+      if (payoutMap.size > 0) {
         Object.values(grouped).forEach((group: any) => {
           const submissions = group.submissions || [];
           group.earnings.expected = submissions.reduce(
@@ -5572,13 +5553,20 @@ export default function ContestDetailClient({
     }
 
     // Apply earnings cap per creator for expected earnings display (for non-CPM campaigns)
-    const maxEarnings =
-      currentContest?.max_earnings_per_creator ??
-      (currentContest?.contest_based_details as any)?.cpm_contest
-        ?.max_earnings_per_creator ??
-      (currentContest?.contest_based_details as any)?.leaderboard_contest
-        ?.max_earnings_per_creator ??
-      null;
+    const maxKeyedForGroup = isKeyedMaxEarningsMap(
+      currentContest?.max_earnings_per_creator,
+    );
+    const maxEarnings = maxKeyedForGroup
+      ? null
+      : resolveMaxEarningsCentsForSubmission(
+          currentContest as any,
+          currentContest?.platform,
+        ) ??
+        (currentContest?.contest_based_details as any)?.cpm_contest
+          ?.max_earnings_per_creator ??
+        (currentContest?.contest_based_details as any)?.leaderboard_contest
+          ?.max_earnings_per_creator ??
+        null;
     if (
       maxEarnings &&
       maxEarnings > 0 &&
@@ -5593,6 +5581,48 @@ export default function ContestDetailClient({
           group.earnings.expected = maxEarnings;
         }
         // Do NOT cap granted earnings - it already reflects actual paid amounts from database
+      });
+    } else if (
+      maxKeyedForGroup &&
+      !isTwitterCpmContest &&
+      !isDualRewardsContestType(currentContest?.contest_type) &&
+      !isCpmContestType(currentContest?.contest_type)
+    ) {
+      Object.values(grouped).forEach((group: any) => {
+        const running = new Map<string, number>();
+        let cappedTotal = 0;
+        const subs = [...(group.submissions || [])].sort(
+          (a: any, b: any) =>
+            new Date(a.created_at || 0).getTime() -
+            new Date(b.created_at || 0).getTime(),
+        );
+        for (const sub of subs) {
+          const raw = String(getStatus(sub) || "").toLowerCase();
+          const st = raw === "approved" ? "verified" : raw;
+          if (st === "rejected") continue;
+          const base = Number(
+            milestoneSubmissionExpectedPayoutCents.get(sub.id) ?? 0,
+          );
+          const max =
+            resolveMaxEarningsCentsForSubmission(
+              currentContest as any,
+              sub.platform,
+            ) || 0;
+          const key = String(sub.platform || "").toLowerCase() || "_";
+          const used = running.get(key) || 0;
+          let capped = base;
+          if (max > 0) {
+            const remaining = max - used;
+            capped = remaining <= 0 ? 0 : Math.min(base, remaining);
+            running.set(key, used + capped);
+          }
+          cappedTotal += capped;
+        }
+        if (cappedTotal < group.earnings.expected) {
+          group.isCapped = true;
+          group.earningsBeforeCap = group.earnings.expected;
+          group.earnings.expected = cappedTotal;
+        }
       });
     }
 
@@ -5967,29 +5997,32 @@ export default function ContestDetailClient({
     return !isInstagramOrYoutube;
   }, [showRejectionReasonColumn, currentContest?.platform]);
 
-  const milestoneMostVerifiedReelsConfig = isMilestoneContestType(
-    currentContest?.contest_type,
-  )
-    ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-        ?.most_verified_reels
-    : null;
-  const milestoneMostVerifiedViewsConfig = isMilestoneContestType(
-    currentContest?.contest_type,
-  )
-    ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-        ?.most_verified_views
-    : null;
+  const milestoneBonusConfigs = useMemo(
+    () =>
+      isMilestoneContestType(currentContest?.contest_type)
+        ? collectMilestoneBonusConfigs(
+            (currentContest?.contest_based_details as Record<
+              string,
+              unknown
+            >) || null,
+            currentContest?.platform,
+          )
+        : [],
+    [currentContest?.contest_type, currentContest?.contest_based_details, currentContest?.platform],
+  );
+  const milestoneMostVerifiedReelsConfig = milestoneBonusConfigs.find(
+    (bonus) => bonus.most_verified_reels,
+  )?.most_verified_reels;
+  const milestoneMostVerifiedViewsConfig = milestoneBonusConfigs.find(
+    (bonus) => bonus.most_verified_views,
+  )?.most_verified_views;
   const showMostVerifiedViewsBonusColumns = Boolean(
     isMilestoneContestType(currentContest?.contest_type) &&
-    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-      ?.enabled &&
-    milestoneMostVerifiedViewsConfig,
+      milestoneBonusConfigs.some((bonus) => bonus.most_verified_views),
   );
   const showMostVerifiedReelsCreatorColumn = Boolean(
     isMilestoneContestType(currentContest?.contest_type) &&
-    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-      ?.enabled &&
-    milestoneMostVerifiedReelsConfig,
+      milestoneBonusConfigs.some((bonus) => bonus.most_verified_reels),
   );
   const showCreatorMilestoneVerifiedBonusActions =
     Boolean(isAdminView) &&
@@ -6048,10 +6081,7 @@ export default function ContestDetailClient({
     )
       return empty;
 
-    const bonusConfig = (currentContest?.contest_based_details as any)
-      ?.milestone_contest?.bonus;
-
-    return buildMilestoneMostVerifiedBonusByCreatorMap(
+    return buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
       (leaderboardSubmissions || []).map((sub: any) => ({
         id: sub.id,
         creator_id: milestoneMvCreatorIdKey(sub.creator_id),
@@ -6059,12 +6089,16 @@ export default function ContestDetailClient({
         status: getStatus(sub),
         deleted_at: sub.deleted_at,
         views: sub.views,
+        platform: sub.platform,
+        other_stats: sub.other_stats,
         bonus_paid: sub.bonus_paid,
         bonus_amount: sub.bonus_amount,
         milestone_bonus_paid: sub.milestone_bonus_paid,
         metadata: sub.metadata,
       })),
-      bonusConfig,
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
       milestoneLedgerNormalized,
       {
         shouldAdjustMostVerifiedMilestoneBonus:
@@ -6133,64 +6167,31 @@ export default function ContestDetailClient({
       isMilestoneContestType(currentContest?.contest_type) ||
       isDualRewardsContestType(currentContest?.contest_type);
     if (!isMilestoneLike) return empty;
-    const milestones =
-      currentContest?.contest_based_details?.milestone_contest?.milestones;
-    if (!Array.isArray(milestones) || milestones.length === 0) return empty;
 
-    const sortedMilestones = [...milestones].sort(
-      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
-    );
-    const winnerCountsByMilestone = new Map<number, number>();
-    const payoutMap = new Map<string, number>();
-
-    const eligible = (currentSubmissions || [])
-      .map((submission) => {
+    return buildMilestoneSubmissionPayoutAssignmentsFromDetails(
+      (currentSubmissions || []).map((submission) => {
         const rawStatus = (submission.status || "pending").toLowerCase();
         const normalizedStatus =
           rawStatus === "approved" ? "verified" : rawStatus;
-        const metrics = extractPlatformMetrics(submission);
-        const views = Number(metrics?.views ?? submission.views ?? 0);
         return {
           id: submission.id,
+          creator_id: submission.creator_id || null,
           created_at: submission.created_at,
           status: normalizedStatus,
           deleted_at: submission.deleted_at,
-          views: Number.isFinite(views) ? views : 0,
+          views: submission.views,
+          platform: submission.platform ?? null,
+          other_stats: submission.other_stats,
         };
-      })
-      .filter(
-        (submission) =>
-          (submission.status === "pending" ||
-            submission.status === "verified" ||
-            submission.status === "paid") &&
-          submission.deleted_at == null,
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.created_at || 0).getTime() -
-          new Date(b.created_at || 0).getTime(),
-      );
-
-    for (const submission of eligible) {
-      let payoutCents = 0;
-      const submissionViews = Number(submission.views || 0);
-      for (const milestone of sortedMilestones) {
-        const targetViews = Number(milestone.target_views || 0);
-        if (submissionViews < targetViews) continue;
-        if (milestone.winner_limit != null) {
-          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
-          if (currentWinners >= milestone.winner_limit) continue;
-          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
-        }
-        payoutCents = Number(milestone.payout_cents || 0);
-        break;
-      }
-      payoutMap.set(submission.id, payoutCents);
-    }
-    return payoutMap;
+      }),
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
+    ).payoutMap;
   }, [
     currentContest?.contest_type,
     currentContest?.contest_based_details,
+    currentContest?.platform,
     currentSubmissions,
   ]);
 
@@ -6229,11 +6230,8 @@ export default function ContestDetailClient({
     ) {
       return empty;
     }
-    const bonusConfig = (currentContest?.contest_based_details as any)
-      ?.milestone_contest?.bonus;
-    if (!bonusConfig?.enabled) return empty;
 
-    return buildMilestoneMostVerifiedBonusByCreatorMap(
+    return buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
       (currentSubmissions || []).map((sub: any) => ({
         id: sub.id,
         creator_id: milestoneMvCreatorIdKey(sub.creator_id),
@@ -6241,12 +6239,16 @@ export default function ContestDetailClient({
         status: getStatus(sub),
         deleted_at: sub.deleted_at,
         views: sub.views,
+        platform: sub.platform,
+        other_stats: sub.other_stats,
         bonus_paid: sub.bonus_paid,
         bonus_amount: sub.bonus_amount,
         milestone_bonus_paid: sub.milestone_bonus_paid,
         metadata: sub.metadata,
       })),
-      bonusConfig,
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
       milestoneLedgerNormalized,
       {
         shouldAdjustMostVerifiedMilestoneBonus:
@@ -12288,31 +12290,8 @@ export default function ContestDetailClient({
   );
 
   /**
-   * View count used for CPM math (matches instagram-insights: prefer views, else reach for IG).
+   * Expected earnings for a submission. When useStoredEarnings is false, always compute from CPM formula so "Expected" column stays correct after payment.
    */
-  function getCpmBasisViewCountForSubmission(submission: Submission): number {
-    const platform = String(submission.platform || "").toLowerCase();
-    const tiktokViews =
-      Number((submission as any)?.other_stats?.tiktok?.view_count) || 0;
-    if (platform.includes("tiktok") && tiktokViews > 0) {
-      return tiktokViews;
-    }
-    let raw = Number(submission.views ?? 0);
-    if (platform.includes("instagram")) {
-      const stats = submission.other_stats || {};
-      const ig =
-        (stats as any).instagram && typeof (stats as any).instagram === "object"
-          ? ((stats as any).instagram as Record<string, unknown>)
-          : (stats as Record<string, unknown>);
-      const igViews = Number(ig.views ?? 0);
-      raw = Math.max(raw, igViews);
-      const reach = Number(ig.reach ?? 0);
-      if (raw === 0 && reach > 0) raw = reach;
-    }
-    return raw;
-  }
-
-  /** Expected earnings for a submission. When useStoredEarnings is false, always compute from CPM formula so "Expected" column stays correct after payment. */
   function calculateSubmissionExpectedEarnings(
     submission: Submission,
     useStoredEarnings = true,
@@ -12321,27 +12300,12 @@ export default function ContestDetailClient({
       useStoredEarnings && submission.earnings ? submission.earnings : 0;
 
     if (!expectedEarnings && isCpmContestType(currentContest?.contest_type)) {
-      const cpmConfig = (currentContest?.contest_based_details as any)
-        ?.cpm_contest;
-      if (cpmConfig?.cpm_rate_usd) {
-        let effectiveViews = getCpmBasisViewCountForSubmission(submission);
-        if (
-          cpmConfig.min_views != null &&
-          effectiveViews < cpmConfig.min_views
-        ) {
-          effectiveViews = 0;
-        }
-        if (
-          cpmConfig.max_views != null &&
-          effectiveViews > cpmConfig.max_views
-        ) {
-          effectiveViews = cpmConfig.max_views;
-        }
-
-        expectedEarnings = Math.round(
-          (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000,
-        );
-      }
+      expectedEarnings = computeCpmRawCentsForRow(
+        submission,
+        (currentContest?.contest_based_details as Record<string, unknown>) ||
+          null,
+        currentContest?.platform,
+      );
     }
 
     return expectedEarnings;
@@ -14490,9 +14454,10 @@ export default function ContestDetailClient({
           })()}
 
           {isCpmContestType(currentContest.contest_type) &&
-            getPoolBudgetCentsFromDetails(
+            resolveContestPoolBudgetCents(
               currentContest.contest_type,
               currentContest.contest_based_details,
+              currentContest.platform,
             ) > 0 && (
               <div
                 className={cn(
@@ -14539,9 +14504,10 @@ export default function ContestDetailClient({
                         )}
                       >
                         {formatMoney(
-                          getPoolBudgetCentsFromDetails(
+                          resolveContestPoolBudgetCents(
                             currentContest.contest_type,
                             currentContest.contest_based_details,
+                            currentContest.platform,
                           ),
                         )}
                       </p>
@@ -14767,9 +14733,10 @@ export default function ContestDetailClient({
 
         {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
         {isCpmContestType(currentContest.contest_type) &&
-          getPoolBudgetCentsFromDetails(
+          resolveContestPoolBudgetCents(
             currentContest.contest_type,
             currentContest.contest_based_details,
+            currentContest.platform,
           ) > 0 && (
             <div
               className={cn(
@@ -14832,14 +14799,16 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget: getPoolBudgetCentsFromDetails(
+                    total_budget: resolveContestPoolBudgetCents(
                       currentContest.contest_type,
                       currentContest.contest_based_details,
+                      currentContest.platform,
                     ),
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
+                    platform: currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -14936,6 +14905,7 @@ export default function ContestDetailClient({
                     contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
+                    platform: currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -15015,6 +14985,7 @@ export default function ContestDetailClient({
                     contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
+                    platform: currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -15662,9 +15633,12 @@ export default function ContestDetailClient({
                       platform={platform}
                       showPlatformLabel={showOverviewPayoutPlatformLabels}
                       isTwitterCpmCampaign={isTwitterCpmCampaign}
-                      winnerCountsByMilestone={
-                        milestoneSubmissionAssignments.winnerCountsByMilestone
-                      }
+                      winnerCountsByMilestone={winnerCountsByTargetForPlatform(
+                        milestoneSubmissionAssignments.winnerCountsByKey,
+                        platform ??
+                          parseVideoContestPlatforms(currentContest.platform)[0] ??
+                          null,
+                      )}
                     />
                   );
                 })}
@@ -17365,9 +17339,10 @@ export default function ContestDetailClient({
                 )}
 
                 {isDualRewardsContestType(overviewDetailContest.contest_type) &&
-                  getPoolBudgetCentsFromDetails(
+                  resolveContestPoolBudgetCents(
                     overviewDetailContest.contest_type,
                     overviewDetailContest.contest_based_details,
+                    overviewDetailContest.platform,
                   ) > 0 && (
                     <div className="space-y-3">
                       <div
@@ -17393,9 +17368,10 @@ export default function ContestDetailClient({
                           )}
                         >
                           {formatMoney(
-                            getPoolBudgetCentsFromDetails(
+                            resolveContestPoolBudgetCents(
                               overviewDetailContest.contest_type,
                               overviewDetailContest.contest_based_details,
+                              overviewDetailContest.platform,
                             ),
                           )}
                         </span>
@@ -22118,8 +22094,10 @@ export default function ContestDetailClient({
                                             preCents === 0 &&
                                             uncappedAdjusted > 0;
                                           const activeCreatorCapCents = Number(
-                                            (currentContest as any)
-                                              ?.max_earnings_per_creator ??
+                                            resolveMaxEarningsCentsForSubmission(
+                                              currentContest as any,
+                                              submission.platform,
+                                            ) ??
                                               (currentContest as any)
                                                 ?.contest_based_details
                                                 ?.cpm_contest
@@ -22177,8 +22155,10 @@ export default function ContestDetailClient({
                                         }
                                       }
                                       const activeCreatorCapForDualMs = Number(
-                                        (currentContest as any)
-                                          ?.max_earnings_per_creator ??
+                                        resolveMaxEarningsCentsForSubmission(
+                                          currentContest as any,
+                                          submission.platform,
+                                        ) ??
                                           (currentContest as any)
                                             ?.contest_based_details?.cpm_contest
                                             ?.max_earnings_per_creator ??
@@ -22310,18 +22290,11 @@ export default function ContestDetailClient({
                                         currentContest.contest_type,
                                       )
                                     ) {
-                                      const milestones =
-                                        currentContest.contest_based_details
-                                          ?.milestone_contest?.milestones;
-                                      if (
-                                        Array.isArray(milestones) &&
-                                        milestones.length > 0
-                                      ) {
-                                        const cents =
-                                          milestoneSubmissionExpectedPayoutCents.get(
-                                            submission.id,
-                                          ) ?? 0;
-                                        if (cents > 0) {
+                                      const cents =
+                                        milestoneSubmissionExpectedPayoutCents.get(
+                                          submission.id,
+                                        ) ?? 0;
+                                      if (cents > 0) {
                                           const postCents =
                                             payoutAdjMilestonePortion
                                               ? applyPayoutAdjustment(
@@ -22344,7 +22317,6 @@ export default function ContestDetailClient({
                                               postDollars,
                                           };
                                         }
-                                      }
                                       return {
                                         amount: 0,
                                         label: "N/A",
@@ -27403,7 +27375,11 @@ export default function ContestDetailClient({
                                                                   <span
                                                                     className="text-amber-600 cursor-help"
                                                                     title={`Capped at ${formatMoney(
-                                                                      currentContest.max_earnings_per_creator ??
+                                                                      resolveMaxEarningsCentsForSubmission(
+                                                                        currentContest as any,
+                                                                        group.submissions?.[0]
+                                                                          ?.platform,
+                                                                      ) ??
                                                                         (
                                                                           currentContest.contest_based_details as any
                                                                         )
@@ -27414,7 +27390,13 @@ export default function ContestDetailClient({
                                                                         )
                                                                           ?.leaderboard_contest
                                                                           ?.max_earnings_per_creator,
-                                                                    )}. Original: ${formatMoney(
+                                                                    )}${
+                                                                      isKeyedMaxEarningsMap(
+                                                                        currentContest.max_earnings_per_creator,
+                                                                      )
+                                                                        ? " per platform"
+                                                                        : ""
+                                                                    }. Original: ${formatMoney(
                                                                       group.earningsBeforeCap,
                                                                     )}`}
                                                                   >
@@ -27609,8 +27591,19 @@ export default function ContestDetailClient({
                                                             <span
                                                               className="text-amber-600 cursor-help"
                                                               title={`Capped at ${formatMoney(
-                                                                currentContest.max_earnings_per_creator,
-                                                              )}. Original: ${formatMoney(
+                                                                resolveMaxEarningsCentsForSubmission(
+                                                                  currentContest as any,
+                                                                  group.submissions?.[0]
+                                                                    ?.platform,
+                                                                ) ??
+                                                                  currentContest.max_earnings_per_creator,
+                                                              )}${
+                                                                isKeyedMaxEarningsMap(
+                                                                  currentContest.max_earnings_per_creator,
+                                                                )
+                                                                  ? " per platform"
+                                                                  : ""
+                                                              }. Original: ${formatMoney(
                                                                 group.earningsBeforeCap,
                                                               )}`}
                                                             >

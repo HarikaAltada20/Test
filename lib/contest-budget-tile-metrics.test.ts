@@ -264,4 +264,124 @@ describe("contest-budget-tile-metrics", () => {
     assert.equal(tile!.numeratorCents, 108_000);
     assert.equal(tile!.denominatorCents, 10_000);
   });
+
+  it("CPM filled uses per-platform rates on multi-platform contests", () => {
+    const contest = {
+      contest_type: "cpm",
+      post_contest_status: "pending_review",
+      platform: "youtube,instagram",
+      contest_based_details: {
+        youtube: {
+          contest_type: "cpm",
+          cpm_contest: { cpm_rate_usd: 1, total_budget: 10_000 },
+        },
+        instagram: {
+          contest_type: "cpm",
+          cpm_contest: { cpm_rate_usd: 2, total_budget: 10_000 },
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "yt",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 10_000,
+        platform: "youtube",
+      },
+      {
+        id: "ig",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 10_000,
+        platform: "instagram",
+      },
+    ];
+    // $1 CPM on 10k YT views = $10; $2 CPM on 10k IG views = $20
+    assert.equal(computeBudgetFilledCents(contest, submissions), 3_000);
+  });
+
+  it("CPM filled uses TikTok other_stats view_count", () => {
+    const contest = {
+      contest_type: "cpm",
+      post_contest_status: "pending_review",
+      contest_based_details: {
+        cpm_contest: { total_budget: 100_000, cpm_rate_usd: 1 },
+      },
+    };
+    const submissions = [
+      {
+        id: "tt",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 0,
+        platform: "tiktok",
+        other_stats: { tiktok: { view_count: 20_000 } },
+      },
+    ];
+    assert.equal(computeBudgetFilledCents(contest, submissions), 2_000);
+  });
+
+  it("milestone filled uses per-platform ladders on multi-platform contests", () => {
+    const contest = {
+      contest_type: "milestone",
+      post_contest_status: "pending_review",
+      platform: "youtube,tiktok",
+      contest_based_details: {
+        youtube: {
+          contest_type: "milestone",
+          milestone_contest: {
+            milestones: [
+              { target_views: 1000, payout_cents: 1_000, winner_limit: null },
+            ],
+          },
+        },
+        tiktok: {
+          contest_type: "milestone",
+          milestone_contest: {
+            milestones: [
+              { target_views: 1000, payout_cents: 5_000, winner_limit: null },
+            ],
+          },
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "yt",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 2_000,
+        platform: "youtube",
+      },
+      {
+        id: "tt",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 2_000,
+        platform: "tiktok",
+      },
+    ];
+    assert.equal(computeBudgetFilledCents(contest, submissions), 6_000);
+  });
 });

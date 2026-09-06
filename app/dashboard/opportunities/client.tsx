@@ -247,30 +247,18 @@ const getContestListCpmRateRow = (
   return { label: "CPM Rate: ", value };
 };
 
-function getDualUnifiedBudgetMeta(contest: any): {
+function getOpportunityBudgetTrackerMeta(contest: any): {
   total: number;
   spent: number;
 } | null {
-  if (contest?.contest_type !== "dual_rewards") return null;
-  const details = contest.contest_based_details;
-  if (!details) return null;
-  const total = resolveContestPoolBudgetCents(
-    "dual_rewards",
-    details,
-    contest.platform,
-  );
+  if (!contest || contest.contest_type === "leaderboard") return null;
+  const total = getContestListPoolBudgetCents(contest);
   if (total <= 0) return null;
-  const hasNestedCpmBudget =
-    typeof details.cpm_contest?.total_budget === "number" &&
-    details.cpm_contest.total_budget > 0;
-  const hasNestedMilestoneBudget =
-    typeof details.milestone_contest?.total_budget_cents === "number" &&
-    details.milestone_contest.total_budget_cents > 0;
-  if (hasNestedCpmBudget || hasNestedMilestoneBudget) return null;
   const spentRaw = getPoolBudgetSpentCentsForDisplay({
     contest_type: contest.contest_type,
     post_contest_status: contest.post_contest_status,
-    contest_based_details: details,
+    contest_based_details: contest.contest_based_details,
+    platform: contest.platform,
   });
   const tracker = getBudgetTrackerValues(total, spentRaw);
   return { total, spent: tracker.spent };
@@ -1474,7 +1462,7 @@ export default function OpportunitiesPage({
 
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
-    const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
+    const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
     return (
       <Card
         key={contest.id}
@@ -1950,9 +1938,9 @@ export default function OpportunitiesPage({
               </div>
 
               {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
-              {dualUnifiedBudget &&
+              {opportunityBudgetTracker &&
                 (() => {
-                  const { total, spent } = dualUnifiedBudget;
+                  const { total, spent } = opportunityBudgetTracker;
                   const tracker = getBudgetTrackerValues(total, spent);
                   return (
                     <div className="mt-3">
@@ -1994,7 +1982,7 @@ export default function OpportunitiesPage({
                 })()}
 
               {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
-              {!dualUnifiedBudget &&
+              {!opportunityBudgetTracker &&
                 isCpmContestType(contest.contest_type) &&
                 contest.contest_based_details?.cpm_contest?.total_budget !=
                   null &&
@@ -2054,7 +2042,7 @@ export default function OpportunitiesPage({
                 })()}
 
               {/* Milestone budget_spent: paid vs filled in fetchData (see contest-budget-tile-metrics) */}
-              {!dualUnifiedBudget &&
+              {!opportunityBudgetTracker &&
                 isMilestoneContestType(contest.contest_type) &&
                 contest.contest_based_details?.milestone_contest
                   ?.total_budget_cents != null &&
@@ -2684,7 +2672,7 @@ export default function OpportunitiesPage({
                 </div>
               ) : paginatedContests && paginatedContests.length > 0 ? (
                 paginatedContests.map((contest) => {
-                  const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
+                  const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
                   return (
                     <Card
                       key={contest.id}
@@ -3223,9 +3211,9 @@ export default function OpportunitiesPage({
                           </div>
 
                           {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
-                          {dualUnifiedBudget &&
+                          {opportunityBudgetTracker &&
                             (() => {
-                              const { total, spent } = dualUnifiedBudget;
+                              const { total, spent } = opportunityBudgetTracker;
                               const tracker = getBudgetTrackerValues(
                                 total,
                                 spent,
@@ -3284,7 +3272,7 @@ export default function OpportunitiesPage({
                             })()}
 
                           {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
-                          {!dualUnifiedBudget &&
+                          {!opportunityBudgetTracker &&
                             isCpmContestType(contest.contest_type) &&
                             contest.contest_based_details?.cpm_contest
                               ?.total_budget != null &&
@@ -3427,7 +3415,7 @@ export default function OpportunitiesPage({
                             })()}
 
                           {/* Budget Spent Progress Bar for Milestone contests (and dual rewards milestone pool) */}
-                          {!dualUnifiedBudget &&
+                          {!opportunityBudgetTracker &&
                             isMilestoneContestType(contest.contest_type) &&
                             contest.contest_based_details?.milestone_contest
                               ?.total_budget_cents != null &&

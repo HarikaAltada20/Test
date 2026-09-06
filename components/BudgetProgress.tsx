@@ -12,6 +12,15 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { getCpmEligibleViewsFromRow } from "@/lib/cpm-eligible-views";
+import {
+  isKeyedMaxEarningsMap,
+  resolveCpmContestConfigForPlatform,
+  resolveContestPoolBudgetCents,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
+import { collectMilestoneBonusConfigs } from "@/lib/milestone-contest-expected-spend";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 
@@ -29,7 +38,8 @@ interface Contest {
   total_budget?: number | null;
   contest_based_details: any;
   contest_type: string;
-  max_earnings_per_creator?: number | null;
+  max_earnings_per_creator?: number | Record<string, unknown> | null;
+  platform?: string | null;
 }
 
 interface BudgetProgressProps {
@@ -77,10 +87,13 @@ export function BudgetProgress({
   )
     ? (contest.contest_based_details as any)?.milestone_contest
     : null;
-  const milestoneCreatorBonusConfigured = Boolean(
-    milestoneContestConfig?.bonus?.enabled &&
-      (milestoneContestConfig?.bonus?.most_verified_views ||
-        milestoneContestConfig?.bonus?.most_verified_reels),
+  const milestoneCreatorBonusConfigured = collectMilestoneBonusConfigs(
+    contest.contest_based_details,
+    contest.platform,
+  ).some(
+    (bonus) =>
+      Boolean(bonus?.enabled) &&
+      Boolean(bonus.most_verified_views || bonus.most_verified_reels),
   );
   const hasFlatFeeBonus =
     (contest.contest_type !== "dual_rewards" && flatFeeBonus > 0) ||
@@ -111,10 +124,17 @@ export function BudgetProgress({
         ? contest.total_budget
         : 0;
     if (totalBudget <= 0 && contest.contest_type !== "leaderboard") {
-      totalBudget = getPoolBudgetCentsFromDetails(
+      totalBudget = resolveContestPoolBudgetCents(
         contest.contest_type,
         contest.contest_based_details,
+        contest.platform,
       );
+      if (totalBudget <= 0) {
+        totalBudget = getPoolBudgetCentsFromDetails(
+          contest.contest_type,
+          contest.contest_based_details,
+        );
+      }
     }
 
     const prizePoolTotal =
@@ -129,11 +149,27 @@ export function BudgetProgress({
         ? cpmConfig.flat_fee_bonus_cap
         : contest.total_budget || 0;
 
-    const maxEarningsPerCreator =
-      (contest as any).max_earnings_per_creator || null;
+    const maxEarningsKeyed = isKeyedMaxEarningsMap(
+      (contest as any).max_earnings_per_creator,
+    );
+    const maxEarningsPerCreator = maxEarningsKeyed
+      ? null
+      : resolveMaxEarningsCentsForSubmission(
+          contest as any,
+          contest.platform,
+        ) ||
+        (typeof (contest as any).max_earnings_per_creator === "number"
+          ? (contest as any).max_earnings_per_creator
+          : null);
+    const creatorPlatformCpmSpent = new Map<string, number>();
     const cpmRate = cpmConfig?.cpm_rate_usd || 0;
     const minViews = cpmConfig?.min_views;
     const maxViews = cpmConfig?.max_views;
+    const detailsRecord =
+      contest.contest_based_details &&
+      typeof contest.contest_based_details === "object"
+        ? (contest.contest_based_details as Record<string, unknown>)
+        : null;
 
     // Group submissions by creator to apply cap correctly
     const creatorEarnings = new Map<
@@ -370,15 +406,23 @@ export function BudgetProgress({
       // Calculate CPM earnings
       let submissionEarnings = 0;
       const submissionPlatform = (sub as any).platform?.toLowerCase();
+      const platformCfg = resolveCpmContestConfigForPlatform(
+        detailsRecord,
+        (sub as any).platform,
+        contest.platform,
+      );
+      const subRate = platformCfg?.cpm_rate_usd || cpmRate;
+      const subMin = platformCfg?.min_views ?? minViews;
+      const subMax = platformCfg?.max_views ?? maxViews;
 
       if (submissionPlatform === "twitter") {
         const basePoints = (sub as any).other_stats?.base_points || 0;
         const manualPointsAdjustment =
           (sub as any).manual_points_adjustment || 0;
         const totalPoints = basePoints + manualPointsAdjustment;
-        submissionEarnings = (totalPoints * cpmRate) / 1000;
+        submissionEarnings = (totalPoints * subRate) / 1000;
         console.log(
-          `[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(
+          `[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${subRate}, earnings=${submissionEarnings.toFixed(
             2
           )}`
         );
@@ -390,32 +434,47 @@ export function BudgetProgress({
             submissionPlatform || "Unknown"
           } Paid] earnings=${submissionEarnings.toFixed(2)}`
         );
+      } else if (isDualRewards) {
+        submissionEarnings =
+          computeCpmRawCentsForRow(
+            sub as any,
+            detailsRecord,
+            contest.platform,
+          ) / 100;
       } else {
         // Calculate expected earnings from CPM formula.
-        // For dual rewards we intentionally keep CPM contribution formula-based
-        // (not from custom paid amount), so CPM + milestone tracker never drops
-        // after paying one component.
-        let views = (sub as any).views || 0;
-        if (minViews != null && views < minViews) views = 0;
-        if (maxViews != null && views > maxViews) views = maxViews;
-        submissionEarnings = (views * cpmRate) / 1000;
+        let views = getCpmEligibleViewsFromRow(sub as any);
+        if (subMin != null && views < subMin) views = 0;
+        if (subMax != null && views > subMax) views = subMax;
+        submissionEarnings = (views * subRate) / 1000;
         console.log(
           `[${
             submissionPlatform || "Unknown"
-          } Unpaid] views=${views}, cpmRate=${cpmRate}, earnings=${submissionEarnings.toFixed(
+          } Unpaid] views=${views}, cpmRate=${subRate}, earnings=${submissionEarnings.toFixed(
             2
           )}`
         );
       }
 
-      // Apply creator cap if configured
-      if (maxEarningsPerCreator) {
-        const maxInDollars = maxEarningsPerCreator / 100;
-        const remainingCap = maxInDollars - creatorData.cpmTotal;
+      // Apply creator cap if configured (keyed maps are per-platform).
+      const subCapCents = maxEarningsKeyed
+        ? resolveMaxEarningsCentsForSubmission(
+            contest as any,
+            (sub as any).platform,
+          )
+        : maxEarningsPerCreator;
+      if (subCapCents && subCapCents > 0) {
+        const maxInDollars = subCapCents / 100;
+        const capKey = maxEarningsKeyed
+          ? `${creatorId}:${String((sub as any).platform || "").toLowerCase() || "_"}`
+          : creatorId;
+        const used = creatorPlatformCpmSpent.get(capKey) || 0;
+        const remainingCap = maxInDollars - used;
         if (remainingCap > 0) {
-          creatorData.cpmTotal += Math.min(submissionEarnings, remainingCap);
+          const applied = Math.min(submissionEarnings, remainingCap);
+          creatorData.cpmTotal += applied;
+          creatorPlatformCpmSpent.set(capKey, used + applied);
         }
-        // If cap reached, this submission contributes $0
       } else {
         creatorData.cpmTotal += submissionEarnings;
       }

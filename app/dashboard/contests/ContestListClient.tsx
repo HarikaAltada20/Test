@@ -426,6 +426,7 @@ const getContestBudgetSpentForTracker = (contest: Contest): number =>
     contest_type: contest.contest_type,
     post_contest_status: contest.post_contest_status,
     contest_based_details: contest.contest_based_details,
+    platform: contest.platform,
   });
 
 const getContestListPoolBudgetCents = (contest: Contest): number =>

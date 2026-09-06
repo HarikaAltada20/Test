@@ -14,7 +14,11 @@ import {
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
-import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
+import { buildMilestoneSubmissionPayoutCentsMapFromDetails } from "@/lib/milestone-contest-expected-spend";
+import {
+  isKeyedMaxEarningsMap,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
 import {
   buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
@@ -295,14 +299,7 @@ export async function POST(request: NextRequest) {
     // Milestone payout — same FCFS + limits + view rules as contest detail / verify-submission
     let milestonePayoutBySubmissionId = new Map<string, number>();
     if (contest.contest_type === "milestone") {
-      const milestoneContest = (contest.contest_based_details as any)
-        ?.milestone_contest;
-      const milestones = Array.isArray(milestoneContest?.milestones)
-        ? milestoneContest.milestones
-        : [];
-
-      if (milestones.length > 0) {
-        const { data: payoutEligibleSubs, error: payoutEligibleErr } =
+      const { data: payoutEligibleSubs, error: payoutEligibleErr } =
           await fetchContestSubmissionsAllPages(
             supabaseAdmin,
             contest_id,
@@ -335,9 +332,13 @@ export async function POST(request: NextRequest) {
             other_stats: sub.other_stats,
           }));
           milestonePayoutBySubmissionId =
-            buildMilestoneSubmissionPayoutCentsMap(records, milestones);
+            buildMilestoneSubmissionPayoutCentsMapFromDetails(
+              records,
+              (contest.contest_based_details as Record<string, unknown>) ||
+                null,
+              contest.platform,
+            );
         }
-      }
     }
 
     // Get flat fee bonus and total budget
@@ -350,10 +351,15 @@ export async function POST(request: NextRequest) {
     const totalBudget = contestDetails?.total_budget || null;
     const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
+    const maxEarningsKeyed = isKeyedMaxEarningsMap(
+      contest.max_earnings_per_creator,
+    );
     const maxEarnings =
-      contest.max_earnings_per_creator ||
-      contestDetails?.max_earnings_per_creator ||
-      null;
+      maxEarningsKeyed
+        ? null
+        : typeof contest.max_earnings_per_creator === "number"
+          ? contest.max_earnings_per_creator
+          : contestDetails?.max_earnings_per_creator || null;
 
     const payoutAdjustment = parsePayoutAdjustment(
       contest.payout_adjustment_percentage,
@@ -523,7 +529,7 @@ export async function POST(request: NextRequest) {
       await fetchContestSubmissionsAllPages(
         supabaseAdmin,
         contest_id,
-        "earnings, paid",
+        "earnings, paid, platform",
         {
           creatorId: creator_id,
           paid: true,
@@ -546,6 +552,17 @@ export async function POST(request: NextRequest) {
       }>,
     );
     runningTotal = alreadyPaidAmount;
+    const runningByPlatform = new Map<string, number>();
+    if (maxEarningsKeyed) {
+      for (const row of previousSubmissions || []) {
+        const key = String((row as any).platform || "").toLowerCase() || "_";
+        runningByPlatform.set(
+          key,
+          (runningByPlatform.get(key) || 0) +
+            Math.max(0, Number((row as any).earnings) || 0),
+        );
+      }
+    }
 
     // Non-Twitter leaderboard: per-submission prizes from contest-wide views rank.
     // Ranking is always fetched fresh (no cross-request cache) so concurrent
@@ -628,18 +645,36 @@ export async function POST(request: NextRequest) {
 
         // Cap applies to CPM, stored-earnings, and leaderboard rank prizes so pay
         // cannot exceed creator-wise Expected Reward (max_earnings_per_creator).
-        if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
-          // Partial payment to reach cap exactly
-          const remainingCap = maxEarnings - runningTotal;
+        const subCap = maxEarningsKeyed
+          ? resolveMaxEarningsCentsForSubmission(
+              contest as any,
+              (sub as any).platform,
+            )
+          : maxEarnings;
+        const runKey = maxEarningsKeyed
+          ? String((sub as any).platform || "").toLowerCase() || "_"
+          : "_";
+        const platformRunning = maxEarningsKeyed
+          ? runningByPlatform.get(runKey) || 0
+          : runningTotal;
+        if (subCap && platformRunning + submissionEarnings > subCap) {
+          const remainingCap = subCap - platformRunning;
           if (remainingCap > 0) {
             submissionEarnings = remainingCap;
-            runningTotal = maxEarnings;
+            if (maxEarningsKeyed) {
+              runningByPlatform.set(runKey, subCap);
+            } else {
+              runningTotal = subCap;
+            }
           } else {
-            // Cap reached, skip this submission for reward payment
             submissionEarnings = 0;
           }
         } else {
-          runningTotal += submissionEarnings;
+          if (maxEarningsKeyed) {
+            runningByPlatform.set(runKey, platformRunning + submissionEarnings);
+          } else {
+            runningTotal += submissionEarnings;
+          }
         }
 
         // Leaderboard prizes are fixed rank amounts — do not apply % payout adjustment.

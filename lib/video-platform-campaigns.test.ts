@@ -24,6 +24,8 @@ import {
   resolveContestPlatformCpmRates,
   formatContestListCpmRatesText,
   withProjectedTopLevelPayout,
+  resolveCpmContestConfigForPlatform,
+  contestHasUsableCpmRate,
   briefHtmlForPlatform,
   rulesHtmlForPlatform,
 } from "./video-platform-campaigns";
@@ -374,6 +376,38 @@ describe("resolveContestPlatformCpmRates", () => {
       (c) => `$${(c / 100).toFixed(2)}`,
     );
     assert.equal(text, "$1.00 / 1k views");
+  });
+});
+
+describe("resolveCpmContestConfigForPlatform", () => {
+  it("reads the submission platform rate on multi-platform contests", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      totalBudget: "100",
+      cpmRate: "1",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      totalBudget: "100",
+      cpmRate: "2",
+    });
+    const details = { youtube, instagram };
+    assert.equal(
+      resolveCpmContestConfigForPlatform(details, "instagram", "youtube,instagram")
+        ?.cpm_rate_usd,
+      2,
+    );
+    assert.equal(
+      resolveCpmContestConfigForPlatform(details, "youtube", "youtube,instagram")
+        ?.cpm_rate_usd,
+      1,
+    );
+    assert.equal(
+      contestHasUsableCpmRate(details, "youtube,instagram"),
+      true,
+    );
   });
 });
 
