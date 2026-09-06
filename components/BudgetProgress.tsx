@@ -3,6 +3,7 @@
 import { calculateMilestoneBudgetSpent } from "@/lib/contest-utils-client";
 import {
   computeBudgetPaidCents,
+  computeDualRewardsCpmMilestoneFilledCents,
   getBudgetTileMode,
   type BudgetTileSubmission,
 } from "@/lib/contest-budget-tile-metrics";
@@ -40,6 +41,7 @@ interface Contest {
   contest_type: string;
   max_earnings_per_creator?: number | Record<string, unknown> | null;
   platform?: string | null;
+  bonus_details?: unknown;
 }
 
 interface BudgetProgressProps {
@@ -569,34 +571,10 @@ export function BudgetProgress({
     let bonusPaid = Math.round(bonusTotal * 100); // Convert back to cents
 
     if (contest.contest_type === "dual_rewards") {
-      const milestoneContest = (contest.contest_based_details as any)
-        ?.milestone_contest;
-      const milestones = milestoneContest?.milestones || [];
       const normalizeMilestoneStatus = (raw: unknown) => {
         const st = String(raw || "").toLowerCase();
         return st === "approved" ? "verified" : st;
       };
-      const subsForMilestone = submissions.map((s) => ({
-        ...(s as object),
-        status: normalizeMilestoneStatus((s as any).status),
-      }));
-
-      const useDetailMilestone =
-        typeof milestoneExpectedPayoutCents === "number" &&
-        !Number.isNaN(milestoneExpectedPayoutCents) &&
-        milestoneExpectedPayoutCents >= 0;
-      const aggregateMilestoneCents =
-        milestones.length > 0
-          ? Math.round(
-              calculateMilestoneBudgetSpent(
-                subsForMilestone as any,
-                milestones,
-              ) * 100,
-            )
-          : 0;
-      const milestoneCents = useDetailMilestone
-        ? Math.round(milestoneExpectedPayoutCents!)
-        : aggregateMilestoneCents;
 
       let bonusPaidFromSubmissions = 0;
       for (const s of submissions) {
@@ -630,7 +608,17 @@ export function BudgetProgress({
           ? bonusPaidFromMap
           : bonusPaidFromSubmissions;
 
-      cpmPaid = cpmPaid + milestoneCents;
+      cpmPaid = computeDualRewardsCpmMilestoneFilledCents(
+        {
+          contest_type: contest.contest_type,
+          post_contest_status: postContestStatus,
+          contest_based_details: contest.contest_based_details,
+          max_earnings_per_creator: (contest as any).max_earnings_per_creator,
+          platform: contest.platform,
+          bonus_details: (contest as any).bonus_details,
+        },
+        submissions as BudgetTileSubmission[],
+      );
       bonusPaid = creatorBonusCents;
     }
 

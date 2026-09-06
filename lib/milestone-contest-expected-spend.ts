@@ -78,12 +78,20 @@ export function winnerCountsByTargetForPlatform(
   winnerCountsByKey: Map<string, number>,
   platform: string | null | undefined,
 ): Map<number, number> {
-  const prefix = `${videoContestPlatformFromValue(platform) ?? "_"}:`;
+  const platforms = parseVideoContestPlatforms(platform);
+  const prefixes =
+    platforms.length === 1
+      ? [`${platforms[0]}:`]
+      : platforms.length > 1
+        ? platforms.map((p) => `${p}:`)
+        : [`_:`];
   const out = new Map<number, number>();
   for (const [key, count] of winnerCountsByKey) {
-    if (!key.startsWith(prefix)) continue;
+    const prefix = prefixes.find((p) => key.startsWith(p));
+    if (!prefix) continue;
     const target = Number(key.slice(prefix.length));
-    if (Number.isFinite(target)) out.set(target, count);
+    if (!Number.isFinite(target)) continue;
+    out.set(target, (out.get(target) || 0) + count);
   }
   return out;
 }
@@ -917,7 +925,6 @@ export function computeMilestoneContestExpectedSpendCentsFromDetails(
     details,
     contestPlatformCsv,
   );
-  if (map.size === 0) return 0;
 
   let ladder = 0;
   for (const sub of submissions) {

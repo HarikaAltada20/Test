@@ -183,6 +183,10 @@ export async function enqueuePlatformMetricsRefresh(options: {
   if (platform === "youtube") {
     body.scope = scope;
   }
+  // Mid-chain advance: claim + skip cooldown even if cron auth header is missing.
+  if (useCronAuth) {
+    body.chainContinue = true;
+  }
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -371,8 +375,9 @@ export async function advanceMultiPlatformMetricsChainAfterTerminal(options: {
     return { advanced: false, error: saveResult.error };
   }
 
+  const advanceBaseUrl = resolveMetricsChainAdvanceBaseUrl(baseUrl);
   const enqueueResult = await enqueuePlatformMetricsRefresh({
-    baseUrl,
+    baseUrl: advanceBaseUrl,
     contestId,
     platform: nextPlatform,
     metricsTarget,
@@ -454,4 +459,31 @@ export async function claimMultiPlatformChainPlatform(options: {
     ok: false,
     error: `Platform ${platform} is not next in chain (currentIndex=${chain.currentIndex})`,
   };
+}
+
+/**
+ * True when this platform is the last step of an active multi-platform chain
+ * (or there is no chain). Used so mid-chain YouTube/IG do not bump
+ * `last_metrics_updated` / heavy finalize before Instagram + TikTok run.
+ */
+export async function isFinalPlatformInMetricsChain(
+  contestId: string,
+  metricsTarget: MetricsRefreshTarget,
+  platform: PostCampaignVideoPlatform,
+): Promise<boolean> {
+  if (!isMultiPlatformMetricsChainEnabled()) return true;
+  const chain = await getMultiPlatformMetricsChain(contestId, metricsTarget);
+  if (!chain || chain.platforms.length <= 1) return true;
+  const last = chain.platforms[chain.platforms.length - 1];
+  return last === platform;
+}
+
+/** Prefer public app URL for server→server chain enqueue (avoids bad localhost origins). */
+export function resolveMetricsChainAdvanceBaseUrl(requestBaseUrl: string): string {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (envUrl) {
+    const withProto = envUrl.startsWith("http") ? envUrl : `https://${envUrl}`;
+    return withProto.replace(/\/$/, "");
+  }
+  return requestBaseUrl.replace(/\/$/, "");
 }

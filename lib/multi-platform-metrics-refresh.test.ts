@@ -179,4 +179,22 @@ describe("youtubeScopeForMetricsRefresh", () => {
       "basic",
     );
   });
+
+  it("forceBasic wins over multi-platform default and requestedScope", () => {
+    assert.equal(
+      youtubeScopeForMetricsRefresh({
+        campaignPlatformCount: 3,
+        forceBasic: true,
+      }),
+      "basic",
+    );
+    assert.equal(
+      youtubeScopeForMetricsRefresh({
+        campaignPlatformCount: 3,
+        requestedScope: "all",
+        forceBasic: true,
+      }),
+      "basic",
+    );
+  });
 });

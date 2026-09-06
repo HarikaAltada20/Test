@@ -495,6 +495,7 @@ export default function CreatorsClient({
       contest_type: contest.contest_type,
       post_contest_status: contest.post_contest_status,
       contest_based_details: contest.contest_based_details,
+      platform: contest.platform,
     });
 
   // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)

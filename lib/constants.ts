@@ -12,11 +12,23 @@ export const PLATFORMS_ALLOW_ANY_AUTHENTICATED = [
   "tiktok",
 ] as const;
 
+/**
+ * True when the contest platform (single or multi CSV) includes Instagram,
+ * YouTube, or TikTok. Hybrid strings like "instagram,youtube,tiktok" must
+ * match — exact equality alone wrongly treats them as Twitter-style contests.
+ */
 export function isPlatformAllowAnyAuthenticated(
   platform: string | null | undefined,
 ): boolean {
-  const p = (platform ?? "").toString().toLowerCase();
-  return (PLATFORMS_ALLOW_ANY_AUTHENTICATED as readonly string[]).includes(p);
+  const p = (platform ?? "").toString().toLowerCase().trim();
+  if (!p) return false;
+  const allowed = PLATFORMS_ALLOW_ANY_AUTHENTICATED as readonly string[];
+  if (allowed.includes(p)) return true;
+  const tokens = p
+    .split(/[,|/]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  return tokens.some((t) => allowed.includes(t));
 }
 
 /**

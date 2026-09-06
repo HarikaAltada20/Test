@@ -5,8 +5,12 @@ import {
   isDualRewardsContestType,
 } from "@/lib/contest-type";
 import { getDualRewardsSubmissionPaidComponents } from "@/lib/dual-rewards-pool-budget";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { buildDualRewardCreatorCapSplitMapsByPlatform } from "@/lib/dual-rewards-creator-cap";
 import {
+  buildMilestoneSubmissionPayoutCentsMapFromDetails,
   computeMilestoneContestExpectedSpendCentsFromDetails,
+  computeMilestoneCreatorBonusExpectedCentsFromDetails,
 } from "@/lib/milestone-contest-expected-spend";
 import {
   calculateLeaderboardBudgetSpent,
@@ -14,6 +18,8 @@ import {
   type Submission,
 } from "@/lib/contest-utils-client";
 import {
+  isMultiPlatformVideoContest,
+  readPersistedPlatformCampaigns,
   resolveCpmContestConfigForPlatform,
   resolveContestPoolBudgetCents,
   resolveMaxEarningsCentsForSubmission,
@@ -35,6 +41,8 @@ export type BudgetTileSubmission = Submission & {
   deleted_at?: string | null;
   is_eligible?: boolean;
   paid_at?: string | null;
+  metadata?: unknown;
+  milestone_bonus_paid?: unknown;
 };
 
 export type ContestBudgetTileInput = {
@@ -185,6 +193,8 @@ function computeMilestoneFilledCents(
     other_stats: s.other_stats,
     bonus_paid: s.bonus_paid,
     bonus_amount: s.bonus_amount,
+    metadata: s.metadata,
+    milestone_bonus_paid: s.milestone_bonus_paid,
   }));
 
   return computeMilestoneContestExpectedSpendCentsFromDetails(
@@ -253,13 +263,112 @@ function computeCpmFilledCents(
   return Math.round(dollars * 100);
 }
 
+function normalizeBudgetStatus(raw: unknown): string {
+  const st = String(raw || "").toLowerCase();
+  return st === "approved" ? "verified" : st;
+}
+
+/**
+ * Dual CPM + milestone expected after the same combined per-creator cap as
+ * contest-detail Expected Reward. Creator bonus is not included.
+ */
+export function computeDualRewardsCpmMilestoneFilledCents(
+  contest: ContestBudgetTileInput,
+  submissions: BudgetTileSubmission[],
+): number {
+  const details =
+    (contest.contest_based_details as Record<string, unknown> | null) ?? null;
+  const rows = submissions
+    .filter((s) => !twitterExcludedFromBudget(s))
+    .map((s) => ({
+      id: String(s.id || ""),
+      creator_id: s.creator_id,
+      created_at: s.created_at,
+      status: normalizeBudgetStatus(s.status),
+      paid: s.paid,
+      paid_at: s.paid_at,
+      earnings: s.earnings,
+      deleted_at: s.deleted_at,
+      views: s.views,
+      platform: s.platform,
+      other_stats: s.other_stats,
+    }))
+    .filter((row) => {
+      const st = row.status;
+      return st === "pending" || st === "verified" || st === "paid";
+    });
+
+  const milestoneMap = buildMilestoneSubmissionPayoutCentsMapFromDetails(
+    rows,
+    details,
+    contest.platform,
+  );
+  const keyed = isKeyedMaxEarningsMap(contest.max_earnings_per_creator);
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const creatorId = String(row.creator_id || "");
+    if (!creatorId) continue;
+    const list = grouped.get(creatorId) || [];
+    list.push(row);
+    grouped.set(creatorId, list);
+  }
+
+  let total = 0;
+  for (const list of grouped.values()) {
+    const dualRows = list.map((sub) => ({
+      id: sub.id,
+      created_at: sub.created_at,
+      platform: sub.platform,
+      mRawCents: Number(milestoneMap.get(sub.id) || 0),
+      cRawCents: computeCpmRawCentsForRow(sub, details, contest.platform),
+    }));
+    const maps = buildDualRewardCreatorCapSplitMapsByPlatform(
+      dualRows,
+      (platform) =>
+        resolveMaxEarningsCentsForSubmission(contest, platform) ?? 0,
+      { keyedCaps: keyed },
+    );
+    for (const sub of list) {
+      const st = sub.status;
+      if (st !== "verified" && st !== "paid") continue;
+      total +=
+        (maps.cpmCappedBySubmissionId.get(sub.id) ?? 0) +
+        (maps.milestoneCappedBySubmissionId.get(sub.id) ?? 0);
+    }
+  }
+  return total;
+}
+
 function computeDualRewardsFilledCents(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
 ): number {
-  const cpmCents = computeCpmFilledCents(contest, submissions, false);
-  const milestoneCents = computeMilestoneFilledCents(contest, submissions);
-  return cpmCents + milestoneCents;
+  const cpmMilestoneCents = computeDualRewardsCpmMilestoneFilledCents(
+    contest,
+    submissions,
+  );
+  const bonusCents = computeMilestoneCreatorBonusExpectedCentsFromDetails(
+    submissions.map((s) => ({
+      id: String(s.id || ""),
+      creator_id: s.creator_id,
+      created_at: s.created_at,
+      status: s.status,
+      paid: s.paid,
+      paid_at: s.paid_at,
+      earnings: s.earnings,
+      deleted_at: s.deleted_at,
+      views: s.views,
+      platform: s.platform,
+      other_stats: s.other_stats,
+      bonus_paid: s.bonus_paid,
+      bonus_amount: s.bonus_amount,
+      metadata: s.metadata,
+      milestone_bonus_paid: s.milestone_bonus_paid,
+    })),
+    (contest.contest_based_details as Record<string, unknown> | null) ?? null,
+    contest.platform,
+  );
+  return cpmMilestoneCents + bonusCents;
 }
 
 export function computeBudgetFilledCents(
@@ -341,6 +450,16 @@ export function computeBudgetPaidCents(
   return sumPaidEarningsAndBonuses(submissions);
 }
 
+function contestHasKeyedPlatformPayouts(
+  contest: ContestBudgetTileInput,
+): boolean {
+  if (isMultiPlatformVideoContest(contest.platform)) return true;
+  const campaigns = readPersistedPlatformCampaigns(
+    contest.contest_based_details as Record<string, unknown> | null,
+  );
+  return Object.keys(campaigns).length > 1;
+}
+
 function dualRewardsStoredNestedSpendCents(
   details: Record<string, unknown> | null | undefined,
 ): number {
@@ -355,7 +474,9 @@ function dualRewardsStoredNestedSpendCents(
 
 /**
  * Unified pool spend for budget trackers (list cards, sort, opportunities).
- * Dual rewards: never sum nested budget_spent blindly — use enriched root field or cap.
+ * Dual / multi-platform: prefer persisted pool_budget_spent_cents (live
+ * verified+paid expected). Do not treat leftover root nested budget_spent as
+ * the tracker — those leftovers are from before per-platform payouts.
  */
 export function getPoolBudgetSpentCentsForDisplay(
   contest: ContestBudgetTileInput,
@@ -363,19 +484,21 @@ export function getPoolBudgetSpentCentsForDisplay(
 ): number {
   const type = contest.contest_type;
   const details = contest.contest_based_details as Record<string, unknown> | null;
+  const multi = contestHasKeyedPlatformPayouts(contest);
+
+  if (submissions && submissions.length > 0) {
+    const tile = resolveBudgetTileMetrics(contest, submissions);
+    return tile?.numeratorCents ?? 0;
+  }
+
+  const enriched = details?.pool_budget_spent_cents;
+  if (typeof enriched === "number" && enriched >= 0) {
+    return enriched;
+  }
 
   if (isDualRewardsContestType(type)) {
-    if (submissions && submissions.length > 0) {
-      const tile = resolveBudgetTileMetrics(contest, submissions);
-      return tile?.numeratorCents ?? 0;
-    }
-
+    if (multi) return 0;
     const pool = getCampaignBudgetCents(contest);
-    const enriched = details?.pool_budget_spent_cents;
-    if (typeof enriched === "number" && enriched >= 0) {
-      return enriched;
-    }
-
     const nestedSum = dualRewardsStoredNestedSpendCents(details);
     return pool > 0 ? Math.min(nestedSum, pool) : nestedSum;
   }

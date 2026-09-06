@@ -105,12 +105,16 @@ export function serializeRefreshPlatforms(
 
 /**
  * YouTube enqueue scope for Refresh Metrics.
- * Multi-platform campaigns refresh full YouTube analytics (all), not basic-only.
+ * Multi-platform admin/brand refresh uses full YouTube analytics (`all`).
+ * Creators/opportunities always use `basic` (see `forceBasic`).
  */
 export function youtubeScopeForMetricsRefresh(options: {
   campaignPlatformCount: number;
   requestedScope?: YouTubeRefreshScope | null;
+  /** When true (creators Leaderboard Metrics), never upgrade to `all`. */
+  forceBasic?: boolean;
 }): YouTubeRefreshScope {
+  if (options.forceBasic) return "basic";
   if (options.requestedScope) return options.requestedScope;
   return options.campaignPlatformCount > 1
     ? MULTI_PLATFORM_YOUTUBE_REFRESH_SCOPE

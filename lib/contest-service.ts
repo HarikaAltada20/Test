@@ -375,7 +375,11 @@ export async function enrichContestWithCalculatedBudgets(
       },
     };
     }
-  } else if (isCpmContestType(contest.contest_type) && hasCpmRate) {
+  } else if (
+    isCpmContestType(contest.contest_type) &&
+    !isDualRewardsContestType(contest.contest_type) &&
+    hasCpmRate
+  ) {
     const { data: submissions, error: submissionsError } =
       await fetchContestSubmissionsAllPages(
         supabase,
@@ -408,39 +412,19 @@ export async function enrichContestWithCalculatedBudgets(
         paid: submission.paid ?? false,
         earnings: submission.earnings,
         views: submission.views,
-        platform: submission.platform || contest.platform || undefined,
+        platform: submission.platform || undefined,
         other_stats: submission.other_stats,
         bonus_paid: submission.bonus_paid ?? false,
         bonus_amount: submission.bonus_amount ?? undefined,
       }));
 
-      const { data: leaderboardAdjustments } = await supabase
-        .from("twitter_campaign_leaderboard")
-        .select("creator_id, manual_points_adjustment")
-        .eq("contest_id", contest.id);
-
-      const manualAdjustmentMap: Record<string, number> = {};
-      (leaderboardAdjustments || []).forEach((entry: any) => {
-        if (
-          entry.creator_id &&
-          typeof entry.manual_points_adjustment === "number"
-        ) {
-          manualAdjustmentMap[entry.creator_id] =
-            entry.manual_points_adjustment;
-        }
-      });
-
-      const resolvedMaxEarnings = resolveMaxEarningsPerCreatorCents({
-        platform: contest.platform,
-        max_earnings_per_creator: contest.max_earnings_per_creator,
-        contest_based_details: contestDetails,
-      });
       const tileInput = {
         contest_type: contest.contest_type,
         post_contest_status: contest.post_contest_status,
         max_earnings_per_creator: contest.max_earnings_per_creator,
-        contest_based_details: contestDetails,
+        contest_based_details: contest.contest_based_details,
         platform: contest.platform,
+        bonus_details: contest.bonus_details,
       };
       const mode = getBudgetTileMode(contest.post_contest_status);
       const budgetSpentCents =
@@ -449,20 +433,9 @@ export async function enrichContestWithCalculatedBudgets(
               tileInput,
               submissionRecords as BudgetTileSubmission[],
             )
-          : Math.round(
-              calculateTwitterCpmBudgetSpent(
-                submissionRecords,
-                cpmDetails.cpm_rate_usd || 0,
-                resolvedMaxEarnings ||
-                  cpmDetails.max_earnings_per_creator ||
-                  null,
-                cpmDetails.min_views,
-                cpmDetails.max_views,
-                cpmDetails.flat_fee_bonus || 0,
-                cpmDetails.flat_fee_bonus_cap || null,
-                manualAdjustmentMap,
-                resolveCpmConfigForBudgetSub(contestDetails, contest.platform),
-              ) * 100,
+          : computeBudgetFilledCents(
+              tileInput,
+              submissionRecords as BudgetTileSubmission[],
             );
 
       updatedContest = {
@@ -473,6 +446,7 @@ export async function enrichContestWithCalculatedBudgets(
             ...cpmDetails,
             budget_spent: budgetSpentCents,
           },
+          pool_budget_spent_cents: budgetSpentCents,
         },
       };
     } else {
@@ -488,6 +462,7 @@ export async function enrichContestWithCalculatedBudgets(
     normalizeContestDetails(updatedContest).milestone_contest;
   if (
     isMilestoneContestType(contest.contest_type) &&
+    !isDualRewardsContestType(contest.contest_type) &&
     (contestHasUsableMilestoneLadder(
       contest.contest_based_details,
       contest.platform,
@@ -544,8 +519,9 @@ export async function enrichContestWithCalculatedBudgets(
         contest_type: contest.contest_type,
         post_contest_status: contest.post_contest_status,
         max_earnings_per_creator: contest.max_earnings_per_creator,
-        contest_based_details: normalizeContestDetails(updatedContest),
+        contest_based_details: contest.contest_based_details,
         platform: contest.platform,
+        bonus_details: contest.bonus_details,
       };
       const mode = getBudgetTileMode(contest.post_contest_status);
       const milestoneBudgetSpentCents =
@@ -561,6 +537,7 @@ export async function enrichContestWithCalculatedBudgets(
             ...milestoneContestDetails,
             budget_spent: milestoneBudgetSpentCents,
           },
+          pool_budget_spent_cents: milestoneBudgetSpentCents,
         },
       };
     } else {
@@ -577,9 +554,9 @@ export async function enrichContestWithCalculatedBudgets(
       await fetchContestSubmissionsAllPages(
         supabase,
         contest.id,
-        "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, dual_rewards_payout",
+        "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, dual_rewards_payout, metadata, milestone_bonus_paid",
         {
-          statusIn: ["verified", "paid"],
+          statusIn: ["pending", "verified", "paid"],
           order: { column: "created_at", ascending: true },
         },
       );
@@ -600,6 +577,8 @@ export async function enrichContestWithCalculatedBudgets(
           bonus_paid?: boolean | null;
           bonus_amount?: number | null;
           dual_rewards_payout?: unknown;
+          metadata?: unknown;
+          milestone_bonus_paid?: unknown;
         }) => ({
           id: s.id,
           creator_id: s.creator_id,
@@ -609,11 +588,13 @@ export async function enrichContestWithCalculatedBudgets(
           paid_at: s.paid_at,
           earnings: s.earnings,
           views: s.views ?? 0,
-          platform: s.platform || contest.platform || undefined,
+          platform: s.platform || undefined,
           other_stats: s.other_stats,
           bonus_paid: s.bonus_paid ?? false,
           bonus_amount: s.bonus_amount ?? undefined,
           dual_rewards_payout: s.dual_rewards_payout,
+          metadata: s.metadata,
+          milestone_bonus_paid: s.milestone_bonus_paid,
         }),
       );
 
@@ -621,8 +602,9 @@ export async function enrichContestWithCalculatedBudgets(
         contest_type: contest.contest_type,
         post_contest_status: contest.post_contest_status,
         max_earnings_per_creator: contest.max_earnings_per_creator,
-        contest_based_details: normalizeContestDetails(updatedContest),
+        contest_based_details: contest.contest_based_details,
         platform: contest.platform,
+        bonus_details: contest.bonus_details,
       };
       const mode = getBudgetTileMode(contest.post_contest_status);
       const poolSpentCents =

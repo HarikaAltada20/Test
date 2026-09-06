@@ -14809,6 +14809,7 @@ export default function ContestDetailClient({
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
                     platform: currentContest.platform,
+                    bonus_details: (currentContest as any).bonus_details,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}

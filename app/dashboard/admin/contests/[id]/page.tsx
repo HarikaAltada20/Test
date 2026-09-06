@@ -13,6 +13,7 @@ import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
 import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { isVideoContestFormat } from "@/lib/trust-score";
 import { flattenContestInspirationLinks } from "@/lib/video-platform-campaigns";
+import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export default async function AdminContestDetailPage({
   params,
@@ -46,6 +47,8 @@ export default async function AdminContestDetailPage({
     if (!contestData) {
       redirect("/dashboard/admin/contests");
     }
+
+    schedulePersistContestBudgetSpent(contestId);
 
     const isVideoContest = isVideoContestFormat(contestData.contest_format);
 

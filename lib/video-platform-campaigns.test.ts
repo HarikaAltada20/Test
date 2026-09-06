@@ -11,6 +11,7 @@ import {
   createDefaultSectionPlatforms,
   deriveSectionPlatformUiState,
   parseVideoContestPlatforms,
+  videoContestPlatformFromValue,
   patchSnapshotSection,
   platformsForTab,
   preparePlatformCampaignsForSave,
@@ -43,6 +44,19 @@ describe("parseVideoContestPlatforms", () => {
     assert.deepEqual(parseVideoContestPlatforms("instagram,twitter,instagram"), [
       "instagram",
     ]);
+  });
+});
+
+describe("videoContestPlatformFromValue", () => {
+  it("resolves a single platform", () => {
+    assert.equal(videoContestPlatformFromValue("tiktok"), "tiktok");
+  });
+
+  it("does not treat a multi-platform CSV as YouTube", () => {
+    assert.equal(
+      videoContestPlatformFromValue("instagram,youtube,tiktok"),
+      null,
+    );
   });
 });
 

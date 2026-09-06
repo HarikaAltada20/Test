@@ -33,18 +33,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const cronAuth = request.headers.get("Authorization") === `Bearer ${process.env.CRON_SECRET}`;
-    let user: { id: string } | null = null;
-    let isAdmin = false;
-    if (!cronAuth) {
-      const supabase = await createClient();
-      const { data: { user: u } } = await supabase.auth.getUser();
-      user = u;
-      if (!user) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-      ({ isAdmin } = await verifyAdminAccess());
-    }
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const cronAuth =
+      !!cronSecret &&
+      request.headers.get("Authorization") === `Bearer ${cronSecret}`;
 
     const body = await request.json().catch(() => ({}));
     const metricsTarget = parseMetricsTarget(body?.metricsTarget);
@@ -53,6 +45,33 @@ export async function POST(
     const { id: contestId } = await params;
     if (!contestId) {
       return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
+    }
+
+    // Mid-chain advance may call this without a user cookie (server→server).
+    const chainContinue = body?.chainContinue === true;
+    let chainContinueOk = false;
+    if (chainContinue) {
+      const claim = await claimMultiPlatformChainPlatform({
+        contestId,
+        metricsTarget,
+        platform: "instagram",
+      });
+      chainContinueOk = claim.ok;
+      if (!claim.ok) {
+        return NextResponse.json({ error: claim.error }, { status: 409 });
+      }
+    }
+
+    let user: { id: string } | null = null;
+    let isAdmin = false;
+    if (!cronAuth && !chainContinueOk) {
+      const supabase = await createClient();
+      const { data: { user: u } } = await supabase.auth.getUser();
+      user = u;
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      ({ isAdmin } = await verifyAdminAccess());
     }
 
     const supabaseAdmin = createAdminSupabaseClient(
@@ -107,26 +126,12 @@ export async function POST(
 
     const accessDenied = assertPostCampaignEnqueueAccess(
       isPostCampaignTarget,
-      cronAuth,
+      cronAuth || chainContinueOk,
       user?.id,
       contest.advertiser_id,
       isAdmin,
     );
     if (accessDenied) return accessDenied;
-
-    const chainContinue = body?.chainContinue === true;
-    let chainContinueOk = false;
-    if (chainContinue) {
-      const claim = await claimMultiPlatformChainPlatform({
-        contestId,
-        metricsTarget,
-        platform: "instagram",
-      });
-      chainContinueOk = claim.ok;
-      if (!claim.ok) {
-        return NextResponse.json({ error: claim.error }, { status: 409 });
-      }
-    }
 
     if (isPostCampaignTarget && !cronAuth && !chainContinueOk) {
       const cooldownDenied = postCampaignCooldownResponse(

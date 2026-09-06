@@ -13,6 +13,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
 import { flattenContestInspirationLinks } from "@/lib/video-platform-campaigns";
+import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export default async function ContestDetailPage({
   params,
@@ -60,6 +61,8 @@ export default async function ContestDetailPage({
   if (!contestData) {
     redirect("/dashboard/contests");
   }
+
+  schedulePersistContestBudgetSpent(contestId);
 
   const isVideoContest = isVideoContestFormat(contestData.contest_format);
 

@@ -23,7 +23,7 @@ import {
   isQStashEnabled,
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
-import { advanceMultiPlatformMetricsChainAfterTerminal } from "@/lib/queue/multi-platform-metrics-chain";
+import { advanceMultiPlatformMetricsChainAfterTerminal, isFinalPlatformInMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -274,34 +274,48 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .update({ status: "completed", finished_at: now, updated_at: now })
       .eq("id", job.runId);
 
-    // Bump the correct cooldown timestamp for the metrics target.
     const isPostCampaignTarget = job.metricsTarget === "post_campaign";
-    await supabaseAdmin
-      .from("contests")
-      .update(
-        isPostCampaignTarget
-          ? { post_campaign_last_metrics_updated: now }
-          : { last_metrics_updated: now },
-      )
-      .eq("id", job.contestId);
+    const metricsTarget = job.metricsTarget ?? "submissions";
+    const isFinalPlatform = await isFinalPlatformInMetricsChain(
+      job.contestId,
+      metricsTarget,
+      "instagram",
+    );
 
-    // Overlay refresh must not recalculate live contest budgets / leaderboard.
-    if (!isPostCampaignTarget) {
-      await refreshContestStats(job.contestId);
-      await updateCpmContestBudgets(supabaseAdmin, job.contestId);
-      await persistContestBudgetSpent(job.contestId, supabaseAdmin);
-      revalidateLeaderboardCache(job.contestId);
+    if (isFinalPlatform) {
+      // Bump the correct cooldown timestamp for the metrics target.
+      await supabaseAdmin
+        .from("contests")
+        .update(
+          isPostCampaignTarget
+            ? { post_campaign_last_metrics_updated: now }
+            : { last_metrics_updated: now },
+        )
+        .eq("id", job.contestId);
+
+      // Overlay refresh must not recalculate live contest budgets / leaderboard.
+      if (!isPostCampaignTarget) {
+        await refreshContestStats(job.contestId);
+        await updateCpmContestBudgets(supabaseAdmin, job.contestId);
+        await persistContestBudgetSpent(job.contestId, supabaseAdmin);
+        revalidateLeaderboardCache(job.contestId);
+      } else {
+        console.info(
+          "[process-instagram-insights-queue] post_campaign run completed",
+          { contestId: job.contestId, runId: job.runId },
+        );
+      }
     } else {
       console.info(
-        "[process-instagram-insights-queue] post_campaign run completed",
-        { contestId: job.contestId, runId: job.runId },
+        "[process-instagram-insights-queue] mid-chain Instagram done; deferring contest finalize",
+        { contestId: job.contestId, runId: job.runId, metricsTarget },
       );
     }
 
     await advanceMultiPlatformMetricsChainAfterTerminal({
       contestId: job.contestId,
       platform: "instagram",
-      metricsTarget: job.metricsTarget ?? "submissions",
+      metricsTarget,
       baseUrl,
     });
   }

@@ -27,7 +27,7 @@ import {
   isQStashEnabled,
   triggerProcessYouTubeMetricsQueue,
 } from "@/lib/qstash";
-import { advanceMultiPlatformMetricsChainAfterTerminal } from "@/lib/queue/multi-platform-metrics-chain";
+import { advanceMultiPlatformMetricsChainAfterTerminal, isFinalPlatformInMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
 function getBaseUrlFromRequest(request: Request): string {
   try {
     const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
@@ -417,20 +417,33 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .maybeSingle();
     if (completedRun) {
       const isPostCampaignTarget = job.metricsTarget === "post_campaign";
-      if (isPostCampaignTarget) {
-        await finalizePostCampaignYoutubeRun(
-          supabaseAdmin,
-          job.contestId,
-          job.scope,
-        );
+      const metricsTarget = job.metricsTarget ?? "submissions";
+      const isFinalPlatform = await isFinalPlatformInMetricsChain(
+        job.contestId,
+        metricsTarget,
+        "youtube",
+      );
+      if (isFinalPlatform) {
+        if (isPostCampaignTarget) {
+          await finalizePostCampaignYoutubeRun(
+            supabaseAdmin,
+            job.contestId,
+            job.scope,
+          );
+        } else {
+          await finalizeContestAfterYoutubeRun(supabaseAdmin, job.contestId, job.scope);
+          revalidateLeaderboardCache(job.contestId);
+        }
       } else {
-        await finalizeContestAfterYoutubeRun(supabaseAdmin, job.contestId, job.scope);
-        revalidateLeaderboardCache(job.contestId);
+        console.info(
+          "[process-youtube-metrics-queue] mid-chain YouTube done; deferring contest finalize",
+          { contestId: job.contestId, runId: job.runId, metricsTarget },
+        );
       }
       await advanceMultiPlatformMetricsChainAfterTerminal({
         contestId: job.contestId,
         platform: "youtube",
-        metricsTarget: job.metricsTarget ?? "submissions",
+        metricsTarget,
         baseUrl,
       });
     }

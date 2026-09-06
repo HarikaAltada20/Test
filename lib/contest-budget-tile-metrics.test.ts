@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   computeBudgetFilledCents,
   computeBudgetPaidCents,
+  computeDualRewardsCpmMilestoneFilledCents,
   getBudgetTileMode,
   getPoolBudgetSpentCentsForDisplay,
   resolveBudgetTileMetrics,
@@ -229,6 +230,202 @@ describe("contest-budget-tile-metrics", () => {
       },
     };
     assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 18_000);
+  });
+
+  it("ignores leftover nested dual spend when keyed platform payouts exist even without platform CSV", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "in_review",
+      contest_based_details: {
+        total_budget_cents: 10_000,
+        cpm_contest: { budget_spent: 708 },
+        milestone_contest: { budget_spent: 7711 },
+        youtube: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 1, total_budget: 10_000 },
+        },
+        instagram: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 1, total_budget: 10_000 },
+        },
+      },
+    };
+    assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 0);
+  });
+
+  it("dual filled includes per-platform creator bonus expected", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "in_review",
+      platform: "youtube,tiktok",
+      contest_based_details: {
+        total_budget_cents: 100_000,
+        youtube: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 1, total_budget: 100_000 },
+          milestone_contest: {
+            milestones: [
+              { order: 1, target_views: 1000, payout_cents: 1000, winner_limit: null },
+            ],
+            bonus: {
+              enabled: true,
+              most_verified_reels: {
+                payout_cents: 200,
+                min_verified_reels: 1,
+              },
+            },
+          },
+        },
+        tiktok: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 1, total_budget: 100_000 },
+          milestone_contest: {
+            milestones: [
+              { order: 1, target_views: 1000, payout_cents: 1000, winner_limit: null },
+            ],
+            bonus: {
+              enabled: true,
+              most_verified_reels: {
+                payout_cents: 200,
+                min_verified_reels: 1,
+              },
+            },
+          },
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "yt",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 1_000,
+        platform: "youtube",
+      },
+      {
+        id: "tt",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 1_000,
+        platform: "tiktok",
+      },
+    ];
+    const filled = computeBudgetFilledCents(contest, submissions);
+    // CPM $1/1k * 1000 views * 2 = 200 cents, ladder 1000*2 = 2000, bonus 200*2 = 400
+    assert.equal(filled, 2_600);
+  });
+
+  it("dual CPM+milestone filled applies combined per-platform max earnings cap", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "in_review",
+      platform: "youtube,instagram",
+      max_earnings_per_creator: {
+        youtube: { max_earnings_per_creator: 200 },
+        instagram: { max_earnings_per_creator: 250 },
+      },
+      contest_based_details: {
+        total_budget_cents: 10_000,
+        youtube: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 10, total_budget: 10_000 },
+          milestone_contest: {
+            milestones: [
+              {
+                order: 1,
+                target_views: 100,
+                payout_cents: 8_000,
+                winner_limit: null,
+              },
+            ],
+          },
+        },
+        instagram: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 10, total_budget: 10_000 },
+          milestone_contest: {
+            milestones: [
+              {
+                order: 1,
+                target_views: 100,
+                payout_cents: 8_000,
+                winner_limit: null,
+              },
+            ],
+          },
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "yt",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 100_000,
+        platform: "youtube",
+      },
+      {
+        id: "ig",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 100_000,
+        platform: "instagram",
+      },
+    ];
+    assert.equal(
+      computeDualRewardsCpmMilestoneFilledCents(contest, submissions),
+      450,
+    );
+    assert.equal(computeBudgetFilledCents(contest, submissions), 450);
+  });
+
+  it("ignores leftover nested dual spend on multi-platform contests without pool_budget_spent_cents", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "in_review",
+      platform: "instagram,youtube,tiktok",
+      contest_based_details: {
+        total_budget_cents: 10_000,
+        cpm_contest: { budget_spent: 708 },
+        milestone_contest: { budget_spent: 7711 },
+        youtube: {
+          contest_type: "dual_rewards",
+          cpm_contest: { cpm_rate_usd: 1, total_budget: 10_000 },
+        },
+      },
+    };
+    assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 0);
+  });
+
+  it("uses pool_budget_spent_cents for multi-platform dual list cards", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "in_review",
+      platform: "instagram,youtube,tiktok",
+      contest_based_details: {
+        total_budget_cents: 10_000,
+        pool_budget_spent_cents: 1_984,
+        cpm_contest: { budget_spent: 708 },
+        milestone_contest: { budget_spent: 7711 },
+      },
+    };
+    assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 1_984);
   });
 
   it("resolveBudgetTileMetrics reports dual filled numerator above pool when overfilled", () => {

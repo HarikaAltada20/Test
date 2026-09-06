@@ -87,6 +87,13 @@ describe("buildMilestoneSubmissionPayoutAssignmentsFromDetails", () => {
       ),
       1,
     );
+    assert.equal(
+      winnerCountsByTargetForPlatform(
+        assignments.winnerCountsByKey,
+        "youtube,tiktok,instagram",
+      ).get(1000),
+      2,
+    );
   });
 
   it("does not let one platform consume another platform's winner_limit", () => {

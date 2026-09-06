@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   isKeyedMaxEarningsMap,
   resolveMaxEarningsCentsForSubmission,
+  videoContestPlatformFromValue,
 } from "./video-platform-campaigns";
 
 const keyedMax = {
@@ -46,5 +47,13 @@ describe("resolveMaxEarningsCentsForSubmission", () => {
       resolveMaxEarningsCentsForSubmission(contest, "tiktok"),
       12_000,
     );
+  });
+
+  it("does not treat a multi-platform CSV as a single YouTube submission", () => {
+    assert.equal(
+      videoContestPlatformFromValue("instagram,youtube,tiktok"),
+      null,
+    );
+    assert.equal(videoContestPlatformFromValue("youtube"), "youtube");
   });
 });

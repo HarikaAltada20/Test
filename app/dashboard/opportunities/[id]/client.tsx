@@ -127,6 +127,13 @@ import {
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
+import { resolveSequentialRefreshPollIndex } from "@/lib/multi-platform-metrics-refresh";
+import {
+  isTerminalPostCampaignRunStatus,
+  isTrackedPostCampaignRun,
+} from "@/lib/post-campaign-refresh-client";
+import { postCampaignEnqueuePathForPlatform } from "@/lib/post-campaign-platforms";
+import type { PostCampaignVideoPlatform } from "@/lib/post-campaign-platforms";
 import { ContestDetailPlatformTabs } from "@/components/contest/ContestDetailPlatformTabs";
 import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
 import { getPlatformIcon } from "@/lib/platform-icons";
@@ -406,6 +413,8 @@ export function ContestClientPage({
   const [leaderboardItemsPerPage, setLeaderboardItemsPerPage] = useState(25); // Or your preferred default
   const [totalLeaderboardEntries, setTotalLeaderboardEntries] = useState(0);
   const [totalLeaderboardPages, setTotalLeaderboardPages] = useState(0);
+  const [contestSubmissionTotalCount, setContestSubmissionTotalCount] =
+    useState(0);
   const [creatorTotalEntries, setCreatorTotalEntries] = useState(0);
   const [creatorTotalPages, setCreatorTotalPages] = useState(0);
   const [allMilestoneBonusSubmissions, setAllMilestoneBonusSubmissions] =
@@ -1406,6 +1415,11 @@ export function ContestClientPage({
   const effectiveLeaderboardTotalPages = isCreatorModeTotals
     ? creatorTotalPages
     : totalLeaderboardPages;
+  const creatorDetailSubmissionTotal = Math.max(
+    Number(contest?.live_submission_count) || 0,
+    contestSubmissionTotalCount,
+    totalLeaderboardEntries,
+  );
 
   // Keep track of how many creators are on each page in creator-wise view
   // so we can render continuous creator ranks across pagination
@@ -1533,6 +1547,8 @@ export function ContestClientPage({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          // Creators always request YouTube basic (server also forces this).
+          body: JSON.stringify({ scope: "basic" }),
         },
       );
 
@@ -1578,7 +1594,186 @@ export function ContestClientPage({
           return;
         }
 
-        // Fallback for non-Twitter (or if runId is missing): timestamp-based polling.
+        // Multi-platform video chain: wait YouTube → Instagram → TikTok (with client backup).
+        type QueuedLiveRun = {
+          platform: string;
+          platformLabel?: string;
+          runId?: string;
+          statusPath?: string;
+        };
+        const queuedRuns: QueuedLiveRun[] = Array.isArray(
+          (result as { runs?: QueuedLiveRun[] }).runs,
+        )
+          ? ((result as { runs: QueuedLiveRun[] }).runs).filter(
+              (r) => r && typeof r.platform === "string",
+            )
+          : [];
+        const isMultiPlatformChain =
+          Boolean((result as { chain?: boolean }).chain) ||
+          queuedRuns.length > 1;
+
+        if (isMultiPlatformChain && queuedRuns.length > 0) {
+          const refreshStartedMs = Date.now();
+          const pollMaxMs = 600_000; // 10 min for full chain
+          const STUCK_AFTER_TERMINAL_MS = 45_000;
+          let continueInFlight = false;
+          let waitingForNextSinceMs: number | null = null;
+          let pollInFlight = false;
+          let finished = false;
+
+          const statusPathFor = (platform: string) => {
+            if (platform === "youtube") return "youtube-metrics-refresh/status";
+            if (platform === "tiktok") return "tiktok-metrics-refresh/status";
+            return "instagram-insights-refresh/status";
+          };
+
+          const tryContinueChain = async (next: QueuedLiveRun) => {
+            if (continueInFlight) return;
+            if (
+              next.platform !== "youtube" &&
+              next.platform !== "instagram" &&
+              next.platform !== "tiktok"
+            ) {
+              return;
+            }
+            continueInFlight = true;
+            try {
+              const enqueueUrl = postCampaignEnqueuePathForPlatform(
+                contest.id,
+                next.platform as PostCampaignVideoPlatform,
+              );
+              const body: Record<string, unknown> = {
+                metricsTarget: "submissions",
+                chainContinue: true,
+              };
+              // Creators always use YouTube basic (server also forces this).
+              if (next.platform === "youtube") body.scope = "basic";
+              const eres = await fetch(enqueueUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(body),
+              });
+              const edata = await eres.json().catch(() => ({}));
+              if (eres.ok && typeof edata.runId === "string") {
+                next.runId = edata.runId;
+              }
+            } catch {
+              // ignore; next poll retries
+            } finally {
+              continueInFlight = false;
+            }
+          };
+
+          const finishChain = (partial?: boolean) => {
+            if (finished) return;
+            finished = true;
+            clearInterval(pollTimer);
+            setIsRefreshingMetrics(false);
+            if (partial) {
+              toast({
+                title: "Refresh finished (partial)",
+                description:
+                  "A later platform did not start. Metrics may still update shortly — try reloading.",
+                variant: "destructive",
+                duration: 10000,
+              });
+            }
+            window.location.reload();
+          };
+
+          const pollOnce = async () => {
+            if (finished || pollInFlight) return;
+            if (Date.now() - refreshStartedMs > pollMaxMs) {
+              finishChain(true);
+              return;
+            }
+            pollInFlight = true;
+            try {
+              const states: Array<{
+                tracked: boolean;
+                terminal: boolean;
+              }> = [];
+
+              for (let i = 0; i < queuedRuns.length; i++) {
+                const queued = queuedRuns[i]!;
+                const statusPath =
+                  queued.statusPath || statusPathFor(queued.platform);
+                try {
+                  const sres = await fetch(
+                    `/api/contests/${contest.id}/${statusPath}`,
+                  );
+                  if (!sres.ok) {
+                    states.push({ tracked: false, terminal: false });
+                    break;
+                  }
+                  const sj = await sres.json();
+                  const run = sj?.run as {
+                    id: string;
+                    status: string;
+                    started_at?: string;
+                    finished_at?: string | null;
+                  } | null;
+                  const tracked = Boolean(
+                    run &&
+                      isTrackedPostCampaignRun(run, {
+                        activeRunId: queued.runId,
+                        refreshStartedMs,
+                      }),
+                  );
+                  const terminal =
+                    tracked &&
+                    isTerminalPostCampaignRunStatus(run?.status);
+                  if (tracked && run && !queued.runId) queued.runId = run.id;
+                  states.push({ tracked, terminal });
+                  if (!tracked || !terminal) break;
+                } catch {
+                  states.push({ tracked: false, terminal: false });
+                  break;
+                }
+              }
+              while (states.length < queuedRuns.length) {
+                states.push({ tracked: false, terminal: false });
+              }
+
+              const pollIndex = resolveSequentialRefreshPollIndex(states);
+              if (pollIndex >= queuedRuns.length) {
+                finishChain(false);
+                return;
+              }
+
+              const current = states[pollIndex];
+              if (current && !current.tracked && pollIndex > 0) {
+                const prev = states[pollIndex - 1];
+                if (prev?.terminal) {
+                  if (waitingForNextSinceMs == null) {
+                    waitingForNextSinceMs = Date.now();
+                  }
+                  await tryContinueChain(queuedRuns[pollIndex]!);
+                  if (
+                    Date.now() - (waitingForNextSinceMs ?? Date.now()) >
+                    STUCK_AFTER_TERMINAL_MS
+                  ) {
+                    finishChain(true);
+                    return;
+                  }
+                }
+              } else {
+                waitingForNextSinceMs = null;
+              }
+            } catch {
+              // ignore poll errors
+            } finally {
+              pollInFlight = false;
+            }
+          };
+
+          void pollOnce();
+          const pollTimer = setInterval(() => void pollOnce(), 3000);
+          return;
+        }
+
+        // Single-platform (or missing runs[]): timestamp-based polling.
         const previousUpdated = contest?.last_metrics_updated ?? null;
         const pollIntervalMs = 3000;
         const pollMaxMs = 120000; // 2 min
@@ -1773,10 +1968,16 @@ export function ContestClientPage({
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
           setCreatorTotalPages(data.totalPages ?? 0);
+          if (typeof data.totalSubmissions === "number") {
+            setContestSubmissionTotalCount(data.totalSubmissions);
+          }
         } else {
           setLeaderboard(data.leaderboard || []);
           setTotalLeaderboardEntries(data.totalEntries ?? 0);
           setTotalLeaderboardPages(data.totalPages ?? 0);
+          if (typeof data.totalSubmissions === "number") {
+            setContestSubmissionTotalCount(data.totalSubmissions);
+          }
         }
         setLastUpdated(data.lastUpdated);
         setLeaderboardCurrentPage(data.currentPage ?? pageToFetch);
@@ -3997,10 +4198,7 @@ export function ContestClientPage({
                         isDark ? "text-white" : "text-slate-800",
                       )}
                     >
-                      {contest.live_submission_count !== null &&
-                      contest.live_submission_count >= 0
-                        ? contest.live_submission_count
-                        : 0}
+                      {creatorDetailSubmissionTotal}
                     </p>
                     <p
                       className={cn(
@@ -10182,9 +10380,8 @@ export function ContestClientPage({
                                   leaderboardDisplayMode === "creator" &&
                                   " Currently viewing by creator (all submissions grouped)."}
                               </p>
-                              {contest?.live_submission_count !== null &&
-                                contest?.live_submission_count !==
-                                  undefined && (
+                              {(creatorDetailSubmissionTotal > 0 ||
+                                effectiveLeaderboardTotalEntries > 0) && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <span className="font-medium">
                                       {leaderboardDisplayMode === "creator" &&
@@ -10195,7 +10392,7 @@ export function ContestClientPage({
                                     <span className="text-green-700 font-semibold">
                                       {effectiveLeaderboardTotalEntries} active
                                     </span>
-                                    {contest.live_submission_count !==
+                                    {creatorDetailSubmissionTotal >
                                       effectiveLeaderboardTotalEntries &&
                                       !(
                                         leaderboardDisplayMode === "creator" &&
@@ -10213,7 +10410,7 @@ export function ContestClientPage({
                                             |
                                           </span>
                                           <span className="text-red-700 font-semibold">
-                                            {contest.live_submission_count -
+                                            {creatorDetailSubmissionTotal -
                                               effectiveLeaderboardTotalEntries}{" "}
                                             rejected
                                           </span>
@@ -10235,7 +10432,7 @@ export function ContestClientPage({
                                                 : "text-blue-700",
                                             )}
                                           >
-                                            {contest.live_submission_count}{" "}
+                                            {creatorDetailSubmissionTotal}{" "}
                                             total
                                           </span>
                                         </>

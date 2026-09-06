@@ -2053,10 +2053,8 @@ export type ResolvedCpmContestConfig = {
 export function videoContestPlatformFromValue(
   value?: string | null,
 ): VideoContestPlatform | null {
-  const raw = String(value || "").toLowerCase();
-  if (raw.includes("youtube")) return "youtube";
-  if (raw.includes("instagram")) return "instagram";
-  if (raw.includes("tiktok")) return "tiktok";
+  const parsed = parseVideoContestPlatforms(value);
+  if (parsed.length === 1) return parsed[0];
   return null;
 }
 

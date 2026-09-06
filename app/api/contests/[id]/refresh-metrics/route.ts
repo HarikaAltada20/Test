@@ -292,17 +292,21 @@ export async function POST(
       const cookieHeader = request.headers.get("cookie");
 
       const scopeRaw = (body as { scope?: string })?.scope;
+      const parsedScope =
+        scopeRaw === "basic" ||
+        scopeRaw === "core" ||
+        scopeRaw === "traffic" ||
+        scopeRaw === "demographics" ||
+        scopeRaw === "all" ||
+        scopeRaw === "all_standard"
+          ? (scopeRaw as YouTubeRefreshScope)
+          : null;
+      // Creators (opportunities) always use YouTube basic — even on multi-platform.
+      // Admin/brand multi-platform still defaults to `all` unless a scope is sent.
       const youtubeScope = youtubeScopeForMetricsRefresh({
         campaignPlatformCount: liveVideoPlatforms.length,
-        requestedScope:
-          scopeRaw === "basic" ||
-          scopeRaw === "core" ||
-          scopeRaw === "traffic" ||
-          scopeRaw === "demographics" ||
-          scopeRaw === "all" ||
-          scopeRaw === "all_standard"
-            ? (scopeRaw as YouTubeRefreshScope)
-            : null,
+        forceBasic: isOpportunitiesRefresh,
+        requestedScope: isOpportunitiesRefresh ? null : parsedScope,
       });
 
       const chainResult = await startMultiPlatformMetricsChain({

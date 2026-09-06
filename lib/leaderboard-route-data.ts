@@ -258,6 +258,12 @@ export async function fetchLeaderboardPayload(
     throw new Error("Contest not found");
   }
 
+  const { count: totalSubmissionsCount } = await supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("contest_id", contestId);
+  const totalSubmissions = totalSubmissionsCount || 0;
+
   if (groupBy === "creator") {
     const creatorWiseResult = await getLeaderboardGroupedByCreator(
       supabase,
@@ -270,6 +276,7 @@ export async function fetchLeaderboardPayload(
       lastUpdated: new Date().toISOString(),
       contestType: contestData.contest_type,
       groupBy: "creator",
+      totalSubmissions,
     };
   }
 
@@ -331,6 +338,7 @@ export async function fetchLeaderboardPayload(
       totalPages: totalPages,
       totalEntries: totalEntries || 0,
       contestType: contestData.contest_type,
+      totalSubmissions,
     };
   }
 
@@ -436,5 +444,6 @@ export async function fetchLeaderboardPayload(
     totalPages: totalPages,
     totalEntries: totalEntries || 0,
     contestType: contestData.contest_type,
+    totalSubmissions,
   };
 }
