@@ -37,7 +37,6 @@ import {
   Eye,
   FileText,
   CheckCheck,
-  Gift,
   Tag,
   Star,
   AlertTriangle,
@@ -62,12 +61,14 @@ import {
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { isCpmContestType, isMilestoneContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
+import { getMultipleSubmissionsBadgeLabel } from "@/lib/contest-list-card-metrics";
 import {
   formatContestListCpmRatesText,
   formatContestPlatformLabel,
   resolveBonusDetails,
   resolveContestPlatformCpmRates,
   resolveContestPoolBudgetCents,
+  resolveLeaderboardFlatFeeBonusBudgetCents,
 } from "@/lib/video-platform-campaigns";
 import { getContestPlatformIcons } from "@/lib/platform-icons";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -104,6 +105,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 import {
+  ContestListFlatFeeBonusBadge,
   ContestListStatsFooter,
   ContestListSubmissionBadges,
 } from "@/components/ContestListCardMetrics";
@@ -435,6 +437,14 @@ const getContestListPoolBudgetCents = (contest: Contest): number =>
     contest.contest_based_details,
     contest.platform,
   );
+
+const getContestListLeaderboardBonusBudgetCents = (contest: Contest): number =>
+  contest.contest_type === "leaderboard"
+    ? resolveLeaderboardFlatFeeBonusBudgetCents(
+        contest.contest_based_details as unknown as Record<string, unknown> | null,
+        contest.platform,
+      )
+    : 0;
 
 const isTwitterLikePlatform = (platform?: string | null) => {
   const lower = platform?.toLowerCase();
@@ -1187,37 +1197,17 @@ export function ContestListClient({
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
-                        {(contest.max_submissions_per_creator ?? 1) > 1
-                          ? `${contest.max_submissions_per_creator} Submissions`
-                          : "Multiple Entries"}
+                        {getMultipleSubmissionsBadgeLabel(contest)}
                       </Badge>
                     );
                   }
                   return null;
                 })()}
-                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[12px]",
-                      isDark
-                        ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200",
-                    )}
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus ||
-                        0,
-                    )}
-                    /submission
-                  </Badge>
-                )}
+                <ContestListFlatFeeBonusBadge
+                  contest={contest}
+                  isDark={isDark}
+                  size="compact"
+                />
                 {/* Don't show content_type badge for Twitter text_image contests (we show campaign_type badge instead) */}
                 {(() => {
                   const isTwitterTextImage =
@@ -1403,19 +1393,14 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.total_budget != null &&
-                  contest.contest_based_details.leaderboard_contest
-                    .total_budget > 0 && (
+                {getContestListLeaderboardBonusBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
                       <span>
                         Total Bonus Budget:{" "}
                         <span className="font-medium text-green-700 dark:text-green-300">
                           {formatMoney(
-                            contest.contest_based_details.leaderboard_contest
-                              .total_budget,
+                            getContestListLeaderboardBonusBudgetCents(contest),
                           )}
                         </span>
                       </span>
@@ -1493,21 +1478,13 @@ export function ContestListClient({
                 })()}
 
               {/* Bonus Budget Tracker for Leaderboard campaigns */}
-              {contest.contest_type === "leaderboard" &&
-                contest.contest_based_details?.leaderboard_contest
-                  ?.total_budget != null &&
-                contest.contest_based_details.leaderboard_contest.total_budget >
-                  0 &&
+              {getContestListLeaderboardBonusBudgetCents(contest) > 0 &&
                 (() => {
                   const totalBudget =
-                    contest.contest_based_details.leaderboard_contest
-                      .total_budget;
-                  const budgetSpent =
-                    contest.contest_based_details.leaderboard_contest
-                      .budget_spent || 0;
+                    getContestListLeaderboardBonusBudgetCents(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
-                    budgetSpent,
+                    getContestBudgetSpentForTracker(contest),
                   );
 
                   return (
@@ -1984,9 +1961,7 @@ export function ContestListClient({
                           )}
                         >
                           <CheckCheck className="h-3 w-3 mr-1" />
-                          {(contest.max_submissions_per_creator ?? 1) > 1
-                            ? `${contest.max_submissions_per_creator} Submissions`
-                            : "Multiple Entries"}
+                          {getMultipleSubmissionsBadgeLabel(contest)}
                         </Badge>
                       );
                     }
@@ -2021,31 +1996,11 @@ export function ContestListClient({
                     }
                     return null;
                   })()}
-                  {/* Flat Fee Bonus Badge */}
-                  {(contest.contest_based_details?.cpm_contest
-                    ?.flat_fee_bonus ||
-                    contest.contest_based_details?.leaderboard_contest
-                      ?.flat_fee_bonus) && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-sm px-3 py-1 font-medium",
-                        isDark
-                          ? "bg-green-900/30 text-green-300 border-green-700/50"
-                          : "bg-green-50 text-green-700 border-green-200",
-                      )}
-                    >
-                      <Gift className="h-3 w-3 mr-1" />
-                      {formatMoney(
-                        contest.contest_based_details?.cpm_contest
-                          ?.flat_fee_bonus ||
-                          contest.contest_based_details?.leaderboard_contest
-                            ?.flat_fee_bonus ||
-                          0,
-                      )}
-                      /submission
-                    </Badge>
-                  )}
+                  <ContestListFlatFeeBonusBadge
+                    contest={contest}
+                    isDark={isDark}
+                    size="default"
+                  />
                   {/* Bonus Available Badge */}
                   {resolveBonusDetails(contest)?.description_html && (
                     <Badge
@@ -2237,6 +2192,26 @@ export function ContestListClient({
                         </span>
                       </div>
                     )}
+                  {getContestListLeaderboardBonusBudgetCents(contest) > 0 && (
+                      <div className="flex items-center">
+                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Total Bonus Budget:{" "}
+                          <span className="font-medium text-green-700 dark:text-green-300">
+                            {formatMoney(
+                              getContestListLeaderboardBonusBudgetCents(
+                                contest,
+                              ),
+                            )}
+                          </span>
+                        </span>
+                      </div>
+                    )}
                   {isMilestoneContestType(contest.contest_type) &&
                     contest.contest_based_details?.milestone_contest
                       ?.total_budget_cents != null &&
@@ -2315,21 +2290,13 @@ export function ContestListClient({
                   })()}
 
                 {/* Bonus Budget Tracker for Leaderboard campaigns */}
-                {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.total_budget != null &&
-                  contest.contest_based_details.leaderboard_contest
-                    .total_budget > 0 &&
+                {getContestListLeaderboardBonusBudgetCents(contest) > 0 &&
                   (() => {
                     const totalBudget =
-                      contest.contest_based_details.leaderboard_contest
-                        .total_budget;
-                    const budgetSpent =
-                      contest.contest_based_details.leaderboard_contest
-                        .budget_spent || 0;
+                      getContestListLeaderboardBonusBudgetCents(contest);
                     const tracker = getBudgetTrackerValues(
                       totalBudget,
-                      budgetSpent,
+                      getContestBudgetSpentForTracker(contest),
                     );
 
                     return (

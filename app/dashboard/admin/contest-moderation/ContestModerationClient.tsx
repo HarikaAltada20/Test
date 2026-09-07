@@ -36,6 +36,7 @@ import {
   resolveContestPoolBudgetCents,
 } from "@/lib/video-platform-campaigns";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { ContestListFlatFeeBonusBadge } from "@/components/ContestListCardMetrics";
 import {
   Shield,
   Clock,
@@ -53,7 +54,6 @@ import {
   PlayCircle,
   StopCircle,
   CheckCheck,
-  Gift,
   Tag,
   Star,
   Inbox,
@@ -571,27 +571,7 @@ export default function ContestModerationClient({
                   <span className="sm:hidden">Multi</span>
                 </Badge>
               )}
-              {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                contest.contest_based_details?.leaderboard_contest
-                  ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] sm:text-xs bg-green-50 text-green-700 border-green-200 py-0.5 px-1.5 sm:px-2"
-                >
-                  <Gift className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" />
-                  <span className="hidden sm:inline">
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus ||
-                        0
-                    )}
-                    /submission
-                  </span>
-                  <span className="sm:hidden">Bonus</span>
-                </Badge>
-              )}
+              <ContestListFlatFeeBonusBadge contest={contest} size="compact" />
               {contest.content_type && (
                 <Badge
                   variant="outline"

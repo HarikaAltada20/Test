@@ -1354,9 +1354,6 @@ export default function CreateContestPage({
   const [formFeedbackType, setFormFeedbackType] = useState<
     "error" | "success" | null
   >(null);
-  const [toastErrorMessage, setToastErrorMessage] = useState<string | null>(
-    null,
-  );
 
   const parseMilestoneViews = (value: number | string): number =>
     value === "" ? NaN : parseInt(String(value), 10);
@@ -1597,13 +1594,6 @@ export default function CreateContestPage({
       captureBonusContent();
     }
     setShowBonusPreview(!showBonusPreview);
-  };
-
-  // Function to clear toast error when user starts interacting
-  const clearToastError = () => {
-    if (toastErrorMessage) {
-      setToastErrorMessage(null);
-    }
   };
 
   // Handler for region selection - automatically selects all countries in the region
@@ -5588,7 +5578,6 @@ export default function CreateContestPage({
       const setError = (message: string) => {
         setFormFeedback(message);
         setFormFeedbackType("error");
-        setToastErrorMessage(message);
         toast({ title: "Error", description: message, variant: "destructive" });
       };
 
@@ -5769,7 +5758,6 @@ export default function CreateContestPage({
   const prevStep = () => {
     setFormFeedback(null); // Clear feedback when going back
     setFormFeedbackType(null);
-    setToastErrorMessage(null); // Clear toast error when going back
     if (step === "prize") setStep("resources");
     else if (step === "resources") setStep("brief");
     else if (step === "brief") setStep("basics");
@@ -7104,40 +7092,6 @@ export default function CreateContestPage({
     )} (00:00 onwards). ${disallowedText} ${
       disallowed.length > 1 ? "are" : "is"
     } not allowed.`;
-  };
-
-  // High Budget Prompt Modal
-  // Modern Error Alert Component with auto-dismiss
-  const ErrorAlert = ({ message }: { message: string }) => {
-    const [isVisible, setIsVisible] = useState(true);
-
-    useEffect(() => {
-      const timer = setTimeout(() => {
-        setIsVisible(false);
-      }, 3000); // Auto-dismiss after 3 seconds
-
-      return () => clearTimeout(timer);
-    }, []);
-
-    if (!isVisible) return null;
-
-    return (
-      <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
-        <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-red-400 max-w-md">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0">
-              <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
-                <AlertTriangle className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-sm mb-1">Validation Error</h4>
-              <p className="text-sm text-red-50">{message}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   // Prize section
@@ -11567,7 +11521,6 @@ export default function CreateContestPage({
                   )}
                   onChange={(e) => {
                     setTitle(e.target.value);
-                    clearToastError(); // Clear toast error when user starts typing
                   }}
                   placeholder="e.g., Create a Viral shorts/video for our New App"
                   maxLength={100}
@@ -13401,7 +13354,6 @@ export default function CreateContestPage({
                         setBrief(html); // Keep for backward compatibility
                         setBriefHtml(html);
                         setBriefJson(json);
-                        clearToastError(); // Clear toast error when user starts typing
                       }}
                     />
                   </div>
@@ -13765,7 +13717,6 @@ export default function CreateContestPage({
                         console.log("Rules editor onChange - json:", json);
                         setRulesHtml(html);
                         setRulesJson(json);
-                        clearToastError(); // Clear toast error when user starts typing
                       }}
                     />
                   </div>
@@ -15127,10 +15078,6 @@ export default function CreateContestPage({
         />
       </CampaignPaymentModal>
 
-      {/* Floating Error Alert */}
-      {toastErrorMessage && (
-        <ErrorAlert key={toastErrorMessage} message={toastErrorMessage} />
-      )}
       {/* Render BackModal if needed */}
       {showBackModal && <BackModal />}
 

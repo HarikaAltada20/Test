@@ -314,6 +314,7 @@ export type PersistedPlatformCampaign = {
     winner_count: number;
     flat_fee_bonus?: number;
     total_budget?: number;
+    budget_spent?: number;
   };
   cpm_contest?: {
     cpm_rate_usd: number;
@@ -1407,11 +1408,16 @@ export function resolveFlatFeeBonusPlan(
       ? first
       : root;
 
+  // Leaderboard bonus budgets are per-platform caps. Matching amounts still
+  // run independent FCFS ladders so YouTube+Instagram+TikTok each keep their
+  // own total_budget. CPM/dual keep a shared All-tab pool when ladders match.
   const shareAcrossAllPlatforms =
-    platforms.length < 2 ||
-    platforms.every((platform) =>
-      flatFeeBonusLaddersEqual(byPlatform[platform] ?? shared, shared),
-    );
+    contestType === "leaderboard"
+      ? platforms.length < 2
+      : platforms.length < 2 ||
+        platforms.every((platform) =>
+          flatFeeBonusLaddersEqual(byPlatform[platform] ?? shared, shared),
+        );
 
   return {
     shareAcrossAllPlatforms,
@@ -1434,6 +1440,42 @@ export function flatFeeBonusLadderForSubmission(
     parseVideoContestPlatforms(contestPlatformCsv)[0] ??
     plan.platforms[0];
   return plan.byPlatform[key] ?? plan.shared;
+}
+
+export type FlatFeeBonusListDisplay =
+  | { kind: "shared"; amountCents: number }
+  | {
+      kind: "byPlatform";
+      rows: Array<{ platform: VideoContestPlatform; amountCents: number }>;
+    };
+
+/** List-card bonus badge: one amount when platforms match, else per-platform rows. */
+export function resolveFlatFeeBonusListDisplay(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+  contestType?: string | null,
+): FlatFeeBonusListDisplay | null {
+  const plan = resolveFlatFeeBonusPlan(details, platformCsv, contestType);
+  const rows = (
+    plan.platforms.length > 0 ? plan.platforms : []
+  )
+    .map((platform) => ({
+      platform,
+      amountCents: Math.max(0, plan.byPlatform[platform]?.amountCents || 0),
+    }))
+    .filter((row) => row.amountCents > 0);
+
+  if (rows.length === 0) {
+    const shared = Math.max(0, plan.shared.amountCents);
+    return shared > 0 ? { kind: "shared", amountCents: shared } : null;
+  }
+
+  const first = rows[0]!.amountCents;
+  if (rows.length === 1 || rows.every((row) => row.amountCents === first)) {
+    return { kind: "shared", amountCents: first };
+  }
+
+  return { kind: "byPlatform", rows };
 }
 
 export function flatFeeBonusesDifferAcrossPlatforms(
@@ -1479,6 +1521,63 @@ export function sumLeaderboardBonusBudgetCents(
   return platforms.reduce((sum, platform) => {
     return sum + readLeaderboardBonusBudgetCents(campaigns[platform]);
   }, 0);
+}
+
+function leaderboardPlatformsFromDetails(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+): VideoContestPlatform[] {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const ordered = parseVideoContestPlatforms(platformCsv);
+  const fromCsv = ordered.filter((platform) => campaigns[platform]);
+  return fromCsv.length > 0
+    ? fromCsv
+    : VIDEO_CONTEST_PLATFORMS.filter((platform) => campaigns[platform]);
+}
+
+/**
+ * Flat-fee bonus pool for list/sort trackers.
+ * Always sums per-platform total_budget when 2+ platform campaigns exist.
+ * Root leaderboard_contest may only have budget_spent.
+ */
+export function resolveLeaderboardFlatFeeBonusBudgetCents(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+): number {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const platforms = leaderboardPlatformsFromDetails(details, platformCsv);
+  if (platforms.length >= 2) {
+    const summed = sumLeaderboardBonusBudgetCents(campaigns, platforms);
+    if (summed > 0) return summed;
+  }
+  const plan = resolveFlatFeeBonusPlan(details, platformCsv, "leaderboard");
+  return Math.max(0, plan.shared.budgetCents ?? 0);
+}
+
+/** Persisted bonus spend: sum per-platform budget_spent, else root. */
+export function resolveLeaderboardFlatFeeBonusSpentCents(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+): number {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const platforms = leaderboardPlatformsFromDetails(details, platformCsv);
+  if (platforms.length >= 2) {
+    let sum = 0;
+    let found = false;
+    for (const platform of platforms) {
+      const raw = campaigns[platform]?.leaderboard_contest?.budget_spent;
+      if (typeof raw === "number" && Number.isFinite(raw)) {
+        sum += Math.max(0, raw);
+        found = true;
+      }
+    }
+    if (found) return sum;
+  }
+  const lb =
+    details && typeof details === "object"
+      ? (details.leaderboard_contest as { budget_spent?: number } | undefined)
+      : undefined;
+  return Math.max(0, Number(lb?.budget_spent) || 0);
 }
 
 /** Normalize rich HTML so empty / whitespace-only briefs compare equal. */

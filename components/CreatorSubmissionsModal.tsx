@@ -4370,6 +4370,10 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("analytics") && (
                                   <TableCell className="text-center">
+                                    {submissionMatchesVideoPlatform(
+                                      submission,
+                                      "youtube",
+                                    ) ? (
                                     <YouTubeAnalyticsPanel
                                       metrics={{
                                         views:
@@ -4448,6 +4452,18 @@ export function CreatorSubmissionsModal({
                                         Details
                                       </button>
                                     </YouTubeAnalyticsPanel>
+                                    ) : (
+                                      <span
+                                        className={cn(
+                                          "text-xs",
+                                          isDark
+                                            ? "text-slate-500"
+                                            : "text-slate-400",
+                                        )}
+                                      >
+                                        —
+                                      </span>
+                                    )}
                                   </TableCell>
                                 )}
                               {isYouTubeContest &&

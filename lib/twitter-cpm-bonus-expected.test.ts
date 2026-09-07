@@ -28,7 +28,7 @@ const instagramLadder = {
 };
 
 describe("flat-fee bonus expected per platform", () => {
-  it("uses one All-tab pool when bonus and budget match", () => {
+  it("uses each platform's own budget even when bonus values match", () => {
     const contest = {
       contest_type: "leaderboard",
       platform: "youtube,instagram",
@@ -56,6 +56,47 @@ describe("flat-fee bonus expected per platform", () => {
     assert.equal(map.get("yt-1"), 200);
     assert.equal(map.get("ig-1"), 200);
     assert.equal(getFlatFeeBonusCentsFromContest(contest), 200);
+  });
+
+  it("caps matching leaderboard bonuses independently per platform", () => {
+    const tightLadder = {
+      ...youtubeLadder,
+      leaderboard_contest: {
+        ...youtubeLadder.leaderboard_contest,
+        total_budget: 200,
+      },
+    };
+    const contest = {
+      contest_type: "leaderboard",
+      platform: "youtube,instagram",
+      contest_based_details: {
+        youtube: tightLadder,
+        instagram: tightLadder,
+      },
+    };
+    const map = buildFlatFeeBonusExpectedCentsBySubmissionId(contest, [
+      {
+        id: "yt-1",
+        created_at: "2026-01-01T00:00:00.000Z",
+        status: "verified",
+        platform: "youtube",
+      },
+      {
+        id: "yt-2",
+        created_at: "2026-01-02T00:00:00.000Z",
+        status: "verified",
+        platform: "youtube",
+      },
+      {
+        id: "ig-1",
+        created_at: "2026-01-03T00:00:00.000Z",
+        status: "verified",
+        platform: "instagram",
+      },
+    ]);
+    assert.equal(map.get("yt-1"), 200);
+    assert.equal(map.get("yt-2"), 0);
+    assert.equal(map.get("ig-1"), 200);
   });
 
   it("uses each platform's bonus and budget when they differ", () => {

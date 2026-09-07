@@ -128,6 +128,13 @@ import {
   resolveLeaderboardPrizeRankingPlan,
   flatFeeBonusesDifferAcrossPlatforms,
   leaderboardBonusBudgetsDifferAcrossPlatforms,
+  briefsDifferAcrossPlatforms,
+  rulesDifferAcrossPlatforms,
+  inspirationLinksDifferAcrossPlatforms,
+  bonusDetailsDifferAcrossPlatforms,
+  maxEarningsDifferAcrossPlatforms,
+  videoPayoutConfigsDifferAcrossPlatforms,
+  resourcesDifferAcrossPlatforms,
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
@@ -882,17 +889,97 @@ export function ContestClientPage({
     detailVideoPlatforms.length,
     buildDetailPayoutContest,
   ]);
+  const detailPayoutConfigsDiffer = useMemo(
+    () =>
+      videoPayoutConfigsDifferAcrossPlatforms(
+        contest?.contest_based_details as
+          | Record<string, unknown>
+          | null
+          | undefined,
+        detailVideoPlatforms,
+      ),
+    [contest?.contest_based_details, detailVideoPlatforms],
+  );
+  const detailBriefsDiffer = useMemo(
+    () => briefsDifferAcrossPlatforms(contest, detailVideoPlatforms),
+    [contest, detailVideoPlatforms],
+  );
+  const detailRulesDiffer = useMemo(
+    () => rulesDifferAcrossPlatforms(contest, detailVideoPlatforms),
+    [contest, detailVideoPlatforms],
+  );
+  const detailInspirationsDiffer = useMemo(
+    () =>
+      inspirationLinksDifferAcrossPlatforms(
+        contest?.inspiration_links,
+        detailVideoPlatforms,
+      ),
+    [contest?.inspiration_links, detailVideoPlatforms],
+  );
+  const detailResourcesDiffer = useMemo(
+    () =>
+      resourcesDifferAcrossPlatforms(
+        contest?.resources,
+        detailVideoPlatforms,
+      ),
+    [contest?.resources, detailVideoPlatforms],
+  );
+  const detailBonusDetailsDiffer = useMemo(
+    () =>
+      bonusDetailsDifferAcrossPlatforms(
+        (contest as { bonus_details?: unknown } | null)?.bonus_details,
+        detailVideoPlatforms,
+      ),
+    [contest, detailVideoPlatforms],
+  );
+  const detailMaxEarningsDiffer = useMemo(
+    () =>
+      maxEarningsDifferAcrossPlatforms(
+        (contest as { max_earnings_per_creator?: unknown } | null)
+          ?.max_earnings_per_creator,
+        (contest as { bonus_details?: unknown } | null)?.bonus_details,
+        detailVideoPlatforms,
+      ),
+    [contest, detailVideoPlatforms],
+  );
   const detailPayoutPlatformList: Array<VideoContestPlatform | null> =
     detailVideoPlatforms.length >= 2
       ? detailPlatformTab === ALL_PLATFORM_TAB
-        ? detailVideoPlatforms
+        ? detailPayoutConfigsDiffer
+          ? detailVideoPlatforms
+          : [null]
         : detailScopedPlatform
           ? [detailScopedPlatform]
           : detailVideoPlatforms.slice(0, 1)
       : [null];
   const showDetailPayoutPlatformLabels =
     detailVideoPlatforms.length >= 2 &&
-    detailPlatformTab === ALL_PLATFORM_TAB;
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailPayoutConfigsDiffer;
+  const showDetailBriefByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailBriefsDiffer;
+  const showDetailRulesByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailRulesDiffer;
+  const showDetailInspirationsByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailInspirationsDiffer;
+  const showDetailResourcesByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailResourcesDiffer;
+  const showDetailBonusDetailsByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailBonusDetailsDiffer;
+  const showDetailMaxEarningsByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailMaxEarningsDiffer;
   const detailLeaderboardPrizesDiffer = useMemo(
     () =>
       leaderboardPrizeStructuresDifferAcrossPlatforms(
@@ -972,7 +1059,9 @@ export function ContestClientPage({
   const showDetailFlatFeeByPlatform =
     detailVideoPlatforms.length >= 2 &&
     detailPlatformTab === ALL_PLATFORM_TAB &&
-    (detailFlatFeeBonusesDiffer || detailBonusBudgetsDiffer);
+    (contest?.contest_type === "leaderboard" ||
+      detailFlatFeeBonusesDiffer ||
+      detailBonusBudgetsDiffer);
   const detailPrizeContestList = showDetailPrizeByPlatform
     ? detailVideoPlatforms.map((platform) => ({
         platform,
@@ -4788,7 +4877,7 @@ export function ContestClientPage({
                           const payoutContest =
                             platform != null
                               ? buildDetailPayoutContest(platform)
-                              : detailContest;
+                              : detailUniformPayoutContest;
                           if (!payoutContest) return null;
                           return (
                             <ContestDetailVideoPayoutSections
@@ -5647,31 +5736,64 @@ export function ContestClientPage({
                               entries
                             </div>
                             {(() => {
-                              const cap = maxEarningsCentsForPlatform(
-                                (contest as any).max_earnings_per_creator,
-                                (contest as any).bonus_details,
-                                detailScopedPlatform ?? contest?.platform,
+                              const platformsForCap = showDetailMaxEarningsByPlatform
+                                ? detailVideoPlatforms
+                                : ([
+                                    detailScopedPlatform ??
+                                      detailVideoPlatforms[0] ??
+                                      (isVideoContestPlatform(contest?.platform)
+                                        ? contest.platform
+                                        : null),
+                                  ].filter(Boolean) as VideoContestPlatform[]);
+                              const caps = platformsForCap
+                                .map((platform) => ({
+                                  platform: showDetailMaxEarningsByPlatform
+                                    ? platform
+                                    : null,
+                                  cents: maxEarningsCentsForPlatform(
+                                    (contest as any).max_earnings_per_creator,
+                                    (contest as any).bonus_details,
+                                    platform,
+                                  ),
+                                }))
+                                .filter((row) => row.cents);
+                              const displayCaps = showDetailMaxEarningsByPlatform
+                                ? caps
+                                : caps.slice(0, 1);
+                              if (displayCaps.length === 0) return null;
+                              return (
+                                <div className="space-y-0.5 mt-0.5">
+                                  {displayCaps.map(({ platform, cents }, idx) => (
+                                    <div
+                                      key={`cap-${platform ?? "shared"}-${idx}`}
+                                      className={cn(
+                                        "text-[10px] sm:text-xs flex items-center gap-1.5",
+                                        isDark
+                                          ? "text-purple-300"
+                                          : "text-purple-700",
+                                      )}
+                                    >
+                                      {platform
+                                        ? getPlatformIcon(platform, "sm")
+                                        : null}
+                                      <span>
+                                        Cap
+                                        {platform
+                                          ? ` (${VIDEO_PLATFORM_LABELS[platform]})`
+                                          : ""}
+                                        : {formatMoney(cents!)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
                               );
-                              return cap ? (
-                              <div
-                                className={cn(
-                                  "text-[10px] sm:text-xs mt-0.5",
-                                  isDark
-                                    ? "text-purple-300"
-                                    : "text-purple-700",
-                                )}
-                              >
-                                Cap:{" "}
-                                {formatMoney(cap)}
-                              </div>
-                              ) : null;
                             })()}
                           </div>
                         </div>
                       )}
 
                       {/* Additional Bonuses */}
-                      {showDetailPayoutPlatformLabels ? (
+                      {showDetailBonusDetailsByPlatform ? (
                         <div className="space-y-3">
                           {detailVideoPlatforms.map((platform) => {
                             const bonus = bonusDetailsForPlatform(
@@ -5731,7 +5853,9 @@ export function ContestClientPage({
                       ) : (
                       bonusDetailsForPlatform(
                         (contest as any).bonus_details,
-                        detailScopedPlatform ?? contest?.platform,
+                        detailScopedPlatform ??
+                          detailVideoPlatforms[0] ??
+                          contest?.platform,
                       )?.description_html && (
                         <div
                           className={cn(
@@ -5789,7 +5913,9 @@ export function ContestClientPage({
                                 __html:
                                   bonusDetailsForPlatform(
                                     (contest as any).bonus_details,
-                                    detailScopedPlatform ?? contest?.platform,
+                                    detailScopedPlatform ??
+                                      detailVideoPlatforms[0] ??
+                                      contest?.platform,
                                   )?.description_html || "",
                               }}
                             />
@@ -7253,8 +7379,7 @@ export function ContestClientPage({
                     >
                       📝 Brief
                     </h4>
-                    {detailVideoPlatforms.length >= 2 &&
-                    detailPlatformTab === ALL_PLATFORM_TAB ? (
+                    {showDetailBriefByPlatform ? (
                       <div className="space-y-3">
                         {detailVideoPlatforms.map((platform) => {
                           const html = briefHtmlForPlatform(contest, platform);
@@ -7288,7 +7413,17 @@ export function ContestClientPage({
                           );
                         })}
                       </div>
-                    ) : detailContest?.brief_html ? (
+                    ) : (
+                      (() => {
+                        const sharedBriefHtml =
+                          detailVideoPlatforms.length >= 2 &&
+                          detailPlatformTab === ALL_PLATFORM_TAB
+                            ? briefHtmlForPlatform(
+                                contest,
+                                detailVideoPlatforms[0],
+                              )
+                            : detailContest?.brief_html;
+                        return sharedBriefHtml ? (
                       <div
                         className={cn(
                           "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
@@ -7297,7 +7432,7 @@ export function ContestClientPage({
                             : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                         )}
                         dangerouslySetInnerHTML={{
-                          __html: detailContest.brief_html,
+                          __html: sharedBriefHtml,
                         }}
                       />
                     ) : (
@@ -7309,6 +7444,8 @@ export function ContestClientPage({
                       >
                         No brief provided
                       </p>
+                    );
+                      })()
                     )}
                   </div>
 
@@ -7379,8 +7516,7 @@ export function ContestClientPage({
                       Rules & Guidelines
                     </h4>
                     {/* Check multiple possible rule fields */}
-                    {detailVideoPlatforms.length >= 2 &&
-                    detailPlatformTab === ALL_PLATFORM_TAB ? (
+                    {showDetailRulesByPlatform ? (
                       <div className="space-y-3">
                         {detailVideoPlatforms.map((platform) => {
                           const html = rulesHtmlForPlatform(contest, platform);
@@ -7414,7 +7550,17 @@ export function ContestClientPage({
                           );
                         })}
                       </div>
-                    ) : (detailContest as any)?.rules_html ? (
+                    ) : (
+                      (() => {
+                        const sharedRulesHtml =
+                          detailVideoPlatforms.length >= 2 &&
+                          detailPlatformTab === ALL_PLATFORM_TAB
+                            ? rulesHtmlForPlatform(
+                                contest,
+                                detailVideoPlatforms[0],
+                              )
+                            : (detailContest as any)?.rules_html;
+                        return sharedRulesHtml ? (
                       <div
                         className={cn(
                           "prose prose-sm max-w-none [&_a]:break-words [&_a]:hover:underline",
@@ -7423,7 +7569,7 @@ export function ContestClientPage({
                             : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700",
                         )}
                         dangerouslySetInnerHTML={{
-                          __html: (detailContest as any).rules_html,
+                          __html: sharedRulesHtml,
                         }}
                       />
                     ) : contest.rules ? (
@@ -7543,6 +7689,8 @@ export function ContestClientPage({
                           </ul>
                         </div>
                       </div>
+                    );
+                      })()
                     )}
                   </div>
 
@@ -7606,7 +7754,7 @@ export function ContestClientPage({
                   {(() => {
                     const resourceGroups =
                       detailVideoPlatforms.length >= 2
-                        ? detailPlatformTab === ALL_PLATFORM_TAB
+                        ? showDetailResourcesByPlatform
                           ? detailVideoPlatforms.map((platform) => ({
                               platform,
                               items: resourcesForPlatform(
@@ -7614,15 +7762,25 @@ export function ContestClientPage({
                                 platform,
                               ),
                             }))
-                          : [
-                              {
-                                platform: detailScopedPlatform,
-                                items: resourcesForPlatform(
-                                  contest.resources,
-                                  detailScopedPlatform,
-                                ),
-                              },
-                            ]
+                          : detailPlatformTab === ALL_PLATFORM_TAB
+                            ? [
+                                {
+                                  platform: null as VideoContestPlatform | null,
+                                  items: resourcesForPlatform(
+                                    contest.resources,
+                                    detailVideoPlatforms[0],
+                                  ),
+                                },
+                              ]
+                            : [
+                                {
+                                  platform: detailScopedPlatform,
+                                  items: resourcesForPlatform(
+                                    contest.resources,
+                                    detailScopedPlatform,
+                                  ),
+                                },
+                              ]
                         : [
                             {
                               platform: null as VideoContestPlatform | null,
@@ -7653,7 +7811,7 @@ export function ContestClientPage({
                               className="space-y-3"
                             >
                               {group.platform &&
-                                detailPlatformTab === ALL_PLATFORM_TAB && (
+                                showDetailResourcesByPlatform && (
                                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                     {getPlatformIcon(group.platform, "sm")}
                                     <span>
@@ -7807,7 +7965,7 @@ export function ContestClientPage({
                 {(() => {
                   const inspirationGroups =
                     detailVideoPlatforms.length >= 2
-                      ? detailPlatformTab === ALL_PLATFORM_TAB
+                      ? showDetailInspirationsByPlatform
                         ? detailVideoPlatforms.map((platform) => ({
                             platform,
                             links: inspirationLinksForPlatform(
@@ -7819,19 +7977,33 @@ export function ContestClientPage({
                                 link.url.trim() !== "",
                             ),
                           }))
-                        : [
-                            {
-                              platform: detailScopedPlatform,
-                              links: inspirationLinksForPlatform(
-                                contest.inspiration_links,
-                                detailScopedPlatform,
-                              ).filter(
-                                (link) =>
-                                  typeof link?.url === "string" &&
-                                  link.url.trim() !== "",
-                              ),
-                            },
-                          ]
+                        : detailPlatformTab === ALL_PLATFORM_TAB
+                          ? [
+                              {
+                                platform: null as VideoContestPlatform | null,
+                                links: inspirationLinksForPlatform(
+                                  contest.inspiration_links,
+                                  detailVideoPlatforms[0],
+                                ).filter(
+                                  (link) =>
+                                    typeof link?.url === "string" &&
+                                    link.url.trim() !== "",
+                                ),
+                              },
+                            ]
+                          : [
+                              {
+                                platform: detailScopedPlatform,
+                                links: inspirationLinksForPlatform(
+                                  contest.inspiration_links,
+                                  detailScopedPlatform,
+                                ).filter(
+                                  (link) =>
+                                    typeof link?.url === "string" &&
+                                    link.url.trim() !== "",
+                                ),
+                              },
+                            ]
                       : [
                           {
                             platform: null as VideoContestPlatform | null,
@@ -7878,7 +8050,7 @@ export function ContestClientPage({
                                 className="space-y-3"
                               >
                                 {group.platform &&
-                                  detailPlatformTab === ALL_PLATFORM_TAB && (
+                                  showDetailInspirationsByPlatform && (
                                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                                       {getPlatformIcon(group.platform, "sm")}
                                       <span>

@@ -1,6 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
-  calculateLeaderboardBudgetSpent,
   Submission,
 } from "@/lib/contest-utils";
 import { calculateTwitterCpmBudgetSpent } from "@/lib/contest-utils-client";
@@ -27,7 +26,11 @@ import {
   fetchContestSubmissionsAllPages,
   fetchContestTwitterTweetsAllPages,
 } from "@/lib/fetch-contest-submissions";
-import { resolveMaxEarningsPerCreatorCents, withProjectedTopLevelPayout, contestHasUsableCpmRate, contestHasUsableMilestoneLadder, resolveCpmContestConfigForPlatform } from "@/lib/video-platform-campaigns";
+import { resolveMaxEarningsPerCreatorCents, withProjectedTopLevelPayout, contestHasUsableCpmRate, contestHasUsableMilestoneLadder, resolveCpmContestConfigForPlatform, resolveLeaderboardFlatFeeBonusBudgetCents, readPersistedPlatformCampaigns, parseVideoContestPlatforms, VIDEO_CONTEST_PLATFORMS } from "@/lib/video-platform-campaigns";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+} from "@/lib/twitter-cpm-bonus-expected";
 
 type ContestWithDetails = {
   id: string;
@@ -151,10 +154,20 @@ export async function enrichContestWithCalculatedBudgets(
     }
   }
 
+  const leaderboardBonusBudgetCents = resolveLeaderboardFlatFeeBonusBudgetCents(
+    contestDetails,
+    contest.platform,
+  );
+  const leaderboardFlatFeeBonusCents = getFlatFeeBonusCentsFromContest({
+    contest_type: contest.contest_type,
+    platform: contest.platform,
+    contest_based_details: contestDetails,
+  });
+
   if (
     contest.contest_type === "leaderboard" &&
-    leaderboard?.total_budget > 0 &&
-    leaderboard?.flat_fee_bonus > 0
+    leaderboardBonusBudgetCents > 0 &&
+    leaderboardFlatFeeBonusCents > 0
   ) {
     let leaderboardSubmissions: Submission[] = [];
     let leaderboardFetchOk = false;
@@ -202,7 +215,7 @@ export async function enrichContestWithCalculatedBudgets(
         await fetchContestSubmissionsAllPages(
         supabase,
         contest.id,
-        "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
+        "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views, platform",
         { statusIn: ["verified", "paid"], order: { column: "created_at", ascending: true } },
       );
 
@@ -228,23 +241,67 @@ export async function enrichContestWithCalculatedBudgets(
         created_at: submission.created_at,
         status: submission.status || undefined,
         views: submission.views,
+        platform: submission.platform,
       }));
       }
     }
 
     if (leaderboardFetchOk) {
-    const actualBudgetSpent = calculateLeaderboardBudgetSpent(
-      leaderboardSubmissions,
-      leaderboard.flat_fee_bonus,
+    const expectedBonusBySubmissionId =
+      buildFlatFeeBonusExpectedCentsBySubmissionId(
+        {
+          contest_type: contest.contest_type,
+          platform: contest.platform,
+          contest_based_details: contestDetails,
+        },
+        leaderboardSubmissions.map((submission) => ({
+          id: String(submission.id || ""),
+          created_at: submission.created_at,
+          status: submission.status,
+          paid: submission.paid,
+          platform: submission.platform,
+          is_twitter_tweet: (submission as { is_twitter_tweet?: boolean })
+            .is_twitter_tweet,
+        })),
+      );
+    let bonusSpentCents = 0;
+    for (const cents of expectedBonusBySubmissionId.values()) {
+      bonusSpentCents += cents;
+    }
+
+    const nextDetails: Record<string, unknown> = { ...contestDetails };
+    const campaigns = readPersistedPlatformCampaigns(contestDetails);
+    const campaignPlatforms = VIDEO_CONTEST_PLATFORMS.filter(
+      (platform) => campaigns[platform],
     );
+    if (campaignPlatforms.length >= 2) {
+      for (const platform of campaignPlatforms) {
+        const campaign = campaigns[platform];
+        if (!campaign?.leaderboard_contest) continue;
+        let platformSpent = 0;
+        for (const submission of leaderboardSubmissions) {
+          const key = parseVideoContestPlatforms(submission.platform)[0];
+          if (key !== platform) continue;
+          platformSpent +=
+            expectedBonusBySubmissionId.get(String(submission.id || "")) || 0;
+        }
+        nextDetails[platform] = {
+          ...campaign,
+          leaderboard_contest: {
+            ...campaign.leaderboard_contest,
+            budget_spent: platformSpent,
+          },
+        };
+      }
+    }
 
     updatedContest = {
       ...updatedContest,
       contest_based_details: {
-        ...contestDetails,
+        ...nextDetails,
         leaderboard_contest: {
           ...leaderboard,
-          budget_spent: Math.round(actualBudgetSpent * 100),
+          budget_spent: bonusSpentCents,
         },
       },
     };

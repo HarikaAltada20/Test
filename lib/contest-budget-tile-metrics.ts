@@ -24,6 +24,7 @@ import {
   resolveMaxEarningsCentsForSubmission,
   isKeyedMaxEarningsMap,
   sumPersistedPlatformCampaignsChargeableCents,
+  resolveLeaderboardFlatFeeBonusSpentCents,
 } from "@/lib/video-platform-campaigns";
 import { buildLeaderboardPrizeCentsBySubmissionIdForContest } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
@@ -520,8 +521,7 @@ export function getPoolBudgetSpentCentsForDisplay(
   }
 
   if (type === "leaderboard") {
-    const lb = details?.leaderboard_contest as { budget_spent?: number } | undefined;
-    return Math.max(0, Number(lb?.budget_spent) || 0);
+    return resolveLeaderboardFlatFeeBonusSpentCents(details, contest.platform);
   }
 
   if (type === "milestone") {

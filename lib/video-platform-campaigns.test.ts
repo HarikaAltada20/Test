@@ -33,6 +33,9 @@ import {
   leaderboardPrizeStructuresDifferAcrossPlatforms,
   resolveLeaderboardPrizeRankingPlan,
   resolveFlatFeeBonusPlan,
+  resolveLeaderboardFlatFeeBonusBudgetCents,
+  resolveLeaderboardFlatFeeBonusSpentCents,
+  resolveFlatFeeBonusListDisplay,
   flatFeeBonusesDifferAcrossPlatforms,
   leaderboardBonusBudgetsDifferAcrossPlatforms,
   sumLeaderboardBonusBudgetCents,
@@ -1134,6 +1137,129 @@ describe("per-platform leaderboard prize and flat fee display", () => {
         [...platforms],
       ),
       false,
+    );
+  });
+
+  it("sums matching per-platform bonus budgets instead of sharing one pool", () => {
+    const campaign = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "2",
+      totalBudget: "50",
+    });
+    const details = {
+      youtube: campaign,
+      instagram: campaign,
+      tiktok: campaign,
+      leaderboard_contest: { budget_spent: 12_800 },
+    };
+    assert.equal(
+      resolveLeaderboardFlatFeeBonusBudgetCents(
+        details,
+        "youtube,instagram,tiktok",
+      ),
+      15_000,
+    );
+    const plan = resolveFlatFeeBonusPlan(
+      details,
+      "youtube,instagram,tiktok",
+      "leaderboard",
+    );
+    assert.equal(plan.shareAcrossAllPlatforms, false);
+  });
+
+  it("sums per-platform bonus spend when present", () => {
+    assert.equal(
+      resolveLeaderboardFlatFeeBonusSpentCents(
+        {
+          youtube: {
+            contest_type: "leaderboard",
+            leaderboard_contest: { budget_spent: 4_000 },
+          },
+          instagram: {
+            contest_type: "leaderboard",
+            leaderboard_contest: { budget_spent: 8_000 },
+          },
+          tiktok: {
+            contest_type: "leaderboard",
+            leaderboard_contest: { budget_spent: 1_200 },
+          },
+          leaderboard_contest: { budget_spent: 12_800 },
+        },
+        "youtube,instagram,tiktok",
+      ),
+      13_200,
+    );
+  });
+
+  it("sums differing per-platform bonus budgets", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "2",
+      totalBudget: "30",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "1",
+      totalBudget: "50",
+    });
+    assert.equal(
+      resolveLeaderboardFlatFeeBonusBudgetCents(
+        { youtube, instagram },
+        "youtube,instagram",
+      ),
+      8_000,
+    );
+  });
+
+  it("falls back to root leaderboard total_budget", () => {
+    assert.equal(
+      resolveLeaderboardFlatFeeBonusBudgetCents({
+        leaderboard_contest: { total_budget: 9_000, flat_fee_bonus: 100 },
+      }),
+      9_000,
+    );
+  });
+
+  it("uses a shared list badge when per-submission bonuses match", () => {
+    const campaign = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "4",
+      totalBudget: "120",
+    });
+    assert.deepEqual(
+      resolveFlatFeeBonusListDisplay(
+        { youtube: campaign, instagram: campaign, tiktok: campaign },
+        "youtube,instagram,tiktok",
+        "leaderboard",
+      ),
+      { kind: "shared", amountCents: 400 },
+    );
+  });
+
+  it("splits the list badge by platform when per-submission bonuses differ", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "4",
+      totalBudget: "120",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "2",
+      totalBudget: "80",
+    });
+    assert.deepEqual(
+      resolveFlatFeeBonusListDisplay(
+        { youtube, instagram },
+        "youtube,instagram",
+        "leaderboard",
+      ),
+      {
+        kind: "byPlatform",
+        rows: [
+          { platform: "youtube", amountCents: 400 },
+          { platform: "instagram", amountCents: 200 },
+        ],
+      },
     );
   });
 });

@@ -20,7 +20,6 @@ import {
   Users,
   Clock,
   CheckCheck,
-  Gift,
   Tag,
   Star,
   Play,
@@ -43,7 +42,7 @@ import {
   compareContestBudgetUsed,
 } from "@/lib/contest-budget-remaining-sort";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import { getAdminSubmissionTotal } from "@/lib/contest-list-card-metrics";
+import { getAdminSubmissionTotal, getMultipleSubmissionsBadgeLabel } from "@/lib/contest-list-card-metrics";
 import { createClient } from "@/utils/supabase/client";
 import {
   calculateLeaderboardBudgetSpent,
@@ -105,6 +104,7 @@ import {
   formatContestPlatformLabel,
   resolveContestPlatformCpmRates,
   resolveContestPoolBudgetCents,
+  resolveLeaderboardFlatFeeBonusBudgetCents,
 } from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
@@ -126,6 +126,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
+import { ContestListFlatFeeBonusBadge } from "@/components/ContestListCardMetrics";
 import { type CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 
 import {
@@ -253,8 +254,15 @@ function getOpportunitySubmissionCount(contest: any): number {
 }
 
 function getOpportunityMultipleEntryBadgeLabel(contest: any): string {
-  const max = Number(contest?.max_submissions_per_creator) || 1;
-  return max > 1 ? `Up to ${max} / creator` : "Multiple Entries";
+  return getMultipleSubmissionsBadgeLabel(contest);
+}
+
+function getOpportunityLeaderboardBonusBudgetCents(contest: any): number {
+  if (contest?.contest_type !== "leaderboard") return 0;
+  return resolveLeaderboardFlatFeeBonusBudgetCents(
+    contest.contest_based_details,
+    contest.platform,
+  );
 }
 
 function getOpportunityBudgetTrackerMeta(contest: any): {
@@ -1623,29 +1631,11 @@ export default function OpportunitiesPage({
                   }
                   return null;
                 })()}
-                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-sm px-3 py-1 font-medium",
-                      isDark
-                        ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200",
-                    )}
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus ||
-                        0,
-                    )}
-                    /submission
-                  </Badge>
-                )}
+                <ContestListFlatFeeBonusBadge
+                  contest={contest}
+                  isDark={isDark}
+                  size="default"
+                />
                 {contest.bonus_details?.description_html && (
                   <Badge
                     variant="outline"
@@ -1914,6 +1904,24 @@ export default function OpportunitiesPage({
                       </span>
                     </div>
                   )}
+                {getOpportunityLeaderboardBonusBudgetCents(contest) > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Bonus Budget:{" "}
+                        <span className="font-medium">
+                          {formatMoney(
+                            getOpportunityLeaderboardBonusBudgetCents(contest),
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                 {contest.contest_type === "milestone" &&
                   contest.contest_based_details?.milestone_contest
                     ?.total_budget_cents != null &&
@@ -2100,6 +2108,67 @@ export default function OpportunitiesPage({
                         className="flex justify-between text-xs mt-1.5"
                         style={{
                           color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              {/* Bonus Budget Tracker for Leaderboard contests */}
+              {getOpportunityLeaderboardBonusBudgetCents(contest) > 0 &&
+                (() => {
+                  const totalBudget =
+                    getOpportunityLeaderboardBonusBudgetCents(contest);
+                  const tracker = getBudgetTrackerValues(
+                    totalBudget,
+                    getPoolBudgetSpentCentsForDisplay({
+                      contest_type: contest.contest_type,
+                      post_contest_status: contest.post_contest_status,
+                      contest_based_details: contest.contest_based_details,
+                      platform: contest.platform,
+                    }),
+                  );
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#cbd5e1" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">
+                          Flat Fee Bonus Budget Tracker
+                        </span>
+                        <span className="font-semibold">
+                          {formatMoney(tracker.spent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                        )}
+                        title={`Flat Fee Bonus Budget Spent: ${formatMoney(
+                          tracker.spent,
+                        )}`}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                          style={{
+                            width: `${Math.min(tracker.percentage, 100)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#94a3b8" : "#64748b",
                           transition: "none",
                         }}
                       >
@@ -2804,30 +2873,11 @@ export default function OpportunitiesPage({
                                 }
                                 return null;
                               })()}
-                              {(contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
-                                contest.contest_based_details
-                                  ?.leaderboard_contest?.flat_fee_bonus) && (
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "text-[12px]",
-                                    isDark
-                                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                      : "bg-green-50 text-green-700 border-green-200",
-                                  )}
-                                >
-                                  <Gift className="h-3 w-3 mr-1" />
-                                  {formatMoney(
-                                    contest.contest_based_details?.cpm_contest
-                                      ?.flat_fee_bonus ||
-                                      contest.contest_based_details
-                                        ?.leaderboard_contest?.flat_fee_bonus ||
-                                      0,
-                                  )}
-                                  /submission
-                                </Badge>
-                              )}
+                              <ContestListFlatFeeBonusBadge
+                                contest={contest}
+                                isDark={isDark}
+                                size="compact"
+                              />
                               {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
                               {(() => {
                                 const isTwitterTextImage =
@@ -3154,11 +3204,8 @@ export default function OpportunitiesPage({
                                   </span>
                                 </div>
                               )}
-                            {contest.contest_type === "leaderboard" &&
-                              contest.contest_based_details?.leaderboard_contest
-                                ?.total_budget != null &&
-                              contest.contest_based_details.leaderboard_contest
-                                .total_budget > 0 && (
+                            {getOpportunityLeaderboardBonusBudgetCents(contest) >
+                              0 && (
                                 <div className="flex items-center">
                                   <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
                                   <span>
@@ -3172,8 +3219,9 @@ export default function OpportunitiesPage({
                                       )}
                                     >
                                       {formatMoney(
-                                        contest.contest_based_details
-                                          .leaderboard_contest.total_budget,
+                                        getOpportunityLeaderboardBonusBudgetCents(
+                                          contest,
+                                        ),
                                       )}
                                     </span>
                                   </span>
@@ -3345,21 +3393,23 @@ export default function OpportunitiesPage({
                             })()}
 
                           {/* Bonus Budget Tracker for Leaderboard contests */}
-                          {contest.contest_type === "leaderboard" &&
-                            contest.contest_based_details?.leaderboard_contest
-                              ?.total_budget != null &&
-                            contest.contest_based_details.leaderboard_contest
-                              .total_budget > 0 &&
+                          {getOpportunityLeaderboardBonusBudgetCents(contest) >
+                            0 &&
                             (() => {
                               const totalBudget =
-                                contest.contest_based_details
-                                  .leaderboard_contest.total_budget;
-                              const leaderboardBudgetSpent =
-                                contest.contest_based_details
-                                  .leaderboard_contest.budget_spent || 0;
+                                getOpportunityLeaderboardBonusBudgetCents(
+                                  contest,
+                                );
                               const tracker = getBudgetTrackerValues(
                                 totalBudget,
-                                leaderboardBudgetSpent,
+                                getPoolBudgetSpentCentsForDisplay({
+                                  contest_type: contest.contest_type,
+                                  post_contest_status:
+                                    contest.post_contest_status,
+                                  contest_based_details:
+                                    contest.contest_based_details,
+                                  platform: contest.platform,
+                                }),
                               );
                               const percentage = tracker.percentage;
                               const remaining = tracker.remaining;

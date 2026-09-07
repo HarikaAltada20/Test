@@ -148,8 +148,6 @@ import {
   VIDEO_PLATFORM_LABELS,
   withProjectedTopLevelPayout,
   leaderboardPrizeStructuresDifferAcrossPlatforms,
-  flatFeeBonusesDifferAcrossPlatforms,
-  leaderboardBonusBudgetsDifferAcrossPlatforms,
   readLeaderboardBonusBudgetCents,
   sumLeaderboardBonusBudgetCents,
   briefsDifferAcrossPlatforms,
@@ -240,6 +238,15 @@ function countSubmissionsByVideoPlatform(
   }
   return counts.filter((row) => row.count > 0);
 }
+
+function creatorGroupHasVideoPlatform(
+  group: { submissions?: Array<{ platform?: string | null }> },
+  platform: VideoContestPlatform,
+): boolean {
+  return (group.submissions || []).some((submission) =>
+    submissionMatchesVideoPlatform(submission, platform),
+  );
+}
 import {
   buildDualRewardCreatorCapSplitMapsByPlatform,
   splitDualPaidTotalByExpectedWeights,
@@ -301,6 +308,12 @@ import {
   type ContestAnalyticsSnapshotContext,
 } from "@/lib/contest-analytics-snapshot";
 import { getPlatformCampaignMetricCards } from "@/lib/contest-analytics-campaign-metrics";
+import {
+  getAnalyticsCampaignBudgetCents,
+  getAnalyticsInvestmentNote,
+  resolveAnalyticsExpectedCpmDisplay,
+  resolveAnalyticsRoiContestType,
+} from "@/lib/contest-analytics-roi";
 import {
   getAnalyticsTabCounts,
   type ContestAnalyticsExportSubmission,
@@ -1929,22 +1942,6 @@ export default function ContestDetailClient({
     overviewPersistedCampaigns,
     overviewVideoPlatforms,
   ]);
-  const overviewFlatFeeBonusesDiffer = useMemo(
-    () =>
-      flatFeeBonusesDifferAcrossPlatforms(
-        overviewPersistedCampaigns,
-        overviewVideoPlatforms,
-      ),
-    [overviewPersistedCampaigns, overviewVideoPlatforms],
-  );
-  const overviewBonusBudgetsDiffer = useMemo(
-    () =>
-      leaderboardBonusBudgetsDifferAcrossPlatforms(
-        overviewPersistedCampaigns,
-        overviewVideoPlatforms,
-      ),
-    [overviewPersistedCampaigns, overviewVideoPlatforms],
-  );
   const overviewUniformPayoutContest = useMemo(() => {
     if (overviewScopedPlatform) return overviewDetailContest;
     if (
@@ -2018,8 +2015,7 @@ export default function ContestDetailClient({
     };
     if (
       overviewVideoPlatforms.length >= 2 &&
-      overviewPlatformTab === ALL_PLATFORM_TAB &&
-      overviewFlatFeeBonusesDiffer
+      overviewPlatformTab === ALL_PLATFORM_TAB
     ) {
       return overviewVideoPlatforms
         .map((platform) =>
@@ -2034,7 +2030,6 @@ export default function ContestDetailClient({
   }, [
     overviewVideoPlatforms,
     overviewPlatformTab,
-    overviewFlatFeeBonusesDiffer,
     buildOverviewPayoutContest,
     overviewUniformPayoutContest,
   ]);
@@ -2042,7 +2037,7 @@ export default function ContestDetailClient({
     ? readLeaderboardBonusBudgetCents(
         overviewPersistedCampaigns[overviewScopedPlatform],
       )
-    : overviewVideoPlatforms.length >= 2 && overviewBonusBudgetsDiffer
+    : overviewVideoPlatforms.length >= 2
       ? sumLeaderboardBonusBudgetCents(
           overviewPersistedCampaigns,
           overviewVideoPlatforms,
@@ -3324,6 +3319,17 @@ export default function ContestDetailClient({
     setIgAnalyticsLoadingCreatorId(null);
   }, []);
 
+  const openInstagramCreatorAnalytics = useCallback(
+    (creatorId: string | null | undefined, label: string) => {
+      if (!creatorId) return;
+      setIgAnalyticsCreatorId(creatorId);
+      setIgAnalyticsCreatorLabel(label);
+      setIgAnalyticsLoadingCreatorId(creatorId);
+      setIgAnalyticsOpen(true);
+    },
+    [],
+  );
+
   const syncInstagramArchiveForCreator = useCallback(
     (creatorId: string, archive: unknown) => {
       setCurrentSubmissions((prev) =>
@@ -4393,9 +4399,13 @@ export default function ContestDetailClient({
     () =>
       getPlatformCampaignMetricCards(
         filteredAnalyticsSubmissions as ContestAnalyticsExportSubmission[],
-        currentContest?.platform,
+        analyticsScopedPlatform ?? currentContest?.platform,
       ),
-    [filteredAnalyticsSubmissions, currentContest?.platform],
+    [
+      filteredAnalyticsSubmissions,
+      analyticsScopedPlatform,
+      currentContest?.platform,
+    ],
   );
 
   const analyticsTabCounts = useMemo(
@@ -12673,12 +12683,19 @@ export default function ContestDetailClient({
         isTwitterPlatform,
         contestFormat: currentContest?.contest_format,
         platform: currentContest?.platform,
+        contestBasedDetails:
+          (currentContest?.contest_based_details as Record<string, unknown>) ||
+          null,
         contentType: (currentContest as { content_type?: string }).content_type,
-        leaderboardTotalPrizeCents:
-          Number(
-            currentContest?.contest_based_details?.leaderboard_contest
-              ?.total_prize,
-          ) || 0,
+        leaderboardTotalPrizeCents: getAnalyticsCampaignBudgetCents({
+          contest_type: currentContest?.contest_type,
+          contest_based_details:
+            (currentContest?.contest_based_details as Record<
+              string,
+              unknown
+            >) || null,
+          platform: currentContest?.platform,
+        }),
         allSubmissions:
           analyticsQualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
         getStatus: (submission) => getStatus(submission as Submission),
@@ -14494,7 +14511,7 @@ export default function ContestDetailClient({
                           >
                             Total Budget
                           </p>
-                          {overviewBonusBudgetsDiffer ? (
+                          {overviewVideoPlatforms.length >= 2 ? (
                             <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
                               {overviewVideoPlatforms.map((platform) => {
                                 const budget =
@@ -24259,28 +24276,44 @@ export default function ContestDetailClient({
                                               "analytics",
                                             ) && (
                                               <TableCell className="text-center">
-                                                <YouTubeAnalyticsPanel
-                                                  metrics={
-                                                    metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics
-                                                  }
-                                                  isDark={isDark}
-                                                  showCore={canSeeCore}
-                                                  showTraffic={canSeeTraffic}
-                                                  showDemographics={canSeeDemo}
-                                                >
-                                                  <button
-                                                    className={cn(
-                                                      "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
-                                                      isDark
-                                                        ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                                        : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
-                                                    )}
-                                                    title="View full analytics breakdown"
+                                                {submissionMatchesVideoPlatform(
+                                                  submission,
+                                                  "youtube",
+                                                ) ? (
+                                                  <YouTubeAnalyticsPanel
+                                                    metrics={
+                                                      metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics
+                                                    }
+                                                    isDark={isDark}
+                                                    showCore={canSeeCore}
+                                                    showTraffic={canSeeTraffic}
+                                                    showDemographics={canSeeDemo}
                                                   >
-                                                    <BarChart2 className="h-3 w-3" />
-                                                    Details
-                                                  </button>
-                                                </YouTubeAnalyticsPanel>
+                                                    <button
+                                                      className={cn(
+                                                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                                        isDark
+                                                          ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                                          : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                                      )}
+                                                      title="View full analytics breakdown"
+                                                    >
+                                                      <BarChart2 className="h-3 w-3" />
+                                                      Details
+                                                    </button>
+                                                  </YouTubeAnalyticsPanel>
+                                                ) : (
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs",
+                                                      isDark
+                                                        ? "text-slate-500"
+                                                        : "text-slate-400",
+                                                    )}
+                                                  >
+                                                    —
+                                                  </span>
+                                                )}
                                               </TableCell>
                                             )}
                                           {canSeeTraffic &&
@@ -28530,7 +28563,10 @@ export default function ContestDetailClient({
                                                   View All ({group.totalCount})
                                                 </Button>
                                                 {isAdminView &&
-                                                  submissionsTablePlatform.includes("instagram") && (
+                                                  creatorGroupHasVideoPlatform(
+                                                    group,
+                                                    "instagram",
+                                                  ) && (
                                                     <Button
                                                       size="sm"
                                                       variant="outline"
@@ -28544,24 +28580,16 @@ export default function ContestDetailClient({
                                                         igAnalyticsLoadingCreatorId ===
                                                         group.creator.id
                                                       }
-                                                      onClick={() => {
-                                                        setIgAnalyticsCreatorId(
+                                                      onClick={() =>
+                                                        openInstagramCreatorAnalytics(
                                                           group.creator.id,
-                                                        );
-                                                        setIgAnalyticsCreatorLabel(
                                                           userTableUsername ||
                                                             group.creator
                                                               .username ||
                                                             platformUsername ||
                                                             group.creator.id,
-                                                        );
-                                                        setIgAnalyticsLoadingCreatorId(
-                                                          group.creator.id,
-                                                        );
-                                                        setIgAnalyticsOpen(
-                                                          true,
-                                                        );
-                                                      }}
+                                                        )
+                                                      }
                                                     >
                                                       {igAnalyticsLoadingCreatorId ===
                                                       group.creator.id ? (
@@ -28576,8 +28604,10 @@ export default function ContestDetailClient({
                                                   )}
                                                 {/* YouTube per-creator analytics refresh (admin only) */}
                                                 {isAdminView &&
-                                                  currentContest.platform?.toLowerCase() ===
-                                                    "youtube" && (
+                                                  creatorGroupHasVideoPlatform(
+                                                    group,
+                                                    "youtube",
+                                                  ) && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -31608,6 +31638,11 @@ export default function ContestDetailClient({
                                   )}
                                 >
                                   {(() => {
+                                    const roiContestType =
+                                      resolveAnalyticsRoiContestType(
+                                        currentContest,
+                                        analyticsScopedPlatform,
+                                      );
                                     if (
                                       currentContest.post_contest_status ===
                                       "payouts_processed"
@@ -31619,24 +31654,17 @@ export default function ContestDetailClient({
                                       );
                                     }
 
-                                    if (
-                                      currentContest.contest_type ===
-                                      "leaderboard"
-                                    ) {
-                                      const totalPrize =
-                                        currentContest.contest_based_details
-                                          ?.leaderboard_contest?.total_prize ||
-                                        0;
-                                      return formatMoney(totalPrize);
+                                    if (roiContestType === "leaderboard") {
+                                      return formatMoney(
+                                        getAnalyticsCampaignBudgetCents(
+                                          currentContest,
+                                          analyticsScopedPlatform,
+                                        ),
+                                      );
                                     } else if (
-                                      isCpmContestType(
-                                        currentContest.contest_type,
-                                      ) ||
-                                      isMilestoneContestType(
-                                        currentContest.contest_type,
-                                      )
+                                      isCpmContestType(roiContestType) ||
+                                      isMilestoneContestType(roiContestType)
                                     ) {
-                                      // Calculate total paid for CPM/Milestone contest
                                       const totalPaid =
                                         filteredAnalyticsSubmissions
                                           ?.filter((s) => s.status === "paid")
@@ -31655,13 +31683,14 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
-                                  {currentContest.post_contest_status ===
-                                  "payouts_processed"
-                                    ? "Expected Reward"
-                                    : currentContest.contest_type ===
-                                        "leaderboard"
-                                      ? "Prize Pool"
-                                      : "Total Paid"}
+                                  {getAnalyticsInvestmentNote(
+                                    resolveAnalyticsRoiContestType(
+                                      currentContest,
+                                      analyticsScopedPlatform,
+                                    ),
+                                    currentContest.post_contest_status ===
+                                      "payouts_processed",
+                                  )}
                                 </p>
                               </div>
                               <div
@@ -31802,19 +31831,27 @@ export default function ContestDetailClient({
                                             (sum, s) => sum + (s.views || 0),
                                             0,
                                           ) || 0;
-                                        if (totalViews === 0) return "$0.00";
-
                                         const expectedPayoutCents =
                                           sumFilteredAnalyticsExpectedCents(
                                             filteredAnalyticsSubmissions,
                                           );
-
-                                        const expectedEffectiveCpm =
-                                          (expectedPayoutCents /
-                                            100 /
-                                            totalViews) *
-                                          1000;
-                                        return `$${expectedEffectiveCpm.toFixed(3)}`;
+                                        return resolveAnalyticsExpectedCpmDisplay(
+                                          {
+                                            submissions:
+                                              filteredAnalyticsSubmissions,
+                                            details:
+                                              (currentContest.contest_based_details as Record<
+                                                string,
+                                                unknown
+                                              >) || null,
+                                            contestPlatformCsv:
+                                              currentContest.platform,
+                                            scopedPlatform:
+                                              analyticsScopedPlatform,
+                                            expectedPayoutCents,
+                                            totalViews,
+                                          },
+                                        ).value;
                                       })()
                                     : (() => {
                                         const totalViews =
@@ -31843,7 +31880,28 @@ export default function ContestDetailClient({
                                   {showsAnalyticsExpectedRewardMetrics
                                     ? activeAnalyticsTab === "paid"
                                       ? "Paid amount ÷ paid views × 1000"
-                                      : "Expected reward ÷ views × 1000"
+                                      : resolveAnalyticsExpectedCpmDisplay({
+                                          submissions:
+                                            filteredAnalyticsSubmissions,
+                                          details:
+                                            (currentContest.contest_based_details as Record<
+                                              string,
+                                              unknown
+                                            >) || null,
+                                          contestPlatformCsv:
+                                            currentContest.platform,
+                                          scopedPlatform:
+                                            analyticsScopedPlatform,
+                                          expectedPayoutCents:
+                                            sumFilteredAnalyticsExpectedCents(
+                                              filteredAnalyticsSubmissions,
+                                            ),
+                                          totalViews:
+                                            filteredAnalyticsSubmissions?.reduce(
+                                              (sum, s) => sum + (s.views || 0),
+                                              0,
+                                            ) || 0,
+                                        }).note
                                     : "Paid ÷ Views"}
                                 </p>
                               </div>
@@ -31859,7 +31917,12 @@ export default function ContestDetailClient({
                               </div>
                             </div>
                           </div>
-                          {isCpmContestType(currentContest.contest_type) &&
+                          {isCpmContestType(
+                            resolveAnalyticsRoiContestType(
+                              currentContest,
+                              analyticsScopedPlatform,
+                            ),
+                          ) &&
                             currentContest.post_contest_status !==
                               "payouts_processed" && (
                               <div
@@ -32190,20 +32253,19 @@ export default function ContestDetailClient({
                                       0,
                                     ) || 0;
                                   let totalCost = 0;
-                                  if (
-                                    currentContest.contest_type ===
-                                    "leaderboard"
-                                  ) {
-                                    totalCost =
-                                      currentContest.contest_based_details
-                                        ?.leaderboard_contest?.total_prize || 0;
+                                  const roiContestType =
+                                    resolveAnalyticsRoiContestType(
+                                      currentContest,
+                                      analyticsScopedPlatform,
+                                    );
+                                  if (roiContestType === "leaderboard") {
+                                    totalCost = getAnalyticsCampaignBudgetCents(
+                                      currentContest,
+                                      analyticsScopedPlatform,
+                                    );
                                   } else if (
-                                    isCpmContestType(
-                                      currentContest.contest_type,
-                                    ) ||
-                                    isMilestoneContestType(
-                                      currentContest.contest_type,
-                                    )
+                                    isCpmContestType(roiContestType) ||
+                                    isMilestoneContestType(roiContestType)
                                   ) {
                                     totalCost =
                                       filteredAnalyticsSubmissions

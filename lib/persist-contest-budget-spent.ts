@@ -9,6 +9,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
 import { clearContestsCache } from "@/lib/cache-utils";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
+import { VIDEO_CONTEST_PLATFORMS } from "@/lib/video-platform-campaigns";
 
 type Details = Record<string, unknown>;
 
@@ -35,6 +36,20 @@ export function mergePersistedBudgetSpentFields(
     next.leaderboard_contest = {
       ...asRecord(base.leaderboard_contest),
       budget_spent: Number(enrichedLb.budget_spent) || 0,
+    };
+  }
+
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    const enrichedCampaign = asRecord(enriched[platform]);
+    const enrichedPlatformLb = asRecord(enrichedCampaign.leaderboard_contest);
+    if (enrichedPlatformLb.budget_spent == null) continue;
+    const baseCampaign = asRecord(base[platform]);
+    next[platform] = {
+      ...baseCampaign,
+      leaderboard_contest: {
+        ...asRecord(baseCampaign.leaderboard_contest),
+        budget_spent: Number(enrichedPlatformLb.budget_spent) || 0,
+      },
     };
   }
 
