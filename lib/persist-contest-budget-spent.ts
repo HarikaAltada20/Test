@@ -63,10 +63,20 @@ export function mergePersistedBudgetSpentFields(
 
   const enrichedMs = asRecord(enriched.milestone_contest);
   if (enrichedMs.budget_spent != null) {
-    next.milestone_contest = {
-      ...asRecord(base.milestone_contest),
-      budget_spent: Number(enrichedMs.budget_spent) || 0,
-    };
+    const spent = Number(enrichedMs.budget_spent) || 0;
+    const baseMilestone = base.milestone_contest;
+    // Multi-platform contests store ladders under youtube|instagram|tiktok
+    // and must not grow a stub root milestone_contest (no total_budget_cents).
+    if (
+      baseMilestone &&
+      typeof baseMilestone === "object" &&
+      !Array.isArray(baseMilestone)
+    ) {
+      next.milestone_contest = {
+        ...asRecord(baseMilestone),
+        budget_spent: spent,
+      };
+    }
   }
 
   if (enriched.pool_budget_spent_cents != null) {

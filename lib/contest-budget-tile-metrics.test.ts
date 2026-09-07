@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   computeBudgetFilledCents,
   computeBudgetPaidCents,
+  computeDualRewardsCpmMilestoneFilledByPlatform,
   computeDualRewardsCpmMilestoneFilledCents,
   getBudgetTileMode,
   getPoolBudgetSpentCentsForDisplay,
@@ -136,6 +137,46 @@ describe("contest-budget-tile-metrics", () => {
     ];
     const filled = computeBudgetFilledCents(contest, submissions);
     assert.equal(filled, 25_000);
+  });
+
+  it("milestone filled sums each qualifying submission from the same creator", () => {
+    const contest = {
+      contest_type: "milestone",
+      post_contest_status: null,
+      contest_based_details: {
+        milestone_contest: {
+          total_budget_cents: 500_000,
+          milestones: [
+            { target_views: 1000, payout_cents: 25_000, winner_limit: null },
+          ],
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "s1",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 5_000,
+        platform: "youtube",
+      },
+      {
+        id: "s2",
+        creator_id: "c1",
+        created_at: "2026-06-02T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 8_000,
+        platform: "youtube",
+      },
+    ];
+    assert.equal(computeBudgetFilledCents(contest, submissions), 50_000);
   });
 
   it("resolveBudgetTileMetrics returns ratio fields and label", () => {
@@ -321,6 +362,12 @@ describe("contest-budget-tile-metrics", () => {
     const filled = computeBudgetFilledCents(contest, submissions);
     // CPM $1/1k * 1000 views * 2 = 200 cents, ladder 1000*2 = 2000, bonus 200*2 = 400
     assert.equal(filled, 2_600);
+    const byPlatform = computeDualRewardsCpmMilestoneFilledByPlatform(
+      contest,
+      submissions,
+    );
+    assert.equal(byPlatform.get("youtube"), 1_100);
+    assert.equal(byPlatform.get("tiktok"), 1_100);
   });
 
   it("dual CPM+milestone filled applies combined per-platform max earnings cap", () => {
@@ -426,6 +473,36 @@ describe("contest-budget-tile-metrics", () => {
       },
     };
     assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 1_984);
+  });
+
+  it("uses pool_budget_spent_cents for multi-platform milestone list cards", () => {
+    const contest = {
+      contest_type: "milestone",
+      post_contest_status: "in_review",
+      platform: "youtube,tiktok",
+      contest_based_details: {
+        pool_budget_spent_cents: 12_500,
+        youtube: {
+          contest_type: "milestone",
+          milestone_contest: {
+            total_budget_cents: 50_000,
+            milestones: [
+              { target_views: 1000, payout_cents: 25_000, winner_limit: null },
+            ],
+          },
+        },
+        tiktok: {
+          contest_type: "milestone",
+          milestone_contest: {
+            total_budget_cents: 50_000,
+            milestones: [
+              { target_views: 1000, payout_cents: 25_000, winner_limit: null },
+            ],
+          },
+        },
+      },
+    };
+    assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 12_500);
   });
 
   it("resolveBudgetTileMetrics reports dual filled numerator above pool when overfilled", () => {

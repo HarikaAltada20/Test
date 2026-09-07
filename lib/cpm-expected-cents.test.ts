@@ -63,4 +63,33 @@ describe("computeCpmRawCentsForRow", () => {
       1_000,
     );
   });
+
+  it("computes TikTok CPM when the TikTok campaign rate is 0", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      totalBudget: "100",
+      cpmRate: "0.1",
+      minViews: "5000",
+    });
+    const tiktok = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      totalBudget: "100",
+      cpmRate: "0",
+    });
+    const details = { youtube, tiktok };
+    assert.equal(
+      computeCpmRawCentsForRow(
+        {
+          views: 0,
+          platform: "tiktok",
+          other_stats: { tiktok: { view_count: 2000 } },
+        },
+        details,
+        "youtube,instagram,tiktok",
+      ),
+      20,
+    );
+  });
 });

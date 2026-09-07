@@ -7537,7 +7537,7 @@ export default function EditContestPage({
     }
 
     // YouTube analytics visibility (brand side) — stored in contest_based_details.youtube_analytics_visibility
-    if (!datesOnly && platform?.toLowerCase() === "youtube") {
+    if (!datesOnly && selectedPlatforms.includes("youtube")) {
       contestBasedDetails.youtube_analytics_visibility = {
         show_core_to_brand: showBrandCoreAnalytics,
         show_traffic_to_brand: showBrandTrafficSources,
@@ -14492,7 +14492,7 @@ export default function EditContestPage({
                 )}
               </div>
 
-              {!datesOnly && platform?.toLowerCase() === "youtube" && (
+              {!datesOnly && selectedPlatforms.includes("youtube") && (
                 <div
                   className={cn(
                     "space-y-3 rounded-xl border p-4",

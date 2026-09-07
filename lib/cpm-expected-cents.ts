@@ -42,7 +42,15 @@ export function computeCpmRawCentsForRow(
   }
 
   let views = getCpmEligibleViewsFromRow(row);
-  if (cfg.min_views != null && views < cfg.min_views) views = 0;
-  if (cfg.max_views != null && views > cfg.max_views) views = cfg.max_views;
+  const minViews =
+    cfg.min_views == null ? null : Number(cfg.min_views);
+  const maxViews =
+    cfg.max_views == null ? null : Number(cfg.max_views);
+  if (minViews != null && Number.isFinite(minViews) && views < minViews) {
+    views = 0;
+  }
+  if (maxViews != null && Number.isFinite(maxViews) && views > maxViews) {
+    views = maxViews;
+  }
   return Math.max(Math.round((views * cfg.cpm_rate_usd * 100) / 1000), 0);
 }

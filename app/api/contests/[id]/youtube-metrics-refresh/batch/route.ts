@@ -22,6 +22,7 @@ import {
   isMetricsTargetMismatch,
   type MetricsRefreshTarget,
 } from "@/lib/post-campaign-enqueue-guards";
+import { createMetricsRefreshRunProgressWriter } from "@/lib/metrics-refresh-run-progress";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -297,6 +298,29 @@ export async function POST(
     const now = new Date().toISOString();
     let skippedRecentCount = 0;
 
+    const { data: progressBaseRow } = await supabaseAdmin
+      .from("youtube_metrics_refresh_runs")
+      .select(
+        "processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count",
+      )
+      .eq("id", runId)
+      .single();
+    const progress = createMetricsRefreshRunProgressWriter({
+      supabase: supabaseAdmin,
+      table: "youtube_metrics_refresh_runs",
+      runId,
+      base: {
+        processed_submissions: progressBaseRow?.processed_submissions ?? 0,
+        reviewed_count: progressBaseRow?.reviewed_count ?? 0,
+        success_count: progressBaseRow?.success_count ?? 0,
+        temporary_failure_count:
+          progressBaseRow?.temporary_failure_count ?? 0,
+        permanent_failure_count:
+          progressBaseRow?.permanent_failure_count ?? 0,
+        skipped_recent_count: progressBaseRow?.skipped_recent_count ?? 0,
+      },
+    });
+
     for (const creator of creators ?? []) {
       const account = creator.youtube_account as Record<string, unknown> | null;
       if (!account?.access_token) {
@@ -310,6 +334,7 @@ export async function POST(
           });
         });
         skippedCreatorIds.add(creator.id);
+        await progress.recordSkipped(creatorSubs.length);
         continue;
       }
 
@@ -330,6 +355,7 @@ export async function POST(
             });
           });
           skippedCreatorIds.add(creator.id);
+          await progress.recordSkipped(creatorSubs.length);
           continue;
         }
       }
@@ -379,6 +405,7 @@ export async function POST(
             });
           });
           skippedCreatorIds.add(creator.id);
+          await progress.recordSkipped(creatorSubs.length);
           continue;
         }
       }
@@ -414,6 +441,7 @@ export async function POST(
           analytics_needs_reauth: true,
           insights_error: "Missing creator profile or token",
         });
+        await progress.recordTemporaryFailure();
         return {
           ok: false,
           auth: false,
@@ -436,6 +464,13 @@ export async function POST(
           metricsTarget: writeTarget,
         }
       );
+      if (res.ok) {
+        await progress.recordSuccess();
+      } else if (res.failureType === "permanent_failure") {
+        await progress.recordPermanentFailure();
+      } else {
+        await progress.recordTemporaryFailure();
+      }
       return { ok: res.ok, auth: res.authError, failureType: res.failureType };
     });
 
@@ -453,40 +488,22 @@ export async function POST(
     }
 
     const reviewedInBatch = batch.length;
-    const { data: runRow } = await supabaseAdmin
-      .from("youtube_metrics_refresh_runs")
-      .select(
-        "processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count"
-      )
-      .eq("id", runId)
-      .eq("current_batch_index", batchIndex)
-      .single();
-
-    if (runRow) {
-      await supabaseAdmin
-        .from("youtube_metrics_refresh_runs")
-        .update({
-          reviewed_count: (runRow.reviewed_count ?? 0) + reviewedInBatch,
-          processed_submissions:
-            (runRow.processed_submissions ?? 0) + success + tempFail + permFail,
-          success_count: (runRow.success_count ?? 0) + success,
-          permanent_failure_count:
-            (runRow.permanent_failure_count ?? 0) + permFail,
-          temporary_failure_count: (runRow.temporary_failure_count ?? 0) + tempFail,
-          skipped_recent_count: (runRow.skipped_recent_count ?? 0) + skippedRecentCount,
-          current_batch_index: batchIndex + 1,
-          last_batch_completed_at: now,
-          updated_at: now,
-        })
-        .eq("id", runId)
-        .eq("current_batch_index", batchIndex);
-    }
+    await progress.awaitIdle();
+    await progress.finalize(batchIndex, now, {
+      // Include skipped so Processed reaches total_submissions for this batch.
+      processed: success + tempFail + permFail + skippedRecentCount,
+      reviewed: reviewedInBatch,
+      success,
+      temporaryFailure: tempFail,
+      permanentFailure: permFail,
+      skipped: skippedRecentCount,
+    });
 
     return NextResponse.json({
       hasMore,
       nextCursor,
       reviewedCount: reviewedInBatch,
-      processedCount: success + tempFail + permFail,
+      processedCount: success + tempFail + permFail + skippedRecentCount,
       successCount: success,
       permanentFailureCount: permFail,
       temporaryFailureCount: tempFail,

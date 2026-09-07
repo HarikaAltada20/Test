@@ -21,17 +21,34 @@ describe("isTrackedPostCampaignRun", () => {
     );
   });
 
-  it("prefers the started_at window over a stale activeRunId", () => {
+  it("accepts a newer active run even when activeRunId is stale", () => {
     const refreshStartedMs = Date.now();
     assert.equal(
       isTrackedPostCampaignRun(
         {
           id: "run-2",
+          status: "running",
           started_at: new Date(refreshStartedMs - 1000).toISOString(),
         },
         { activeRunId: "run-1", refreshStartedMs },
       ),
       true,
+    );
+  });
+
+  it("rejects a recent terminal run that is not this chain's runId", () => {
+    const refreshStartedMs = Date.now();
+    assert.equal(
+      isTrackedPostCampaignRun(
+        {
+          id: "run-old-ig",
+          status: "completed",
+          started_at: new Date(refreshStartedMs - 30_000).toISOString(),
+          finished_at: new Date(refreshStartedMs - 5_000).toISOString(),
+        },
+        { refreshStartedMs },
+      ),
+      false,
     );
   });
 
@@ -41,6 +58,7 @@ describe("isTrackedPostCampaignRun", () => {
       isTrackedPostCampaignRun(
         {
           id: "run-1",
+          status: "running",
           started_at: new Date(refreshStartedMs - 1000).toISOString(),
         },
         { refreshStartedMs },
@@ -51,6 +69,7 @@ describe("isTrackedPostCampaignRun", () => {
       isTrackedPostCampaignRun(
         {
           id: "run-old",
+          status: "running",
           started_at: new Date(refreshStartedMs - 180_000).toISOString(),
         },
         { refreshStartedMs },
@@ -65,6 +84,7 @@ describe("isTrackedPostCampaignRun", () => {
       isTrackedPostCampaignRun(
         {
           id: "run-old-tt",
+          status: "completed",
           started_at: new Date(refreshStartedMs - 180_000).toISOString(),
           finished_at: new Date(refreshStartedMs - 5_000).toISOString(),
         },

@@ -2668,7 +2668,7 @@ export function videoContestPlatformFromValue(
 
 function asResolvedCpmConfig(cpm: unknown): ResolvedCpmContestConfig | null {
   const rate = readCpmRateUsd(cpm);
-  if (rate == null) return null;
+  if (rate == null || !(rate > 0)) return null;
   const obj = cpm as {
     min_views?: number | null;
     max_views?: number | null;
@@ -2698,6 +2698,9 @@ function rootCpmFromDetails(
 /**
  * CPM payout config for one submission/platform. Multi-platform contests store
  * rates under youtube|instagram|tiktok; root cpm_contest is often empty.
+ * A persisted `cpm_rate_usd: 0` (empty editor field) is treated as missing so
+ * TikTok/Instagram can inherit a usable rate without inheriting another
+ * platform's min/max view gates.
  */
 export function resolveCpmContestConfigForPlatform(
   details: Record<string, unknown> | null | undefined,
@@ -2706,16 +2709,51 @@ export function resolveCpmContestConfigForPlatform(
 ): ResolvedCpmContestConfig | null {
   const campaigns = readPersistedPlatformCampaigns(details);
   const platform = videoContestPlatformFromValue(submissionPlatform);
-  if (platform) {
-    const fromPlatform = asResolvedCpmConfig(campaigns[platform]?.cpm_contest);
-    if (fromPlatform) return fromPlatform;
-  }
+  const platformRaw =
+    platform && campaigns[platform]
+      ? campaigns[platform]?.cpm_contest
+      : undefined;
+  const fromPlatform = asResolvedCpmConfig(platformRaw);
+  if (fromPlatform) return fromPlatform;
 
   const fromRoot = asResolvedCpmConfig(rootCpmFromDetails(details));
-  if (fromRoot) return fromRoot;
+  const projected = asResolvedCpmConfig(
+    withProjectedTopLevelPayout(details, contestPlatformCsv).cpm_contest,
+  );
+  const fallback = fromRoot ?? projected;
+  if (!fallback) return null;
 
-  const projected = withProjectedTopLevelPayout(details, contestPlatformCsv);
-  return asResolvedCpmConfig(projected.cpm_contest);
+  if (platformRaw && typeof platformRaw === "object") {
+    const raw = platformRaw as {
+      min_views?: number | null;
+      max_views?: number | null;
+      flat_fee_bonus?: number;
+      flat_fee_bonus_cap?: number | null;
+      max_earnings_per_creator?: number | null;
+      total_budget?: number;
+    };
+    return {
+      ...fallback,
+      min_views: raw.min_views !== undefined ? raw.min_views : fallback.min_views,
+      max_views: raw.max_views !== undefined ? raw.max_views : fallback.max_views,
+      flat_fee_bonus:
+        raw.flat_fee_bonus !== undefined
+          ? raw.flat_fee_bonus
+          : fallback.flat_fee_bonus,
+      flat_fee_bonus_cap:
+        raw.flat_fee_bonus_cap !== undefined
+          ? raw.flat_fee_bonus_cap
+          : fallback.flat_fee_bonus_cap,
+      max_earnings_per_creator:
+        raw.max_earnings_per_creator !== undefined
+          ? raw.max_earnings_per_creator
+          : fallback.max_earnings_per_creator,
+      total_budget:
+        raw.total_budget !== undefined ? raw.total_budget : fallback.total_budget,
+    };
+  }
+
+  return fallback;
 }
 
 export function contestHasUsableCpmRate(
@@ -2724,7 +2762,8 @@ export function contestHasUsableCpmRate(
 ): boolean {
   const campaigns = readPersistedPlatformCampaigns(details);
   for (const platform of VIDEO_CONTEST_PLATFORMS) {
-    if (readCpmRateUsd(campaigns[platform]?.cpm_contest) != null) return true;
+    const rate = readCpmRateUsd(campaigns[platform]?.cpm_contest);
+    if (rate != null && rate > 0) return true;
   }
   return resolveCpmContestConfigForPlatform(details, null, contestPlatformCsv) !=
     null;
@@ -2849,7 +2888,7 @@ export function resolveContestPlatformCpmRates(
   const fromPlatforms: ContestPlatformCpmRate[] = [];
   for (const platform of platforms) {
     const rate = readCpmRateUsd(campaigns[platform]?.cpm_contest);
-    if (rate != null) {
+    if (rate != null && rate > 0) {
       fromPlatforms.push({ platform, rateUsd: rate });
     }
   }

@@ -1,9 +1,8 @@
 "use client";
 
-import { calculateMilestoneBudgetSpent } from "@/lib/contest-utils-client";
 import {
   computeBudgetPaidCents,
-  computeDualRewardsCpmMilestoneFilledCents,
+  computeDualRewardsCpmMilestoneFilledByPlatform,
   getBudgetTileMode,
   type BudgetTileSubmission,
 } from "@/lib/contest-budget-tile-metrics";
@@ -29,10 +28,14 @@ import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
 } from "@/lib/twitter-cpm-bonus-expected";
-import { collectMilestoneBonusConfigs } from "@/lib/milestone-contest-expected-spend";
+import {
+  buildMilestoneSubmissionPayoutCentsMapFromDetails,
+  collectMilestoneBonusConfigs,
+  computeMilestoneCreatorBonusExpectedCentsFromDetails,
+} from "@/lib/milestone-contest-expected-spend";
 import { getPlatformIcon } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 interface Submission {
   id?: string;
@@ -100,6 +103,21 @@ export function BudgetProgress({
         ? (contest.contest_based_details as Record<string, unknown>)
         : null,
   };
+  const isCreatorBonusContest =
+    contest.contest_type === "dual_rewards" ||
+    contest.contest_type === "milestone";
+  const bonusLegendLabel = isCreatorBonusContest
+    ? "Creators bonus"
+    : "Flat Fee Bonus";
+  const earningsLegendLabel =
+    contest.contest_type === "dual_rewards"
+      ? "CPM + Milestone earnings"
+      : contest.contest_type === "cpm"
+        ? "CPM Earnings"
+        : contest.contest_type === "milestone"
+          ? "Milestone payouts"
+          : "Contest Earnings";
+
   const contestFlatFeeBonusCents =
     getFlatFeeBonusCentsFromContest(contestBonusInput);
   const flatFeeBonus =
@@ -138,6 +156,7 @@ export function BudgetProgress({
     bonusSpent,
     totalSpent,
     platformBonusRows,
+    platformCpmRows,
   } = useMemo(() => {
     // Use contest row total_budget when set; else pool from contest_based_details (dual: root total_budget_cents via helper)
     let totalBudget =
@@ -165,10 +184,14 @@ export function BudgetProgress({
 
     // For CPM contests, use flat_fee_bonus_cap if configured, otherwise total_budget
     // For leaderboard contests, use total_budget
+    // Dual / milestone use creator bonus, not a flat-fee bonus pool.
     let bonusBudget =
-      isCpmContestType(contest.contest_type) && cpmConfig?.flat_fee_bonus_cap
-        ? cpmConfig.flat_fee_bonus_cap
-        : contest.total_budget || 0;
+      contest.contest_type === "dual_rewards" ||
+      contest.contest_type === "milestone"
+        ? 0
+        : isCpmContestType(contest.contest_type) && cpmConfig?.flat_fee_bonus_cap
+          ? cpmConfig.flat_fee_bonus_cap
+          : contest.total_budget || 0;
 
     const maxEarningsKeyed = isKeyedMaxEarningsMap(
       (contest as any).max_earnings_per_creator,
@@ -183,6 +206,14 @@ export function BudgetProgress({
           ? (contest as any).max_earnings_per_creator
           : null);
     const creatorPlatformCpmSpent = new Map<string, number>();
+    const platformCpmCents = new Map<VideoContestPlatform, number>();
+    const addPlatformCpmCents = (platformRaw: unknown, cents: number) => {
+      const key = parseVideoContestPlatforms(String(platformRaw || ""))[0];
+      if (!key) return;
+      const amount = Math.round(cents);
+      if (!Number.isFinite(amount) || amount === 0) return;
+      platformCpmCents.set(key, (platformCpmCents.get(key) || 0) + amount);
+    };
     const cpmRate = cpmConfig?.cpm_rate_usd || 0;
     const minViews = cpmConfig?.min_views;
     const maxViews = cpmConfig?.max_views;
@@ -191,6 +222,60 @@ export function BudgetProgress({
       typeof contest.contest_based_details === "object"
         ? (contest.contest_based_details as Record<string, unknown>)
         : null;
+    const videoPlatforms = parseVideoContestPlatforms(contest.platform);
+    const buildPlatformCpmRows = () =>
+      videoPlatforms.length >= 2
+        ? videoPlatforms.map((platform) => ({
+            platform,
+            spentCents: Math.max(0, platformCpmCents.get(platform) || 0),
+          }))
+        : [];
+    const toBonusSubmission = (s: Submission) => ({
+      id: String((s as any).id || ""),
+      creator_id: (s as any).creator_id,
+      created_at: (s as any).created_at,
+      status: (s as any).status,
+      paid: s.paid,
+      paid_at: s.paid_at,
+      earnings: s.earnings,
+      deleted_at: (s as any).deleted_at,
+      views: (s as any).views,
+      platform: (s as any).platform,
+      other_stats: (s as any).other_stats,
+      bonus_paid: s.bonus_paid,
+      bonus_amount: s.bonus_amount,
+      metadata: (s as any).metadata,
+      milestone_bonus_paid: (s as any).milestone_bonus_paid,
+    });
+    const buildCreatorBonusPlatformRows = (paidMode: boolean) => {
+      if (videoPlatforms.length < 2 || !hasFlatFeeBonus) return [];
+      return videoPlatforms.map((platform) => {
+        const platformSubs = submissions.filter(
+          (s) => parseVideoContestPlatforms((s as any).platform)[0] === platform,
+        );
+        let spentCents = 0;
+        if (paidMode) {
+          for (const s of platformSubs) {
+            if (s.bonus_paid && s.bonus_amount != null) {
+              spentCents += Math.max(0, Number(s.bonus_amount) || 0);
+            }
+          }
+        } else {
+          spentCents = computeMilestoneCreatorBonusExpectedCentsFromDetails(
+            platformSubs.map(toBonusSubmission),
+            detailsRecord,
+            platform,
+          );
+        }
+        return {
+          platform,
+          amountCents: 0,
+          budgetCents: 0,
+          spentCents,
+          showSpend: true,
+        };
+      });
+    };
 
     // Group submissions by creator to apply cap correctly
     const creatorEarnings = new Map<
@@ -205,17 +290,10 @@ export function BudgetProgress({
         : false;
 
     if (contest.contest_type === "milestone") {
-      const milestoneContest = (contest.contest_based_details as any)
-        ?.milestone_contest;
-      const milestones = milestoneContest?.milestones || [];
       const normalizeMilestoneStatus = (raw: unknown) => {
         const st = String(raw || "").toLowerCase();
         return st === "approved" ? "verified" : st;
       };
-      const subsForMilestone = submissions.map((s) => ({
-        ...(s as object),
-        status: normalizeMilestoneStatus((s as any).status),
-      }));
 
       // After payouts are processed: use actual paid amounts only (same as CPM / dual).
       if (getBudgetTileMode(postContestStatus) === "paid") {
@@ -229,7 +307,9 @@ export function BudgetProgress({
             Boolean((s as any).paid_at) ||
             (s as any).paid === true;
           if (isPaidSubmission && (s as any).earnings != null) {
-            mainPaid += Math.max(0, Number((s as any).earnings) || 0);
+            const paidCents = Math.max(0, Number((s as any).earnings) || 0);
+            mainPaid += paidCents;
+            addPlatformCpmCents((s as any).platform, paidCents);
           }
           if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
             bonusPaidFromSubmissions += Math.max(
@@ -274,23 +354,36 @@ export function BudgetProgress({
           bonusBudget: 0,
           bonusSpent: bonusPaidCents,
           totalSpent,
-          platformBonusRows: [],
+          platformBonusRows: buildCreatorBonusPlatformRows(true),
+          platformCpmRows: buildPlatformCpmRows(),
         };
       }
 
-      const milestoneDollars =
-        milestones.length > 0
-          ? calculateMilestoneBudgetSpent(subsForMilestone as any, milestones)
-          : 0;
-      const aggregateMilestoneCents = Math.round(milestoneDollars * 100);
       const expectedBySubmissionMap =
         milestoneExpectedPayoutBySubmissionId instanceof Map
           ? milestoneExpectedPayoutBySubmissionId
-          : null;
+          : buildMilestoneSubmissionPayoutCentsMapFromDetails(
+              submissions.map((s) => ({
+                id: String((s as any).id || ""),
+                creator_id: (s as any).creator_id,
+                created_at: (s as any).created_at,
+                status: normalizeMilestoneStatus((s as any).status),
+                paid: s.paid,
+                paid_at: s.paid_at,
+                earnings: s.earnings,
+                deleted_at: (s as any).deleted_at,
+                views: (s as any).views,
+                platform: (s as any).platform,
+                other_stats: (s as any).other_stats,
+              })),
+              detailsRecord,
+              contest.platform,
+            );
 
       // Paid-first model (pre payouts_processed):
       // - If a submission is paid and has stored earnings, use paid amount.
-      // - Otherwise use expected payout.
+      // - Otherwise use expected per-submission payout (multiple entries
+      //   from the same creator each count independently).
       let blendedMilestonePayoutCents = 0;
       for (const s of submissions) {
         const st = normalizeMilestoneStatus((s as any).status).toLowerCase();
@@ -303,26 +396,18 @@ export function BudgetProgress({
           (s as any).paid === true;
         const paidEarningsCents = Number((s as any).earnings || 0);
         const expectedCents =
-          expectedBySubmissionMap?.get(String((s as any).id || "")) ?? 0;
+          expectedBySubmissionMap.get(String((s as any).id || "")) ?? 0;
 
         if (isPaidSubmission && paidEarningsCents > 0) {
           blendedMilestonePayoutCents += paidEarningsCents;
+          addPlatformCpmCents((s as any).platform, paidEarningsCents);
         } else {
           blendedMilestonePayoutCents += expectedCents;
+          addPlatformCpmCents((s as any).platform, expectedCents);
         }
       }
 
-      const hasBlendedMilestone =
-        expectedBySubmissionMap != null || blendedMilestonePayoutCents > 0;
-      const useDetailMilestone =
-        typeof milestoneExpectedPayoutCents === "number" &&
-        !Number.isNaN(milestoneExpectedPayoutCents) &&
-        milestoneExpectedPayoutCents >= 0;
-      const cpmPaid = hasBlendedMilestone
-        ? blendedMilestonePayoutCents
-        : useDetailMilestone
-          ? Math.round(milestoneExpectedPayoutCents)
-          : aggregateMilestoneCents;
+      const cpmPaid = blendedMilestonePayoutCents;
 
       let bonusPaidFromSubmissions = 0;
       for (const s of submissions) {
@@ -385,7 +470,8 @@ export function BudgetProgress({
         bonusBudget: 0,
         bonusSpent: bonusPaidCents,
         totalSpent,
-        platformBonusRows: [],
+        platformBonusRows: buildCreatorBonusPlatformRows(false),
+        platformCpmRows: buildPlatformCpmRows(),
       };
     }
 
@@ -497,9 +583,11 @@ export function BudgetProgress({
           const applied = Math.min(submissionEarnings, remainingCap);
           creatorData.cpmTotal += applied;
           creatorPlatformCpmSpent.set(capKey, used + applied);
+          addPlatformCpmCents((sub as any).platform, applied * 100);
         }
       } else {
         creatorData.cpmTotal += submissionEarnings;
+        addPlatformCpmCents((sub as any).platform, submissionEarnings * 100);
       }
 
       // Calculate Bonus - apply cap during calculation (first-come-first-served)
@@ -662,17 +750,25 @@ export function BudgetProgress({
           ? bonusPaidFromMap
           : bonusPaidFromSubmissions;
 
-      cpmPaid = computeDualRewardsCpmMilestoneFilledCents(
-        {
-          contest_type: contest.contest_type,
-          post_contest_status: postContestStatus,
-          contest_based_details: contest.contest_based_details,
-          max_earnings_per_creator: (contest as any).max_earnings_per_creator,
-          platform: contest.platform,
-          bonus_details: (contest as any).bonus_details,
-        },
+      const dualContestInput = {
+        contest_type: contest.contest_type,
+        post_contest_status: postContestStatus,
+        contest_based_details: contest.contest_based_details,
+        max_earnings_per_creator: (contest as any).max_earnings_per_creator,
+        platform: contest.platform,
+        bonus_details: (contest as any).bonus_details,
+      };
+      const dualByPlatform = computeDualRewardsCpmMilestoneFilledByPlatform(
+        dualContestInput,
         submissions as BudgetTileSubmission[],
       );
+      platformCpmCents.clear();
+      let dualTotal = 0;
+      for (const [platform, cents] of dualByPlatform) {
+        addPlatformCpmCents(platform, cents);
+        dualTotal += cents;
+      }
+      cpmPaid = dualTotal;
       bonusPaid = creatorBonusCents;
     }
 
@@ -722,6 +818,7 @@ export function BudgetProgress({
       finalTotalSpent = paidTotal;
 
       if (contest.contest_type === "dual_rewards") {
+        platformCpmCents.clear();
         let cpmMilestonePaid = 0;
         let creatorBonusPaid = 0;
         for (const s of subs) {
@@ -742,6 +839,10 @@ export function BudgetProgress({
             dual_rewards_payout: (s as any).dual_rewards_payout,
           });
           cpmMilestonePaid += paid.cpmCents + paid.milestoneCents;
+          addPlatformCpmCents(
+            (s as any).platform,
+            paid.cpmCents + paid.milestoneCents,
+          );
           if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
             creatorBonusPaid += Number((s as any).bonus_amount) || 0;
           }
@@ -773,6 +874,7 @@ export function BudgetProgress({
         finalBonusPaid = Math.max(0, finalTotalSpent - finalPrizePoolSpent);
         finalCpmPaid = finalPrizePoolSpent;
       } else {
+        platformCpmCents.clear();
         let mainPaid = 0;
         let bonusPaidAmt = 0;
         for (const s of subs) {
@@ -784,7 +886,9 @@ export function BudgetProgress({
           if (!isPaidSubmission) continue;
           if (twitterExcluded(s)) continue;
           if ((s as any).earnings != null) {
-            mainPaid += Number((s as any).earnings) || 0;
+            const paidCents = Number((s as any).earnings) || 0;
+            mainPaid += paidCents;
+            addPlatformCpmCents((s as any).platform, paidCents);
           }
           if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
             bonusPaidAmt += Number((s as any).bonus_amount) || 0;
@@ -796,20 +900,30 @@ export function BudgetProgress({
     }
 
     const paidMode = getBudgetTileMode(postContestStatus) === "paid";
-    const platformsWithBonus = bonusPlan.platforms.filter((platform) => {
-      const ladder = bonusPlan.byPlatform[platform];
-      return (ladder?.amountCents || 0) > 0 || (ladder?.budgetCents || 0) > 0;
-    });
+    const useFlatFeeBonusPlan =
+      contest.contest_type !== "dual_rewards" &&
+      contest.contest_type !== "milestone";
+    const platformsWithBonus = useFlatFeeBonusPlan
+      ? bonusPlan.platforms.filter((platform) => {
+          const ladder = bonusPlan.byPlatform[platform];
+          return (
+            (ladder?.amountCents || 0) > 0 || (ladder?.budgetCents || 0) > 0
+          );
+        })
+      : [];
     const showPerPlatformBonus =
-      !bonusPlan.shareAcrossAllPlatforms && platformsWithBonus.length >= 2;
+      useFlatFeeBonusPlan &&
+      !bonusPlan.shareAcrossAllPlatforms &&
+      platformsWithBonus.length >= 2;
     const platformBonusRows: Array<{
       platform: VideoContestPlatform;
       amountCents: number;
       budgetCents: number;
       spentCents: number;
       showSpend: boolean;
-    }> =
-      platformsWithBonus.length >= 1
+    }> = !useFlatFeeBonusPlan
+      ? buildCreatorBonusPlatformRows(paidMode)
+      : platformsWithBonus.length >= 1
         ? platformsWithBonus.map((platform) => {
             const ladder = bonusPlan.byPlatform[platform];
             let spentCents = 0;
@@ -835,7 +949,7 @@ export function BudgetProgress({
           })
         : [];
 
-    if (showPerPlatformBonus) {
+    if (useFlatFeeBonusPlan && showPerPlatformBonus) {
       const planBudget = platformBonusRows.reduce(
         (sum, row) => sum + row.budgetCents,
         0,
@@ -850,13 +964,19 @@ export function BudgetProgress({
         finalTotalSpent = finalCpmPaid + finalBonusPaid;
       }
     } else if (
+      useFlatFeeBonusPlan &&
       bonusPlan.shared.budgetCents != null &&
       bonusPlan.shared.budgetCents > 0 &&
       (contest.contest_type === "leaderboard" ||
-        isCpmContestType(contest.contest_type))
+        contest.contest_type === "cpm")
     ) {
       bonusBudget = bonusPlan.shared.budgetCents;
     }
+
+    const platformCpmRows: Array<{
+      platform: VideoContestPlatform;
+      spentCents: number;
+    }> = buildPlatformCpmRows();
 
     const cpmPercentage =
       totalBudget > 0 ? Math.min((finalCpmPaid / totalBudget) * 100, 100) : 0;
@@ -885,6 +1005,7 @@ export function BudgetProgress({
       bonusSpent: finalBonusPaid,
       totalSpent: finalTotalSpent,
       platformBonusRows,
+      platformCpmRows,
     };
   }, [
     contest,
@@ -896,11 +1017,21 @@ export function BudgetProgress({
     milestoneExpectedPayoutBySubmissionId,
     postContestStatus,
     contestFlatFeeBonusCents,
+    hasFlatFeeBonus,
   ]);
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
   };
+
+  const platformBonusSpentTotal = platformBonusRows.reduce(
+    (sum, row) => sum + row.spentCents,
+    0,
+  );
+  const platformBonusBudgetTotal = platformBonusRows.reduce(
+    (sum, row) => sum + row.budgetCents,
+    0,
+  );
 
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
@@ -945,17 +1076,58 @@ export function BudgetProgress({
 
   const isDark = mode === "dark";
 
-  const renderPlatformFlatFeeBonusRow = (row: {
+  const renderFlatFeeBonusTotalColumn = () => {
+    const spent =
+      platformBonusRows.length > 0 ? platformBonusSpentTotal : bonusPaid;
+    const budget =
+      platformBonusBudgetTotal > 0
+        ? platformBonusBudgetTotal
+        : bonusBudget || 0;
+    return (
+      <div className="flex items-start gap-1.5 min-w-0">
+        <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+        <div className="min-w-0">
+          <p
+            className={cn(
+              "font-medium",
+              isDark ? "text-gray-300" : "text-gray-700",
+            )}
+          >
+            {bonusLegendLabel}
+          </p>
+          <p
+            className={cn(
+              "font-semibold tabular-nums",
+              isDark ? "text-white" : "text-gray-900",
+            )}
+          >
+            {formatCurrency(spent)}
+            {!isCreatorBonusContest && budget > 0 ? (
+              <span
+                className={cn(
+                  "font-normal",
+                  isDark ? "text-gray-400" : "text-gray-600",
+                )}
+              >
+                {" "}
+                / {formatCurrency(budget)}
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlatformAmountRow = (row: {
     platform: VideoContestPlatform;
-    amountCents: number;
-    budgetCents: number;
     spentCents: number;
-    showSpend?: boolean;
+    budgetCents?: number;
   }) => {
     return (
       <div
         key={row.platform}
-        className="flex items-center gap-1 min-w-0 text-sm"
+        className="flex items-center gap-1 min-w-0"
       >
         <span
           className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4"
@@ -970,7 +1142,7 @@ export function BudgetProgress({
           )}
         >
           {formatCurrency(row.spentCents)}
-          {row.budgetCents > 0 ? (
+          {(row.budgetCents || 0) > 0 ? (
             <span
               className={cn(
                 "font-normal",
@@ -978,10 +1150,34 @@ export function BudgetProgress({
               )}
             >
               {" "}
-              / {formatCurrency(row.budgetCents)}
+              / {formatCurrency(row.budgetCents || 0)}
             </span>
           ) : null}
         </span>
+      </div>
+    );
+  };
+
+  const renderLegendRow = (
+    leading: ReactNode,
+    rows: Array<{
+      platform: VideoContestPlatform;
+      spentCents: number;
+      budgetCents?: number;
+    }>,
+  ) => {
+    return (
+      <div
+        className="grid gap-3 items-start"
+        style={{
+          gridTemplateColumns: `minmax(7.5rem, 1.15fr) repeat(${Math.max(
+            rows.length,
+            1,
+          )}, minmax(0, 1fr))`,
+        }}
+      >
+        {leading}
+        {rows.map((row) => renderPlatformAmountRow(row))}
       </div>
     );
   };
@@ -1056,41 +1252,10 @@ export function BudgetProgress({
           />
         </div>
 
-        <div className="flex items-end gap-4 min-w-0">
-          <div className="flex items-start gap-1.5 shrink-0">
-            <div className="w-3 h-3 mt-0.5 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
-            <div>
-              <p
-                className={cn(
-                  "font-medium text-sm",
-                  isDark ? "text-gray-300" : "text-gray-700",
-                )}
-              >
-                Flat Fee Bonus
-              </p>
-              <p
-                className={cn(
-                  "font-semibold text-sm tabular-nums",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                {formatCurrency(bonusSpent)}
-              </p>
-            </div>
-          </div>
-          {platformBonusRows.length > 0 ? (
-            <div
-              className="grid flex-1 gap-3 min-w-0"
-              style={{
-                gridTemplateColumns: `repeat(${platformBonusRows.length}, minmax(0, 1fr))`,
-              }}
-            >
-              {platformBonusRows.map((row) =>
-                renderPlatformFlatFeeBonusRow(row),
-              )}
-            </div>
-          ) : null}
-        </div>
+        {renderLegendRow(
+          renderFlatFeeBonusTotalColumn(),
+          platformBonusRows,
+        )}
 
         {bonusPercentage >= 80 ? (
           <div className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
@@ -1159,7 +1324,7 @@ export function BudgetProgress({
                     : "expected"
                 }): ${formatCurrency(
                   cpmPaid,
-                )} | Creator bonus: ${formatCurrency(
+                )} | Creators bonus: ${formatCurrency(
                   bonusPaid,
                 )} | Total: ${formatCurrency(totalSpent)}`
               : contest.contest_type === "dual_rewards"
@@ -1169,7 +1334,7 @@ export function BudgetProgress({
                       : "expected"
                   }): ${formatCurrency(
                     cpmPaid,
-                  )} | Creator bonus: ${formatCurrency(
+                  )} | Creators bonus: ${formatCurrency(
                     bonusPaid,
                   )} | Total: ${formatCurrency(totalSpent)}`
                 : `${
@@ -1223,39 +1388,37 @@ export function BudgetProgress({
       </div>
 
       {/* Legend */}
-      {platformBonusRows.length > 0 ? (
-        <div className="space-y-2 text-xs">
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
-            <div className="flex-1">
-              <p
-                className={cn(
-                  "font-medium",
-                  isDark ? "text-gray-300" : "text-gray-700",
-                )}
-              >
-                {contest.contest_type === "cpm"
-                  ? "CPM Earnings"
-                  : "Contest Earnings"}
-              </p>
-              <p
-                className={cn(
-                  "font-semibold",
-                  isDark ? "text-white" : "text-gray-900",
-                )}
-              >
-                {formatCurrency(cpmPaid)}
-              </p>
-            </div>
-          </div>
-          <div
-            className="grid gap-3"
-            style={{
-              gridTemplateColumns: `repeat(${platformBonusRows.length}, minmax(0, 1fr))`,
-            }}
-          >
-            {platformBonusRows.map((row) => renderPlatformFlatFeeBonusRow(row))}
-          </div>
+      {platformCpmRows.length > 0 || platformBonusRows.length > 0 ? (
+        <div className="space-y-3 text-xs">
+          {renderLegendRow(
+            <div className="flex items-start gap-1.5 min-w-0">
+              <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    "font-medium",
+                    isDark ? "text-gray-300" : "text-gray-700",
+                  )}
+                >
+                  {earningsLegendLabel}
+                </p>
+                <p
+                  className={cn(
+                    "font-semibold tabular-nums",
+                    isDark ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  {formatCurrency(cpmPaid)}
+                </p>
+              </div>
+            </div>,
+            platformCpmRows,
+          )}
+          {(hasFlatFeeBonus || platformBonusRows.length > 0) &&
+            renderLegendRow(
+              renderFlatFeeBonusTotalColumn(),
+              platformBonusRows,
+            )}
         </div>
       ) : (
         <div
@@ -1272,13 +1435,7 @@ export function BudgetProgress({
                   isDark ? "text-gray-300" : "text-gray-700",
                 )}
               >
-                {contest.contest_type === "dual_rewards"
-                  ? "CPM + Milestone earnings"
-                  : contest.contest_type === "cpm"
-                    ? "CPM Earnings"
-                    : contest.contest_type === "milestone"
-                      ? "Milestone payouts"
-                      : "Contest Earnings"}
+                {earningsLegendLabel}
               </p>
               <p
                 className={cn(
@@ -1300,10 +1457,7 @@ export function BudgetProgress({
                     isDark ? "text-gray-300" : "text-gray-700",
                   )}
                 >
-                  {contest.contest_type === "milestone" ||
-                  contest.contest_type === "dual_rewards"
-                    ? "Creator bonus"
-                    : "Flat Fee Bonus"}
+                  {bonusLegendLabel}
                 </p>
                 <p
                   className={cn(

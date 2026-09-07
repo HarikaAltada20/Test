@@ -51,7 +51,6 @@ import {
 } from "@/lib/contest-utils-client";
 import {
   isCpmContestType,
-  isMilestoneContestType,
 } from "@/lib/contest-type";
 import {
   computeBudgetFilledCents,
@@ -1923,10 +1922,7 @@ export default function OpportunitiesPage({
                     </div>
                   )}
                 {contest.contest_type === "milestone" &&
-                  contest.contest_based_details?.milestone_contest
-                    ?.total_budget_cents != null &&
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents > 0 && (
+                  getContestListPoolBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -1937,10 +1933,7 @@ export default function OpportunitiesPage({
                       >
                         Total Budget:{" "}
                         <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents,
-                          )}
+                          {formatMoney(getContestListPoolBudgetCents(contest))}
                         </span>
                       </span>
                     </div>
@@ -2053,19 +2046,15 @@ export default function OpportunitiesPage({
 
               {/* Milestone budget_spent: paid vs filled in fetchData (see contest-budget-tile-metrics) */}
               {!opportunityBudgetTracker &&
-                isMilestoneContestType(contest.contest_type) &&
-                contest.contest_based_details?.milestone_contest
-                  ?.total_budget_cents != null &&
-                contest.contest_based_details.milestone_contest
-                  .total_budget_cents > 0 &&
+                contest.contest_type === "milestone" &&
+                getContestListPoolBudgetCents(contest) > 0 &&
                 (() => {
-                  const totalBudget =
-                    contest.contest_based_details.milestone_contest
-                      .total_budget_cents;
+                  const totalBudget = getContestListPoolBudgetCents(contest);
                   const budgetSpent = getPoolBudgetSpentCentsForDisplay({
                     contest_type: contest.contest_type,
                     post_contest_status: contest.post_contest_status,
                     contest_based_details: contest.contest_based_details,
+                    platform: contest.platform,
                   });
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
@@ -3228,10 +3217,7 @@ export default function OpportunitiesPage({
                                 </div>
                               )}
                             {contest.contest_type === "milestone" &&
-                              contest.contest_based_details?.milestone_contest
-                                ?.total_budget_cents != null &&
-                              contest.contest_based_details.milestone_contest
-                                .total_budget_cents > 0 && (
+                              getContestListPoolBudgetCents(contest) > 0 && (
                                 <div className="flex items-center">
                                   <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                                   <span>
@@ -3245,8 +3231,7 @@ export default function OpportunitiesPage({
                                       )}
                                     >
                                       {formatMoney(
-                                        contest.contest_based_details
-                                          .milestone_contest.total_budget_cents,
+                                        getContestListPoolBudgetCents(contest),
                                       )}
                                     </span>
                                   </span>
@@ -3462,15 +3447,11 @@ export default function OpportunitiesPage({
 
                           {/* Budget Spent Progress Bar for Milestone contests (and dual rewards milestone pool) */}
                           {!opportunityBudgetTracker &&
-                            isMilestoneContestType(contest.contest_type) &&
-                            contest.contest_based_details?.milestone_contest
-                              ?.total_budget_cents != null &&
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents > 0 &&
+                            contest.contest_type === "milestone" &&
+                            getContestListPoolBudgetCents(contest) > 0 &&
                             (() => {
                               const totalBudget =
-                                contest.contest_based_details.milestone_contest
-                                  .total_budget_cents;
+                                getContestListPoolBudgetCents(contest);
                               const budgetSpent =
                                 getPoolBudgetSpentCentsForDisplay({
                                   contest_type: contest.contest_type,
@@ -3478,6 +3459,7 @@ export default function OpportunitiesPage({
                                     contest.post_contest_status,
                                   contest_based_details:
                                     contest.contest_based_details,
+                                  platform: contest.platform,
                                 });
                               const tracker = getBudgetTrackerValues(
                                 totalBudget,

@@ -4951,13 +4951,8 @@ export function ContestClientPage({
                             : contest.contest_type === "dual_rewards" &&
                                 contest.contest_based_details
                               ? formatMoney(contestPoolBudgetCents)
-                              : contest.contest_type === "milestone" &&
-                                  contest.contest_based_details?.milestone_contest
-                                ? formatMoney(
-                                    contest.contest_based_details
-                                      .milestone_contest.total_budget_cents ||
-                                      0,
-                                  )
+                              : contest.contest_type === "milestone"
+                                ? formatMoney(contestPoolBudgetCents)
                                 : contest.contest_type === "leaderboard" &&
                                     contest.contest_based_details
                                       ?.leaderboard_contest

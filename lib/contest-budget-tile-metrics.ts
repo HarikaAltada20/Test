@@ -23,6 +23,7 @@ import {
   resolveContestPoolBudgetCents,
   resolveMaxEarningsCentsForSubmission,
   isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
   sumPersistedPlatformCampaignsChargeableCents,
   resolveLeaderboardFlatFeeBonusSpentCents,
 } from "@/lib/video-platform-campaigns";
@@ -286,12 +287,13 @@ function normalizeBudgetStatus(raw: unknown): string {
 
 /**
  * Dual CPM + milestone expected after the same combined per-creator cap as
- * contest-detail Expected Reward. Creator bonus is not included.
+ * contest-detail Expected Reward, grouped by submission platform.
+ * Creator bonus is not included.
  */
-export function computeDualRewardsCpmMilestoneFilledCents(
+export function computeDualRewardsCpmMilestoneFilledByPlatform(
   contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
-): number {
+): Map<string, number> {
   const details =
     (contest.contest_based_details as Record<string, unknown> | null) ?? null;
   const rows = submissions
@@ -329,7 +331,7 @@ export function computeDualRewardsCpmMilestoneFilledCents(
     grouped.set(creatorId, list);
   }
 
-  let total = 0;
+  const byPlatform = new Map<string, number>();
   for (const list of grouped.values()) {
     const dualRows = list.map((sub) => ({
       id: sub.id,
@@ -347,10 +349,28 @@ export function computeDualRewardsCpmMilestoneFilledCents(
     for (const sub of list) {
       const st = sub.status;
       if (st !== "verified" && st !== "paid") continue;
-      total +=
+      const cents =
         (maps.cpmCappedBySubmissionId.get(sub.id) ?? 0) +
         (maps.milestoneCappedBySubmissionId.get(sub.id) ?? 0);
+      if (cents === 0) continue;
+      const key = parseVideoContestPlatforms(String(sub.platform || ""))[0];
+      if (!key) continue;
+      byPlatform.set(key, (byPlatform.get(key) || 0) + cents);
     }
+  }
+  return byPlatform;
+}
+
+export function computeDualRewardsCpmMilestoneFilledCents(
+  contest: ContestBudgetTileInput,
+  submissions: BudgetTileSubmission[],
+): number {
+  let total = 0;
+  for (const cents of computeDualRewardsCpmMilestoneFilledByPlatform(
+    contest,
+    submissions,
+  ).values()) {
+    total += cents;
   }
   return total;
 }

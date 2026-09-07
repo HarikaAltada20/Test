@@ -1308,20 +1308,26 @@ function formatDurationSeconds(sec: number): string {
 
 function metricsRunProgressPercent(run: {
   total_submissions?: number | null;
+  processed_submissions?: number | null;
   reviewed_count?: number | null;
   total_batches?: number | null;
   current_batch_index?: number | null;
+  status?: string | null;
 }): number {
+  if (run.status === "completed") return 100;
   const totalSubs = run.total_submissions ?? 0;
+  const processed = run.processed_submissions ?? 0;
   const reviewed = run.reviewed_count ?? 0;
   const totalBatches = run.total_batches ?? 0;
   const batchIndex = run.current_batch_index ?? 0;
+  const byProcessed =
+    totalSubs > 0 && processed > 0 ? (processed / totalSubs) * 100 : 0;
   const byReviewed =
     totalSubs > 0 && reviewed > 0 ? (reviewed / totalSubs) * 100 : 0;
   const byBatches = totalBatches > 0 ? (batchIndex / totalBatches) * 100 : 0;
   return Math.min(
     100,
-    Math.max(0, Math.round(Math.max(byReviewed, byBatches))),
+    Math.max(0, Math.round(Math.max(byProcessed, byReviewed, byBatches))),
   );
 }
 
@@ -1336,15 +1342,21 @@ function InstagramRefreshProgressCard({
   isAdminView: boolean;
   elapsedSeconds: number | null;
 }) {
-  if (run.status !== "pending" && run.status !== "running") return null;
+  const isActive = run.status === "pending" || run.status === "running";
+  const isTerminalSummary =
+    completed ||
+    run.status === "completed" ||
+    run.status === "failed" ||
+    run.status === "cancelled";
+  if (!isActive && !isTerminalSummary) return null;
   const pct = metricsRunProgressPercent(run);
   return (
     <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-          {completed
-            ? "Insights refresh summary"
-            : "Insights refresh in progress"}
+          {isTerminalSummary && !isActive
+            ? "Instagram refresh summary"
+            : "Instagram refresh in progress"}
         </span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400">
           {isAdminView
@@ -1352,11 +1364,14 @@ function InstagramRefreshProgressCard({
             : `${pct}%`}
         </span>
       </div>
-      {run.status === "running" && (
+      {(isActive || isTerminalSummary) && (
         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
           <div
-            className="h-full bg-emerald-500 transition-all"
-            style={{ width: `${pct}%` }}
+            className={cn(
+              "h-full bg-emerald-500 transition-all duration-500",
+              isActive && pct === 0 && "animate-pulse",
+            )}
+            style={{ width: `${isActive && pct === 0 ? 12 : pct}%` }}
           />
         </div>
       )}
@@ -1416,13 +1431,19 @@ function YoutubeRefreshProgressCard({
   isAdminView: boolean;
   elapsedSeconds: number | null;
 }) {
-  if (run.status !== "pending" && run.status !== "running") return null;
+  const isActive = run.status === "pending" || run.status === "running";
+  const isTerminalSummary =
+    completed ||
+    run.status === "completed" ||
+    run.status === "failed" ||
+    run.status === "cancelled";
+  if (!isActive && !isTerminalSummary) return null;
   const pct = metricsRunProgressPercent(run);
   return (
     <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-          {completed
+          {isTerminalSummary && !isActive
             ? "YouTube refresh summary"
             : "YouTube refresh in progress"}
         </span>
@@ -1440,11 +1461,14 @@ function YoutubeRefreshProgressCard({
           </span>
         </div>
       )}
-      {run.status === "running" && (
+      {(isActive || isTerminalSummary) && (
         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
           <div
-            className="h-full bg-[#6C43D0] transition-all"
-            style={{ width: `${pct}%` }}
+            className={cn(
+              "h-full bg-[#6C43D0] transition-all duration-500",
+              isActive && pct === 0 && "animate-pulse",
+            )}
+            style={{ width: `${isActive && pct === 0 ? 12 : pct}%` }}
           />
         </div>
       )}
@@ -1494,6 +1518,28 @@ function YoutubeRefreshProgressCard({
 function createPendingInstagramRefreshRun(
   runId?: string,
 ): InstagramInsightsRefreshRunSummary {
+  return {
+    id: runId || "pending",
+    status: "pending",
+    total_submissions: 0,
+    processed_submissions: 0,
+    success_count: 0,
+    permanent_failure_count: 0,
+    temporary_failure_count: 0,
+    skipped_recent_count: 0,
+    reviewed_count: 0,
+    current_batch_index: 0,
+    total_batches: 1,
+    started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    last_batch_completed_at: null,
+    finished_at: null,
+  };
+}
+
+function createPendingTiktokRefreshRun(
+  runId?: string,
+): TikTokMetricsRefreshRunSummary {
   return {
     id: runId || "pending",
     status: "pending",
@@ -2660,6 +2706,9 @@ export default function ContestDetailClient({
   // runs finish (do not reload when YouTube alone completes mid-chain).
   useEffect(() => {
     if (activeTab !== "submissions") return;
+    // Manual multi-platform poll owns progress UI — don't let hydrate re-apply
+    // stale completed IG/TT runs while the chain is in flight.
+    if (isRefreshingMetrics) return;
 
     const metricsTarget = isPostCampaignLeaderboard
       ? "post_campaign"
@@ -2710,6 +2759,7 @@ export default function ContestDetailClient({
     currentContest.id,
     currentContest.platform,
     isPostCampaignLeaderboard,
+    isRefreshingMetrics,
   ]);
 
   useEffect(() => {
@@ -10293,7 +10343,27 @@ export default function ContestDetailClient({
               const pollIndex = resolveSequentialRefreshPollIndex(states);
 
               if (pollIndex < queuedRuns.length) {
-                const cur = queuedRuns[pollIndex]!.platform;
+                const curQueued = queuedRuns[pollIndex]!;
+                const cur = curQueued.platform;
+                if (!states[pollIndex]?.tracked) {
+                  if (cur === "youtube") {
+                    setYoutubeRunCompleted(false);
+                    setYoutubeRun(
+                      createPendingYoutubeRefreshRun(
+                        curQueued.runId,
+                        youtubeScope,
+                      ),
+                    );
+                  } else if (cur === "tiktok") {
+                    setTiktokRunCompleted(false);
+                    setTiktokRun(createPendingTiktokRefreshRun(curQueued.runId));
+                  } else if (cur === "instagram") {
+                    setInstagramRunCompleted(false);
+                    setInstagramRun(
+                      createPendingInstagramRefreshRun(curQueued.runId),
+                    );
+                  }
+                }
                 setShowYoutubeRunPopup(cur === "youtube");
                 setShowInstagramRunPopup(cur === "instagram");
                 setShowTiktokRunPopup(cur === "tiktok");
@@ -10725,22 +10795,25 @@ export default function ContestDetailClient({
           setShowYoutubeRunPopup(false);
           setShowInstagramRunPopup(false);
           setShowTiktokRunPopup(false);
+          // Clear stale completed runs so the next platform never flashes COMPLETED.
           for (const run of queuedRunsFromApi) {
-            if (run.platform === "youtube") setYoutubeRunCompleted(false);
-            else if (run.platform === "tiktok") setTiktokRunCompleted(false);
-            else if (run.platform === "instagram")
+            if (run.platform === "youtube") {
+              setYoutubeRunCompleted(false);
+              setYoutubeRun(
+                createPendingYoutubeRefreshRun(run.runId, youtubeScope),
+              );
+            } else if (run.platform === "tiktok") {
+              setTiktokRunCompleted(false);
+              setTiktokRun(createPendingTiktokRefreshRun(run.runId));
+            } else if (run.platform === "instagram") {
               setInstagramRunCompleted(false);
+              setInstagramRun(createPendingInstagramRefreshRun(run.runId));
+            }
           }
           const firstQueued = queuedRunsFromApi[0]!;
           if (firstQueued.platform === "youtube") {
-            setYoutubeRun(
-              createPendingYoutubeRefreshRun(firstQueued.runId, youtubeScope),
-            );
             setShowYoutubeRunPopup(true);
           } else if (firstQueued.platform === "instagram") {
-            setInstagramRun(
-              createPendingInstagramRefreshRun(firstQueued.runId),
-            );
             setShowInstagramRunPopup(true);
           } else if (firstQueued.platform === "tiktok") {
             setShowTiktokRunPopup(true);
@@ -10754,6 +10827,22 @@ export default function ContestDetailClient({
             variant: "success",
             duration: 6000,
           });
+
+          const seedPendingPlatformUi = (
+            platform: MetricsRefreshPlatform | null,
+            runId?: string,
+          ) => {
+            if (platform === "youtube") {
+              setYoutubeRunCompleted(false);
+              setYoutubeRun(createPendingYoutubeRefreshRun(runId, youtubeScope));
+            } else if (platform === "instagram") {
+              setInstagramRunCompleted(false);
+              setInstagramRun(createPendingInstagramRefreshRun(runId));
+            } else if (platform === "tiktok") {
+              setTiktokRunCompleted(false);
+              setTiktokRun(createPendingTiktokRefreshRun(runId));
+            }
+          };
 
           const focusPlatformCard = (
             platform: MetricsRefreshPlatform | null,
@@ -10780,15 +10869,20 @@ export default function ContestDetailClient({
             run: { id: string; status: string; total_submissions?: number | null },
             focus: boolean,
           ) => {
+            const active =
+              run.status === "pending" || run.status === "running";
             switch (platform) {
               case "instagram":
                 setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                setInstagramRunCompleted(!active);
                 break;
               case "tiktok":
                 setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                setTiktokRunCompleted(!active);
                 break;
               case "youtube":
                 setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                setYoutubeRunCompleted(!active);
                 break;
               default:
                 break;
@@ -10860,9 +10954,36 @@ export default function ContestDetailClient({
             // stop ref and used to recurse until the finish path never completed.
             metricsRefreshManualPollStopRef.current = null;
             setIsRefreshingMetrics(false);
-            setShowYoutubeRunPopup(false);
-            setShowInstagramRunPopup(false);
-            setShowTiktokRunPopup(false);
+
+            const last =
+              [...states].reverse().find((s) => s.run) ??
+              states[states.length - 1] ??
+              null;
+            if (last?.platform && last.run) {
+              switch (last.platform) {
+                case "instagram":
+                  setInstagramRun(last.run as InstagramInsightsRefreshRunSummary);
+                  setInstagramRunCompleted(true);
+                  setShowInstagramRunPopup(true);
+                  setShowYoutubeRunPopup(false);
+                  setShowTiktokRunPopup(false);
+                  break;
+                case "tiktok":
+                  setTiktokRun(last.run as TikTokMetricsRefreshRunSummary);
+                  setTiktokRunCompleted(true);
+                  setShowTiktokRunPopup(true);
+                  setShowYoutubeRunPopup(false);
+                  setShowInstagramRunPopup(false);
+                  break;
+                case "youtube":
+                  setYoutubeRun(last.run as YouTubeMetricsRefreshRunSummary);
+                  setYoutubeRunCompleted(true);
+                  setShowYoutubeRunPopup(true);
+                  setShowInstagramRunPopup(false);
+                  setShowTiktokRunPopup(false);
+                  break;
+              }
+            }
 
             try {
               toastMultiPlatformRefreshSummaries(states);
@@ -10879,28 +11000,13 @@ export default function ContestDetailClient({
               // still reload below
             }
 
-            const last =
-              [...states].reverse().find((s) => s.run) ??
-              states[states.length - 1] ??
-              null;
-            if (last?.platform && last.run) {
-              // Apply terminal UI state without toasts (already shown above).
-              switch (last.platform) {
-                case "instagram":
-                  setInstagramRun(last.run as InstagramInsightsRefreshRunSummary);
-                  setInstagramRunCompleted(true);
-                  break;
-                case "tiktok":
-                  setTiktokRun(last.run as TikTokMetricsRefreshRunSummary);
-                  setTiktokRunCompleted(true);
-                  break;
-                case "youtube":
-                  setYoutubeRun(last.run as YouTubeMetricsRefreshRunSummary);
-                  setYoutubeRunCompleted(true);
-                  break;
-              }
-            }
-            schedulePostRefreshReload();
+            // Keep final progress visible briefly so Processed N/N can paint.
+            window.setTimeout(() => {
+              setShowYoutubeRunPopup(false);
+              setShowInstagramRunPopup(false);
+              setShowTiktokRunPopup(false);
+              schedulePostRefreshReload();
+            }, 2200);
           };
 
           const fetchPlatformStatus = async (queued: QueuedLiveRun) => {
@@ -11029,29 +11135,13 @@ export default function ContestDetailClient({
               if (pollIndex < queuedRunsFromApi.length) {
                 const curPlat = settled[pollIndex]?.platform ?? null;
                 const curRun = settled[pollIndex]?.run ?? null;
-                focusPlatformCard(curPlat, curRun);
-                if (
-                  curPlat === "youtube" &&
-                  !settled[pollIndex]?.tracked &&
-                  !settled[pollIndex]?.run
-                ) {
-                  setYoutubeRun(
-                    createPendingYoutubeRefreshRun(
-                      queuedRunsFromApi[pollIndex]?.runId,
-                      youtubeScope,
-                    ),
-                  );
-                } else if (
-                  curPlat === "instagram" &&
-                  !settled[pollIndex]?.tracked &&
-                  !settled[pollIndex]?.run
-                ) {
-                  setInstagramRun(
-                    createPendingInstagramRefreshRun(
-                      queuedRunsFromApi[pollIndex]?.runId,
-                    ),
-                  );
+                const curQueued = queuedRunsFromApi[pollIndex];
+                // Before showing the next platform, wipe any stale COMPLETED card
+                // from a prior refresh (esp. TikTok which had no pending seed).
+                if (!settled[pollIndex]?.tracked) {
+                  seedPendingPlatformUi(curPlat, curQueued?.runId);
                 }
+                focusPlatformCard(curPlat, curRun);
               }
 
               // Finish only when every queued platform has a tracked terminal run
@@ -11138,7 +11228,8 @@ export default function ContestDetailClient({
           };
 
           void pollOnce();
-          pollTimer = setInterval(() => void pollOnce(), 3000);
+          // Poll faster so mid-batch Processed X/N updates are visible.
+          pollTimer = setInterval(() => void pollOnce(), 1500);
           metricsRefreshManualPollStopRef.current = () => {
             finishing = true;
             clearPollTimer();
@@ -14942,11 +15033,12 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
-          {isMilestoneContestType(currentContest.contest_type) &&
-            currentContest.contest_based_details?.milestone_contest
-              ?.total_budget_cents != null &&
-            currentContest.contest_based_details.milestone_contest
-              .total_budget_cents > 0 && (
+          {currentContest.contest_type === "milestone" &&
+            resolveContestPoolBudgetCents(
+              currentContest.contest_type,
+              currentContest.contest_based_details,
+              currentContest.platform,
+            ) > 0 && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -14992,8 +15084,11 @@ export default function ContestDetailClient({
                         )}
                       >
                         {formatMoney(
-                          currentContest.contest_based_details.milestone_contest
-                            .total_budget_cents,
+                          resolveContestPoolBudgetCents(
+                            currentContest.contest_type,
+                            currentContest.contest_based_details,
+                            currentContest.platform,
+                          ),
                         )}
                       </p>
                     </div>
@@ -15278,10 +15373,11 @@ export default function ContestDetailClient({
         {/* Budget Progress Tracker - For Milestone campaigns (not dual — dual uses CPM tracker above) */}
         {isMilestoneContestType(currentContest.contest_type) &&
           !isDualRewardsContestType(currentContest.contest_type) &&
-          currentContest.contest_based_details?.milestone_contest
-            ?.total_budget_cents != null &&
-          currentContest.contest_based_details.milestone_contest
-            .total_budget_cents > 0 && (
+          resolveContestPoolBudgetCents(
+            currentContest.contest_type,
+            currentContest.contest_based_details,
+            currentContest.platform,
+          ) > 0 && (
             <div
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -15338,9 +15434,11 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget:
-                      currentContest.contest_based_details.milestone_contest
-                        .total_budget_cents,
+                    total_budget: resolveContestPoolBudgetCents(
+                      currentContest.contest_type,
+                      currentContest.contest_based_details,
+                      currentContest.platform,
+                    ),
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
@@ -19519,6 +19617,37 @@ export default function ContestDetailClient({
                             isAdminView &&
                             currentContest.platform?.toLowerCase() ===
                               "youtube";
+                          const showYoutubeAdminControls =
+                            isAdminView &&
+                            overviewVideoPlatforms.includes("youtube") &&
+                            (submissionsPlatformTab === ALL_PLATFORM_TAB ||
+                              submissionsPlatformTab === "youtube");
+                          const youtubeAdminControlsDisabled =
+                            anyYtRefreshInProgress ||
+                            hasRecentRunningRun ||
+                            postRefreshReloadPending;
+                          const youtubeAdminControlsButton =
+                            showYoutubeAdminControls ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAdminControlsModalOpen(true)
+                                }
+                                disabled={youtubeAdminControlsDisabled}
+                                className={cn(
+                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
+                                  "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
+                                  isDark &&
+                                    "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
+                                  youtubeAdminControlsDisabled &&
+                                    "opacity-60 cursor-not-allowed",
+                                )}
+                                title="Choose what the brand sees for this campaign"
+                              >
+                                <Settings className="h-3.5 w-3.5" />
+                                Admin controls
+                              </button>
+                            ) : null;
 
                           if (!isYoutubeAdmin) {
                             if (!isAdminView) {
@@ -19586,10 +19715,11 @@ export default function ContestDetailClient({
                                       ? `Wait ${cooldownInfo.remainingMinutes}m`
                                       : "Refresh Metrics"}
                                 </button>
-                                <div className="ml-auto">
+                                <div className="ml-auto flex flex-col items-end gap-2 shrink-0">
                                   <BulkVideoDownloadSummaryButton
                                     isDark={isDark}
                                   />
+                                  {youtubeAdminControlsButton}
                                 </div>
                               </>
                             );
@@ -19872,25 +20002,7 @@ export default function ContestDetailClient({
                                   <BulkVideoDownloadSummaryButton
                                     isDark={isDark}
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setAdminControlsModalOpen(true)
-                                    }
-                                    disabled={anyRefreshInProgress}
-                                    className={cn(
-                                      "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
-                                      "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
-                                      isDark &&
-                                        "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
-                                      anyRefreshInProgress &&
-                                        "opacity-60 cursor-not-allowed",
-                                    )}
-                                    title="Choose what the brand sees for this campaign"
-                                  >
-                                    <Settings className="h-3.5 w-3.5" />
-                                    Admin controls
-                                  </button>
+                                  {youtubeAdminControlsButton}
                                 </div>
                               </div>
                               {/* Section B — Detailed analytics */}
@@ -20241,82 +20353,46 @@ export default function ContestDetailClient({
                         showTiktokRunPopup &&
                         tiktokRun &&
                         (tiktokRun.status === "pending" ||
-                          tiktokRun.status === "running") && (
+                          tiktokRun.status === "running" ||
+                          tiktokRunCompleted ||
+                          tiktokRun.status === "completed" ||
+                          tiktokRun.status === "failed" ||
+                          tiktokRun.status === "cancelled") && (
                           <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                {tiktokRunCompleted
+                                {tiktokRunCompleted ||
+                                tiktokRun.status === "completed" ||
+                                tiktokRun.status === "failed" ||
+                                tiktokRun.status === "cancelled"
                                   ? "TikTok refresh summary"
                                   : "TikTok refresh in progress"}
                               </span>
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {isAdminView
                                   ? `Batch ${tiktokRun.current_batch_index ?? 0}/${tiktokRun.total_batches ?? 1}`
-                                  : `${(() => {
-                                      const totalSubs =
-                                        tiktokRun.total_submissions ?? 0;
-                                      const reviewed =
-                                        tiktokRun.reviewed_count ?? 0;
-                                      const totalBatches =
-                                        tiktokRun.total_batches ?? 1;
-                                      const batchIndex =
-                                        tiktokRun.current_batch_index ?? 0;
-                                      const byReviewed =
-                                        totalSubs > 0 && reviewed > 0
-                                          ? (reviewed / totalSubs) * 100
-                                          : 0;
-                                      const byBatches =
-                                        totalBatches > 0
-                                          ? (batchIndex / totalBatches) * 100
-                                          : 0;
-                                      return Math.min(
-                                        100,
-                                        Math.max(
-                                          0,
-                                          Math.round(
-                                            Math.max(byReviewed, byBatches),
-                                          ),
-                                        ),
-                                      );
-                                    })()}%`}
+                                  : `${metricsRunProgressPercent(tiktokRun)}%`}
                               </span>
                             </div>
-                            {tiktokRun.status === "running" && (
-                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                {(() => {
-                                  const totalSubs =
-                                    tiktokRun.total_submissions ?? 0;
-                                  const reviewed =
-                                    tiktokRun.reviewed_count ?? 0;
-                                  const totalBatches =
-                                    tiktokRun.total_batches ?? 1;
-                                  const batchIndex =
-                                    tiktokRun.current_batch_index ?? 0;
-
-                                  const byReviewed =
-                                    totalSubs > 0 && reviewed > 0
-                                      ? (reviewed / totalSubs) * 100
-                                      : 0;
-                                  const byBatches =
-                                    totalBatches > 0
-                                      ? (batchIndex / totalBatches) * 100
-                                      : 0;
-                                  const pct = Math.max(byReviewed, byBatches);
-
-                                  return (
-                                    <div
-                                      className="h-full bg-emerald-500 transition-all"
-                                      style={{
-                                        width: `${Math.min(
-                                          100,
-                                          Math.max(0, Math.round(pct)),
-                                        )}%`,
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                            )}
+                            <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                              {(() => {
+                                const pct = metricsRunProgressPercent(tiktokRun);
+                                const isActive =
+                                  tiktokRun.status === "pending" ||
+                                  tiktokRun.status === "running";
+                                return (
+                                  <div
+                                    className={cn(
+                                      "h-full bg-emerald-500 transition-all duration-500",
+                                      isActive && pct === 0 && "animate-pulse",
+                                    )}
+                                    style={{
+                                      width: `${isActive && pct === 0 ? 12 : pct}%`,
+                                    }}
+                                  />
+                                );
+                              })()}
+                            </div>
                             <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
                               <span>
                                 Processed{" "}

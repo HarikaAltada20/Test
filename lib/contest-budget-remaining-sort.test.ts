@@ -50,3 +50,29 @@ describe("contest-budget-remaining-sort leaderboard flat fee bonus", () => {
     assert.equal(getContestBudgetRemainingForSort(contest), 13_720);
   });
 });
+
+describe("contest-budget-remaining-sort milestone multi-platform", () => {
+  const campaign = {
+    contest_type: "milestone",
+    milestone_contest: {
+      total_budget_cents: 50_000,
+      milestones: [
+        { target_views: 1000, payout_cents: 10_000, winner_limit: null },
+      ],
+    },
+  };
+  const contest = {
+    contest_type: "milestone",
+    platform: "youtube,tiktok",
+    contest_based_details: {
+      youtube: campaign,
+      tiktok: campaign,
+      pool_budget_spent_cents: 10_000,
+    },
+  };
+
+  it("reads persisted pool spend when root milestone_contest is absent", () => {
+    assert.equal(getContestBudgetSpentForSort(contest), 10_000);
+    assert.equal(getContestBudgetRemainingForSort(contest), 40_000);
+  });
+});

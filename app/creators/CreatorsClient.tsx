@@ -46,11 +46,9 @@ import { createClient } from "@/utils/supabase/client";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import {
-  getPoolBudgetCentsFromDetails,
-  isCpmContestType,
-} from "@/lib/contest-type";
+import { isCpmContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
+import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
@@ -484,9 +482,10 @@ export default function CreatorsClient({
         contest.contest_based_details?.leaderboard_contest?.total_prize || 0
       );
     }
-    return getPoolBudgetCentsFromDetails(
+    return resolveContestPoolBudgetCents(
       contest.contest_type,
-      contest.contest_based_details
+      contest.contest_based_details,
+      contest.platform,
     );
   };
 

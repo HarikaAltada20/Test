@@ -9,18 +9,43 @@ export function getCpmEligibleViewsFromRow(row: {
   other_stats?: unknown;
 }): number {
   const platform = String(row.platform || "").toLowerCase();
+  const parsedStats =
+    typeof row.other_stats === "string"
+      ? (() => {
+          try {
+            return JSON.parse(row.other_stats) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : row.other_stats;
   const stats =
-    row.other_stats && typeof row.other_stats === "object"
-      ? (row.other_stats as Record<string, unknown>)
+    parsedStats && typeof parsedStats === "object"
+      ? (parsedStats as Record<string, unknown>)
       : {};
+
+  const firstPositive = (...values: unknown[]): number => {
+    for (const value of values) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+  };
 
   if (platform.includes("tiktok")) {
     const tiktok =
       stats.tiktok && typeof stats.tiktok === "object"
         ? (stats.tiktok as Record<string, unknown>)
         : {};
-    const tiktokViews = Number(tiktok.view_count ?? tiktok.views ?? 0);
-    if (Number.isFinite(tiktokViews) && tiktokViews > 0) return tiktokViews;
+    const tiktokViews = firstPositive(
+      tiktok.view_count,
+      tiktok.views,
+      tiktok.viewCount,
+      stats.view_count,
+      stats.views,
+      row.views,
+    );
+    if (tiktokViews > 0) return tiktokViews;
   }
 
   let raw = Number(row.views ?? 0);

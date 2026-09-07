@@ -112,4 +112,29 @@ describe("mergePersistedBudgetSpentFields", () => {
       12_000,
     );
   });
+
+  it("does not create a stub root milestone_contest on multi-platform contests", () => {
+    const campaign = {
+      contest_type: "milestone",
+      milestone_contest: {
+        total_budget_cents: 50_000,
+        milestones: [{ target_views: 1000, payout_cents: 1000, winner_limit: null }],
+      },
+    };
+    const merged = mergePersistedBudgetSpentFields(
+      { youtube: campaign, tiktok: campaign },
+      {
+        milestone_contest: { budget_spent: 2_000 },
+        pool_budget_spent_cents: 2_000,
+      },
+    );
+
+    assert.equal(merged.milestone_contest, undefined);
+    assert.equal(merged.pool_budget_spent_cents, 2_000);
+    assert.equal(
+      (merged.youtube as { milestone_contest: { total_budget_cents: number } })
+        .milestone_contest.total_budget_cents,
+      50_000,
+    );
+  });
 });

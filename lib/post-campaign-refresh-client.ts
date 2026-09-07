@@ -25,6 +25,7 @@ export type PostCampaignRefreshRunCounts = {
 export function isTrackedPostCampaignRun(
   run: {
     id: string;
+    status?: string | null;
     started_at?: string | null;
     finished_at?: string | null;
   },
@@ -36,22 +37,37 @@ export function isTrackedPostCampaignRun(
 ): boolean {
   const { activeRunId, refreshStartedMs, skewMs = 120_000 } = options;
 
-  // Time window first: chainContinue / server advance can disagree on runId.
-  // Prefer started_at so an older run that finished recently is not treated as
-  // belonging to a new multi-platform chain (would skip TikTok / later platforms).
+  // Exact id always wins (chainContinue / enqueue returned this run).
+  if (activeRunId && run.id === activeRunId) return true;
+
+  const terminal = isTerminalPostCampaignRunStatus(run.status);
+
   if (run.started_at) {
     const runStartMs = new Date(run.started_at).getTime();
-    if (!Number.isNaN(runStartMs) && runStartMs >= refreshStartedMs - skewMs) {
+    if (Number.isNaN(runStartMs)) return false;
+
+    // Terminal runs from a prior refresh must not count as "this chain done"
+    // (otherwise IG/TT paint as COMPLETED the moment YT finishes).
+    // Allow only a tiny clock skew.
+    if (terminal) {
+      return runStartMs >= refreshStartedMs - 5_000;
+    }
+
+    // Active pending/running: allow enqueue race skew.
+    if (runStartMs >= refreshStartedMs - skewMs) {
       return true;
     }
-  } else if (run.finished_at) {
+    return false;
+  }
+
+  // No started_at: only accept non-terminal if finished_at is in window (rare).
+  if (!terminal && run.finished_at) {
     const finishedMs = new Date(run.finished_at).getTime();
     if (!Number.isNaN(finishedMs) && finishedMs >= refreshStartedMs - skewMs) {
       return true;
     }
   }
 
-  if (activeRunId && run.id === activeRunId) return true;
   return false;
 }
 

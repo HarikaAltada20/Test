@@ -57,11 +57,20 @@ export function getContestBudgetRemainingForSort(
   }
 
   if (contest.contest_type === "milestone") {
-    const milestone = details.milestone_contest as
-      | { total_budget_cents?: number; budget_spent?: number }
-      | undefined;
-    const total = milestone?.total_budget_cents ?? 0;
-    return getRemainingFromTotalAndSpent(total, milestone?.budget_spent);
+    const total = resolveContestPoolBudgetCents(
+      contest.contest_type,
+      details,
+      contest.platform,
+    );
+    if (total <= 0) return -1;
+
+    const spent = getPoolBudgetSpentCentsForDisplay({
+      contest_type: contest.contest_type,
+      post_contest_status: contest.post_contest_status,
+      contest_based_details: details,
+      platform: contest.platform,
+    });
+    return getRemainingFromTotalAndSpent(total, spent);
   }
 
   if (isCpmContestType(contest.contest_type)) {
@@ -125,12 +134,21 @@ export function getContestBudgetSpentForSort(
   }
 
   if (contest.contest_type === "milestone") {
-    const milestone = details.milestone_contest as
-      | { total_budget_cents?: number; budget_spent?: number }
-      | undefined;
-    const total = milestone?.total_budget_cents ?? 0;
+    const total = resolveContestPoolBudgetCents(
+      contest.contest_type,
+      details,
+      contest.platform,
+    );
     if (total <= 0) return -1;
-    return Math.max(0, milestone?.budget_spent ?? 0);
+    return Math.max(
+      0,
+      getPoolBudgetSpentCentsForDisplay({
+        contest_type: contest.contest_type,
+        post_contest_status: contest.post_contest_status,
+        contest_based_details: details,
+        platform: contest.platform,
+      }),
+    );
   }
 
   if (isCpmContestType(contest.contest_type)) {

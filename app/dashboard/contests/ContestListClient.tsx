@@ -59,7 +59,7 @@ import {
   getEndedOpportunityPhaseLabel,
 } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import { isCpmContestType, isMilestoneContestType } from "@/lib/contest-type";
+import { isCpmContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { getMultipleSubmissionsBadgeLabel } from "@/lib/contest-list-card-metrics";
 import {
@@ -482,9 +482,7 @@ const getContestPrimaryFinancialText = (contest: Contest): string => {
     )}`;
   }
   if (contest.contest_type === "milestone") {
-    return `Budget: ${formatMoney(
-      contest.contest_based_details?.milestone_contest?.total_budget_cents || 0,
-    )}`;
+    return `Budget: ${formatMoney(getContestListPoolBudgetCents(contest))}`;
   }
   if (
     contest.contest_type === "cpm" ||
@@ -1406,20 +1404,14 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {isMilestoneContestType(contest.contest_type) &&
-                  contest.contest_based_details?.milestone_contest
-                    ?.total_budget_cents != null &&
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents > 0 && (
+                {contest.contest_type === "milestone" &&
+                  getContestListPoolBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
                       <span>
                         Total Budget:{" "}
                         <span className="font-medium text-blue-700 dark:text-blue-300">
-                          {formatMoney(
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents,
-                          )}
+                          {formatMoney(getContestListPoolBudgetCents(contest))}
                         </span>
                       </span>
                     </div>
@@ -1528,17 +1520,11 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
-              {/* Budget Tracker for Milestone campaigns — uses persisted
-                milestone_contest.budget_spent (same helper as CPM/dual). */}
+              {/* Budget Tracker for Milestone campaigns — same pool helper as CPM/dual. */}
               {contest.contest_type === "milestone" &&
-                contest.contest_based_details?.milestone_contest
-                  ?.total_budget_cents != null &&
-                contest.contest_based_details.milestone_contest
-                  .total_budget_cents > 0 &&
+                getContestListPoolBudgetCents(contest) > 0 &&
                 (() => {
-                  const totalBudget =
-                    contest.contest_based_details.milestone_contest
-                      .total_budget_cents;
+                  const totalBudget = getContestListPoolBudgetCents(contest);
                   const budgetSpent = getContestBudgetSpentForTracker(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
@@ -2212,11 +2198,8 @@ export function ContestListClient({
                         </span>
                       </div>
                     )}
-                  {isMilestoneContestType(contest.contest_type) &&
-                    contest.contest_based_details?.milestone_contest
-                      ?.total_budget_cents != null &&
-                    contest.contest_based_details.milestone_contest
-                      .total_budget_cents > 0 && (
+                  {contest.contest_type === "milestone" &&
+                    getContestListPoolBudgetCents(contest) > 0 && (
                       <div className="flex items-center">
                         <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
                         <span
@@ -2227,10 +2210,7 @@ export function ContestListClient({
                         >
                           Total Budget:{" "}
                           <span className="font-medium text-blue-700 dark:text-blue-300">
-                            {formatMoney(
-                              contest.contest_based_details.milestone_contest
-                                .total_budget_cents,
-                            )}
+                            {formatMoney(getContestListPoolBudgetCents(contest))}
                           </span>
                         </span>
                       </div>
@@ -2337,16 +2317,11 @@ export function ContestListClient({
                       </div>
                     );
                   })()}
-                {/* Milestone budget_spent: persisted field via getContestBudgetSpentForTracker */}
+                {/* Milestone budget: pool helper so multi-platform contests still show */}
                 {contest.contest_type === "milestone" &&
-                  contest.contest_based_details?.milestone_contest
-                    ?.total_budget_cents != null &&
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents > 0 &&
+                  getContestListPoolBudgetCents(contest) > 0 &&
                   (() => {
-                    const totalBudget =
-                      contest.contest_based_details.milestone_contest
-                        .total_budget_cents;
+                    const totalBudget = getContestListPoolBudgetCents(contest);
                     const budgetSpent =
                       getContestBudgetSpentForTracker(contest);
                     const tracker = getBudgetTrackerValues(

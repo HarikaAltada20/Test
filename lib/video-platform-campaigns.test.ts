@@ -447,6 +447,27 @@ describe("preparePlatformCampaignsForSave", () => {
       25_000,
     );
   });
+
+  it("resolves multi-platform milestone pool budget when root payout is empty", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "milestone",
+      totalBudget: "250",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "milestone",
+      totalBudget: "250",
+    });
+    assert.equal(
+      resolveContestPoolBudgetCents(
+        "milestone",
+        { youtube, instagram },
+        "youtube,instagram",
+      ),
+      25_000,
+    );
+  });
 });
 
 describe("resolveContestPlatformCpmRates", () => {
@@ -530,6 +551,30 @@ describe("resolveCpmContestConfigForPlatform", () => {
       contestHasUsableCpmRate(details, "youtube,instagram"),
       true,
     );
+  });
+
+  it("inherits a usable rate when TikTok was saved with cpm_rate_usd 0", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      totalBudget: "100",
+      cpmRate: "0.1",
+      minViews: "5000",
+    });
+    const tiktok = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      totalBudget: "100",
+      cpmRate: "0",
+    });
+    const details = { youtube, tiktok };
+    const cfg = resolveCpmContestConfigForPlatform(
+      details,
+      "tiktok",
+      "youtube,instagram,tiktok",
+    );
+    assert.equal(cfg?.cpm_rate_usd, 0.1);
+    assert.equal(cfg?.min_views ?? null, null);
   });
 });
 
