@@ -43,6 +43,7 @@ import {
   compareContestBudgetUsed,
 } from "@/lib/contest-budget-remaining-sort";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { getAdminSubmissionTotal } from "@/lib/contest-list-card-metrics";
 import { createClient } from "@/utils/supabase/client";
 import {
   calculateLeaderboardBudgetSpent,
@@ -246,6 +247,15 @@ const getContestListCpmRateRow = (
   if (!value) return null;
   return { label: "CPM Rate: ", value };
 };
+
+function getOpportunitySubmissionCount(contest: any): number {
+  return getAdminSubmissionTotal(contest);
+}
+
+function getOpportunityMultipleEntryBadgeLabel(contest: any): string {
+  const max = Number(contest?.max_submissions_per_creator) || 1;
+  return max > 1 ? `Up to ${max} / creator` : "Multiple Entries";
+}
 
 function getOpportunityBudgetTrackerMeta(contest: any): {
   total: number;
@@ -1578,9 +1588,7 @@ export default function OpportunitiesPage({
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
-                        {(contest.max_submissions_per_creator ?? 1) > 1
-                          ? `${contest.max_submissions_per_creator} Submissions`
-                          : "Multiple Entries"}
+                        {getOpportunityMultipleEntryBadgeLabel(contest)}
                       </Badge>
                     );
                   }
@@ -1754,28 +1762,22 @@ export default function OpportunitiesPage({
                   }
 
                   // For non-Twitter contests, show submissions count
-                  if (
-                    contest.live_submission_count !== null &&
-                    contest.live_submission_count !== undefined
-                  ) {
-                    return (
-                      <div className="flex items-center">
-                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Submissions:{" "}
-                          <span className="font-medium">
-                            {contest.live_submission_count}
-                          </span>
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Submissions:{" "}
+                        <span className="font-medium">
+                          {getOpportunitySubmissionCount(contest)}
                         </span>
-                      </div>
-                    );
-                  }
-                  return null;
+                      </span>
+                    </div>
+                  );
                 })()}
                 {(() => {
                   const contestCategories = Array.isArray(contest.categories)
@@ -2794,9 +2796,9 @@ export default function OpportunitiesPage({
                                       )}
                                     >
                                       <CheckCheck className="h-3 w-3 mr-1" />
-                                      {contest.max_submissions_per_creator > 1
-                                        ? `${contest.max_submissions_per_creator} Submissions`
-                                        : "Multiple Entries"}
+                                      {getOpportunityMultipleEntryBadgeLabel(
+                                        contest,
+                                      )}
                                     </Badge>
                                   );
                                 }
@@ -2976,30 +2978,24 @@ export default function OpportunitiesPage({
                               }
 
                               // For non-Twitter contests, show submissions count
-                              if (
-                                contest.live_submission_count !== null &&
-                                contest.live_submission_count !== undefined
-                              ) {
-                                return (
-                                  <div className="flex items-center">
-                                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span>
-                                      Submissions:{" "}
-                                      <span
-                                        className={cn(
-                                          "font-medium",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-700",
-                                        )}
-                                      >
-                                        {contest.live_submission_count}
-                                      </span>
+                              return (
+                                <div className="flex items-center">
+                                  <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                                  <span>
+                                    Submissions:{" "}
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      {getOpportunitySubmissionCount(contest)}
                                     </span>
-                                  </div>
-                                );
-                              }
-                              return null;
+                                  </span>
+                                </div>
+                              );
                             })()}
                             {(() => {
                               const contestCategories = Array.isArray(

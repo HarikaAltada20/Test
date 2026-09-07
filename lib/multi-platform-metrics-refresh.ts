@@ -105,13 +105,13 @@ export function serializeRefreshPlatforms(
 
 /**
  * YouTube enqueue scope for Refresh Metrics.
- * Multi-platform admin/brand refresh uses full YouTube analytics (`all`).
- * Creators/opportunities always use `basic` (see `forceBasic`).
+ * Multi-platform admin refresh defaults to full YouTube analytics (`all`).
+ * Brand and creators always use `basic` (same as single-platform YouTube).
  */
 export function youtubeScopeForMetricsRefresh(options: {
   campaignPlatformCount: number;
   requestedScope?: YouTubeRefreshScope | null;
-  /** When true (creators Leaderboard Metrics), never upgrade to `all`. */
+  /** When true (brand / creators), never upgrade to `all`. */
   forceBasic?: boolean;
 }): YouTubeRefreshScope {
   if (options.forceBasic) return "basic";
@@ -140,4 +140,29 @@ export function resolveSequentialRefreshPollIndex(
     if (!s?.tracked || !s.terminal) return i;
   }
   return states.length;
+}
+
+/**
+ * Platforms that have at least one non-rejected submission in the local list.
+ * Used by brand/admin UI to skip progress cards for empty platforms.
+ */
+export function platformsWithLocalSubmissionsForRefresh(
+  platforms: readonly PostCampaignVideoPlatform[],
+  submissions: readonly {
+    platform?: string | null;
+    status?: string | null;
+  }[],
+): PostCampaignVideoPlatform[] {
+  const present = new Set<PostCampaignVideoPlatform>();
+  for (const row of submissions) {
+    if (!row) continue;
+    if (String(row.status ?? "").toLowerCase() === "rejected") continue;
+    const token = String(row.platform ?? "").toLowerCase();
+    for (const platform of platforms) {
+      if (token === platform || token.includes(platform)) {
+        present.add(platform);
+      }
+    }
+  }
+  return platforms.filter((p) => present.has(p));
 }

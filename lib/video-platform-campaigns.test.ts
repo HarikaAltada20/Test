@@ -14,6 +14,7 @@ import {
   videoContestPlatformFromValue,
   patchSnapshotSection,
   platformsForTab,
+  prizePoolCentsForPlatformScope,
   preparePlatformCampaignsForSave,
   serializeVideoContestPlatforms,
   snapshotToPersistedPlatformCampaign,
@@ -29,6 +30,19 @@ import {
   contestHasUsableCpmRate,
   briefHtmlForPlatform,
   rulesHtmlForPlatform,
+  leaderboardPrizeStructuresDifferAcrossPlatforms,
+  resolveLeaderboardPrizeRankingPlan,
+  resolveFlatFeeBonusPlan,
+  flatFeeBonusesDifferAcrossPlatforms,
+  leaderboardBonusBudgetsDifferAcrossPlatforms,
+  sumLeaderboardBonusBudgetCents,
+  briefsDifferAcrossPlatforms,
+  rulesDifferAcrossPlatforms,
+  inspirationLinksDifferAcrossPlatforms,
+  resourcesDifferAcrossPlatforms,
+  bonusDetailsDifferAcrossPlatforms,
+  maxEarningsDifferAcrossPlatforms,
+  videoPayoutConfigsDifferAcrossPlatforms,
 } from "./video-platform-campaigns";
 
 describe("parseVideoContestPlatforms", () => {
@@ -156,6 +170,22 @@ describe("multi-platform payout persistence", () => {
         instagram: igCpm,
       }),
       4_000,
+    );
+
+    const ytLb = createDefaultPlatformCampaignSnapshot();
+    ytLb.totalPrizePool = 10_000;
+    ytLb.flatFeeBonus = "2";
+    ytLb.totalBudget = "40";
+    const igLb = createDefaultPlatformCampaignSnapshot();
+    igLb.totalPrizePool = 4_000;
+    igLb.flatFeeBonus = "5";
+    igLb.totalBudget = "25";
+    assert.equal(
+      sumSnapshotChargeableCents(["youtube", "instagram"], {
+        youtube: ytLb,
+        instagram: igLb,
+      }),
+      14_000 + 4_000 + 2_500,
     );
   });
 
@@ -311,6 +341,81 @@ describe("preparePlatformCampaignsForSave", () => {
     assert.equal(prepared.youtube?.cpmRate, "1");
     assert.equal(prepared.instagram?.cpmRate, "2");
   });
+
+  it("keeps per-platform leaderboard bonus budgets when earnings tab is not All", () => {
+    const tabs = createDefaultSectionPlatforms();
+    tabs.earnings = "youtube";
+    tabs.prize = "youtube";
+    const live = createDefaultAllSectionLive();
+    live.earnings = false;
+    live.prize = false;
+
+    const current = createDefaultPlatformCampaignSnapshot();
+    current.contestType = "leaderboard";
+    current.flatFeeBonus = "2";
+    current.totalBudget = "40";
+    current.totalPrizePool = 24_000;
+
+    const yt = createDefaultPlatformCampaignSnapshot();
+    yt.contestType = "leaderboard";
+    yt.flatFeeBonus = "2";
+    yt.totalBudget = "10";
+    yt.totalPrizePool = 24_000;
+
+    const ig = createDefaultPlatformCampaignSnapshot();
+    ig.contestType = "leaderboard";
+    ig.flatFeeBonus = "3";
+    ig.totalBudget = "15";
+    ig.totalPrizePool = 10_000;
+
+    const prepared = preparePlatformCampaignsForSave(
+      ["youtube", "instagram"],
+      tabs,
+      current,
+      { youtube: yt, instagram: ig },
+      live,
+    );
+
+    assert.equal(prepared.youtube?.totalBudget, "40");
+    assert.equal(prepared.instagram?.totalBudget, "15");
+    assert.equal(prepared.youtube?.flatFeeBonus, "2");
+    assert.equal(prepared.instagram?.flatFeeBonus, "3");
+  });
+
+  it("applies All-tab leaderboard bonus budget to every platform on save", () => {
+    const tabs = createDefaultSectionPlatforms();
+    tabs.earnings = "all";
+    const live = createDefaultAllSectionLive();
+    live.earnings = false;
+
+    const current = createDefaultPlatformCampaignSnapshot();
+    current.contestType = "leaderboard";
+    current.flatFeeBonus = "2";
+    current.totalBudget = "40";
+
+    const yt = createDefaultPlatformCampaignSnapshot();
+    yt.contestType = "leaderboard";
+    yt.flatFeeBonus = "1";
+    yt.totalBudget = "10";
+    const ig = createDefaultPlatformCampaignSnapshot();
+    ig.contestType = "leaderboard";
+    ig.flatFeeBonus = "3";
+    ig.totalBudget = "15";
+
+    const prepared = preparePlatformCampaignsForSave(
+      ["youtube", "instagram"],
+      tabs,
+      current,
+      { youtube: yt, instagram: ig },
+      live,
+    );
+
+    assert.equal(prepared.youtube?.totalBudget, "40");
+    assert.equal(prepared.instagram?.totalBudget, "40");
+    assert.equal(prepared.youtube?.flatFeeBonus, "2");
+    assert.equal(prepared.instagram?.flatFeeBonus, "2");
+  });
+
   it("resolves shared multi-platform pool budget when root payout is empty", () => {
     const youtube = snapshotToPersistedPlatformCampaign({
       ...createDefaultPlatformCampaignSnapshot(),
@@ -590,6 +695,40 @@ describe("buildFlushedPlatformCampaigns All-guard", () => {
     assert.equal(flushed.instagram?.totalBudget, "75");
     assert.equal(flushed.instagram?.cpmRate, "3");
   });
+
+  it("keeps leaderboard Total Budget for Bonuses per platform", () => {
+    const tabs = createDefaultSectionPlatforms();
+    tabs.earnings = "youtube";
+    tabs.prize = "youtube";
+    const live = createDefaultAllSectionLive();
+    live.earnings = false;
+    live.prize = false;
+
+    const current = createDefaultPlatformCampaignSnapshot();
+    current.contestType = "leaderboard";
+    current.flatFeeBonus = "2";
+    current.totalBudget = "40";
+    current.totalPrizePool = 24_000;
+
+    const existingIg = createDefaultPlatformCampaignSnapshot();
+    existingIg.contestType = "leaderboard";
+    existingIg.flatFeeBonus = "1";
+    existingIg.totalBudget = "15";
+    existingIg.totalPrizePool = 10_000;
+
+    const flushed = buildFlushedPlatformCampaigns(
+      ["youtube", "instagram"],
+      tabs,
+      current,
+      { instagram: existingIg },
+      live,
+    );
+
+    assert.equal(flushed.youtube?.totalBudget, "40");
+    assert.equal(flushed.instagram?.totalBudget, "15");
+    assert.equal(flushed.youtube?.flatFeeBonus, "2");
+    assert.equal(flushed.instagram?.flatFeeBonus, "1");
+  });
 });
 
 describe("platformsForTab", () => {
@@ -621,6 +760,40 @@ describe("platformsForTab", () => {
     assert.equal(allKey.includes("instagram"), true);
     assert.equal(allKey.includes("youtube"), true);
     assert.equal(allKey.includes("tiktok"), true);
+  });
+});
+
+describe("prizePoolCentsForPlatformScope", () => {
+  it("uses the stored Instagram prize pool when earnings is on Instagram", () => {
+    const youtube = createDefaultPlatformCampaignSnapshot();
+    youtube.totalPrizePool = 10_000;
+    const instagram = createDefaultPlatformCampaignSnapshot();
+    instagram.totalPrizePool = 6_000;
+    assert.equal(
+      prizePoolCentsForPlatformScope({
+        scopeTab: "instagram",
+        prizeTab: "youtube",
+        selected: ["youtube", "instagram"],
+        snapshots: { youtube, instagram },
+        livePrizePoolCents: 10_000,
+      }),
+      6_000,
+    );
+  });
+
+  it("uses the live prize editor when earnings and prize tabs match", () => {
+    const youtube = createDefaultPlatformCampaignSnapshot();
+    youtube.totalPrizePool = 10_000;
+    assert.equal(
+      prizePoolCentsForPlatformScope({
+        scopeTab: "youtube",
+        prizeTab: "youtube",
+        selected: ["youtube", "instagram"],
+        snapshots: { youtube },
+        livePrizePoolCents: 12_000,
+      }),
+      12_000,
+    );
   });
 });
 
@@ -841,5 +1014,241 @@ describe("buildFlushedPlatformCampaigns resources", () => {
     );
     assert.equal((persisted as { brief_html?: unknown }).brief_html, undefined);
     assert.equal((persisted as { content_type?: unknown }).content_type, undefined);
+  });
+});
+
+describe("per-platform leaderboard prize and flat fee display", () => {
+  const platforms = ["youtube", "instagram"] as const;
+
+  it("keeps prize structures equal when amounts match", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 6_000,
+      winnerCount: 3,
+      winnerAmounts: [3_000, 2_000, 1_000],
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 6_000,
+      winnerCount: 3,
+      winnerAmounts: [3_000, 2_000, 1_000],
+    });
+    assert.equal(
+      leaderboardPrizeStructuresDifferAcrossPlatforms(
+        { youtube, instagram },
+        [...platforms],
+      ),
+      false,
+    );
+    const plan = resolveLeaderboardPrizeRankingPlan(
+      { youtube, instagram },
+      "youtube,instagram",
+    );
+    assert.equal(plan.rankAcrossAllPlatforms, true);
+    assert.equal(plan.sharedPrizes[0]?.amount, 3_000);
+  });
+
+  it("detects different prize amounts across platforms", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 6_000,
+      winnerCount: 3,
+      winnerAmounts: [3_000, 2_000, 1_000],
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 9_000,
+      winnerCount: 3,
+      winnerAmounts: [5_000, 3_000, 1_000],
+    });
+    assert.equal(
+      leaderboardPrizeStructuresDifferAcrossPlatforms(
+        { youtube, instagram },
+        [...platforms],
+      ),
+      true,
+    );
+    const plan = resolveLeaderboardPrizeRankingPlan(
+      { youtube, instagram },
+      "youtube,instagram",
+    );
+    assert.equal(plan.rankAcrossAllPlatforms, false);
+    assert.equal(plan.prizesByPlatform.youtube?.[0]?.amount, 3_000);
+    assert.equal(plan.prizesByPlatform.instagram?.[0]?.amount, 5_000);
+  });
+
+  it("detects different flat fee bonuses and bonus budgets", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "2",
+      totalBudget: "30",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "1",
+      totalBudget: "50",
+    });
+    assert.equal(
+      flatFeeBonusesDifferAcrossPlatforms({ youtube, instagram }, [...platforms]),
+      true,
+    );
+    assert.equal(
+      leaderboardBonusBudgetsDifferAcrossPlatforms(
+        { youtube, instagram },
+        [...platforms],
+      ),
+      true,
+    );
+    assert.equal(
+      sumLeaderboardBonusBudgetCents({ youtube, instagram }, [...platforms]),
+      8_000,
+    );
+    const plan = resolveFlatFeeBonusPlan(
+      { youtube, instagram },
+      "youtube,instagram",
+      "leaderboard",
+    );
+    assert.equal(plan.shareAcrossAllPlatforms, false);
+    assert.equal(plan.byPlatform.youtube?.amountCents, 200);
+    assert.equal(plan.byPlatform.instagram?.amountCents, 100);
+  });
+
+  it("treats matching flat fees as a whole-contest value", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "2",
+      totalBudget: "30",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      flatFeeBonus: "2",
+      totalBudget: "30",
+    });
+    assert.equal(
+      flatFeeBonusesDifferAcrossPlatforms({ youtube, instagram }, [...platforms]),
+      false,
+    );
+    assert.equal(
+      leaderboardBonusBudgetsDifferAcrossPlatforms(
+        { youtube, instagram },
+        [...platforms],
+      ),
+      false,
+    );
+  });
+});
+
+describe("content differ-across-platforms helpers", () => {
+  const platforms = ["youtube", "instagram"] as const;
+
+  it("detects differing briefs and matching rules", () => {
+    const contest = {
+      platform: "youtube,instagram",
+      brief_html: "",
+      brief_json: {
+        youtube: { html: "<p>YT brief</p>", json: null },
+        instagram: { html: "<p>IG brief</p>", json: null },
+      },
+      rules_html: "",
+      rules_json: {
+        youtube: { html: "<p>Same rules</p>", json: null },
+        instagram: { html: "<p>Same rules</p>", json: null },
+      },
+    };
+    assert.equal(briefsDifferAcrossPlatforms(contest, [...platforms]), true);
+    assert.equal(rulesDifferAcrossPlatforms(contest, [...platforms]), false);
+  });
+
+  it("detects differing inspiration links and resources", () => {
+    const links = {
+      youtube: [{ url: "https://yt.example", description: "a" }],
+      instagram: [{ url: "https://ig.example", description: "b" }],
+    };
+    const sameLinks = {
+      youtube: [{ url: "https://same.example", description: "x" }],
+      instagram: [{ url: "https://same.example", description: "x" }],
+    };
+    assert.equal(
+      inspirationLinksDifferAcrossPlatforms(links, [...platforms]),
+      true,
+    );
+    assert.equal(
+      inspirationLinksDifferAcrossPlatforms(sameLinks, [...platforms]),
+      false,
+    );
+
+    const resources = {
+      youtube: [{ url: "https://yt.res", description: "yt", type: "link" }],
+      instagram: [{ url: "https://ig.res", description: "ig", type: "link" }],
+    };
+    assert.equal(resourcesDifferAcrossPlatforms(resources, [...platforms]), true);
+  });
+
+  it("detects differing creator bonus and max earnings", () => {
+    assert.equal(
+      bonusDetailsDifferAcrossPlatforms(
+        {
+          youtube: { description_html: "<p>YT bonus</p>" },
+          instagram: { description_html: "<p>IG bonus</p>" },
+        },
+        [...platforms],
+      ),
+      true,
+    );
+    assert.equal(
+      bonusDetailsDifferAcrossPlatforms(
+        {
+          youtube: { description_html: "<p>Shared</p>" },
+          instagram: { description_html: "<p>Shared</p>" },
+        },
+        [...platforms],
+      ),
+      false,
+    );
+    assert.equal(
+      maxEarningsDifferAcrossPlatforms(
+        { youtube: 5000, instagram: 7000 },
+        null,
+        [...platforms],
+      ),
+      true,
+    );
+    assert.equal(
+      maxEarningsDifferAcrossPlatforms(
+        { youtube: 5000, instagram: 5000 },
+        null,
+        [...platforms],
+      ),
+      false,
+    );
+  });
+
+  it("detects differing CPM payout configs", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      cpmRate: "1",
+      totalBudget: "100",
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      cpmRate: "2",
+      totalBudget: "100",
+    });
+    assert.equal(
+      videoPayoutConfigsDifferAcrossPlatforms(
+        { youtube, instagram },
+        [...platforms],
+      ),
+      true,
+    );
+    assert.equal(
+      videoPayoutConfigsDifferAcrossPlatforms(
+        { youtube, instagram: youtube },
+        [...platforms],
+      ),
+      false,
+    );
   });
 });

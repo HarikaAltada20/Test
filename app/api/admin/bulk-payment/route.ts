@@ -17,6 +17,8 @@ import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMapFromDetails } from "@/lib/milestone-contest-expected-spend";
 import {
   isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
+  resolveFlatFeeBonusPlan,
   resolveMaxEarningsCentsForSubmission,
 } from "@/lib/video-platform-campaigns";
 import {
@@ -25,7 +27,11 @@ import {
   loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+  getFlatFeeBonusLadderForSubmission,
+} from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
@@ -347,7 +353,12 @@ export async function POST(request: NextRequest) {
         ? (contest.contest_based_details as any)?.cpm_contest
         : (contest.contest_based_details as any)?.leaderboard_contest;
 
-    const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
+    const flatFeeBonusPlan = resolveFlatFeeBonusPlan(
+      (contest.contest_based_details as Record<string, unknown>) || null,
+      contest.platform,
+      contest.contest_type,
+    );
+    const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest as any);
     const totalBudget = contestDetails?.total_budget || null;
     const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
@@ -405,7 +416,11 @@ export async function POST(request: NextRequest) {
         unpaidBonusSubmissions.length * flatFeeBonus;
 
       // For leaderboard contests with total_budget, check if budget would be exceeded
-      if (contest.contest_type === "leaderboard" && totalBudget) {
+      if (
+        contest.contest_type === "leaderboard" &&
+        totalBudget &&
+        flatFeeBonusPlan.shareAcrossAllPlatforms
+      ) {
         if (currentBonusSpent + potentialBonusSpending > totalBudget) {
           return NextResponse.json(
             {
@@ -426,7 +441,11 @@ export async function POST(request: NextRequest) {
       }
 
       // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
-      if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+      if (
+        contest.contest_type === "cpm" &&
+        flatFeeBonusCap &&
+        flatFeeBonusPlan.shareAcrossAllPlatforms
+      ) {
         if (currentBonusSpent + potentialBonusSpending > flatFeeBonusCap) {
           return NextResponse.json(
             {
@@ -476,7 +495,7 @@ export async function POST(request: NextRequest) {
       await fetchContestSubmissionsAllPages(
         supabaseAdmin,
         contest_id,
-        "bonus_amount",
+        "bonus_amount, platform",
         { bonusPaid: true, order: { column: "created_at", ascending: true } },
       );
     if (bonusSpendErr2) {
@@ -492,6 +511,19 @@ export async function POST(request: NextRequest) {
       0,
     );
     let runningBonusSpent = currentBonusSpent;
+    const runningBonusSpentByPlatform = new Map<string, number>();
+    if (!flatFeeBonusPlan.shareAcrossAllPlatforms) {
+      for (const row of bonusSpendingData || []) {
+        const key =
+          parseVideoContestPlatforms((row as { platform?: string }).platform)[0] ||
+          "_";
+        runningBonusSpentByPlatform.set(
+          key,
+          (runningBonusSpentByPlatform.get(key) || 0) +
+            (Number((row as { bonus_amount?: number }).bonus_amount) || 0),
+        );
+      }
+    }
     if (payment_type !== "standard" && flatFeeBonus > 0) {
       // Fetch every contest submission and let `buildFlatFeeBonusExpectedCentsBySubmissionId`
       // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
@@ -502,7 +534,7 @@ export async function POST(request: NextRequest) {
         await fetchContestSubmissionsAllPages(
           supabaseAdmin,
           contest_id,
-          "id, created_at, status, paid",
+          "id, created_at, status, paid, platform",
           { order: { column: "created_at", ascending: true } },
         );
       if (contestEligibleErr) {
@@ -520,6 +552,7 @@ export async function POST(request: NextRequest) {
           created_at: s.created_at,
           status: s.status,
           paid: s.paid === true,
+          platform: s.platform,
         })),
       );
     }
@@ -564,7 +597,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Non-Twitter leaderboard: per-submission prizes from contest-wide views rank.
+    // Non-Twitter leaderboard: per-submission prizes from All-tab rank when
+    // platform prizes match, or each platform's own ladder when they differ.
     // Ranking is always fetched fresh (no cross-request cache) so concurrent
     // verifies cannot cause two submissions to both receive the same prize rank.
     let leaderboardPrizeBySubmissionId = new Map<string, number>();
@@ -577,6 +611,9 @@ export async function POST(request: NextRequest) {
         supabaseAdmin,
         contestId: contest_id,
         prizes,
+        contestBasedDetails:
+          (contest.contest_based_details as Record<string, unknown>) || null,
+        contestPlatform: contest.platform,
       });
       if (prizeMapResult.error) {
         return NextResponse.json(
@@ -698,18 +735,23 @@ export async function POST(request: NextRequest) {
             (bonusReasonCounts.not_expected || 0) + 1;
           submissionBonus = 0;
         } else {
-          const bonusLimit =
-            contest.contest_type === "leaderboard"
-              ? totalBudget
-              : contest.contest_type === "cpm"
-                ? flatFeeBonusCap
-                : null;
+          const ladder = getFlatFeeBonusLadderForSubmission(
+            contest as any,
+            (sub as { platform?: string | null }).platform,
+          );
+          const platformKey =
+            parseVideoContestPlatforms(
+              (sub as { platform?: string | null }).platform,
+            )[0] || "_";
+          const spent = flatFeeBonusPlan.shareAcrossAllPlatforms
+            ? runningBonusSpent
+            : runningBonusSpentByPlatform.get(platformKey) || 0;
           const remainingBudget =
-            bonusLimit != null
-              ? Math.max(0, bonusLimit - runningBonusSpent)
+            ladder.budgetCents != null
+              ? Math.max(0, ladder.budgetCents - spent)
               : null;
           const bonusAllocation = allocateFlatFeeBonusCents(
-            flatFeeBonus,
+            expectedBonusForSubmission,
             remainingBudget,
           );
           submissionBonus = bonusAllocation.amount;
@@ -720,7 +762,14 @@ export async function POST(request: NextRequest) {
             expectedBonusForSubmission,
           );
           if (submissionBonus > 0) {
-            runningBonusSpent += submissionBonus;
+            if (flatFeeBonusPlan.shareAcrossAllPlatforms) {
+              runningBonusSpent += submissionBonus;
+            } else {
+              runningBonusSpentByPlatform.set(
+                platformKey,
+                spent + submissionBonus,
+              );
+            }
             totalBonus += submissionBonus;
           }
         }

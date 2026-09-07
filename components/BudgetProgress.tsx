@@ -17,11 +17,20 @@ import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import { getCpmEligibleViewsFromRow } from "@/lib/cpm-eligible-views";
 import {
   isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
   resolveCpmContestConfigForPlatform,
   resolveContestPoolBudgetCents,
+  resolveFlatFeeBonusPlan,
   resolveMaxEarningsCentsForSubmission,
+  VIDEO_PLATFORM_LABELS,
+  type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+} from "@/lib/twitter-cpm-bonus-expected";
 import { collectMilestoneBonusConfigs } from "@/lib/milestone-contest-expected-spend";
+import { getPlatformIcon } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 
@@ -82,13 +91,22 @@ export function BudgetProgress({
       ? (contest.contest_based_details as any)?.leaderboard_contest
       : null;
 
+  const contestBonusInput = {
+    contest_type: contest.contest_type,
+    platform: contest.platform,
+    contest_based_details:
+      contest.contest_based_details &&
+      typeof contest.contest_based_details === "object"
+        ? (contest.contest_based_details as Record<string, unknown>)
+        : null,
+  };
+  const contestFlatFeeBonusCents =
+    getFlatFeeBonusCentsFromContest(contestBonusInput);
   const flatFeeBonus =
-    cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
-  const milestoneContestConfig = isMilestoneContestType(
-    contest.contest_type,
-  )
-    ? (contest.contest_based_details as any)?.milestone_contest
-    : null;
+    contestFlatFeeBonusCents ||
+    cpmConfig?.flat_fee_bonus ||
+    leaderboardConfig?.flat_fee_bonus ||
+    0;
   const milestoneCreatorBonusConfigured = collectMilestoneBonusConfigs(
     contest.contest_based_details,
     contest.platform,
@@ -98,7 +116,7 @@ export function BudgetProgress({
       Boolean(bonus.most_verified_views || bonus.most_verified_reels),
   );
   const hasFlatFeeBonus =
-    (contest.contest_type !== "dual_rewards" && flatFeeBonus > 0) ||
+    (contest.contest_type !== "dual_rewards" && contestFlatFeeBonusCents > 0) ||
     (isMilestoneContestType(contest.contest_type) &&
       (milestoneCreatorBonusConfigured ||
         (typeof milestoneCreatorBonusExpectedCents === "number" &&
@@ -119,6 +137,7 @@ export function BudgetProgress({
     bonusBudget,
     bonusSpent,
     totalSpent,
+    platformBonusRows,
   } = useMemo(() => {
     // Use contest row total_budget when set; else pool from contest_based_details (dual: root total_budget_cents via helper)
     let totalBudget =
@@ -146,7 +165,7 @@ export function BudgetProgress({
 
     // For CPM contests, use flat_fee_bonus_cap if configured, otherwise total_budget
     // For leaderboard contests, use total_budget
-    const bonusBudget =
+    let bonusBudget =
       isCpmContestType(contest.contest_type) && cpmConfig?.flat_fee_bonus_cap
         ? cpmConfig.flat_fee_bonus_cap
         : contest.total_budget || 0;
@@ -255,6 +274,7 @@ export function BudgetProgress({
           bonusBudget: 0,
           bonusSpent: bonusPaidCents,
           totalSpent,
+          platformBonusRows: [],
         };
       }
 
@@ -365,6 +385,7 @@ export function BudgetProgress({
         bonusBudget: 0,
         bonusSpent: bonusPaidCents,
         totalSpent,
+        platformBonusRows: [],
       };
     }
 
@@ -425,8 +446,8 @@ export function BudgetProgress({
         submissionEarnings = (totalPoints * subRate) / 1000;
         console.log(
           `[Twitter CPM] basePoints=${basePoints}, manual=${manualPointsAdjustment}, totalPoints=${totalPoints}, cpmRate=${subRate}, earnings=${submissionEarnings.toFixed(
-            2
-          )}`
+            2,
+          )}`,
         );
       } else if (!isDualRewards && sub.paid && sub.earnings != null) {
         // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
@@ -434,7 +455,7 @@ export function BudgetProgress({
         console.log(
           `[${
             submissionPlatform || "Unknown"
-          } Paid] earnings=${submissionEarnings.toFixed(2)}`
+          } Paid] earnings=${submissionEarnings.toFixed(2)}`,
         );
       } else if (isDualRewards) {
         submissionEarnings =
@@ -453,8 +474,8 @@ export function BudgetProgress({
           `[${
             submissionPlatform || "Unknown"
           } Unpaid] views=${views}, cpmRate=${subRate}, earnings=${submissionEarnings.toFixed(
-            2
-          )}`
+            2,
+          )}`,
         );
       }
 
@@ -553,7 +574,7 @@ export function BudgetProgress({
         } else {
           creatorData.cpmTotal = Math.max(
             0,
-            creatorData.cpmTotal + manualEarnings
+            creatorData.cpmTotal + manualEarnings,
           );
         }
       });
@@ -569,6 +590,39 @@ export function BudgetProgress({
 
     let cpmPaid = Math.round(cpmTotal * 100); // Convert back to cents
     let bonusPaid = Math.round(bonusTotal * 100); // Convert back to cents
+
+    const bonusPlan = resolveFlatFeeBonusPlan(
+      contest.contest_based_details,
+      contest.platform,
+      contest.contest_type,
+    );
+    const expectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
+      {
+        contest_type: contest.contest_type,
+        platform: contest.platform,
+        contest_based_details:
+          contest.contest_based_details &&
+          typeof contest.contest_based_details === "object"
+            ? (contest.contest_based_details as Record<string, unknown>)
+            : null,
+      },
+      submissions.map((s) => ({
+        id: String((s as any).id || ""),
+        created_at: (s as any).created_at,
+        status: (s as any).status,
+        paid: s.paid,
+        platform: (s as any).platform,
+      })),
+    );
+    if (
+      contest.contest_type !== "dual_rewards" &&
+      contest.contest_type !== "milestone" &&
+      contestFlatFeeBonusCents > 0
+    ) {
+      let expectedSum = 0;
+      for (const cents of expectedBonusMap.values()) expectedSum += cents;
+      bonusPaid = expectedSum;
+    }
 
     if (contest.contest_type === "dual_rewards") {
       const normalizeMilestoneStatus = (raw: unknown) => {
@@ -642,7 +696,7 @@ export function BudgetProgress({
       for (let i = 0; i < sortedPaidSubmissions.length; i++) {
         const rank = i + 1;
         const prizeForRank = leaderboardPrizes.find(
-          (p: any) => p.position === rank
+          (p: any) => p.position === rank,
         );
         if (prizeForRank) {
           prizePoolSpent += prizeForRank.amount;
@@ -741,6 +795,69 @@ export function BudgetProgress({
       }
     }
 
+    const paidMode = getBudgetTileMode(postContestStatus) === "paid";
+    const platformsWithBonus = bonusPlan.platforms.filter((platform) => {
+      const ladder = bonusPlan.byPlatform[platform];
+      return (ladder?.amountCents || 0) > 0 || (ladder?.budgetCents || 0) > 0;
+    });
+    const showPerPlatformBonus =
+      !bonusPlan.shareAcrossAllPlatforms && platformsWithBonus.length >= 2;
+    const platformBonusRows: Array<{
+      platform: VideoContestPlatform;
+      amountCents: number;
+      budgetCents: number;
+      spentCents: number;
+      showSpend: boolean;
+    }> =
+      platformsWithBonus.length >= 1
+        ? platformsWithBonus.map((platform) => {
+            const ladder = bonusPlan.byPlatform[platform];
+            let spentCents = 0;
+            for (const s of submissions) {
+              const key = parseVideoContestPlatforms((s as any).platform)[0];
+              if (key !== platform) continue;
+              if (paidMode) {
+                if (s.bonus_paid && s.bonus_amount != null) {
+                  spentCents += Math.max(0, Number(s.bonus_amount) || 0);
+                }
+              } else {
+                spentCents +=
+                  expectedBonusMap.get(String((s as any).id || "")) || 0;
+              }
+            }
+            return {
+              platform,
+              amountCents: ladder?.amountCents || 0,
+              budgetCents: ladder?.budgetCents || 0,
+              spentCents,
+              showSpend: true,
+            };
+          })
+        : [];
+
+    if (showPerPlatformBonus) {
+      const planBudget = platformBonusRows.reduce(
+        (sum, row) => sum + row.budgetCents,
+        0,
+      );
+      if (planBudget > 0) bonusBudget = planBudget;
+      const planSpent = platformBonusRows.reduce(
+        (sum, row) => sum + row.spentCents,
+        0,
+      );
+      finalBonusPaid = planSpent;
+      if (contest.contest_type === "leaderboard" && !paidMode) {
+        finalTotalSpent = finalCpmPaid + finalBonusPaid;
+      }
+    } else if (
+      bonusPlan.shared.budgetCents != null &&
+      bonusPlan.shared.budgetCents > 0 &&
+      (contest.contest_type === "leaderboard" ||
+        isCpmContestType(contest.contest_type))
+    ) {
+      bonusBudget = bonusPlan.shared.budgetCents;
+    }
+
     const cpmPercentage =
       totalBudget > 0 ? Math.min((finalCpmPaid / totalBudget) * 100, 100) : 0;
     const bonusPercentage =
@@ -767,6 +884,7 @@ export function BudgetProgress({
       bonusBudget,
       bonusSpent: finalBonusPaid,
       totalSpent: finalTotalSpent,
+      platformBonusRows,
     };
   }, [
     contest,
@@ -777,6 +895,7 @@ export function BudgetProgress({
     milestoneCreatorBonusPaidCents,
     milestoneExpectedPayoutBySubmissionId,
     postContestStatus,
+    contestFlatFeeBonusCents,
   ]);
 
   const formatCurrency = (cents: number) => {
@@ -826,6 +945,47 @@ export function BudgetProgress({
 
   const isDark = mode === "dark";
 
+  const renderPlatformFlatFeeBonusRow = (row: {
+    platform: VideoContestPlatform;
+    amountCents: number;
+    budgetCents: number;
+    spentCents: number;
+    showSpend?: boolean;
+  }) => {
+    return (
+      <div
+        key={row.platform}
+        className="flex items-center gap-1 min-w-0 text-sm"
+      >
+        <span
+          className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4"
+          title={VIDEO_PLATFORM_LABELS[row.platform]}
+        >
+          {getPlatformIcon(row.platform, "sm")}
+        </span>
+        <span
+          className={cn(
+            "font-semibold tabular-nums",
+            isDark ? "text-white" : "text-gray-900",
+          )}
+        >
+          {formatCurrency(row.spentCents)}
+          {row.budgetCents > 0 ? (
+            <span
+              className={cn(
+                "font-normal",
+                isDark ? "text-gray-400" : "text-gray-600",
+              )}
+            >
+              {" "}
+              / {formatCurrency(row.budgetCents)}
+            </span>
+          ) : null}
+        </span>
+      </div>
+    );
+  };
+
   if (!showDetailed) {
     // Simple view - just total budget used
     return (
@@ -864,7 +1024,6 @@ export function BudgetProgress({
   ) {
     const bonusPercentage =
       bonusBudget > 0 ? Math.min((bonusSpent / bonusBudget) * 100, 100) : 0;
-    const isNearLimit = bonusPercentage >= 80;
     const remaining = Math.max(0, bonusBudget - bonusSpent);
 
     return (
@@ -873,7 +1032,7 @@ export function BudgetProgress({
           <span
             className={cn(
               "font-medium",
-              isDark ? "text-gray-300" : "text-gray-700"
+              isDark ? "text-gray-300" : "text-gray-700",
             )}
           >
             Budget Tracker
@@ -883,46 +1042,57 @@ export function BudgetProgress({
           </span>
         </div>
 
-        {/* Progress bar for Total Budget only */}
         <div
           className={cn(
             "relative w-full h-4 rounded-full overflow-hidden",
-            isDark ? "bg-[#FFFFFF42]" : "bg-gray-200"
+            isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
           )}
         >
           <div
             className={`absolute h-full transition-all duration-300 ${
-              isNearLimit ? "bg-yellow-500" : "bg-green-500"
+              bonusPercentage >= 80 ? "bg-yellow-500" : "bg-green-500"
             }`}
             style={{ width: `${Math.min(bonusPercentage, 100)}%` }}
           />
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
-          <div className="flex-1">
-            <p
-              className={cn(
-                "font-medium text-xs",
-                isDark ? "text-gray-300" : "text-gray-700"
-              )}
-            >
-              Flat Fee Bonus
-            </p>
-            <p
-              className={cn(
-                "font-semibold text-xs",
-                isDark ? "text-white" : "text-gray-900"
-              )}
-            >
-              {formatCurrency(bonusSpent)}
-            </p>
+        <div className="flex items-end gap-4 min-w-0">
+          <div className="flex items-start gap-1.5 shrink-0">
+            <div className="w-3 h-3 mt-0.5 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+            <div>
+              <p
+                className={cn(
+                  "font-medium text-sm",
+                  isDark ? "text-gray-300" : "text-gray-700",
+                )}
+              >
+                Flat Fee Bonus
+              </p>
+              <p
+                className={cn(
+                  "font-semibold text-sm tabular-nums",
+                  isDark ? "text-white" : "text-gray-900",
+                )}
+              >
+                {formatCurrency(bonusSpent)}
+              </p>
+            </div>
           </div>
+          {platformBonusRows.length > 0 ? (
+            <div
+              className="grid flex-1 gap-3 min-w-0"
+              style={{
+                gridTemplateColumns: `repeat(${platformBonusRows.length}, minmax(0, 1fr))`,
+              }}
+            >
+              {platformBonusRows.map((row) =>
+                renderPlatformFlatFeeBonusRow(row),
+              )}
+            </div>
+          ) : null}
         </div>
 
-        {/* Status message */}
-        {isNearLimit ? (
+        {bonusPercentage >= 80 ? (
           <div className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
             <div className="flex-shrink-0 w-1 h-8 bg-yellow-500 rounded-full" />
             <div className="flex-1 text-xs">
@@ -938,7 +1108,7 @@ export function BudgetProgress({
           <p
             className={cn(
               "text-xs text-right",
-              isDark ? "text-gray-300" : "text-gray-600"
+              isDark ? "text-gray-300" : "text-gray-600",
             )}
           >
             {formatCurrency(remaining)} remaining (
@@ -956,7 +1126,7 @@ export function BudgetProgress({
         <span
           className={cn(
             "font-medium",
-            isDark ? "text-gray-300" : "text-gray-700"
+            isDark ? "text-gray-300" : "text-gray-700",
           )}
         >
           Budget Tracker
@@ -978,7 +1148,7 @@ export function BudgetProgress({
       <div
         className={cn(
           "relative w-full h-4 rounded-full overflow-hidden",
-          isDark ? "bg-[#FFFFFF42]" : "bg-gray-200"
+          isDark ? "bg-[#FFFFFF42]" : "bg-gray-200",
         )}
         title={
           hasFlatFeeBonus && bonusPaid > 0
@@ -1045,7 +1215,7 @@ export function BudgetProgress({
               left: `${Math.min(cpmPercentage, 100)}%`,
               width: `${Math.min(
                 bonusPercentageOfTotal,
-                Math.max(0, 100 - cpmPercentage)
+                Math.max(0, 100 - cpmPercentage),
               )}%`,
             }}
           />
@@ -1053,78 +1223,114 @@ export function BudgetProgress({
       </div>
 
       {/* Legend */}
-      <div
-        className={`grid gap-2 text-xs ${
-          hasFlatFeeBonus ? "grid-cols-2" : "grid-cols-1"
-        }`}
-      >
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
-          <div className="flex-1">
-            <p
-              className={cn(
-                "font-medium",
-                isDark ? "text-gray-300" : "text-gray-700"
-              )}
-            >
-              {contest.contest_type === "dual_rewards"
-                ? "CPM + Milestone earnings"
-                : contest.contest_type === "cpm"
-                  ? "CPM Earnings"
-                  : contest.contest_type === "milestone"
-                    ? "Milestone payouts"
-                    : "Contest Earnings"}
-            </p>
-            <p
-              className={cn(
-                "font-semibold",
-                isDark ? "text-white" : "text-gray-900"
-              )}
-            >
-              {formatCurrency(cpmPaid)}
-            </p>
-          </div>
-        </div>
-        {hasFlatFeeBonus && (
+      {platformBonusRows.length > 0 ? (
+        <div className="space-y-2 text-xs">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
             <div className="flex-1">
               <p
                 className={cn(
                   "font-medium",
-                  isDark ? "text-gray-300" : "text-gray-700"
+                  isDark ? "text-gray-300" : "text-gray-700",
                 )}
               >
-                {contest.contest_type === "milestone" ||
-                contest.contest_type === "dual_rewards"
-                  ? "Creator bonus"
-                  : "Flat Fee Bonus"}
+                {contest.contest_type === "cpm"
+                  ? "CPM Earnings"
+                  : "Contest Earnings"}
               </p>
               <p
                 className={cn(
                   "font-semibold",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
-                {formatCurrency(bonusPaid)}
-                {isCpmContestType(contest.contest_type) &&
-                  contest.contest_type !== "dual_rewards" &&
-                  bonusBudget &&
-                  bonusBudget > 0 && (
-                    <span
-                      className={cn(
-                        isDark ? "text-gray-400" : "text-gray-600",
-                        "font-normal ml-1"
-                      )}
-                    >
-                      / {formatCurrency(bonusBudget)}
-                    </span>
-                  )}
+                {formatCurrency(cpmPaid)}
               </p>
             </div>
           </div>
-        )}
-      </div>
+          <div
+            className="grid gap-3"
+            style={{
+              gridTemplateColumns: `repeat(${platformBonusRows.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {platformBonusRows.map((row) => renderPlatformFlatFeeBonusRow(row))}
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`grid gap-2 text-xs ${
+            hasFlatFeeBonus ? "grid-cols-2" : "grid-cols-1"
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
+            <div className="flex-1">
+              <p
+                className={cn(
+                  "font-medium",
+                  isDark ? "text-gray-300" : "text-gray-700",
+                )}
+              >
+                {contest.contest_type === "dual_rewards"
+                  ? "CPM + Milestone earnings"
+                  : contest.contest_type === "cpm"
+                    ? "CPM Earnings"
+                    : contest.contest_type === "milestone"
+                      ? "Milestone payouts"
+                      : "Contest Earnings"}
+              </p>
+              <p
+                className={cn(
+                  "font-semibold",
+                  isDark ? "text-white" : "text-gray-900",
+                )}
+              >
+                {formatCurrency(cpmPaid)}
+              </p>
+            </div>
+          </div>
+          {hasFlatFeeBonus && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+              <div className="flex-1">
+                <p
+                  className={cn(
+                    "font-medium",
+                    isDark ? "text-gray-300" : "text-gray-700",
+                  )}
+                >
+                  {contest.contest_type === "milestone" ||
+                  contest.contest_type === "dual_rewards"
+                    ? "Creator bonus"
+                    : "Flat Fee Bonus"}
+                </p>
+                <p
+                  className={cn(
+                    "font-semibold",
+                    isDark ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  {formatCurrency(bonusPaid)}
+                  {isCpmContestType(contest.contest_type) &&
+                    contest.contest_type !== "dual_rewards" &&
+                    bonusBudget &&
+                    bonusBudget > 0 && (
+                      <span
+                        className={cn(
+                          isDark ? "text-gray-400" : "text-gray-600",
+                          "font-normal ml-1",
+                        )}
+                      >
+                        / {formatCurrency(bonusBudget)}
+                      </span>
+                    )}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Status message */}
       {isNearLimit ? (
@@ -1143,7 +1349,7 @@ export function BudgetProgress({
         <p
           className={cn(
             "text-xs text-right",
-            isDark ? "text-gray-300" : "text-gray-600"
+            isDark ? "text-gray-300" : "text-gray-600",
           )}
         >
           {formatCurrency(remaining)} remaining (

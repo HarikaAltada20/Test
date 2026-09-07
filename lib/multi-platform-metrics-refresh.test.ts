@@ -9,6 +9,7 @@ import {
   resolveMetricsRefreshPlatformQueue,
   resolveSequentialRefreshPollIndex,
   youtubeScopeForMetricsRefresh,
+  platformsWithLocalSubmissionsForRefresh,
 } from "./multi-platform-metrics-refresh";
 import { ALL_PLATFORM_TAB } from "./video-platform-campaigns";
 
@@ -195,6 +196,32 @@ describe("youtubeScopeForMetricsRefresh", () => {
         forceBasic: true,
       }),
       "basic",
+    );
+  });
+
+  it("admin multi-platform still defaults to all without forceBasic", () => {
+    assert.equal(
+      youtubeScopeForMetricsRefresh({
+        campaignPlatformCount: 2,
+        forceBasic: false,
+      }),
+      "all",
+    );
+  });
+});
+
+describe("platformsWithLocalSubmissionsForRefresh", () => {
+  it("keeps only platforms with non-rejected submissions", () => {
+    assert.deepEqual(
+      platformsWithLocalSubmissionsForRefresh(
+        ["youtube", "instagram", "tiktok"],
+        [
+          { platform: "youtube", status: "verified" },
+          { platform: "instagram", status: "rejected" },
+          { platform: "tiktok", status: "pending" },
+        ],
+      ),
+      ["youtube", "tiktok"],
     );
   });
 });

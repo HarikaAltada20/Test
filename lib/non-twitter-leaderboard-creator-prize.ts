@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import {
+  isVideoContestPlatform,
+  parseVideoContestPlatforms,
+  resolveLeaderboardPrizeRankingPlan,
+  type VideoContestPlatform,
+} from "@/lib/video-platform-campaigns";
 
 export type LeaderboardPrize = { position?: number; amount?: number };
 
@@ -25,6 +31,7 @@ export type LeaderboardRankableSubmission = {
   views?: number | null;
   status?: string | null;
   paid?: boolean | null;
+  platform?: string | null;
 };
 
 /** Statuses that count toward non-Twitter leaderboard ranking (matches payout server). */
@@ -97,6 +104,75 @@ export function buildLeaderboardPrizeCentsBySubmissionId(
   return map;
 }
 
+function videoPlatformForSubmission(
+  platform?: string | null,
+  contestPlatformCsv?: string | null,
+): VideoContestPlatform | null {
+  const fromRow = parseVideoContestPlatforms(platform)[0];
+  if (fromRow) return fromRow;
+  if (isVideoContestPlatform(platform)) return platform;
+  return parseVideoContestPlatforms(contestPlatformCsv)[0] ?? null;
+}
+
+function mergePrizeMaps(maps: Array<Map<string, number>>): Map<string, number> {
+  const merged = new Map<string, number>();
+  for (const map of maps) {
+    for (const [id, cents] of map) merged.set(id, cents);
+  }
+  return merged;
+}
+
+/**
+ * Multi-platform leaderboard expected reward / pay:
+ * - Same prize structure on every platform → rank in the All tab (contest-wide).
+ * - Different prizes per platform → rank within each platform against that ladder.
+ */
+export function buildLeaderboardPrizeCentsBySubmissionIdForContest(params: {
+  rows: readonly LeaderboardRankableSubmission[];
+  details?: Record<string, unknown> | null;
+  contestPlatform?: string | null;
+  fallbackPrizes?: LeaderboardPrize[] | null;
+}): Map<string, number> {
+  const plan = resolveLeaderboardPrizeRankingPlan(
+    params.details,
+    params.contestPlatform,
+  );
+  const sharedPrizes =
+    plan.sharedPrizes.length > 0
+      ? plan.sharedPrizes
+      : Array.isArray(params.fallbackPrizes)
+        ? params.fallbackPrizes
+        : [];
+
+  if (plan.leaderboardPlatforms.length < 2 || plan.rankAcrossAllPlatforms) {
+    const scoped =
+      plan.leaderboardPlatforms.length >= 2
+        ? params.rows.filter((row) => {
+            const key = videoPlatformForSubmission(
+              row.platform,
+              params.contestPlatform,
+            );
+            return key != null && plan.leaderboardPlatforms.includes(key);
+          })
+        : params.rows;
+    return buildLeaderboardPrizeCentsBySubmissionId(scoped, sharedPrizes);
+  }
+
+  return mergePrizeMaps(
+    plan.leaderboardPlatforms.map((platform) => {
+      const platformRows = params.rows.filter(
+        (row) =>
+          videoPlatformForSubmission(row.platform, params.contestPlatform) ===
+          platform,
+      );
+      return buildLeaderboardPrizeCentsBySubmissionId(
+        platformRows,
+        plan.prizesByPlatform[platform] ?? [],
+      );
+    }),
+  );
+}
+
 export function sumPaidEarningsCents(
   rows: readonly { earnings?: number | null; paid?: boolean | null }[],
 ): number {
@@ -132,14 +208,19 @@ export function clearLeaderboardPrizeCacheForTests(): void {
 }
 
 /**
- * Load contest-wide leaderboard prize map (verified/paid by views).
+ * Load leaderboard prize map (verified/paid by views).
  * Always fetches fresh — money paths must not reuse rankings after concurrent
  * verify/pay changes the eligible set.
+ *
+ * Multi-platform: ranks All-tab when prizes match; otherwise ranks each
+ * platform against that platform's prize ladder.
  */
 export async function fetchNonTwitterLeaderboardPrizeMap(params: {
   supabaseAdmin: SupabaseClient;
   contestId: string;
   prizes: LeaderboardPrize[] | null | undefined;
+  contestBasedDetails?: Record<string, unknown> | null;
+  contestPlatform?: string | null;
   /**
    * @deprecated Ignored — ranking is always fresh to avoid overpay from stale ranks.
    */
@@ -150,7 +231,14 @@ export async function fetchNonTwitterLeaderboardPrizeMap(params: {
   error?: string;
 }> {
   const prizes = Array.isArray(params.prizes) ? params.prizes : [];
-  if (prizes.length === 0) {
+  const plan = resolveLeaderboardPrizeRankingPlan(
+    params.contestBasedDetails,
+    params.contestPlatform,
+  );
+  const hasPlatformPrizes = plan.leaderboardPlatforms.some(
+    (platform) => (plan.prizesByPlatform[platform] ?? []).length > 0,
+  );
+  if (prizes.length === 0 && plan.sharedPrizes.length === 0 && !hasPlatformPrizes) {
     return {
       prizeBySubmissionId: new Map(),
       rankingRows: [],
@@ -162,7 +250,7 @@ export async function fetchNonTwitterLeaderboardPrizeMap(params: {
   const { data: rows, error, truncated } = await fetchContestSubmissionsAllPages(
     params.supabaseAdmin,
     params.contestId,
-    "id, views, status, paid",
+    "id, views, status, paid, platform",
     {
       statusIn: ["verified", "paid"],
       order: { column: "views", ascending: false },
@@ -187,9 +275,13 @@ export async function fetchNonTwitterLeaderboardPrizeMap(params: {
   }
 
   const rankingRows = (rows || []) as LeaderboardRankableSubmission[];
-  const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionId(
-    rankingRows,
-    prizes,
+  const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionIdForContest(
+    {
+      rows: rankingRows,
+      details: params.contestBasedDetails,
+      contestPlatform: params.contestPlatform,
+      fallbackPrizes: prizes,
+    },
   );
 
   return { prizeBySubmissionId, rankingRows };
@@ -212,26 +304,38 @@ export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
   contestId: string;
   submissionId: string;
   views?: number | null;
+  platform?: string | null;
   prizes: LeaderboardPrize[] | null | undefined;
+  contestBasedDetails?: Record<string, unknown> | null;
+  contestPlatform?: string | null;
 }): Promise<{ prizeCents: number; rank: number | null; error?: string }> {
   const prizes = Array.isArray(params.prizes) ? params.prizes : [];
-  if (prizes.length === 0) {
-    return { prizeCents: 0, rank: null };
-  }
-
   const submissionId = String(params.submissionId);
   const fetched = await fetchNonTwitterLeaderboardPrizeMap({
     supabaseAdmin: params.supabaseAdmin,
     contestId: params.contestId,
     prizes,
+    contestBasedDetails: params.contestBasedDetails,
+    contestPlatform: params.contestPlatform,
   });
   if (fetched.error) {
     return { prizeCents: 0, rank: null, error: fetched.error };
   }
 
+  const rankingParams = {
+    details: params.contestBasedDetails,
+    contestPlatform: params.contestPlatform,
+    fallbackPrizes: prizes,
+  };
+
   const cachedPrize = fetched.prizeBySubmissionId.get(submissionId);
   if (cachedPrize != null) {
-    const ranked = rankLeaderboardSubmissionsByViews(fetched.rankingRows);
+    const ranked = rankLeaderboardSubmissionsForRankLookup(
+      fetched.rankingRows,
+      submissionId,
+      params.platform,
+      rankingParams,
+    );
     const rankIndex = ranked.findIndex((row) => String(row.id) === submissionId);
     return {
       prizeCents: cachedPrize,
@@ -247,17 +351,72 @@ export async function computeNonTwitterLeaderboardSubmissionPrizeCents(params: {
     views: params.views ?? 0,
     status: "verified",
     paid: false,
+    platform: params.platform ?? null,
   });
 
-  const ranked = rankLeaderboardSubmissionsByViews(list);
+  const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionIdForContest(
+    {
+      rows: list,
+      ...rankingParams,
+    },
+  );
+  const ranked = rankLeaderboardSubmissionsForRankLookup(
+    list,
+    submissionId,
+    params.platform,
+    rankingParams,
+  );
   const rankIndex = ranked.findIndex((row) => String(row.id) === submissionId);
   if (rankIndex < 0) {
     return { prizeCents: 0, rank: null };
   }
 
-  const rank = leaderboardRankAtIndex(ranked, rankIndex);
   return {
-    prizeCents: prizeCentsForLeaderboardRank(prizes, rank),
-    rank,
+    prizeCents: prizeBySubmissionId.get(submissionId) ?? 0,
+    rank: leaderboardRankAtIndex(ranked, rankIndex),
   };
+}
+
+function rankLeaderboardSubmissionsForRankLookup(
+  rows: readonly LeaderboardRankableSubmission[],
+  submissionId: string,
+  submissionPlatform: string | null | undefined,
+  rankingParams: {
+    details?: Record<string, unknown> | null;
+    contestPlatform?: string | null;
+  },
+): LeaderboardRankableSubmission[] {
+  const plan = resolveLeaderboardPrizeRankingPlan(
+    rankingParams.details,
+    rankingParams.contestPlatform,
+  );
+  if (plan.leaderboardPlatforms.length < 2 || plan.rankAcrossAllPlatforms) {
+    const scoped =
+      plan.leaderboardPlatforms.length >= 2
+        ? rows.filter((row) => {
+            const key = videoPlatformForSubmission(
+              row.platform,
+              rankingParams.contestPlatform,
+            );
+            return key != null && plan.leaderboardPlatforms.includes(key);
+          })
+        : rows;
+    return rankLeaderboardSubmissionsByViews(scoped);
+  }
+
+  const targetPlatform =
+    videoPlatformForSubmission(
+      rows.find((row) => String(row.id) === submissionId)?.platform ??
+        submissionPlatform,
+      rankingParams.contestPlatform,
+    ) ?? plan.leaderboardPlatforms[0];
+  return rankLeaderboardSubmissionsByViews(
+    rows.filter(
+      (row) =>
+        videoPlatformForSubmission(
+          row.platform,
+          rankingParams.contestPlatform,
+        ) === targetPlatform,
+    ),
+  );
 }

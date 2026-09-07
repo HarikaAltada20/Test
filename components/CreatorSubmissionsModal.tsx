@@ -89,7 +89,7 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import { buildFlatFeeBonusExpectedCentsBySubmissionId, getFlatFeeBonusCentsFromContest } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
@@ -1329,22 +1329,7 @@ export function CreatorSubmissionsModal({
   };
 
   // Get flat_fee_bonus from the correct nested location based on contest type
-  const getFlatFeeBonus = () => {
-    if (contest?.contest_type === "cpm") {
-      return (
-        (contest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus ||
-        0
-      );
-    } else if (contest?.contest_type === "leaderboard") {
-      return (
-        (contest?.contest_based_details as any)?.leaderboard_contest
-          ?.flat_fee_bonus || 0
-      );
-    }
-    return 0;
-  };
-
-  const flatFeeBonus = getFlatFeeBonus();
+  const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest);
   const hasFlatFeeBonus = flatFeeBonus > 0;
 
   const payoutAdjustment = parsePayoutAdjustment(
@@ -1406,9 +1391,7 @@ export function CreatorSubmissionsModal({
   const isTikTokContest = modalTablePlatforms.includes("tiktok");
   const isYouTubeContest = modalTablePlatforms.includes("youtube");
   const isVideoContest = contest?.contest_format !== "text_image";
-  const showModalPlatformColumn =
-    contestVideoPlatforms.length >= 2 &&
-    platformTab === ALL_PLATFORM_TAB;
+  const showModalPlatformColumn = contestVideoPlatforms.length >= 2;
 
   const getSubmissionContentViewHref = (submission: Submission) => {
     const link = submission.content_link || "";

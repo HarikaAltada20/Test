@@ -72,6 +72,32 @@ describe("getChargeableBudgetCents", () => {
     assert.equal(cents, 14_000);
   });
 
+  it("sums per-platform leaderboard bonus budgets when configured", () => {
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "leaderboard",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            total_prize: 10_000,
+            flat_fee_bonus: 200,
+            total_budget: 4_000,
+          },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            total_prize: 4_000,
+            flat_fee_bonus: 500,
+            total_budget: 2_500,
+          },
+        },
+      },
+    });
+    assert.equal(cents, 20_500);
+  });
+
   it("uses shared campaign budget once for multi-platform CPM", () => {
     const cents = getChargeableBudgetCents({
       id: "c1",

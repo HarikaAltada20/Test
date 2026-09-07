@@ -124,6 +124,10 @@ import {
   resourcesForPlatform,
   rulesHtmlForPlatform,
   withProjectedTopLevelPayout,
+  leaderboardPrizeStructuresDifferAcrossPlatforms,
+  resolveLeaderboardPrizeRankingPlan,
+  flatFeeBonusesDifferAcrossPlatforms,
+  leaderboardBonusBudgetsDifferAcrossPlatforms,
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
@@ -232,6 +236,50 @@ type LeaderboardEntry = {
   bonus_amount?: number | null;
   milestone_bonus_paid?: { views?: number; reels?: number } | null;
 };
+
+function uniqueVideoPlatformsFromValues(
+  values: Array<string | null | undefined>,
+): VideoContestPlatform[] {
+  const seen = new Set<VideoContestPlatform>();
+  const out: VideoContestPlatform[] = [];
+  for (const value of values) {
+    const platform = parseVideoContestPlatforms(value)[0];
+    if (!platform || seen.has(platform)) continue;
+    seen.add(platform);
+    out.push(platform);
+  }
+  return out;
+}
+
+function LeaderboardRowPlatformIcons({
+  values,
+  show,
+  tab = ALL_PLATFORM_TAB,
+}: {
+  values: Array<string | null | undefined>;
+  show: boolean;
+  tab?: PlatformTabValue;
+}) {
+  if (!show) return null;
+  let platforms = uniqueVideoPlatformsFromValues(values);
+  if (tab !== ALL_PLATFORM_TAB && isVideoContestPlatform(tab)) {
+    platforms = platforms.filter((platform) => platform === tab);
+  }
+  if (platforms.length === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-1 shrink-0">
+      {platforms.map((platform) => (
+        <span
+          key={platform}
+          className="inline-flex"
+          title={VIDEO_PLATFORM_LABELS[platform]}
+        >
+          {getPlatformIcon(platform, "sm")}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 // Store for generated dummy data to avoid re-computation if count doesn't change
 let generatedDummyDataCache: {
@@ -759,6 +807,9 @@ export function ContestClientPage({
   );
   const [detailPlatformTab, setDetailPlatformTab] =
     useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const [leaderboardPlatformTab, setLeaderboardPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const showLeaderboardPlatformIcons = detailVideoPlatforms.length >= 2;
   useEffect(() => {
     if (
       detailPlatformTab !== ALL_PLATFORM_TAB &&
@@ -766,7 +817,13 @@ export function ContestClientPage({
     ) {
       setDetailPlatformTab(ALL_PLATFORM_TAB);
     }
-  }, [detailVideoPlatforms, detailPlatformTab]);
+    if (
+      leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
+      !detailVideoPlatforms.includes(leaderboardPlatformTab)
+    ) {
+      setLeaderboardPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [detailVideoPlatforms, detailPlatformTab, leaderboardPlatformTab]);
   const detailScopedPlatform: VideoContestPlatform | null =
     detailPlatformTab !== ALL_PLATFORM_TAB &&
     isVideoContestPlatform(detailPlatformTab)
@@ -836,6 +893,112 @@ export function ContestClientPage({
   const showDetailPayoutPlatformLabels =
     detailVideoPlatforms.length >= 2 &&
     detailPlatformTab === ALL_PLATFORM_TAB;
+  const detailLeaderboardPrizesDiffer = useMemo(
+    () =>
+      leaderboardPrizeStructuresDifferAcrossPlatforms(
+        detailPersistedCampaigns,
+        detailVideoPlatforms,
+      ),
+    [detailPersistedCampaigns, detailVideoPlatforms],
+  );
+  const leaderboardPrizeRankingPlan = useMemo(
+    () =>
+      resolveLeaderboardPrizeRankingPlan(
+        (contest?.contest_based_details as Record<string, unknown>) || null,
+        contest?.platform,
+      ),
+    [contest?.contest_based_details, contest?.platform],
+  );
+  const activeLeaderboardPrizes = useMemo((): PrizeInfo[] => {
+    const root = (contest?.contest_based_details?.leaderboard_contest?.prizes ||
+      []) as PrizeInfo[];
+    if (
+      leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
+      isVideoContestPlatform(leaderboardPlatformTab)
+    ) {
+      const scoped =
+        leaderboardPrizeRankingPlan.prizesByPlatform[leaderboardPlatformTab];
+      if (Array.isArray(scoped) && scoped.length > 0) {
+        return scoped as PrizeInfo[];
+      }
+    }
+    if (leaderboardPrizeRankingPlan.sharedPrizes.length > 0) {
+      return leaderboardPrizeRankingPlan.sharedPrizes as PrizeInfo[];
+    }
+    return root;
+  }, [
+    contest?.contest_based_details,
+    leaderboardPlatformTab,
+    leaderboardPrizeRankingPlan,
+  ]);
+  const detailFlatFeeBonusesDiffer = useMemo(
+    () =>
+      flatFeeBonusesDifferAcrossPlatforms(
+        detailPersistedCampaigns,
+        detailVideoPlatforms,
+      ),
+    [detailPersistedCampaigns, detailVideoPlatforms],
+  );
+  const detailBonusBudgetsDiffer = useMemo(
+    () =>
+      leaderboardBonusBudgetsDifferAcrossPlatforms(
+        detailPersistedCampaigns,
+        detailVideoPlatforms,
+      ),
+    [detailPersistedCampaigns, detailVideoPlatforms],
+  );
+  const detailUniformPayoutContest = useMemo(() => {
+    if (!contest) return contest;
+    if (detailScopedPlatform) return detailContest;
+    if (
+      detailVideoPlatforms.length >= 2 &&
+      detailPersistedCampaigns[detailVideoPlatforms[0]]
+    ) {
+      return buildDetailPayoutContest(detailVideoPlatforms[0]);
+    }
+    return detailContest;
+  }, [
+    contest,
+    detailScopedPlatform,
+    detailContest,
+    detailVideoPlatforms,
+    detailPersistedCampaigns,
+    buildDetailPayoutContest,
+  ]);
+  const showDetailPrizeByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    detailLeaderboardPrizesDiffer;
+  const showDetailFlatFeeByPlatform =
+    detailVideoPlatforms.length >= 2 &&
+    detailPlatformTab === ALL_PLATFORM_TAB &&
+    (detailFlatFeeBonusesDiffer || detailBonusBudgetsDiffer);
+  const detailPrizeContestList = showDetailPrizeByPlatform
+    ? detailVideoPlatforms.map((platform) => ({
+        platform,
+        contest: buildDetailPayoutContest(platform),
+        showLabel: true,
+      }))
+    : [
+        {
+          platform: detailScopedPlatform,
+          contest: detailUniformPayoutContest,
+          showLabel: false,
+        },
+      ];
+  const detailFlatFeeContestList = showDetailFlatFeeByPlatform
+    ? detailVideoPlatforms.map((platform) => ({
+        platform,
+        contest: buildDetailPayoutContest(platform),
+        showLabel: true,
+      }))
+    : [
+        {
+          platform: detailScopedPlatform,
+          contest: detailUniformPayoutContest,
+          showLabel: false,
+        },
+      ];
   const detailPlatformLabel =
     detailScopedPlatform != null
       ? VIDEO_PLATFORM_LABELS[detailScopedPlatform]
@@ -1510,10 +1673,24 @@ export function ContestClientPage({
       contest?.platform?.toLowerCase() !== "x" &&
       leaderboardDisplayMode === "creator" &&
       creatorWiseLeaderboard.length > 0;
-    if (creatorGroup?.submissions?.length) return creatorGroup.submissions;
-    if (isNonTwitterCreatorWise && selectedCreatorSubmissions.length > 0)
-      return selectedCreatorSubmissions;
-    return creatorGroup?.submissions || [];
+    let videos =
+      creatorGroup?.submissions?.length
+        ? creatorGroup.submissions
+        : isNonTwitterCreatorWise && selectedCreatorSubmissions.length > 0
+          ? selectedCreatorSubmissions
+          : creatorGroup?.submissions || [];
+    if (
+      showLeaderboardPlatformIcons &&
+      leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
+      isVideoContestPlatform(leaderboardPlatformTab)
+    ) {
+      videos = videos.filter(
+        (video: { platform?: string | null }) =>
+          parseVideoContestPlatforms(video.platform)[0] ===
+          leaderboardPlatformTab,
+      );
+    }
+    return videos;
   }, [
     selectedCreatorId,
     groupedLeaderboardByCreator,
@@ -1521,6 +1698,8 @@ export function ContestClientPage({
     leaderboardDisplayMode,
     creatorWiseLeaderboard.length,
     selectedCreatorSubmissions,
+    showLeaderboardPlatformIcons,
+    leaderboardPlatformTab,
   ]);
 
   const handleRefreshMetrics = async () => {
@@ -1885,8 +2064,19 @@ export function ContestClientPage({
     if (!silent) setLoadingLeaderboard(true);
 
     if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
-      const { entries: allEntries } =
+      const { entries: dummyEntries } =
         generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
+      const platformFilter =
+        leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
+        isVideoContestPlatform(leaderboardPlatformTab)
+          ? leaderboardPlatformTab
+          : null;
+      const allEntries = platformFilter
+        ? dummyEntries.filter(
+            (entry) =>
+              String(entry.platform || "").toLowerCase() === platformFilter,
+          )
+        : dummyEntries;
       const totalEntries = allEntries.length;
       const totalPages = Math.ceil(totalEntries / leaderboardItemsPerPage);
       const startIndex = (pageToFetch - 1) * leaderboardItemsPerPage;
@@ -1904,7 +2094,7 @@ export function ContestClientPage({
 
           // Mark as loaded only after successful fetch
           const platform = contest?.platform || "unknown";
-          const contestKey = `${contestId}-${platform}`;
+          const contestKey = `${contestId}-${platform}-${leaderboardPlatformTab}`;
           leaderboardLoadedRef.current = contestKey;
 
           // If we got data, reset the empty refetch flag
@@ -1926,6 +2116,12 @@ export function ContestClientPage({
         limit: String(leaderboardItemsPerPage),
       });
       if (groupByCreator) params.set("groupBy", "creator");
+      if (
+        leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
+        isVideoContestPlatform(leaderboardPlatformTab)
+      ) {
+        params.set("platform", leaderboardPlatformTab);
+      }
       // Bypass server cache when user just submitted (to avoid stale empty data)
       if (justSubmitted) params.set("fresh", "1");
       const response = await fetch(
@@ -1964,6 +2160,8 @@ export function ContestClientPage({
                 r.most_verified_bonus_paid_reels_cents ?? 0,
               display_status: r.display_status ?? null,
               pending_submission_count: r.pending_submission_count ?? 0,
+              platform: r.platform ?? null,
+              platforms: Array.isArray(r.platforms) ? r.platforms : [],
             })),
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
@@ -1984,7 +2182,7 @@ export function ContestClientPage({
         setContestType(data.contestType || null);
 
         const platform = contest?.platform || "unknown";
-        const contestKey = `${contestId}-${platform}`;
+        const contestKey = `${contestId}-${platform}-${leaderboardPlatformTab}`;
         leaderboardLoadedRef.current = contestKey;
       }
     } catch (err: any) {
@@ -2749,7 +2947,9 @@ export function ContestClientPage({
     const isTwitterContest =
       contest.platform?.toLowerCase() === "twitter" ||
       contest.platform?.toLowerCase() === "x";
-    const contestKey = `${contestId}-${contest.platform}`;
+    const contestKey = isTwitterContest
+      ? `${contestId}-${contest.platform}`
+      : `${contestId}-${contest.platform}-${leaderboardPlatformTab}`;
     const hasLoaded = leaderboardLoadedRef.current === contestKey;
 
     // Only fetch if we haven't loaded for this contest yet
@@ -2779,7 +2979,7 @@ export function ContestClientPage({
         // Note: myRankFetchedRef will be set in fetchMySubmissionData after fetch completes
       }
     }
-  }, [activeTab, contestId, contest]);
+  }, [activeTab, contestId, contest, leaderboardPlatformTab]);
   // Fetch user profile data for link processing
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -2892,7 +3092,7 @@ export function ContestClientPage({
     if (showCreatorVideosModal) {
       setCreatorVideosCurrentPage(1);
     }
-  }, [showCreatorVideosModal]);
+  }, [showCreatorVideosModal, leaderboardPlatformTab]);
 
   const isTwitterTextImageContest =
     contest?.platform === "twitter" &&
@@ -5136,10 +5336,19 @@ export function ContestClientPage({
                     {/* Bonus Information */}
                     <div className="space-y-3">
                       {/* Bonus Budget Tracker for Leaderboard with flat_fee_bonus */}
-                      {contest.contest_type === "leaderboard" &&
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus && (
+                      {detailFlatFeeContestList.map((slice) => {
+                        const lb =
+                          slice.contest?.contest_based_details
+                            ?.leaderboard_contest;
+                        if (
+                          slice.contest?.contest_type !== "leaderboard" ||
+                          !lb?.flat_fee_bonus
+                        ) {
+                          return null;
+                        }
+                        return (
                           <div
+                            key={`bonus-budget-${slice.platform ?? "contest"}`}
                             className={cn(
                               "bg-gradient-to-r rounded-lg border p-4",
                               isDark
@@ -5162,6 +5371,12 @@ export function ContestClientPage({
                               >
                                 Bonus Budget
                               </span>
+                              {slice.showLabel && slice.platform ? (
+                                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                  {getPlatformIcon(slice.platform, "sm")}
+                                  {VIDEO_PLATFORM_LABELS[slice.platform]}
+                                </span>
+                              ) : null}
                               <div className="group relative">
                                 <Info
                                   className={cn(
@@ -5206,14 +5421,10 @@ export function ContestClientPage({
                                       : "text-green-900",
                                   )}
                                 >
-                                  {formatMoney(
-                                    contest.contest_based_details
-                                      .leaderboard_contest.flat_fee_bonus,
-                                  )}
+                                  {formatMoney(lb.flat_fee_bonus)}
                                 </div>
                               </div>
-                              {contest.contest_based_details.leaderboard_contest
-                                .total_budget && (
+                              {lb.total_budget ? (
                                 <div
                                   className={cn(
                                     "rounded-lg p-3 border",
@@ -5240,22 +5451,28 @@ export function ContestClientPage({
                                         : "text-green-900",
                                     )}
                                   >
-                                    {formatMoney(
-                                      contest.contest_based_details
-                                        .leaderboard_contest.total_budget,
-                                    )}
+                                    {formatMoney(lb.total_budget)}
                                   </div>
                                 </div>
-                              )}
+                              ) : null}
                             </div>
                           </div>
-                        )}
+                        );
+                      })}
 
                       {/* Flat Fee Bonus for CPM contests */}
-                      {isCpmContestType(detailContest?.contest_type) &&
-                        detailContest?.contest_based_details?.cpm_contest
-                          ?.flat_fee_bonus && (
+                      {detailFlatFeeContestList.map((slice) => {
+                        const cpm =
+                          slice.contest?.contest_based_details?.cpm_contest;
+                        if (
+                          !isCpmContestType(slice.contest?.contest_type) ||
+                          !cpm?.flat_fee_bonus
+                        ) {
+                          return null;
+                        }
+                        return (
                           <div
+                            key={`cpm-flat-fee-${slice.platform ?? "contest"}`}
                             className={cn(
                               "p-3 rounded-lg border transition-all duration-300",
                               isDark
@@ -5263,6 +5480,14 @@ export function ContestClientPage({
                                 : "bg-gradient-to-r from-green-50 to-green-50 border-green-200",
                             )}
                           >
+                            {slice.showLabel && slice.platform ? (
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
+                                {getPlatformIcon(slice.platform, "sm")}
+                                <span>
+                                  {VIDEO_PLATFORM_LABELS[slice.platform]}
+                                </span>
+                              </div>
+                            ) : null}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
                                 <Gift
@@ -5316,10 +5541,7 @@ export function ContestClientPage({
                                       : "text-green-900",
                                   )}
                                 >
-                                  {formatMoney(
-                                    detailContest.contest_based_details.cpm_contest
-                                      .flat_fee_bonus,
-                                  )}
+                                  {formatMoney(cpm.flat_fee_bonus)}
                                 </div>
                                 <div
                                   className={cn(
@@ -5333,9 +5555,7 @@ export function ContestClientPage({
                                 </div>
                               </div>
                             </div>
-                            {/* Flat Fee Bonus Cap (for CPM contests) */}
-                            {detailContest.contest_based_details?.cpm_contest
-                              ?.flat_fee_bonus_cap && (
+                            {cpm.flat_fee_bonus_cap ? (
                               <div className="mt-3">
                                 <p
                                   className={cn(
@@ -5346,10 +5566,7 @@ export function ContestClientPage({
                                   )}
                                 >
                                   💰 Flat Fee Bonus Cap:{" "}
-                                  {formatMoney(
-                                    detailContest.contest_based_details.cpm_contest
-                                      .flat_fee_bonus_cap,
-                                  )}
+                                  {formatMoney(cpm.flat_fee_bonus_cap)}
                                 </p>
                                 <p
                                   className={cn(
@@ -5364,9 +5581,10 @@ export function ContestClientPage({
                                   no more flat fee bonuses will be given.
                                 </p>
                               </div>
-                            )}
+                            ) : null}
                           </div>
-                        )}
+                        );
+                      })}
 
                       {/* Multiple Submissions */}
                       {(contest as any).multiple_submissions_enabled && (
@@ -5603,9 +5821,12 @@ export function ContestClientPage({
                 </div>
 
                 {/* Comprehensive Prize Distribution Section for Leaderboard Contests */}
-                {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.prizes && (
+                {detailPrizeContestList.some(
+                  (slice) =>
+                    slice.contest?.contest_type === "leaderboard" &&
+                    slice.contest?.contest_based_details?.leaderboard_contest
+                      ?.prizes,
+                ) && (
                     <div
                       id="prize-structure"
                       ref={(el) => {
@@ -5642,6 +5863,30 @@ export function ContestClientPage({
                             </p>
                           </div>
                         </div>
+
+                        {detailPrizeContestList.map((slice) => {
+                          const lb =
+                            slice.contest?.contest_based_details
+                              ?.leaderboard_contest;
+                          if (
+                            slice.contest?.contest_type !== "leaderboard" ||
+                            !lb?.prizes
+                          ) {
+                            return null;
+                          }
+                          return (
+                            <div
+                              key={`creator-prize-${slice.platform ?? "contest"}`}
+                              className="space-y-6"
+                            >
+                              {slice.showLabel && slice.platform ? (
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                  {getPlatformIcon(slice.platform, "sm")}
+                                  <span>
+                                    {VIDEO_PLATFORM_LABELS[slice.platform]}
+                                  </span>
+                                </div>
+                              ) : null}
 
                         {/* Prize Summary Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -5681,10 +5926,7 @@ export function ContestClientPage({
                                       : "text-purple-900",
                                   )}
                                 >
-                                  {formatMoney(
-                                    contest.contest_based_details
-                                      .leaderboard_contest.total_prize,
-                                  )}
+                                  {formatMoney(lb.total_prize)}
                                 </div>
                               </div>
                             </div>
@@ -5719,138 +5961,12 @@ export function ContestClientPage({
                                     isDark ? "text-blue-200" : "text-blue-900",
                                   )}
                                 >
-                                  {
-                                    contest.contest_based_details
-                                      .leaderboard_contest.winner_count
-                                  }
+                                  {lb.winner_count}
                                 </div>
                               </div>
                             </div>
                           </div>
-                          {contest.contest_based_details.leaderboard_contest
-                            .flat_fee_bonus && (
-                            <div
-                              className={cn(
-                                "bg-gradient-to-r rounded-lg p-4 border",
-                                isDark
-                                  ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
-                                  : "from-green-50 to-emerald-50 border-green-200",
-                              )}
-                            >
-                              <div className="flex items-center gap-3">
-                                <Gift
-                                  className={cn(
-                                    "h-6 w-6",
-                                    isDark
-                                      ? "text-green-400"
-                                      : "text-green-600",
-                                  )}
-                                />
-                                <div>
-                                  <div
-                                    className={cn(
-                                      "text-sm font-medium",
-                                      isDark
-                                        ? "text-green-200"
-                                        : "text-green-800",
-                                    )}
-                                  >
-                                    Bonus Budget
-                                  </div>
-                                  <div
-                                    className={cn(
-                                      "text-2xl font-bold",
-                                      isDark
-                                        ? "text-green-100"
-                                        : "text-green-900",
-                                    )}
-                                  >
-                                    {formatMoney(
-                                      contest.contest_based_details
-                                        .leaderboard_contest.flat_fee_bonus,
-                                    )}
-                                  </div>
-                                  <div
-                                    className={cn(
-                                      "text-xs mt-0.5",
-                                      isDark
-                                        ? "text-green-300"
-                                        : "text-green-700",
-                                    )}
-                                  >
-                                    per verified submission
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
                         </div>
-
-                        {/* Bonus Budget Note */}
-                        {contest.contest_based_details.leaderboard_contest
-                          .flat_fee_bonus && (
-                          <div
-                            className={cn(
-                              "mb-6 p-4 border rounded-lg",
-                              isDark
-                                ? "bg-green-900/10 border-green-700/50"
-                                : "bg-green-50 border-green-200",
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <Gift
-                                className={cn(
-                                  "h-5 w-5 mt-0.5 flex-shrink-0",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              />
-                              <div>
-                                <p
-                                  className={cn(
-                                    "text-sm font-semibold mb-1",
-                                    isDark
-                                      ? "text-green-200"
-                                      : "text-green-900",
-                                  )}
-                                >
-                                  Additional Bonus Earnings
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-sm",
-                                    isDark
-                                      ? "text-green-300"
-                                      : "text-green-800",
-                                  )}
-                                >
-                                  Every verified submission receives{" "}
-                                  <span className="font-bold">
-                                    {formatMoney(
-                                      contest.contest_based_details
-                                        .leaderboard_contest.flat_fee_bonus,
-                                    )}
-                                  </span>{" "}
-                                  as a guaranteed bonus, on top of any prizes
-                                  won from the leaderboard positions above
-                                  {contest.contest_based_details
-                                    .leaderboard_contest.total_budget && (
-                                    <>
-                                      , until the bonus budget of{" "}
-                                      <span className="font-bold">
-                                        {formatMoney(
-                                          contest.contest_based_details
-                                            .leaderboard_contest.total_budget,
-                                        )}
-                                      </span>{" "}
-                                      is reached
-                                    </>
-                                  )}
-                                  .
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
 
                         {/* Prize Distribution List */}
                         <div>
@@ -5878,13 +5994,13 @@ export function ContestClientPage({
                                   : "divide-slate-200",
                               )}
                             >
-                              {contest.contest_based_details.leaderboard_contest.prizes
+                              {[...lb.prizes]
                                 .sort(
                                   (a: any, b: any) => a.position - b.position,
                                 )
                                 .map((prize: any, index: number) => (
                                   <div
-                                    key={index}
+                                    key={`${slice.platform ?? "contest"}-${prize.position}-${index}`}
                                     className={cn(
                                       "p-4 transition-colors",
                                       isDark
@@ -5948,13 +6064,12 @@ export function ContestClientPage({
                                               : "text-slate-600",
                                           )}
                                         >
-                                          {(
-                                            (prize.amount /
-                                              contest.contest_based_details
-                                                .leaderboard_contest
-                                                .total_prize) *
-                                            100
-                                          ).toFixed(1)}
+                                          {lb.total_prize
+                                            ? (
+                                                (prize.amount / lb.total_prize) *
+                                                100
+                                              ).toFixed(1)
+                                            : "0.0"}
                                           % of total
                                         </div>
                                       </div>
@@ -5964,6 +6079,148 @@ export function ContestClientPage({
                             </div>
                           </div>
                         </div>
+                            </div>
+                          );
+                        })}
+
+                        {detailFlatFeeContestList.map((slice) => {
+                          const lb =
+                            slice.contest?.contest_based_details
+                              ?.leaderboard_contest;
+                          if (
+                            slice.contest?.contest_type !== "leaderboard" ||
+                            !lb?.flat_fee_bonus
+                          ) {
+                            return null;
+                          }
+                          return (
+                            <div
+                              key={`creator-prize-bonus-${slice.platform ?? "contest"}`}
+                              className="space-y-6 mt-6"
+                            >
+                              {slice.showLabel && slice.platform ? (
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                  {getPlatformIcon(slice.platform, "sm")}
+                                  <span>
+                                    {VIDEO_PLATFORM_LABELS[slice.platform]}
+                                  </span>
+                                </div>
+                              ) : null}
+                          <div
+                            className={cn(
+                              "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "bg-gradient-to-r rounded-lg p-4 border",
+                                isDark
+                                  ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
+                                  : "from-green-50 to-emerald-50 border-green-200",
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                <Gift
+                                  className={cn(
+                                    "h-6 w-6",
+                                    isDark
+                                      ? "text-green-400"
+                                      : "text-green-600",
+                                  )}
+                                />
+                                <div>
+                                  <div
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark
+                                        ? "text-green-200"
+                                        : "text-green-800",
+                                    )}
+                                  >
+                                    Bonus Budget
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "text-2xl font-bold",
+                                      isDark
+                                        ? "text-green-100"
+                                        : "text-green-900",
+                                    )}
+                                  >
+                                    {formatMoney(lb.flat_fee_bonus)}
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "text-xs mt-0.5",
+                                      isDark
+                                        ? "text-green-300"
+                                        : "text-green-700",
+                                    )}
+                                  >
+                                    per verified submission
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "mb-2 p-4 border rounded-lg",
+                              isDark
+                                ? "bg-green-900/10 border-green-700/50"
+                                : "bg-green-50 border-green-200",
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              <Gift
+                                className={cn(
+                                  "h-5 w-5 mt-0.5 flex-shrink-0",
+                                  isDark ? "text-green-400" : "text-green-600",
+                                )}
+                              />
+                              <div>
+                                <p
+                                  className={cn(
+                                    "text-sm font-semibold mb-1",
+                                    isDark
+                                      ? "text-green-200"
+                                      : "text-green-900",
+                                  )}
+                                >
+                                  Additional Bonus Earnings
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark
+                                      ? "text-green-300"
+                                      : "text-green-800",
+                                  )}
+                                >
+                                  Every verified submission receives{" "}
+                                  <span className="font-bold">
+                                    {formatMoney(lb.flat_fee_bonus)}
+                                  </span>{" "}
+                                  as a guaranteed bonus, on top of any prizes
+                                  won from the leaderboard positions above
+                                  {lb.total_budget ? (
+                                    <>
+                                      , until the bonus budget of{" "}
+                                      <span className="font-bold">
+                                        {formatMoney(lb.total_budget)}
+                                      </span>{" "}
+                                      is reached
+                                    </>
+                                  ) : null}
+                                  .
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                            </div>
+                          );
+                        })}
+
                       </div>
                     </div>
                   )}
@@ -8428,6 +8685,38 @@ export function ContestClientPage({
                                             >
                                               {displayName || "You"}
                                             </p>
+                                            <LeaderboardRowPlatformIcons
+                                              show={
+                                                showLeaderboardPlatformIcons &&
+                                                !isTwitter
+                                              }
+                                              values={
+                                                isCreatorWiseMyCard
+                                                  ? [
+                                                      ...eligibleSubs.map(
+                                                        (submission: {
+                                                          platform?:
+                                                            | string
+                                                            | null;
+                                                        }) =>
+                                                          submission.platform,
+                                                      ),
+                                                      ...(
+                                                        myCreatorGroupOnPage?.submissions ||
+                                                        []
+                                                      ).map(
+                                                        (submission: {
+                                                          platform?:
+                                                            | string
+                                                            | null;
+                                                        }) =>
+                                                          submission.platform,
+                                                      ),
+                                                    ]
+                                                  : [displayEntry.platform]
+                                              }
+                                              tab={leaderboardPlatformTab}
+                                            />
                                             {!isTwitter && (
                                               <span
                                                 className={cn(
@@ -8848,19 +9137,14 @@ export function ContestClientPage({
                                     }
                                   } else if (
                                     contest.contest_type === "leaderboard" &&
-                                    Array.isArray(
-                                      contest.contest_based_details
-                                        ?.leaderboard_contest?.prizes,
-                                    ) &&
+                                    Array.isArray(activeLeaderboardPrizes) &&
+                                    activeLeaderboardPrizes.length > 0 &&
                                     prizeRankForZone != null
                                   ) {
-                                    const prizeInfo = (
-                                      contest.contest_based_details
-                                        .leaderboard_contest
-                                        .prizes as PrizeInfo[]
-                                    ).find(
-                                      (p) => p.position === prizeRankForZone,
-                                    );
+                                    const prizeInfo =
+                                      activeLeaderboardPrizes.find(
+                                        (p) => p.position === prizeRankForZone,
+                                      );
                                     if (prizeInfo) {
                                       const prizeText =
                                         contest.status === "active"
@@ -10057,17 +10341,11 @@ export function ContestClientPage({
                                       }
                                     } else if (
                                       contest.contest_type === "leaderboard" &&
-                                      Array.isArray(
-                                        contest.contest_based_details
-                                          ?.leaderboard_contest?.prizes,
-                                      )
+                                      Array.isArray(activeLeaderboardPrizes) &&
+                                      activeLeaderboardPrizes.length > 0
                                     ) {
                                       const prizeInfo = actualRank
-                                        ? (
-                                            contest.contest_based_details
-                                              .leaderboard_contest
-                                              .prizes as PrizeInfo[]
-                                          ).find(
+                                        ? activeLeaderboardPrizes.find(
                                             (p) => p.position === actualRank,
                                           )
                                         : null;
@@ -10184,6 +10462,17 @@ export function ContestClientPage({
                                                       video.user_platform_username
                                                     : video.user_platform_username}
                                                 </p>
+                                                <LeaderboardRowPlatformIcons
+                                                  show={
+                                                    showLeaderboardPlatformIcons &&
+                                                    contest?.platform?.toLowerCase() !==
+                                                      "twitter" &&
+                                                    contest?.platform?.toLowerCase() !==
+                                                      "x"
+                                                  }
+                                                  values={[video.platform]}
+                                                  tab={leaderboardPlatformTab}
+                                                />
                                                 {renderVerificationBadges(video)}
                                               </div>
                                               <p
@@ -10392,7 +10681,9 @@ export function ContestClientPage({
                                     <span className="text-green-700 font-semibold">
                                       {effectiveLeaderboardTotalEntries} active
                                     </span>
-                                    {creatorDetailSubmissionTotal >
+                                    {leaderboardPlatformTab ===
+                                      ALL_PLATFORM_TAB &&
+                                      creatorDetailSubmissionTotal >
                                       effectiveLeaderboardTotalEntries &&
                                       !(
                                         leaderboardDisplayMode === "creator" &&
@@ -10444,6 +10735,19 @@ export function ContestClientPage({
                         </div>
                       </div>
                     )}
+                    {showLeaderboardPlatformIcons &&
+                      contest?.platform?.toLowerCase() !== "twitter" &&
+                      contest?.platform?.toLowerCase() !== "x" && (
+                        <div className="mb-4">
+                          <ContestDetailPlatformTabs
+                            platforms={detailVideoPlatforms}
+                            active={leaderboardPlatformTab}
+                            onChange={setLeaderboardPlatformTab}
+                            isDark={isDark}
+                            fullWidth
+                          />
+                        </div>
+                      )}
                     {/* Render leaderboard based on display mode */}
                     {leaderboardDisplayMode === "creator" &&
                     groupedLeaderboardByCreator
@@ -10847,13 +11151,10 @@ export function ContestClientPage({
                                 }
                               } else if (
                                 contest.contest_type === "leaderboard" &&
-                                Array.isArray(
-                                  contest.contest_based_details
-                                    ?.leaderboard_contest?.prizes,
-                                )
+                                Array.isArray(activeLeaderboardPrizes) &&
+                                activeLeaderboardPrizes.length > 0
                               ) {
-                                const prizes = contest.contest_based_details
-                                  .leaderboard_contest.prizes as PrizeInfo[];
+                                const prizes = activeLeaderboardPrizes;
                                 // Sum prize for each of this creator's submissions
                                 const submissionRanks = (
                                   creatorGroup as {
@@ -11059,6 +11360,34 @@ export function ContestClientPage({
                                             >
                                               {twitterDisplayName}
                                             </span>
+                                            <LeaderboardRowPlatformIcons
+                                              show={
+                                                showLeaderboardPlatformIcons &&
+                                                !isTwitter
+                                              }
+                                              values={[
+                                                ...(
+                                                  (
+                                                    creatorGroup as {
+                                                      platforms?: string[];
+                                                    }
+                                                  ).platforms || []
+                                                ),
+                                                ...(
+                                                  creatorGroup.submissions || []
+                                                ).map(
+                                                  (submission: {
+                                                    platform?: string | null;
+                                                  }) => submission.platform,
+                                                ),
+                                                (
+                                                  creatorGroup as {
+                                                    platform?: string | null;
+                                                  }
+                                                ).platform,
+                                              ]}
+                                              tab={leaderboardPlatformTab}
+                                            />
                                             {renderVerificationBadges(creatorGroup)}
                                           </div>
 
@@ -11681,6 +12010,14 @@ export function ContestClientPage({
                                         >
                                           {entry.user_platform_username}
                                         </p>
+                                        <LeaderboardRowPlatformIcons
+                                          show={
+                                            showLeaderboardPlatformIcons &&
+                                            !entryIsTwitter
+                                          }
+                                          values={[entry.platform]}
+                                          tab={leaderboardPlatformTab}
+                                        />
                                         {renderVerificationBadges(entry)}
                                       </div>
                                       <p

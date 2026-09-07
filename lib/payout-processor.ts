@@ -172,7 +172,14 @@ export async function processQueuedPayouts(
               contestId: sub.contest_id,
               submissionId: sub.id,
               views: sub.views,
+              platform: (sub as any).platform,
               prizes,
+              contestBasedDetails:
+                ((contest as any)?.contest_based_details as Record<
+                  string,
+                  unknown
+                >) || null,
+              contestPlatform: (contest as any)?.platform,
             });
           if (prizeResult.error) {
             throw new Error(

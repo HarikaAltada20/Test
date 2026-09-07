@@ -13,7 +13,6 @@ import {
   computeMilestoneCreatorBonusExpectedCentsFromDetails,
 } from "@/lib/milestone-contest-expected-spend";
 import {
-  calculateLeaderboardBudgetSpent,
   calculateTwitterCpmBudgetSpent,
   type Submission,
 } from "@/lib/contest-utils-client";
@@ -24,7 +23,10 @@ import {
   resolveContestPoolBudgetCents,
   resolveMaxEarningsCentsForSubmission,
   isKeyedMaxEarningsMap,
+  sumPersistedPlatformCampaignsChargeableCents,
 } from "@/lib/video-platform-campaigns";
+import { buildLeaderboardPrizeCentsBySubmissionIdForContest } from "@/lib/non-twitter-leaderboard-creator-prize";
+import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 
 export type BudgetTileMode = "filled" | "paid";
 
@@ -101,6 +103,8 @@ export function getCampaignBudgetCents(contest: ContestBudgetTileInput): number 
   const type = contest.contest_type;
 
   if (type === "leaderboard") {
+    const multi = sumPersistedPlatformCampaignsChargeableCents(details);
+    if (multi != null && multi > 0) return multi;
     const lb = details?.leaderboard_contest as
       | { total_budget?: number; total_prize?: number }
       | undefined;
@@ -115,26 +119,37 @@ export function getCampaignBudgetCents(contest: ContestBudgetTileInput): number 
 }
 
 function computeLeaderboardPrizePoolCents(
+  contest: ContestBudgetTileInput,
   submissions: BudgetTileSubmission[],
-  prizes: Array<{ position: number; amount: number }>,
   paidOnly: boolean,
 ): number {
-  if (!prizes.length) return 0;
-
+  const details =
+    (contest.contest_based_details as Record<string, unknown> | null) ?? null;
+  const fallbackPrizes = (
+    details?.leaderboard_contest as
+      | { prizes?: Array<{ position: number; amount: number }> }
+      | undefined
+  )?.prizes;
   const pool = relevantSubmissions(submissions);
-  const ranked = [...pool].sort(
-    (a, b) => (b.views || 0) - (a.views || 0),
+  const prizeBySubmissionId = buildLeaderboardPrizeCentsBySubmissionIdForContest(
+    {
+      rows: pool.map((s) => ({
+        id: String(s.id || ""),
+        views: s.views,
+        status: s.status,
+        paid: s.paid,
+        platform: s.platform,
+      })),
+      details,
+      contestPlatform: contest.platform,
+      fallbackPrizes: fallbackPrizes || [],
+    },
   );
 
-  const candidates = paidOnly
-    ? ranked.filter((s) => isPaidLike(s))
-    : ranked;
-
   let total = 0;
-  for (let i = 0; i < candidates.length; i++) {
-    const rank = i + 1;
-    const prizeForRank = prizes.find((p) => p.position === rank);
-    if (prizeForRank) total += prizeForRank.amount;
+  for (const s of pool) {
+    if (paidOnly && !isPaidLike(s)) continue;
+    total += prizeBySubmissionId.get(String(s.id || "")) || 0;
   }
   return total;
 }
@@ -379,22 +394,23 @@ export function computeBudgetFilledCents(
   if (!type) return 0;
 
   if (type === "leaderboard") {
-    const lb = (
-      contest.contest_based_details as {
-        leaderboard_contest?: {
-          flat_fee_bonus?: number;
-          prizes?: Array<{ position: number; amount: number }>;
-        };
-      } | null
-    )?.leaderboard_contest;
-    const flatFeeBonus = lb?.flat_fee_bonus || 0;
-    const bonusDollars = calculateLeaderboardBudgetSpent(submissions, flatFeeBonus);
-    const bonusCents = Math.round(bonusDollars * 100);
     const prizeCents = computeLeaderboardPrizePoolCents(
+      contest,
       submissions,
-      lb?.prizes || [],
       false,
     );
+    const bonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
+      contest,
+      relevantSubmissions(submissions).map((s) => ({
+        id: String(s.id || ""),
+        created_at: s.created_at,
+        status: s.status,
+        paid: s.paid,
+        platform: s.platform,
+      })),
+    );
+    let bonusCents = 0;
+    for (const cents of bonusMap.values()) bonusCents += cents;
     return bonusCents + prizeCents;
   }
 
@@ -429,8 +445,8 @@ export function computeBudgetPaidCents(
       } | null
     )?.leaderboard_contest;
     const prizeCents = computeLeaderboardPrizePoolCents(
+      contest,
       submissions,
-      lb?.prizes || [],
       true,
     );
     let paidBonuses = 0;

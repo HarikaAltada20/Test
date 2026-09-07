@@ -147,10 +147,22 @@ import {
   rulesHtmlForPlatform,
   VIDEO_PLATFORM_LABELS,
   withProjectedTopLevelPayout,
+  leaderboardPrizeStructuresDifferAcrossPlatforms,
+  flatFeeBonusesDifferAcrossPlatforms,
+  leaderboardBonusBudgetsDifferAcrossPlatforms,
+  readLeaderboardBonusBudgetCents,
+  sumLeaderboardBonusBudgetCents,
+  briefsDifferAcrossPlatforms,
+  rulesDifferAcrossPlatforms,
+  inspirationLinksDifferAcrossPlatforms,
+  resourcesDifferAcrossPlatforms,
+  bonusDetailsDifferAcrossPlatforms,
+  maxEarningsDifferAcrossPlatforms,
+  videoPayoutConfigsDifferAcrossPlatforms,
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
-import { platformsForRefreshTab, resolveSequentialRefreshPollIndex, youtubeScopeForMetricsRefresh } from "@/lib/multi-platform-metrics-refresh";
+import { platformsForRefreshTab, resolveSequentialRefreshPollIndex, youtubeScopeForMetricsRefresh, platformsWithLocalSubmissionsForRefresh } from "@/lib/multi-platform-metrics-refresh";
 import { postCampaignEnqueuePathForPlatform } from "@/lib/post-campaign-platforms";
 import type { PostCampaignVideoPlatform } from "@/lib/post-campaign-platforms";
 import { ContestDetailPlatformTabs } from "@/components/contest/ContestDetailPlatformTabs";
@@ -174,7 +186,7 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import {
-  buildLeaderboardPrizeCentsBySubmissionId,
+  buildLeaderboardPrizeCentsBySubmissionIdForContest,
   isTwitterTextImageLeaderboardContest,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
@@ -243,6 +255,7 @@ import {
 import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
+  getFlatFeeBonusLadderForSubmission,
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
   buildContestEligibilityDisplayItems,
@@ -1743,9 +1756,7 @@ export default function ContestDetailClient({
     submissionsPlatformTab,
     overviewVideoPlatforms,
   ).join(",");
-  const showAllTabPlatformColumn =
-    overviewVideoPlatforms.length >= 2 &&
-    submissionsPlatformTab === ALL_PLATFORM_TAB;
+  const showAllTabPlatformColumn = overviewVideoPlatforms.length >= 2;
   const overviewPersistedCampaigns = useMemo(
     () =>
       readPersistedPlatformCampaigns(
@@ -1828,17 +1839,218 @@ export default function ContestDetailClient({
       overviewPersistedCampaigns,
     ],
   );
+  const overviewPayoutConfigsDiffer = useMemo(
+    () =>
+      videoPayoutConfigsDifferAcrossPlatforms(
+        currentContest.contest_based_details as
+          | Record<string, unknown>
+          | null
+          | undefined,
+        overviewVideoPlatforms,
+      ),
+    [currentContest.contest_based_details, overviewVideoPlatforms],
+  );
+  const overviewBriefsDiffer = useMemo(
+    () => briefsDifferAcrossPlatforms(contestState, overviewVideoPlatforms),
+    [contestState, overviewVideoPlatforms],
+  );
+  const overviewRulesDiffer = useMemo(
+    () => rulesDifferAcrossPlatforms(contestState, overviewVideoPlatforms),
+    [contestState, overviewVideoPlatforms],
+  );
+  const overviewInspirationsDiffer = useMemo(
+    () =>
+      inspirationLinksDifferAcrossPlatforms(
+        contestState.inspiration_links,
+        overviewVideoPlatforms,
+      ),
+    [contestState.inspiration_links, overviewVideoPlatforms],
+  );
+  const overviewResourcesDiffer = useMemo(
+    () =>
+      resourcesDifferAcrossPlatforms(
+        contestState.resources,
+        overviewVideoPlatforms,
+      ),
+    [contestState.resources, overviewVideoPlatforms],
+  );
+  const overviewBonusDetailsDiffer = useMemo(
+    () =>
+      bonusDetailsDifferAcrossPlatforms(
+        (currentContest as { bonus_details?: unknown }).bonus_details,
+        overviewVideoPlatforms,
+      ),
+    [currentContest, overviewVideoPlatforms],
+  );
+  const overviewMaxEarningsDiffer = useMemo(
+    () =>
+      maxEarningsDifferAcrossPlatforms(
+        (currentContest as { max_earnings_per_creator?: unknown })
+          .max_earnings_per_creator,
+        (currentContest as { bonus_details?: unknown }).bonus_details,
+        overviewVideoPlatforms,
+      ),
+    [currentContest, overviewVideoPlatforms],
+  );
   const overviewPayoutPlatformList: Array<VideoContestPlatform | null> =
     overviewVideoPlatforms.length >= 2
       ? overviewPlatformTab === ALL_PLATFORM_TAB
-        ? overviewVideoPlatforms
+        ? overviewPayoutConfigsDiffer
+          ? overviewVideoPlatforms
+          : [null]
         : overviewScopedPlatform
           ? [overviewScopedPlatform]
           : overviewVideoPlatforms.slice(0, 1)
       : [null];
   const showOverviewPayoutPlatformLabels =
     overviewVideoPlatforms.length >= 2 &&
-    overviewPlatformTab === ALL_PLATFORM_TAB;
+    overviewPlatformTab === ALL_PLATFORM_TAB &&
+    overviewPayoutConfigsDiffer;
+  const overviewLeaderboardPrizesDiffer = useMemo(
+    () =>
+      leaderboardPrizeStructuresDifferAcrossPlatforms(
+        overviewPersistedCampaigns,
+        overviewVideoPlatforms,
+      ),
+    [overviewPersistedCampaigns, overviewVideoPlatforms],
+  );
+  const overviewWinnerCountsDiffer = useMemo(() => {
+    if (!overviewLeaderboardPrizesDiffer) return false;
+    const counts = overviewVideoPlatforms.map(
+      (platform) =>
+        Number(
+          overviewPersistedCampaigns[platform]?.leaderboard_contest
+            ?.winner_count,
+        ) || 0,
+    );
+    return counts.some((count) => count !== counts[0]);
+  }, [
+    overviewLeaderboardPrizesDiffer,
+    overviewPersistedCampaigns,
+    overviewVideoPlatforms,
+  ]);
+  const overviewFlatFeeBonusesDiffer = useMemo(
+    () =>
+      flatFeeBonusesDifferAcrossPlatforms(
+        overviewPersistedCampaigns,
+        overviewVideoPlatforms,
+      ),
+    [overviewPersistedCampaigns, overviewVideoPlatforms],
+  );
+  const overviewBonusBudgetsDiffer = useMemo(
+    () =>
+      leaderboardBonusBudgetsDifferAcrossPlatforms(
+        overviewPersistedCampaigns,
+        overviewVideoPlatforms,
+      ),
+    [overviewPersistedCampaigns, overviewVideoPlatforms],
+  );
+  const overviewUniformPayoutContest = useMemo(() => {
+    if (overviewScopedPlatform) return overviewDetailContest;
+    if (
+      overviewVideoPlatforms.length >= 2 &&
+      overviewPersistedCampaigns[overviewVideoPlatforms[0]]
+    ) {
+      return buildOverviewPayoutContest(overviewVideoPlatforms[0]);
+    }
+    return overviewDetailContest;
+  }, [
+    overviewScopedPlatform,
+    overviewDetailContest,
+    overviewVideoPlatforms,
+    overviewPersistedCampaigns,
+    buildOverviewPayoutContest,
+  ]);
+  const overviewLeaderboardPrizeSlices = useMemo(() => {
+    const asSlice = (
+      platform: VideoContestPlatform | null,
+      contest: typeof overviewDetailContest,
+      showLabel: boolean,
+    ) => {
+      if (
+        contest.contest_type !== "leaderboard" ||
+        !contest.contest_based_details?.leaderboard_contest
+      ) {
+        return null;
+      }
+      return { platform, contest, showLabel };
+    };
+    if (
+      overviewVideoPlatforms.length >= 2 &&
+      overviewPlatformTab === ALL_PLATFORM_TAB &&
+      overviewLeaderboardPrizesDiffer
+    ) {
+      return overviewVideoPlatforms
+        .map((platform) =>
+          asSlice(platform, buildOverviewPayoutContest(platform), true),
+        )
+        .filter(
+          (slice): slice is NonNullable<typeof slice> => slice != null,
+        );
+    }
+    const slice = asSlice(null, overviewUniformPayoutContest, false);
+    return slice ? [slice] : [];
+  }, [
+    overviewVideoPlatforms,
+    overviewPlatformTab,
+    overviewLeaderboardPrizesDiffer,
+    buildOverviewPayoutContest,
+    overviewUniformPayoutContest,
+  ]);
+  const overviewFlatFeeSlices = useMemo(() => {
+    const asSlice = (
+      platform: VideoContestPlatform | null,
+      contest: typeof overviewDetailContest,
+      showLabel: boolean,
+    ) => {
+      if (isDualRewardsContestType(contest.contest_type)) return null;
+      const bonus =
+        Number(
+          (contest.contest_based_details?.cpm_contest as any)?.flat_fee_bonus,
+        ) ||
+        Number(
+          (contest.contest_based_details?.leaderboard_contest as any)
+            ?.flat_fee_bonus,
+        ) ||
+        0;
+      if (bonus <= 0) return null;
+      return { platform, contest, showLabel, bonus };
+    };
+    if (
+      overviewVideoPlatforms.length >= 2 &&
+      overviewPlatformTab === ALL_PLATFORM_TAB &&
+      overviewFlatFeeBonusesDiffer
+    ) {
+      return overviewVideoPlatforms
+        .map((platform) =>
+          asSlice(platform, buildOverviewPayoutContest(platform), true),
+        )
+        .filter(
+          (slice): slice is NonNullable<typeof slice> => slice != null,
+        );
+    }
+    const slice = asSlice(null, overviewUniformPayoutContest, false);
+    return slice ? [slice] : [];
+  }, [
+    overviewVideoPlatforms,
+    overviewPlatformTab,
+    overviewFlatFeeBonusesDiffer,
+    buildOverviewPayoutContest,
+    overviewUniformPayoutContest,
+  ]);
+  const overviewLeaderboardBonusBudgetCents = overviewScopedPlatform
+    ? readLeaderboardBonusBudgetCents(
+        overviewPersistedCampaigns[overviewScopedPlatform],
+      )
+    : overviewVideoPlatforms.length >= 2 && overviewBonusBudgetsDiffer
+      ? sumLeaderboardBonusBudgetCents(
+          overviewPersistedCampaigns,
+          overviewVideoPlatforms,
+        )
+      : Number(
+          overviewUniformPayoutContest.contest_based_details
+            ?.leaderboard_contest?.total_budget,
+        ) || 0;
   const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
     percentage: number | null;
     mode:
@@ -4336,8 +4548,9 @@ export default function ContestDetailClient({
   ]);
 
   // Non-Twitter leaderboard: prize per eligible submission (verified/approved/paid by views).
-  // Always rank from live currentSubmissions (not post-campaign overlay) so Expected
-  // Reward matches bulk-payment / verify-submission. Requires the full contest set.
+  // Same prizes across platforms → All-tab contest-wide rank. Different prizes →
+  // each platform's own ladder. Always rank from live currentSubmissions so Expected
+  // Reward matches bulk-payment / verify-submission.
   const leaderboardPrizeCentsBySubmissionId = useMemo(() => {
     if (
       currentContest?.contest_type !== "leaderboard" ||
@@ -4345,16 +4558,12 @@ export default function ContestDetailClient({
     ) {
       return new Map<string, number>();
     }
-    const prizes =
-      currentContest?.contest_based_details?.leaderboard_contest?.prizes || [];
-    if (!Array.isArray(prizes) || prizes.length === 0) {
-      return new Map<string, number>();
-    }
     const eligibleSubs: Array<{
       id: string;
       views?: number | null;
       status?: string | null;
       paid?: boolean | null;
+      platform?: string | null;
     }> = [];
     for (const s of currentSubmissions || []) {
       const id = String((s as any)?.id || "");
@@ -4364,10 +4573,21 @@ export default function ContestDetailClient({
         views: (s as any)?.views,
         status: (s as any)?.status,
         paid: (s as any)?.paid,
+        platform: (s as any)?.platform,
       });
     }
-    return buildLeaderboardPrizeCentsBySubmissionId(eligibleSubs, prizes);
-  }, [currentContest, currentSubmissions]);
+    return buildLeaderboardPrizeCentsBySubmissionIdForContest({
+      rows: eligibleSubs,
+      details:
+        (contestState.contest_based_details as Record<string, unknown>) ||
+        (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      contestPlatform: currentContest?.platform,
+      fallbackPrizes:
+        currentContest?.contest_based_details?.leaderboard_contest?.prizes ||
+        [],
+    });
+  }, [contestState.contest_based_details, currentContest, currentSubmissions]);
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
@@ -4968,11 +5188,10 @@ export default function ContestDetailClient({
         moderationBucket === "verified" ||
         moderationBucket === "paid"
       ) {
-        const flatFeeBonus = isCpmContestType(currentContest?.contest_type)
-          ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-          : (currentContest?.contest_based_details as any)?.leaderboard_contest
-              ?.flat_fee_bonus || 0;
+        const flatFeeBonus = getFlatFeeBonusLadderForSubmission(
+          currentContest as any,
+          submission.platform,
+        ).amountCents;
 
         // Calculate bonus with budget constraints (include paid so Bonus Expected is not 0 after grant)
         // Dual rewards: pool covers CPM + milestones; no per-submission flat fee bonus here.
@@ -5020,11 +5239,10 @@ export default function ContestDetailClient({
         )
       ) {
         // Use actual bonus_amount from database if available
-        const flatFeeBonus = isCpmContestType(currentContest?.contest_type)
-          ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-          : (currentContest?.contest_based_details as any)?.leaderboard_contest
-              ?.flat_fee_bonus || 0;
+        const flatFeeBonus = getFlatFeeBonusLadderForSubmission(
+          currentContest as any,
+          submission.platform,
+        ).amountCents;
         const actualBonus = isDualRewardsContestType(
           currentContest?.contest_type,
         )
@@ -5485,36 +5703,31 @@ export default function ContestDetailClient({
     }
 
     // For non-Twitter leaderboard campaigns (e.g. Instagram / YouTube),
-    // Expected Reward = sum of each eligible submission's contest-wide rank prize
-    // (same helper as bulk-payment / verify-submission — avoid UI/pay drift).
+    // Expected Reward = sum of each eligible submission's rank prize
+    // (All-tab rank when prizes match; per-platform rank when they differ).
     const isNonTwitterLeaderboard =
       currentContest?.contest_type === "leaderboard" &&
       !isTwitterTextImageLeaderboardContest(currentContest);
 
     if (isNonTwitterLeaderboard) {
-      const prizes =
-        currentContest?.contest_based_details?.leaderboard_contest?.prizes ||
-        [];
-      if (Array.isArray(prizes) && prizes.length > 0) {
-        const allCreators = Object.values(grouped) as any[];
-        allCreators.forEach((group: any) => {
-          group.earnings.expected = (group.submissions || []).reduce(
-            (sum: number, s: any) =>
-              sum +
-              (leaderboardPrizeCentsBySubmissionId.get(String(s.id)) || 0),
-            0,
-          );
+      const allCreators = Object.values(grouped) as any[];
+      allCreators.forEach((group: any) => {
+        group.earnings.expected = (group.submissions || []).reduce(
+          (sum: number, s: any) =>
+            sum +
+            (leaderboardPrizeCentsBySubmissionId.get(String(s.id)) || 0),
+          0,
+        );
 
-          const grantedFromSubs = (group.submissions || []).reduce(
-            (sum: number, s: any) => {
-              if (!isSubmissionPaidForGrantedReward(s)) return sum;
-              return sum + Math.max(0, Number(s?.earnings) || 0);
-            },
-            0,
-          );
-          group.earnings.granted = grantedFromSubs;
-        });
-      }
+        const grantedFromSubs = (group.submissions || []).reduce(
+          (sum: number, s: any) => {
+            if (!isSubmissionPaidForGrantedReward(s)) return sum;
+            return sum + Math.max(0, Number(s?.earnings) || 0);
+          },
+          0,
+        );
+        group.earnings.granted = grantedFromSubs;
+      });
     }
 
     if (
@@ -9818,6 +10031,7 @@ export default function ContestDetailClient({
         );
         const youtubeScope = youtubeScopeForMetricsRefresh({
           campaignPlatformCount: overviewVideoPlatforms.length,
+          forceBasic: !isAdminView,
         });
         const response = await fetch(
           `/api/contests/${contestId}/post-campaign-submissions/refresh-metrics`,
@@ -10209,6 +10423,7 @@ export default function ContestDetailClient({
               );
               const youtubeScope = youtubeScopeForMetricsRefresh({
                 campaignPlatformCount: overviewVideoPlatforms.length,
+                forceBasic: !isAdminView,
               });
               return {
                 ...(refreshPlatforms.length > 0
@@ -10236,13 +10451,31 @@ export default function ContestDetailClient({
           runId?: string;
           statusPath?: string;
         };
-        const queuedRunsFromApi: QueuedLiveRun[] = Array.isArray(
+        const rawQueuedRuns: QueuedLiveRun[] = Array.isArray(
           (result as { runs?: QueuedLiveRun[] }).runs,
         )
           ? ((result as { runs: QueuedLiveRun[] }).runs).filter(
               (r) => r && typeof r.platform === "string",
             )
           : [];
+        // Hide platforms with no local submissions (server also filters eligible).
+        const localWithSubs = new Set(
+          platformsWithLocalSubmissionsForRefresh(
+            overviewVideoPlatforms as PostCampaignVideoPlatform[],
+            currentSubmissions,
+          ),
+        );
+        let queuedRunsFromApi: QueuedLiveRun[] =
+          submissionsFullyHydrated && localWithSubs.size > 0
+            ? rawQueuedRuns.filter((r) =>
+                localWithSubs.has(r.platform as PostCampaignVideoPlatform),
+              )
+            : rawQueuedRuns;
+
+        if (queuedRunsFromApi.length === 0 && rawQueuedRuns.length > 0) {
+          // Local filter emptied everything — fall back to server list.
+          queuedRunsFromApi = rawQueuedRuns;
+        }
 
         const previousUpdated = currentContest.last_metrics_updated ?? null;
         const pollMaxMs = 600000;
@@ -10425,6 +10658,11 @@ export default function ContestDetailClient({
             const state = states.find((s) => s.platform === platform);
             const run = state?.run;
             if (!run) continue;
+            const countsRun = run as InstagramInsightsRefreshRunSummary &
+              YouTubeMetricsRefreshRunSummary &
+              TikTokMetricsRefreshRunSummary;
+            // No progress / toast for platforms with zero submissions.
+            if ((countsRun.total_submissions ?? 0) <= 0) continue;
 
             // Allow multi-platform completion toasts even if a YT id was marked earlier.
             if (platform === "youtube") {
@@ -10432,9 +10670,6 @@ export default function ContestDetailClient({
             }
 
             const status = run.status;
-            const countsRun = run as InstagramInsightsRefreshRunSummary &
-              YouTubeMetricsRefreshRunSummary &
-              TikTokMetricsRefreshRunSummary;
             if (status === "completed") {
               toast({
                 title: liveMetricsRefreshToastTitle(platform, status),
@@ -10472,9 +10707,11 @@ export default function ContestDetailClient({
           let waitingForNextSinceMs: number | null = null;
           const youtubeScope = youtubeScopeForMetricsRefresh({
             campaignPlatformCount: overviewVideoPlatforms.length,
+            forceBasic: !isAdminView,
           });
 
-          // One card at a time: YouTube (scope all) → Instagram → TikTok.
+          // One card at a time: YouTube → Instagram → TikTok.
+          // Brand uses YouTube basic; admin multi uses `all` unless forced basic.
           setShowYoutubeRunPopup(false);
           setShowInstagramRunPopup(false);
           setShowTiktokRunPopup(false);
@@ -10510,7 +10747,19 @@ export default function ContestDetailClient({
 
           const focusPlatformCard = (
             platform: MetricsRefreshPlatform | null,
+            run?: { total_submissions?: number | null } | null,
           ) => {
+            // Don't show progress UI for platforms with no submissions.
+            if (
+              run &&
+              typeof run.total_submissions === "number" &&
+              run.total_submissions <= 0
+            ) {
+              setShowYoutubeRunPopup(false);
+              setShowInstagramRunPopup(false);
+              setShowTiktokRunPopup(false);
+              return;
+            }
             setShowYoutubeRunPopup(platform === "youtube");
             setShowInstagramRunPopup(platform === "instagram");
             setShowTiktokRunPopup(platform === "tiktok");
@@ -10518,7 +10767,7 @@ export default function ContestDetailClient({
 
           const applyTrackedRunToUi = (
             platform: MetricsRefreshPlatform,
-            run: { id: string; status: string },
+            run: { id: string; status: string; total_submissions?: number | null },
             focus: boolean,
           ) => {
             switch (platform) {
@@ -10534,7 +10783,7 @@ export default function ContestDetailClient({
               default:
                 break;
             }
-            if (focus) focusPlatformCard(platform);
+            if (focus) focusPlatformCard(platform, run);
           };
 
           const tryContinueChain = async (next: QueuedLiveRun) => {
@@ -10681,6 +10930,7 @@ export default function ContestDetailClient({
                   status: string;
                   started_at?: string;
                   finished_at?: string | null;
+                  total_submissions?: number | null;
                 } | null) ?? null;
               const tracked = Boolean(
                 run &&
@@ -10689,9 +10939,17 @@ export default function ContestDetailClient({
                     refreshStartedMs,
                   }),
               );
+              const emptyEligible =
+                tracked &&
+                run != null &&
+                typeof run.total_submissions === "number" &&
+                run.total_submissions <= 0;
               const terminal =
                 tracked &&
-                Boolean(run && isTerminalPostCampaignRunStatus(run.status));
+                Boolean(
+                  emptyEligible ||
+                    (run && isTerminalPostCampaignRunStatus(run.status)),
+                );
               if (run && tracked && !queued.runId) queued.runId = run.id;
               return { tracked, terminal, platform, run: tracked ? run : null };
             } catch {
@@ -10760,7 +11018,8 @@ export default function ContestDetailClient({
 
               if (pollIndex < queuedRunsFromApi.length) {
                 const curPlat = settled[pollIndex]?.platform ?? null;
-                focusPlatformCard(curPlat);
+                const curRun = settled[pollIndex]?.run ?? null;
+                focusPlatformCard(curPlat, curRun);
                 if (
                   curPlat === "youtube" &&
                   !settled[pollIndex]?.tracked &&
@@ -14085,9 +14344,10 @@ export default function ContestDetailClient({
                     </Card> */}
 
           {/* Prize Pool Card */}
-          {currentContest.contest_type === "leaderboard" &&
-            currentContest.contest_based_details?.leaderboard_contest
-              ?.total_prize != null && (
+          {overviewUniformPayoutContest.contest_type === "leaderboard" &&
+            (overviewUniformPayoutContest.contest_based_details
+              ?.leaderboard_contest?.total_prize != null ||
+              overviewLeaderboardPrizeSlices.length > 0) && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -14100,7 +14360,7 @@ export default function ContestDetailClient({
                   <div className="flex items-center justify-between mb-4">
                     <div
                       className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm shrink-0",
                         isDark
                           ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
                           : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
@@ -14113,7 +14373,7 @@ export default function ContestDetailClient({
                         )}
                       />
                     </div>
-                    <div className="text-right">
+                    <div className="text-right min-w-0 pl-3">
                       <p
                         className={cn(
                           "text-sm font-medium uppercase tracking-wide",
@@ -14124,51 +14384,106 @@ export default function ContestDetailClient({
                       >
                         Prize Pool
                       </p>
-                      <p
-                        className={cn(
-                          "text-2xl font-bold mt-1",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
-                        {formatMoney(
-                          currentContest.contest_based_details
-                            .leaderboard_contest.total_prize,
-                        )}
-                      </p>
+                      {overviewLeaderboardPrizesDiffer ? (
+                        <div className="mt-1 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
+                          {overviewVideoPlatforms.map((platform) => {
+                            const prize =
+                              overviewPersistedCampaigns[platform]
+                                ?.leaderboard_contest?.total_prize;
+                            if (prize == null) return null;
+                            return (
+                              <span
+                                key={`summary-prize-${platform}`}
+                                className="inline-flex items-center gap-1"
+                              >
+                                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
+                                  {getPlatformIcon(platform)}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-base font-bold leading-none",
+                                    isDark ? "text-white" : "text-gray-900",
+                                  )}
+                                >
+                                  {formatMoney(prize)}
+                                </span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
+                              : "text-gray-900",
+                          )}
+                        >
+                          {formatMoney(
+                            overviewUniformPayoutContest.contest_based_details
+                              ?.leaderboard_contest?.total_prize,
+                          )}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="mb-4">
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
-                      {
-                        currentContest.contest_based_details.leaderboard_contest
-                          .winner_count
-                      }{" "}
-                      winners
-                    </p>
+                  <div className="mb-3">
+                    {overviewWinnerCountsDiffer ? (
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        {overviewVideoPlatforms.map((platform) => {
+                          const winners =
+                            overviewPersistedCampaigns[platform]
+                              ?.leaderboard_contest?.winner_count;
+                          if (winners == null) return null;
+                          return (
+                            <span
+                              key={`summary-winners-${platform}`}
+                              className={cn(
+                                "inline-flex items-center gap-1 text-sm font-medium",
+                                isDark
+                                  ? "text-white/80 drop-shadow-sm"
+                                  : "text-gray-600",
+                              )}
+                            >
+                              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
+                                {getPlatformIcon(platform)}
+                              </span>
+                              {winners} winners
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          isDark
+                            ? "text-white/80 drop-shadow-sm"
+                            : "text-gray-600",
+                        )}
+                      >
+                        {
+                          overviewUniformPayoutContest.contest_based_details
+                            ?.leaderboard_contest?.winner_count
+                        }{" "}
+                        winners
+                      </p>
+                    )}
                   </div>
 
                   {/* Total Budget (if set) */}
-                  {currentContest.contest_based_details?.leaderboard_contest
-                    ?.total_budget && (
+                  {overviewLeaderboardBonusBudgetCents > 0 && (
                     <div
                       className={cn(
-                        "pt-4 mb-4",
+                        "pt-3 mb-3",
                         isDark
                           ? "border-t border-white/30"
                           : "border-t border-yellow-200",
                       )}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
                           <p
                             className={cn(
                               "text-sm font-medium uppercase tracking-wide",
@@ -14179,19 +14494,47 @@ export default function ContestDetailClient({
                           >
                             Total Budget
                           </p>
-                          <p
-                            className={cn(
-                              "text-xl font-bold mt-1",
-                              isDark
-                                ? "text-cyan-300 drop-shadow-sm"
-                                : "text-blue-600",
-                            )}
-                          >
-                            {formatMoney(
-                              currentContest.contest_based_details
-                                .leaderboard_contest.total_budget,
-                            )}
-                          </p>
+                          {overviewBonusBudgetsDiffer ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                              {overviewVideoPlatforms.map((platform) => {
+                                const budget =
+                                  overviewPersistedCampaigns[platform]
+                                    ?.leaderboard_contest?.total_budget;
+                                if (!budget) return null;
+                                return (
+                                  <span
+                                    key={`summary-bonus-budget-${platform}`}
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
+                                      {getPlatformIcon(platform)}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-sm font-bold",
+                                        isDark
+                                          ? "text-cyan-300 drop-shadow-sm"
+                                          : "text-blue-600",
+                                      )}
+                                    >
+                                      {formatMoney(budget)}
+                                    </span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p
+                              className={cn(
+                                "text-xl font-bold mt-1",
+                                isDark
+                                  ? "text-cyan-300 drop-shadow-sm"
+                                  : "text-blue-600",
+                              )}
+                            >
+                              {formatMoney(overviewLeaderboardBonusBudgetCents)}
+                            </p>
+                          )}
                           <p
                             className={cn(
                               "text-xs mt-1",
@@ -14205,7 +14548,7 @@ export default function ContestDetailClient({
                         </div>
                         <div
                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-lg",
+                            "w-10 h-10 flex items-center justify-center rounded-lg shrink-0",
                             isDark
                               ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
                               : "bg-blue-100 text-blue-600",
@@ -14838,11 +15181,8 @@ export default function ContestDetailClient({
           )}
 
         {/* Budget Progress Tracker - For Leaderboard with total_budget */}
-        {currentContest.contest_type === "leaderboard" &&
-          currentContest.contest_based_details?.leaderboard_contest
-            ?.total_budget != null &&
-          currentContest.contest_based_details.leaderboard_contest
-            .total_budget > 0 && (
+        {overviewUniformPayoutContest.contest_type === "leaderboard" &&
+          overviewLeaderboardBonusBudgetCents > 0 && (
             <div
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -14899,14 +15239,16 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget:
-                      currentContest.contest_based_details.leaderboard_contest
-                        .total_budget,
-                    contest_based_details: currentContest.contest_based_details,
-                    contest_type: currentContest.contest_type ?? "",
+                    total_budget: overviewLeaderboardBonusBudgetCents,
+                    contest_based_details:
+                      currentContest.contest_based_details ||
+                      overviewUniformPayoutContest.contest_based_details,
+                    contest_type: overviewUniformPayoutContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
-                    platform: currentContest.platform,
+                    platform: overviewScopedPlatform
+                      ? overviewScopedPlatform
+                      : currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -15127,7 +15469,8 @@ export default function ContestDetailClient({
                 <div className="space-y-3">
                   <h3 className="font-semibold text-lg">Brief</h3>
                   {overviewVideoPlatforms.length >= 2 &&
-                  overviewPlatformTab === ALL_PLATFORM_TAB ? (
+                  overviewPlatformTab === ALL_PLATFORM_TAB &&
+                  overviewBriefsDiffer ? (
                     <div className="space-y-3">
                       {overviewVideoPlatforms.map((platform) => {
                         const html = briefHtmlForPlatform(
@@ -15164,23 +15507,39 @@ export default function ContestDetailClient({
                         );
                       })}
                     </div>
-                  ) : overviewDetailContest.brief_html ? (
-                    <div
-                      className={cn(
-                        "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
-                        isDark
-                          ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
-                          : "bg-white text-foreground",
-                      )}
-                      style={isDark ? { color: "white" } : undefined}
-                      dangerouslySetInnerHTML={{
-                        __html: overviewDetailContest.brief_html,
-                      }}
-                    />
                   ) : (
-                    <p className="text-muted-foreground bg-muted/30 p-4 rounded-lg border">
-                      No brief provided
-                    </p>
+                    (() => {
+                      const sharedBriefHtml =
+                        overviewVideoPlatforms.length >= 2 &&
+                        overviewPlatformTab === ALL_PLATFORM_TAB
+                          ? briefHtmlForPlatform(
+                              contestState as {
+                                brief_html?: string | null;
+                                brief_json?: unknown;
+                                platform?: string | null;
+                              },
+                              overviewVideoPlatforms[0],
+                            )
+                          : overviewDetailContest.brief_html;
+                      return sharedBriefHtml ? (
+                        <div
+                          className={cn(
+                            "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
+                            isDark
+                              ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
+                              : "bg-white text-foreground",
+                          )}
+                          style={isDark ? { color: "white" } : undefined}
+                          dangerouslySetInnerHTML={{
+                            __html: sharedBriefHtml,
+                          }}
+                        />
+                      ) : (
+                        <p className="text-muted-foreground bg-muted/30 p-4 rounded-lg border">
+                          No brief provided
+                        </p>
+                      );
+                    })()
                   )}
                 </div>
 
@@ -15450,13 +15809,29 @@ export default function ContestDetailClient({
                   )}
 
                 {/* Conditional Prize Structure / CPM Details */}
-                {overviewDetailContest.contest_type === "leaderboard" &&
-                  overviewDetailContest.contest_based_details
-                    ?.leaderboard_contest && (
+                {overviewLeaderboardPrizeSlices.length > 0 && (
                     <div className="space-y-4">
                       <h3 className="font-semibold text-lg text-foreground">
                         Prize Structure
                       </h3>
+                      {overviewLeaderboardPrizeSlices.map((slice) => {
+                        const leaderboard =
+                          slice.contest.contest_based_details
+                            ?.leaderboard_contest;
+                        if (!leaderboard) return null;
+                        return (
+                          <div
+                            key={`prize-structure-${slice.platform ?? "contest"}`}
+                            className="space-y-4"
+                          >
+                            {slice.showLabel && slice.platform ? (
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                {getPlatformIcon(slice.platform)}
+                                <span>
+                                  {VIDEO_PLATFORM_LABELS[slice.platform]}
+                                </span>
+                              </div>
+                            ) : null}
 
                       {/* Prize Pool Summary */}
 
@@ -15485,10 +15860,7 @@ export default function ContestDetailClient({
                                   Total Prize Pool
                                 </p>
                                 <p className="text-lg md:text-xl font-bold ">
-                                  {formatMoney(
-                                    overviewDetailContest.contest_based_details
-                                      .leaderboard_contest.total_prize,
-                                  )}
+                                  {formatMoney(leaderboard.total_prize)}
                                 </p>
                               </div>
                             </div>
@@ -15519,69 +15891,26 @@ export default function ContestDetailClient({
                                   Total Winners
                                 </p>
                                 <p className=" text-lg md:text-xl font-bold">
-                                  {
-                                    overviewDetailContest.contest_based_details
-                                      .leaderboard_contest.winner_count
-                                  }
+                                  {leaderboard.winner_count}
                                 </p>
                               </div>
                             </div>
                           </CardContent>
                         </div>
                       </div>
-                      {/* <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
-                              <Trophy className="h-5 w-5 text-green-600 dark:text-green-400" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">
-                                Total Prize Pool
-                              </p>
-                              <p className="text-xl font-bold text-green-900 dark:text-green-100">
-                                {formatMoney(
-                                  overviewDetailContest.contest_based_details
-                                    .leaderboard_contest.total_prize
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
-                              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">
-                                Total Winners
-                              </p>
-                              <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                                {
-                                  overviewDetailContest.contest_based_details
-                                    .leaderboard_contest.winner_count
-                                }
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div> */}
 
                       {/* Prize Distribution */}
                       <div className="py-4">
                         <h4 className="font-medium text-lg text-foreground mb-3 flex items-center gap-2">
-                          {/* <ListOrdered className="h-4 w-4" /> */}
                           Prize Distribution
                         </h4>
                         <div className="space-y-4">
-                          {Array.isArray(
-                            overviewDetailContest.contest_based_details
-                              .leaderboard_contest.prizes,
-                          ) &&
-                            overviewDetailContest.contest_based_details.leaderboard_contest.prizes
+                          {Array.isArray(leaderboard.prizes) &&
+                            [...leaderboard.prizes]
                               .sort((a: any, b: any) => a.position - b.position)
                               .map((prize: any, index: number) => (
                                 <div
-                                  key={index}
+                                  key={`${slice.platform ?? "contest"}-${prize.position}-${index}`}
                                   className={cn(
                                     "flex items-center justify-between py-3 px-3 rounded-lg border",
                                     isDark
@@ -15618,13 +15947,16 @@ export default function ContestDetailClient({
                               ))}
                         </div>
                       </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
                 {overviewPayoutPlatformList.map((platform) => {
                   const payoutContest =
                     platform == null
-                      ? overviewDetailContest
+                      ? overviewUniformPayoutContest
                       : buildOverviewPayoutContest(platform);
                   return (
                     <ContestDetailVideoPayoutSections
@@ -17381,7 +17713,8 @@ export default function ContestDetailClient({
                   )}
 
                 {overviewVideoPlatforms.length >= 2 &&
-                overviewPlatformTab === ALL_PLATFORM_TAB ? (
+                overviewPlatformTab === ALL_PLATFORM_TAB &&
+                overviewRulesDiffer ? (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-lg text-foreground">
                       Rules
@@ -17425,31 +17758,46 @@ export default function ContestDetailClient({
                     </div>
                   </div>
                 ) : (
-                  overviewDetailContest.rules_html && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        Rules
-                      </h3>
-                      <div
-                        className={cn(
-                          "border rounded-lg p-4",
-                          isDark ? "border-gray-600" : "border-gray-300",
-                        )}
-                      >
+                  (() => {
+                    const sharedRulesHtml =
+                      overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB
+                        ? rulesHtmlForPlatform(
+                            contestState as {
+                              rules_html?: string | null;
+                              rules_json?: unknown;
+                              platform?: string | null;
+                            },
+                            overviewVideoPlatforms[0],
+                          )
+                        : overviewDetailContest.rules_html;
+                    if (!sharedRulesHtml) return null;
+                    return (
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-lg text-foreground">
+                          Rules
+                        </h3>
                         <div
                           className={cn(
-                            "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
-                            isDark
-                              ? "bg-[#170337] text-white prose-invert border-gray-600"
-                              : "bg-white text-foreground",
+                            "border rounded-lg p-4",
+                            isDark ? "border-gray-600" : "border-gray-300",
                           )}
-                          dangerouslySetInnerHTML={{
-                            __html: overviewDetailContest.rules_html || "",
-                          }}
-                        />
+                        >
+                          <div
+                            className={cn(
+                              "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
+                              isDark
+                                ? "bg-[#170337] text-white prose-invert border-gray-600"
+                                : "bg-white text-foreground",
+                            )}
+                            dangerouslySetInnerHTML={{
+                              __html: sharedRulesHtml || "",
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )
+                    );
+                  })()
                 )}
 
                 {hasTwitterRequirements && (
@@ -17734,17 +18082,22 @@ export default function ContestDetailClient({
                   )}
 
                 {/* Flat Fee Bonus Section */}
-                {!isDualRewardsContestType(overviewDetailContest.contest_type) &&
-                  (overviewDetailContest.contest_based_details?.cpm_contest
-                    ?.flat_fee_bonus ||
-                    overviewDetailContest.contest_based_details?.leaderboard_contest
-                      ?.flat_fee_bonus) && (
+                {overviewFlatFeeSlices.length > 0 && (
                     <div className="space-y-3">
                       <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                         <Gift className="h-5 w-5 text-green-600" />
                         Guaranteed Flat Bonus
                       </h3>
+                      {overviewFlatFeeSlices.map((slice) => {
+                        const cap = isCpmContestType(slice.contest.contest_type)
+                          ? Number(
+                              (slice.contest.contest_based_details
+                                ?.cpm_contest as any)?.flat_fee_bonus_cap,
+                            ) || 0
+                          : 0;
+                        return (
                       <div
+                        key={`flat-fee-${slice.platform ?? "contest"}`}
                         className={cn(
                           "border p-4 rounded-lg",
                           isDark
@@ -17752,24 +18105,21 @@ export default function ContestDetailClient({
                             : "border-green-300 bg-green-50/50 rounded-xl p-4",
                         )}
                       >
+                        {slice.showLabel && slice.platform ? (
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
+                            {getPlatformIcon(slice.platform)}
+                            <span>
+                              {VIDEO_PLATFORM_LABELS[slice.platform]}
+                            </span>
+                          </div>
+                        ) : null}
                         <p
                           className={cn(
                             "text-2xl font-bold mb-2",
                             isDark ? "text-green-300" : "text-green-900",
                           )}
                         >
-                          {formatMoney(
-                            (
-                              overviewDetailContest.contest_based_details
-                                ?.cpm_contest as any
-                            )?.flat_fee_bonus ||
-                              (
-                                overviewDetailContest.contest_based_details
-                                  ?.leaderboard_contest as any
-                              )?.flat_fee_bonus ||
-                              0,
-                          )}{" "}
-                          per verified submission
+                          {formatMoney(slice.bonus)} per verified submission
                         </p>
                         <p
                           className={cn(
@@ -17782,12 +18132,7 @@ export default function ContestDetailClient({
                           Paid after the campaign ends along with other
                           earnings.
                         </p>
-                        {/* Flat Fee Bonus Cap (for CPM campaigns) */}
-                        {isCpmContestType(currentContest.contest_type) &&
-                          (
-                            currentContest.contest_based_details
-                              ?.cpm_contest as any
-                          )?.flat_fee_bonus_cap && (
+                        {cap > 0 && (
                             <div
                               className={cn(
                                 "mt-3 pt-3 border-t",
@@ -17802,13 +18147,7 @@ export default function ContestDetailClient({
                                   isDark ? "text-green-200" : "text-green-800",
                                 )}
                               >
-                                💰 Flat Fee Bonus Cap:{" "}
-                                {formatMoney(
-                                  (
-                                    currentContest.contest_based_details
-                                      ?.cpm_contest as any
-                                  )?.flat_fee_bonus_cap,
-                                )}
+                                💰 Flat Fee Bonus Cap: {formatMoney(cap)}
                               </p>
                               <p
                                 className={cn(
@@ -17823,6 +18162,8 @@ export default function ContestDetailClient({
                             </div>
                           )}
                       </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -17867,22 +18208,24 @@ export default function ContestDetailClient({
                         ALL submissions.
                       </p>
                       {(() => {
-                        const platformsForCap =
+                        const showAllCapsSplit =
                           overviewVideoPlatforms.length >= 2 &&
-                          overviewPlatformTab === ALL_PLATFORM_TAB
-                            ? overviewVideoPlatforms
-                            : [
-                                overviewScopedPlatform ??
-                                  overviewVideoPlatforms[0] ??
-                                  parseVideoContestPlatforms(
-                                    currentContest?.platform,
-                                  )[0],
-                              ].filter(Boolean);
+                          overviewPlatformTab === ALL_PLATFORM_TAB &&
+                          overviewMaxEarningsDiffer;
+                        const platformsForCap = showAllCapsSplit
+                          ? overviewVideoPlatforms
+                          : [
+                              overviewScopedPlatform ??
+                                overviewVideoPlatforms[0] ??
+                                parseVideoContestPlatforms(
+                                  currentContest?.platform,
+                                )[0],
+                            ].filter(Boolean);
                         const caps = (
                           platformsForCap as VideoContestPlatform[]
                         )
                           .map((platform) => ({
-                            platform,
+                            platform: showAllCapsSplit ? platform : null,
                             cents: maxEarningsCentsForPlatform(
                               (currentContest as any)?.max_earnings_per_creator,
                               (currentContest as any)?.bonus_details,
@@ -17890,8 +18233,12 @@ export default function ContestDetailClient({
                             ),
                           }))
                           .filter((row) => row.cents);
+                        // Deduplicate identical caps when not splitting
+                        const displayCaps = showAllCapsSplit
+                          ? caps
+                          : caps.slice(0, 1);
 
-                        return caps.length > 0 ? (
+                        return displayCaps.length > 0 ? (
                           <div
                             className={cn(
                               "mt-3 pt-3 border-t space-y-2",
@@ -17900,9 +18247,9 @@ export default function ContestDetailClient({
                                 : "border-purple-200",
                             )}
                           >
-                            {caps.map(({ platform, cents }) => (
+                            {displayCaps.map(({ platform, cents }, idx) => (
                               <p
-                                key={`cap-${platform}`}
+                                key={`cap-${platform ?? "shared"}-${idx}`}
                                 className={cn(
                                   "text-sm font-medium flex items-center gap-2",
                                   isDark
@@ -17938,27 +18285,32 @@ export default function ContestDetailClient({
 
                 {/* Additional Bonus Opportunities Section */}
                 {(() => {
-                  const bonusPlatforms =
+                  const showAllBonusSplit =
                     overviewVideoPlatforms.length >= 2 &&
-                    overviewPlatformTab === ALL_PLATFORM_TAB
-                      ? overviewVideoPlatforms
-                      : [
-                          overviewScopedPlatform ??
-                            overviewVideoPlatforms[0] ??
-                            parseVideoContestPlatforms(
-                              currentContest?.platform,
-                            )[0],
-                        ].filter(Boolean) as VideoContestPlatform[];
+                    overviewPlatformTab === ALL_PLATFORM_TAB &&
+                    overviewBonusDetailsDiffer;
+                  const bonusPlatforms = showAllBonusSplit
+                    ? overviewVideoPlatforms
+                    : ([
+                        overviewScopedPlatform ??
+                          overviewVideoPlatforms[0] ??
+                          parseVideoContestPlatforms(
+                            currentContest?.platform,
+                          )[0],
+                      ].filter(Boolean) as VideoContestPlatform[]);
                   const bonusRows = bonusPlatforms
                     .map((platform) => ({
-                      platform,
+                      platform: showAllBonusSplit ? platform : null,
                       html: bonusDetailsForPlatform(
                         (currentContest as any).bonus_details,
                         platform,
                       )?.description_html,
                     }))
                     .filter((row) => row.html);
-                  if (bonusRows.length === 0) return null;
+                  const displayBonusRows = showAllBonusSplit
+                    ? bonusRows
+                    : bonusRows.slice(0, 1);
+                  if (displayBonusRows.length === 0) return null;
                   return (
                     <div className="space-y-3">
                       <h3
@@ -17970,9 +18322,9 @@ export default function ContestDetailClient({
                         <Star className="h-5 w-5 text-amber-600" />
                         Additional Bonus Opportunities
                       </h3>
-                      {bonusRows.map(({ platform, html }) => (
+                      {displayBonusRows.map(({ platform, html }, idx) => (
                         <div
-                          key={`bonus-${platform}`}
+                          key={`bonus-${platform ?? "shared"}-${idx}`}
                           className={cn(
                             "border rounded-xl p-4",
                             isDark
@@ -17980,7 +18332,7 @@ export default function ContestDetailClient({
                               : "border-amber-300 bg-amber-50/50",
                           )}
                         >
-                          {overviewVideoPlatforms.length >= 2 && (
+                          {platform && (
                             <div className="flex items-center gap-1.5 mb-2 text-sm text-muted-foreground">
                               {getPlatformIcon(platform)}
                               <span>{VIDEO_PLATFORM_LABELS[platform]}</span>
@@ -18213,21 +18565,27 @@ export default function ContestDetailClient({
                 {/* Render inspiration links for non-Twitter contests */}
                 {currentContest.platform?.toLowerCase() !== "twitter" &&
                   (() => {
+                    const showAllInspoSplit =
+                      overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB &&
+                      overviewInspirationsDiffer;
                     const inspirationRows =
                       overviewVideoPlatforms.length >= 2
                         ? (
-                            overviewPlatformTab === ALL_PLATFORM_TAB
+                            showAllInspoSplit
                               ? overviewVideoPlatforms
-                              : overviewScopedPlatform
-                                ? [overviewScopedPlatform]
-                                : overviewVideoPlatforms
+                              : overviewPlatformTab === ALL_PLATFORM_TAB
+                                ? [overviewVideoPlatforms[0]!]
+                                : overviewScopedPlatform
+                                  ? [overviewScopedPlatform]
+                                  : overviewVideoPlatforms.slice(0, 1)
                           ).flatMap((platform) =>
                             inspirationLinksForPlatform(
                               contestState.inspiration_links,
                               platform,
                             ).map((item, idx) => ({
                               ...item,
-                              platform,
+                              platform: showAllInspoSplit ? platform : null,
                               key: `${platform}-${idx}`,
                             })),
                           )
@@ -18275,8 +18633,7 @@ export default function ContestDetailClient({
                                   : <ExternalLink className="h-5 w-5 " />}
                               </div>
                               <div className="flex-1 min-w-0">
-                                {item.platform &&
-                                  overviewVideoPlatforms.length >= 2 && (
+                                {item.platform && (
                                     <p className="text-sm text-muted-foreground mb-1 inline-flex items-center gap-1.5">
                                       {VIDEO_PLATFORM_LABELS[item.platform]}
                                     </p>
@@ -18424,21 +18781,27 @@ export default function ContestDetailClient({
                     </div>
                   )}
                 {(() => {
+                  const showAllResourcesSplit =
+                    overviewVideoPlatforms.length >= 2 &&
+                    overviewPlatformTab === ALL_PLATFORM_TAB &&
+                    overviewResourcesDiffer;
                   const resourceRows =
                     overviewVideoPlatforms.length >= 2
                       ? (
-                          overviewPlatformTab === ALL_PLATFORM_TAB
+                          showAllResourcesSplit
                             ? overviewVideoPlatforms
-                            : overviewScopedPlatform
-                              ? [overviewScopedPlatform]
-                              : overviewVideoPlatforms
+                            : overviewPlatformTab === ALL_PLATFORM_TAB
+                              ? [overviewVideoPlatforms[0]!]
+                              : overviewScopedPlatform
+                                ? [overviewScopedPlatform]
+                                : overviewVideoPlatforms.slice(0, 1)
                         ).flatMap((platform) =>
                           resourcesForPlatform(
                             contestState.resources,
                             platform,
                           ).map((resource, idx) => ({
                             ...resource,
-                            platform,
+                            platform: showAllResourcesSplit ? platform : null,
                             key: `${platform}-res-${idx}`,
                           })),
                         )
@@ -18488,8 +18851,7 @@ export default function ContestDetailClient({
                                 isDark ? "border-gray-600" : "border-gray-300",
                               )}
                             >
-                              {resource.platform &&
-                                overviewVideoPlatforms.length >= 2 && (
+                              {resource.platform && (
                                   <div className="flex items-center gap-1.5 mb-3 text-sm text-muted-foreground">
                                     {getPlatformIcon(resource.platform)}
                                     <span>
@@ -20378,13 +20740,9 @@ export default function ContestDetailClient({
                   isCpmContestType(currentContest?.contest_type) ||
                   isMilestoneContestType(currentContest?.contest_type)) &&
                   (() => {
-                    const flatFeeBonus = isCpmContestType(
-                      currentContest?.contest_type,
-                    )
-                      ? ((currentContest?.contest_based_details as any)
-                          ?.cpm_contest?.flat_fee_bonus ?? 0)
-                      : ((currentContest?.contest_based_details as any)
-                          ?.leaderboard_contest?.flat_fee_bonus ?? 0);
+                    const flatFeeBonus = getFlatFeeBonusCentsFromContest(
+                      currentContest,
+                    );
                     const tot = statusFilterFinancialTotals;
                     const hasBonus =
                       flatFeeBonus > 0 ||
@@ -21943,8 +22301,8 @@ export default function ContestDetailClient({
                                           };
                                         }
 
-                                        // Non-Twitter: contest-wide views rank among
-                                        // verified/approved/paid only (not table display rank).
+                                        // Non-Twitter: views rank among verified/approved/paid
+                                        // (All-tab when prizes match; per-platform when they differ).
                                         // Do not apply % payout adjustment — server pays fixed rank prizes.
                                         const preCents =
                                           leaderboardPrizeCentsBySubmissionId.get(
@@ -26096,18 +26454,7 @@ export default function ContestDetailClient({
                                       )}
                                     </>
                                   ) : null}
-                                  {(() => {
-                                    const flatFeeBonus = isCpmContestType(
-                                      currentContest.contest_type,
-                                    )
-                                      ? (
-                                          currentContest.contest_based_details as any
-                                        )?.cpm_contest?.flat_fee_bonus
-                                      : (
-                                          currentContest.contest_based_details as any
-                                        )?.leaderboard_contest?.flat_fee_bonus;
-                                    return flatFeeBonus > 0;
-                                  })() && (
+                                  {showNormalViewFlatFeeBonusColumns && (
                                     <>
                                       <TableHead className="text-center">
                                         Bonus Expected
@@ -27936,20 +28283,7 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {(() => {
-                                            const flatFeeBonus =
-                                              isCpmContestType(
-                                                currentContest.contest_type,
-                                              )
-                                                ? (
-                                                    currentContest.contest_based_details as any
-                                                  )?.cpm_contest?.flat_fee_bonus
-                                                : (
-                                                    currentContest.contest_based_details as any
-                                                  )?.leaderboard_contest
-                                                    ?.flat_fee_bonus;
-                                            return flatFeeBonus > 0;
-                                          })() && (
+                                          {showNormalViewFlatFeeBonusColumns && (
                                             <>
                                               <TableCell className="text-center font-medium">
                                                 {formatMoney(
@@ -28755,26 +29089,7 @@ export default function ContestDetailClient({
                                                                 Mark as Custom
                                                                 Paid
                                                               </DropdownMenuItem>
-                                                              {(() => {
-                                                                const flatFeeBonus =
-                                                                  isCpmContestType(
-                                                                    currentContest.contest_type,
-                                                                  )
-                                                                    ? (
-                                                                        currentContest.contest_based_details as any
-                                                                      )
-                                                                        ?.cpm_contest
-                                                                        ?.flat_fee_bonus
-                                                                    : (
-                                                                        currentContest.contest_based_details as any
-                                                                      )
-                                                                        ?.leaderboard_contest
-                                                                        ?.flat_fee_bonus;
-                                                                return (
-                                                                  flatFeeBonus >
-                                                                  0
-                                                                );
-                                                              })() && (
+                                                              {showNormalViewFlatFeeBonusColumns && (
                                                                 <>
                                                                   <DropdownMenuItem
                                                                     onClick={() => {

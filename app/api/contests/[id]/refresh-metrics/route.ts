@@ -37,6 +37,7 @@ import {
   youtubeScopeForMetricsRefresh,
 } from "@/lib/multi-platform-metrics-refresh";
 import { startMultiPlatformMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
+import { filterPlatformsWithEligibleLiveSubmissions } from "@/lib/eligible-live-submissions-for-refresh";
 import type { PostCampaignVideoPlatform } from "@/lib/post-campaign-platforms";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 
@@ -301,18 +302,38 @@ export async function POST(
         scopeRaw === "all_standard"
           ? (scopeRaw as YouTubeRefreshScope)
           : null;
-      // Creators (opportunities) always use YouTube basic — even on multi-platform.
-      // Admin/brand multi-platform still defaults to `all` unless a scope is sent.
+      // Brand + creators always use YouTube basic (same as single-platform).
+      // Admin multi-platform still defaults to `all` unless a scope is sent.
       const youtubeScope = youtubeScopeForMetricsRefresh({
         campaignPlatformCount: liveVideoPlatforms.length,
-        forceBasic: isOpportunitiesRefresh,
-        requestedScope: isOpportunitiesRefresh ? null : parsedScope,
+        forceBasic: !isAdmin,
+        requestedScope: isAdmin ? parsedScope : null,
       });
+
+      // Skip platforms with no eligible submissions so UI/chain don't show empty progress.
+      const supabaseAdminForEligibility = createAdminSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      );
+      const platformsWithSubs = await filterPlatformsWithEligibleLiveSubmissions(
+        supabaseAdminForEligibility,
+        contestId,
+        queuedVideoPlatforms,
+      );
+      if (platformsWithSubs.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "No eligible submissions to refresh for the selected platform(s).",
+          },
+          { status: 400 },
+        );
+      }
 
       const chainResult = await startMultiPlatformMetricsChain({
         baseUrl,
         contestId,
-        platforms: queuedVideoPlatforms,
+        platforms: platformsWithSubs,
         metricsTarget: "submissions",
         scope: youtubeScope,
         cookieHeader,
@@ -342,7 +363,7 @@ export async function POST(
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
-        platforms: queuedVideoPlatforms,
+        platforms: platformsWithSubs,
         runs,
         runId: runs[0]?.runId,
         nextRefreshAvailable: new Date(

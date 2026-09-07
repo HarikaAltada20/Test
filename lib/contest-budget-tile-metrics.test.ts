@@ -581,4 +581,159 @@ describe("contest-budget-tile-metrics", () => {
     ];
     assert.equal(computeBudgetFilledCents(contest, submissions), 6_000);
   });
+
+  it("leaderboard filled uses All-tab ranking when platform prizes match", () => {
+    const youtube = {
+      contest_type: "leaderboard",
+      leaderboard_contest: {
+        prizes: [
+          { position: 1, amount: 10000 },
+          { position: 2, amount: 5000 },
+        ],
+        total_prize: 15000,
+        winner_count: 2,
+      },
+    };
+    const contest = {
+      contest_type: "leaderboard",
+      post_contest_status: "in_review",
+      platform: "youtube,instagram",
+      contest_based_details: {
+        youtube,
+        instagram: youtube,
+      },
+    };
+    const submissions = [
+      {
+        id: "yt-1",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 500,
+        platform: "youtube",
+      },
+      {
+        id: "ig-1",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 400,
+        platform: "instagram",
+      },
+    ];
+    assert.equal(computeBudgetFilledCents(contest, submissions), 15000);
+  });
+
+  it("leaderboard filled uses per-platform prizes when ladders differ", () => {
+    const contest = {
+      contest_type: "leaderboard",
+      post_contest_status: "in_review",
+      platform: "youtube,instagram",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            prizes: [{ position: 1, amount: 20000 }],
+            total_prize: 20000,
+            winner_count: 1,
+          },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            prizes: [{ position: 1, amount: 7000 }],
+            total_prize: 7000,
+            winner_count: 1,
+          },
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "yt-1",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 500,
+        platform: "youtube",
+      },
+      {
+        id: "ig-1",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 400,
+        platform: "instagram",
+      },
+    ];
+    assert.equal(computeBudgetFilledCents(contest, submissions), 27000);
+  });
+
+  it("leaderboard filled uses per-platform flat fee bonus when amounts differ", () => {
+    const contest = {
+      contest_type: "leaderboard",
+      post_contest_status: "in_review",
+      platform: "youtube,instagram",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            prizes: [{ position: 1, amount: 10000 }],
+            total_prize: 10000,
+            winner_count: 1,
+            flat_fee_bonus: 200,
+            total_budget: 1000,
+          },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            prizes: [{ position: 1, amount: 10000 }],
+            total_prize: 10000,
+            winner_count: 1,
+            flat_fee_bonus: 500,
+            total_budget: 1500,
+          },
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "yt-1",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 500,
+        platform: "youtube",
+      },
+      {
+        id: "ig-1",
+        creator_id: "c2",
+        created_at: "2026-06-01T00:00:01.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 400,
+        platform: "instagram",
+      },
+    ];
+    // Same prize ladders → All-tab rank: 1st 10000, 2nd 0. Bonuses 200 + 500.
+    assert.equal(computeBudgetFilledCents(contest, submissions), 10700);
+  });
 });

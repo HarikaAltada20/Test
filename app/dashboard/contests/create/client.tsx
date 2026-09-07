@@ -77,6 +77,7 @@ import {
   PLATFORM_SECTION_KEYS,
   platformSectionHint,
   platformsForTab,
+  prizePoolCentsForPlatformScope,
   preparePlatformCampaignsForSave,
   primaryPlatformOf,
   readPersistedPlatformCampaigns,
@@ -1040,7 +1041,7 @@ export default function CreateContestPage({
         setCpmRate(snapshot.cpmRate);
         setMinViews(snapshot.minViews);
         setMaxViews(snapshot.maxViews);
-        // totalBudget is shared across platforms — keep the form value
+        // CPM / milestone / dual pool budget is shared — keep the form value.
         setTermsConditions(snapshot.termsConditions);
         setMilestoneRows(
           snapshot.milestoneRows.length > 0
@@ -1062,6 +1063,7 @@ export default function CreateContestPage({
       case "earnings":
         setFlatFeeBonus(snapshot.flatFeeBonus);
         setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
+        setTotalBudget(snapshot.totalBudget);
         setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator ?? "");
         setBonusEnabled(Boolean(snapshot.bonusEnabled));
         setBonusHtml(snapshot.bonusHtml || "");
@@ -1266,7 +1268,7 @@ export default function CreateContestPage({
     cpmRate,
     minViews,
     maxViews,
-    totalBudget,
+    contestType === "leaderboard" ? "" : totalBudget,
     termsConditions,
     milestoneRows,
     milestoneBonusEnabled,
@@ -1283,6 +1285,7 @@ export default function CreateContestPage({
   }, [
     flatFeeBonus,
     flatFeeBonusCap,
+    contestType === "leaderboard" ? totalBudget : "",
     maxEarningsPerCreator,
     bonusEnabled,
     bonusHtml,
@@ -9945,8 +9948,16 @@ export default function CreateContestPage({
                             enabled.
                             <br />
                             <strong>Prize Pool:</strong>{" "}
-                            {formatCurrencyFromCents(totalPrizePool)} (for
-                            rankings)
+                            {formatCurrencyFromCents(
+                              prizePoolCentsForPlatformScope({
+                                scopeTab: sectionPlatforms.earnings,
+                                prizeTab: sectionPlatforms.prize,
+                                selected: selectedPlatforms,
+                                snapshots: platformCampaigns,
+                                livePrizePoolCents: totalPrizePool,
+                              }),
+                            )}{" "}
+                            (for rankings)
                             <br />
                             <strong>Total Budget:</strong>{" "}
                             {totalBudget

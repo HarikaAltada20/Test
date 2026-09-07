@@ -32,6 +32,8 @@ import {
 import {
   contestHasUsableMilestoneLadder,
   isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
+  resolveFlatFeeBonusPlan,
   resolveMaxEarningsCentsForSubmission,
 } from "@/lib/video-platform-campaigns";
 import {
@@ -46,7 +48,11 @@ import {
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+  getFlatFeeBonusLadderForSubmission,
+} from "@/lib/twitter-cpm-bonus-expected";
 import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
@@ -965,15 +971,7 @@ export async function processVerifySubmission(
       }
 
       if (contest.contest_type !== "dual_rewards") {
-        // Get flat fee bonus from contest details based on contest type
-        const contestDetails =
-          contest.contest_type === "cpm"
-            ? (contest.contest_based_details as any)?.cpm_contest
-            : (contest.contest_based_details as any)?.leaderboard_contest;
-
-        const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
-        const totalBudget = contestDetails?.total_budget || null;
-        const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
+        const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest as any);
 
       const submissionStatusLower = String(
         submissionFull.status || "",
@@ -996,7 +994,7 @@ export async function processVerifySubmission(
           await fetchContestSubmissionsAllPages(
             supabaseAdmin,
             submissionFull.contest_id,
-            "id, created_at, status, paid",
+            "id, created_at, status, paid, platform",
             { order: { column: "created_at", ascending: true } },
           );
         if (allEligibleErr) {
@@ -1012,6 +1010,7 @@ export async function processVerifySubmission(
             created_at: s.created_at,
             status: s.status,
             paid: s.paid === true,
+            platform: s.platform,
           })),
         );
         const expectedBonusForSubmission =
@@ -1032,11 +1031,14 @@ export async function processVerifySubmission(
         }
 
         // Calculate current bonus spending
-        const { data: bonusSpendingData, error: bonusSpendErr } =
-          await fetchContestSubmissionsAllPages<{ bonus_amount?: number | null }>(
+          const { data: bonusSpendingData, error: bonusSpendErr } =
+          await fetchContestSubmissionsAllPages<{
+            bonus_amount?: number | null;
+            platform?: string | null;
+          }>(
           supabaseAdmin,
           submissionFull.contest_id,
-          "bonus_amount",
+          "bonus_amount, platform",
           {
             bonusPaid: true,
             order: { column: "created_at", ascending: true },
@@ -1054,18 +1056,35 @@ export async function processVerifySubmission(
             0,
           );
 
-        const budgetLimit =
-          contest.contest_type === "leaderboard"
-            ? totalBudget
-            : contest.contest_type === "cpm"
-              ? flatFeeBonusCap
-              : null;
+        const bonusPlan = resolveFlatFeeBonusPlan(
+          (contest as any)?.contest_based_details || null,
+          (contest as any)?.platform,
+          (contest as any)?.contest_type,
+        );
+        const ladder = getFlatFeeBonusLadderForSubmission(
+          contest as any,
+          submissionFull.platform,
+        );
+        const platformKey =
+          parseVideoContestPlatforms(submissionFull.platform)[0] || "_";
+        const spentForCap = bonusPlan.shareAcrossAllPlatforms
+          ? currentBonusSpent
+          : (bonusSpendingData || []).reduce((sum, sub) => {
+              const key =
+                parseVideoContestPlatforms(
+                  (sub as { platform?: string | null }).platform,
+                )[0] || "_";
+              if (key !== platformKey) return sum;
+              return sum + (Number(sub.bonus_amount) || 0);
+            }, 0);
         const remainingBonusBudget =
-          budgetLimit != null
-            ? Math.max(0, budgetLimit - currentBonusSpent)
+          ladder.budgetCents != null
+            ? Math.max(0, ladder.budgetCents - spentForCap)
             : null;
         const rawBonusAllocation = allocateFlatFeeBonusCents(
-          flatFeeBonus,
+          expectedBonusForSubmission > 0
+            ? expectedBonusForSubmission
+            : ladder.amountCents,
           remainingBonusBudget,
         );
         const adjustedBonusAllocation = adjustBonusCents(
@@ -1168,7 +1187,8 @@ export async function processVerifySubmission(
                   bonus_type: "flat_fee",
                   payout_cycle: resolvedBonusCycle,
                   bonus_reason: rawBonusAllocation.reason,
-                  original_bonus_amount: flatFeeBonus,
+                  original_bonus_amount:
+                    expectedBonusForSubmission || ladder.amountCents,
                   adjusted_bonus_amount: adjustedBonusAllocation,
                 },
               },
@@ -1351,7 +1371,8 @@ export async function processVerifySubmission(
               rewardAmount = cappedBase;
             }
         } else if (contest.contest_type === "leaderboard" && !customAmount) {
-          // Per-submission prize by contest-wide views rank.
+          // Per-submission prize by All-tab rank when prizes match, or
+          // per-platform rank when prize ladders differ.
           const prizes =
             (contest as any)?.contest_based_details?.leaderboard_contest
               ?.prizes || [];
@@ -1361,7 +1382,14 @@ export async function processVerifySubmission(
               contestId: submissionFull.contest_id,
               submissionId: String(submissionFull.id),
               views: submissionFull.views || 0,
+              platform: submissionFull.platform,
               prizes,
+              contestBasedDetails:
+                ((contest as any)?.contest_based_details as Record<
+                  string,
+                  unknown
+                >) || null,
+              contestPlatform: (contest as any)?.platform,
             });
           if (prizeResult.error) {
             return NextResponse.json(
