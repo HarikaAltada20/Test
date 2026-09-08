@@ -47,7 +47,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: apps/goc-downloader/package-lock.json
 
@@ -58,6 +58,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Fetch and verify pinned sidecars
+        run: npm run fetch-sidecars
 
       - name: Configure code signing (optional)
         shell: pwsh

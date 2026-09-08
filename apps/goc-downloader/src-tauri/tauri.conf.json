@@ -57,7 +57,7 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
+      "active": false,
       "endpoints": [
         "https://releases.gameofcreators.example/downloader/{{target}}/{{arch}}/{{current_version}}"
       ],
