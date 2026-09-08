@@ -36,3 +36,4 @@ SUPABASE/backup-storage.local.ps1
 SUPABASE/supabase-backups/
 SUPABASE_BACKUP/
 db/backups/*.dump
+apps/goc-downloader/
