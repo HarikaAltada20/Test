@@ -16,6 +16,11 @@ import {
 import type { ContestListCardStats } from "@/lib/contest-list-card-stats";
 import type { CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 import { sortCampaignsForList } from "@/lib/contest-list-sort";
+import {
+  expandAvailableCampaignPlatforms,
+  normalizeCampaignPlatformFilter,
+  postgrestPlatformOrFilter,
+} from "@/lib/campaign-platform-filter";
 
 export { sortCampaignsForList };
 export {
@@ -396,8 +401,9 @@ function applyListFilters(
   q = applyTabFilter(q, tab, params.scope);
   q = applyPostPhaseFilter(q, params.postContestPhase, tab);
 
-  if (params.platform && params.platform !== "all") {
-    q = q.eq("platform", params.platform);
+  const platformOr = postgrestPlatformOrFilter(params.platform);
+  if (platformOr) {
+    q = q.or(platformOr);
   }
 
   if (params.contestType && params.contestType !== "all") {
@@ -683,9 +689,11 @@ async function fetchTabCountsFromRpc(
       ...emptyPostPhaseCounts(),
       ...payload.postPhaseCounts,
     },
-    availablePlatforms: Array.isArray(payload.availablePlatforms)
-      ? payload.availablePlatforms
-      : ["all"],
+    availablePlatforms: expandAvailableCampaignPlatforms(
+      Array.isArray(payload.availablePlatforms)
+        ? payload.availablePlatforms
+        : ["all"],
+    ),
   };
 }
 
@@ -719,7 +727,7 @@ async function fetchFilteredPageSql(
       p_sort: params.sort,
       p_offset: offset,
       p_limit: limit,
-      p_platform: params.platform || "all",
+      p_platform: normalizeCampaignPlatformFilter(params.platform),
       p_contest_type: params.contestType || "all",
       p_contest_format: params.contestFormat || "all",
       p_post_contest_phase: params.postContestPhase || "all",
@@ -941,12 +949,16 @@ async function fetchFilteredPageViaPostgrest(
 export async function listCampaignsPaginated(
   params: ListCampaignsParams,
 ): Promise<ListCampaignsResult> {
-  assertAdvertiserScoped(params);
+  const listParams: ListCampaignsParams = {
+    ...params,
+    platform: normalizeCampaignPlatformFilter(params.platform),
+  };
+  assertAdvertiserScoped(listParams);
 
-  if (params.eligibleOnly) {
+  if (listParams.eligibleOnly) {
     if (
-      params.scope !== "opportunities" ||
-      !params.creatorEligibilitySnapshot
+      listParams.scope !== "opportunities" ||
+      !listParams.creatorEligibilitySnapshot
     ) {
       throw new Error(
         "eligibleOnly requires opportunities scope and creatorEligibilitySnapshot",
@@ -954,16 +966,16 @@ export async function listCampaignsPaginated(
     }
   }
 
-  const page = Math.max(1, params.page || 1);
-  const limit = parseListLimit(String(params.limit));
+  const page = Math.max(1, listParams.page || 1);
+  const limit = parseListLimit(String(listParams.limit));
   const offset = (page - 1) * limit;
 
-  const countsPromise = fetchTabCountsFromRpc(params.supabase, params);
-  const sortForSql = resolveSortForSql(params);
+  const countsPromise = fetchTabCountsFromRpc(listParams.supabase, listParams);
+  const sortForSql = resolveSortForSql(listParams);
 
   const { rows, total: sqlTotal } = await fetchFilteredPageSql(
-    params.supabase,
-    { ...params, sort: sortForSql },
+    listParams.supabase,
+    { ...listParams, sort: sortForSql },
     offset,
     limit,
   );
@@ -976,7 +988,7 @@ export async function listCampaignsPaginated(
     );
   }
 
-  const enrichedPage = await hydrateListPage(params, pageRows);
+  const enrichedPage = await hydrateListPage(listParams, pageRows);
 
   return {
     contests: enrichedPage,
@@ -986,6 +998,8 @@ export async function listCampaignsPaginated(
     tabCounts: countsFromRpc?.tabCounts ?? emptyTabCounts(),
     postPhaseCounts:
       countsFromRpc?.postPhaseCounts ?? emptyPostPhaseCounts(),
-    availablePlatforms: countsFromRpc?.availablePlatforms ?? ["all"],
+    availablePlatforms: expandAvailableCampaignPlatforms(
+      countsFromRpc?.availablePlatforms,
+    ),
   };
 }

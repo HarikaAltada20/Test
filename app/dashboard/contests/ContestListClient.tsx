@@ -104,6 +104,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
+import { CampaignPlatformFilter } from "@/components/campaign-list/CampaignPlatformFilter";
+import {
+  CAMPAIGN_FILTER_PLATFORMS,
+  expandAvailableCampaignPlatforms,
+  normalizeCampaignPlatformFilter,
+  type CampaignFilterPlatform,
+} from "@/lib/campaign-platform-filter";
 import {
   ContestListFlatFeeBonusBadge,
   ContestListStatsFooter,
@@ -682,7 +689,7 @@ export function ContestListClient({
   useEffect(() => {
     const stored = readStoredContestListFilters(contestListFiltersStorageKey);
     setSortOption(stored.sortOption as SortOptionType);
-    setPlatformFilter(stored.platformFilter);
+    setPlatformFilter(normalizeCampaignPlatformFilter(stored.platformFilter));
     setContestTypeFilter(stored.contestTypeFilter);
     setContestFormatFilter(stored.contestFormatFilter);
     setLimit(stored.limit);
@@ -827,8 +834,12 @@ export function ContestListClient({
   }, [refreshServerList]);
 
   const postPhaseCounts = serverPostPhaseCounts;
-  const availablePlatforms =
-    serverAvailablePlatforms.length > 0 ? serverAvailablePlatforms : ["all"];
+  const platformFilterOptions = useMemo(() => {
+    const expanded = expandAvailableCampaignPlatforms(
+      serverAvailablePlatforms,
+    ).filter((platform): platform is CampaignFilterPlatform => platform !== "all");
+    return expanded.length > 0 ? expanded : [...CAMPAIGN_FILTER_PLATFORMS];
+  }, [serverAvailablePlatforms]);
 
   useLayoutEffect(() => {
     const checkMode = () => {
@@ -3918,18 +3929,13 @@ export function ContestListClient({
                 </SelectContent>
               </Select>
 
-              <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
-                  <SelectValue placeholder="Platform" />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  {availablePlatforms.map((p) => (
-                    <SelectItem isDark={isDark} key={p} value={p}>
-                      {p === "all" ? "All Platforms" : p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CampaignPlatformFilter
+                value={platformFilter}
+                onChange={setPlatformFilter}
+                platforms={platformFilterOptions}
+                isDark={isDark}
+                triggerClassName="border border-gray-400"
+              />
 
               {/* Campaign Type Filter */}
               <Select

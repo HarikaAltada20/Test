@@ -1,3 +1,5 @@
+import { normalizeCampaignPlatformFilter } from "@/lib/campaign-platform-filter";
+
 export const BRAND_CONTEST_LIST_FILTERS_KEY = "gv-dashboard-contests-filters";
 export const ADMIN_CONTEST_LIST_FILTERS_KEY =
   "gv-dashboard-admin-contests-filters";
@@ -155,7 +157,7 @@ export type ContestListFilters = {
 export type OpportunitiesListFilters = {
   mediaType: OpportunitiesMediaTypeOption;
   eligibilityFilter: OpportunitiesEligibilityFilterOption;
-  platformFilter: OpportunitiesPlatformFilterOption;
+  platformFilter: string;
   typeFilter: ContestTypeFilterOption;
   sortOption: OpportunitiesSortOption;
   viewMode: ViewModeOption;
@@ -231,10 +233,7 @@ export function readStoredContestListFilters(
       sortOption: isOneOf(parsed.sortOption, CONTEST_LIST_SORT_OPTIONS)
         ? parsed.sortOption
         : defaults.sortOption,
-      platformFilter: pickString(
-        parsed.platformFilter,
-        defaults.platformFilter,
-      ),
+      platformFilter: normalizeCampaignPlatformFilter(parsed.platformFilter),
       contestTypeFilter: isOneOf(
         parsed.contestTypeFilter,
         CONTEST_TYPE_FILTER_OPTIONS,
@@ -299,12 +298,7 @@ export function readStoredOpportunitiesListFilters(
       )
         ? parsed.eligibilityFilter
         : defaults.eligibilityFilter,
-      platformFilter: isOneOf(
-        parsed.platformFilter,
-        OPPORTUNITIES_PLATFORM_FILTER_OPTIONS,
-      )
-        ? parsed.platformFilter
-        : defaults.platformFilter,
+      platformFilter: normalizeCampaignPlatformFilter(parsed.platformFilter),
       typeFilter: isOneOf(parsed.typeFilter, CONTEST_TYPE_FILTER_OPTIONS)
         ? parsed.typeFilter
         : defaults.typeFilter,

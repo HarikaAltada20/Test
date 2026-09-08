@@ -151,22 +151,21 @@ import {
   type ContestTypeFilterOption,
   type OpportunitiesMediaTypeOption,
   type OpportunitiesEligibilityFilterOption,
-  type OpportunitiesPlatformFilterOption,
   type OpportunitiesSortOption,
   type PageSizeOption,
   type ViewModeOption,
 } from "@/lib/campaign-list-filters-storage";
+import { CampaignPlatformFilter } from "@/components/campaign-list/CampaignPlatformFilter";
+import {
+  campaignPlatformsForMediaType,
+  normalizeCampaignPlatformFilter,
+} from "@/lib/campaign-platform-filter";
 import { buildOpportunitiesListQueryKey } from "@/lib/opportunities-list-query";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
 type EligibilityFilterType = "all" | "eligible";
-type PlatformFilterType =
-  | "all"
-  | "youtube"
-  | "instagram"
-  | "twitter"
-  | "tiktok"; // Scalable: add more platforms as needed
+type PlatformFilterType = string;
 type ContestTypeFilterType =
   | "all"
   | "leaderboard"
@@ -414,6 +413,22 @@ export default function OpportunitiesPage({
 
   const [platformFilter, setPlatformFilter] =
     useState<PlatformFilterType>("all");
+  const platformOptions = useMemo(
+    () => campaignPlatformsForMediaType(mediaType),
+    [mediaType],
+  );
+  const handleMediaTypeChange = useCallback(
+    (next: OpportunitiesMediaTypeOption) => {
+      setMediaType(next);
+      setPlatformFilter((prev) =>
+        normalizeCampaignPlatformFilter(
+          prev,
+          campaignPlatformsForMediaType(next),
+        ),
+      );
+    },
+    [],
+  );
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
   const [sortOption, setSortOption] =
     useState<SortOptionType>("relevance_desc");
@@ -440,7 +455,12 @@ export default function OpportunitiesPage({
     );
     setMediaType(stored.mediaType);
     setEligibilityFilter(stored.eligibilityFilter);
-    setPlatformFilter(stored.platformFilter);
+    setPlatformFilter(
+      normalizeCampaignPlatformFilter(
+        stored.platformFilter,
+        campaignPlatformsForMediaType(stored.mediaType),
+      ),
+    );
     setTypeFilter(stored.typeFilter);
     setSortOption(stored.sortOption);
     setViewMode(stored.viewMode);
@@ -538,7 +558,7 @@ export default function OpportunitiesPage({
       mediaType: mediaType as OpportunitiesMediaTypeOption,
       eligibilityFilter:
         eligibilityFilter as OpportunitiesEligibilityFilterOption,
-      platformFilter: platformFilter as OpportunitiesPlatformFilterOption,
+      platformFilter,
       typeFilter: typeFilter as ContestTypeFilterOption,
       sortOption: sortOption as OpportunitiesSortOption,
       viewMode: viewMode as ViewModeOption,
@@ -2378,7 +2398,7 @@ export default function OpportunitiesPage({
                 >
                   <button
                     type="button"
-                    onClick={() => setMediaType("all")}
+                    onClick={() => handleMediaTypeChange("all")}
                     title="All opportunities"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
@@ -2394,7 +2414,7 @@ export default function OpportunitiesPage({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMediaType("text")}
+                    onClick={() => handleMediaTypeChange("text")}
                     title="Text and image opportunities"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
@@ -2410,7 +2430,7 @@ export default function OpportunitiesPage({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMediaType("media")}
+                    onClick={() => handleMediaTypeChange("media")}
                     title="Video opportunities"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
@@ -2524,63 +2544,16 @@ export default function OpportunitiesPage({
         {/* Enhanced Filter and Sort Select Dropdowns */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Platform Filter */}
-          <Select
+          <CampaignPlatformFilter
             value={platformFilter}
-            onValueChange={(value) =>
-              setPlatformFilter(value as PlatformFilterType)
-            }
-          >
-            <SelectTrigger
-              className={cn(
-                "border font-medium",
-                isDark ? "border-gray-600" : "border-gray-400",
-              )}
-            >
-              <SelectValue placeholder="Filter by Platform" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              <SelectItem value="all" isDark={isDark}>
-                All Platforms
-              </SelectItem>
-
-              {mediaType == "all" && (
-                <>
-                  <SelectItem value="youtube" isDark={isDark}>
-                    YouTube
-                  </SelectItem>
-                  <SelectItem value="instagram" isDark={isDark}>
-                    Instagram
-                  </SelectItem>
-                  <SelectItem value="tiktok" isDark={isDark}>
-                    TikTok
-                  </SelectItem>
-                  <SelectItem value="twitter" isDark={isDark}>
-                    Twitter
-                  </SelectItem>
-                </>
-              )}
-              {mediaType == "media" && (
-                <>
-                  <SelectItem value="youtube" isDark={isDark}>
-                    YouTube
-                  </SelectItem>
-                  <SelectItem value="instagram" isDark={isDark}>
-                    Instagram
-                  </SelectItem>
-                  <SelectItem value="tiktok" isDark={isDark}>
-                    TikTok
-                  </SelectItem>
-                </>
-              )}
-              {mediaType == "text" && (
-                <SelectItem value="twitter" isDark={isDark}>
-                  Twitter
-                </SelectItem>
-              )}
-
-              {/* Add more platforms as needed */}
-            </SelectContent>
-          </Select>
+            onChange={setPlatformFilter}
+            platforms={platformOptions}
+            isDark={isDark}
+            triggerClassName={cn(
+              "border font-medium",
+              isDark ? "border-gray-600" : "border-gray-400",
+            )}
+          />
 
           {/* Contest Type Filter */}
           <Select
