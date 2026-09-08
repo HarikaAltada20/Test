@@ -166,4 +166,77 @@ describe("flat-fee bonus expected per platform", () => {
     assert.equal(map.get("yt-2"), 0);
     assert.equal(map.get("ig-1"), 500);
   });
+
+  it("counts Twitter tweets as verified from moderation_status", () => {
+    const contest = {
+      contest_type: "cpm",
+      platform: "twitter",
+      contest_based_details: {
+        cpm_contest: { flat_fee_bonus: 200, flat_fee_bonus_cap: 1000 },
+      },
+    };
+    const map = buildFlatFeeBonusExpectedCentsBySubmissionId(contest, [
+      {
+        id: "tw-1",
+        created_at: "2026-01-01T00:00:00.000Z",
+        moderation_status: "verified",
+        is_twitter_tweet: true,
+        platform: "twitter",
+      },
+    ]);
+    assert.equal(map.get("tw-1"), 200);
+  });
+
+  it("counts approved video submissions as verified", () => {
+    const contest = {
+      contest_type: "leaderboard",
+      platform: "youtube",
+      contest_based_details: {
+        leaderboard_contest: {
+          flat_fee_bonus: 200,
+          total_budget: 1000,
+        },
+      },
+    };
+    const map = buildFlatFeeBonusExpectedCentsBySubmissionId(contest, [
+      {
+        id: "yt-1",
+        created_at: "2026-01-01T00:00:00.000Z",
+        status: "approved",
+        platform: "youtube",
+      },
+    ]);
+    assert.equal(map.get("yt-1"), 200);
+  });
+
+  it("uses root flat_fee_bonus when platform campaigns only have a budget", () => {
+    const contest = {
+      contest_type: "leaderboard",
+      platform: "youtube,instagram",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_budget: 5000 },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_budget: 5000 },
+        },
+        leaderboard_contest: {
+          flat_fee_bonus: 200,
+          total_budget: 10000,
+        },
+      },
+    };
+    assert.equal(getFlatFeeBonusCentsFromContest(contest), 200);
+    const map = buildFlatFeeBonusExpectedCentsBySubmissionId(contest, [
+      {
+        id: "yt-1",
+        created_at: "2026-01-01T00:00:00.000Z",
+        status: "verified",
+        platform: "youtube",
+      },
+    ]);
+    assert.equal(map.get("yt-1"), 200);
+  });
 });

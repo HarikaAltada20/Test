@@ -27,6 +27,8 @@ import {
 import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
+  getNormalizedSubmissionStatusForFlatFeeBonus,
+  toFlatFeeBonusSubmissionInput,
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
   buildMilestoneSubmissionPayoutCentsMapFromDetails,
@@ -134,7 +136,8 @@ export function BudgetProgress({
       Boolean(bonus.most_verified_views || bonus.most_verified_reels),
   );
   const hasFlatFeeBonus =
-    (contest.contest_type !== "dual_rewards" && contestFlatFeeBonusCents > 0) ||
+    (contest.contest_type !== "dual_rewards" &&
+      (contestFlatFeeBonusCents > 0 || flatFeeBonus > 0)) ||
     (isMilestoneContestType(contest.contest_type) &&
       (milestoneCreatorBonusConfigured ||
         (typeof milestoneCreatorBonusExpectedCents === "number" &&
@@ -476,7 +479,9 @@ export function BudgetProgress({
     }
 
     const relevantSubmissions = submissions.filter((s) => {
-      const status = (s as any).status?.toLowerCase();
+      const status = getNormalizedSubmissionStatusForFlatFeeBonus(
+        toFlatFeeBonusSubmissionInput(s as any),
+      );
       return (
         (status === "verified" || status === "paid") && !twitterExcluded(s)
       );
@@ -694,18 +699,12 @@ export function BudgetProgress({
             ? (contest.contest_based_details as Record<string, unknown>)
             : null,
       },
-      submissions.map((s) => ({
-        id: String((s as any).id || ""),
-        created_at: (s as any).created_at,
-        status: (s as any).status,
-        paid: s.paid,
-        platform: (s as any).platform,
-      })),
+      submissions.map((s) => toFlatFeeBonusSubmissionInput(s as any)),
     );
     if (
       contest.contest_type !== "dual_rewards" &&
       contest.contest_type !== "milestone" &&
-      contestFlatFeeBonusCents > 0
+      (contestFlatFeeBonusCents > 0 || flatFeeBonus > 0)
     ) {
       let expectedSum = 0;
       for (const cents of expectedBonusMap.values()) expectedSum += cents;
@@ -1137,7 +1136,7 @@ export function BudgetProgress({
         </span>
         <span
           className={cn(
-            "font-semibold tabular-nums",
+            "text-xs font-medium tabular-nums whitespace-nowrap",
             isDark ? "text-white" : "text-gray-900",
           )}
         >
@@ -1168,7 +1167,7 @@ export function BudgetProgress({
   ) => {
     return (
       <div
-        className="grid gap-3 items-start"
+        className="grid gap-3 items-center text-sm"
         style={{
           gridTemplateColumns: `minmax(7.5rem, 1.15fr) repeat(${Math.max(
             rows.length,
@@ -1389,7 +1388,7 @@ export function BudgetProgress({
 
       {/* Legend */}
       {platformCpmRows.length > 0 || platformBonusRows.length > 0 ? (
-        <div className="space-y-3 text-xs">
+        <div className="space-y-3 text-sm">
           {renderLegendRow(
             <div className="flex items-start gap-1.5 min-w-0">
               <div className="w-3 h-3 mt-0.5 shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
@@ -1422,7 +1421,7 @@ export function BudgetProgress({
         </div>
       ) : (
         <div
-          className={`grid gap-2 text-xs ${
+          className={`grid gap-2 text-sm ${
             hasFlatFeeBonus ? "grid-cols-2" : "grid-cols-1"
           }`}
         >

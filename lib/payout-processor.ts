@@ -4,6 +4,7 @@ import {
   creditCreatorWithdrawableBalance,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import {
   isKeyedMaxEarningsMap,
   resolveMaxEarningsCentsForSubmission,
@@ -141,21 +142,18 @@ export async function processQueuedPayouts(
 
       if (!rewardAmount || rewardAmount <= 0) {
         if ((contest as any).contest_type === "cpm") {
-          const cpm = (contest as any)?.contest_based_details?.cpm_contest;
-          const rate =
-            typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
-          let effectiveViews = sub.views || 0;
-          if (
-            typeof cpm?.min_views === "number" &&
-            effectiveViews < cpm.min_views
-          )
-            effectiveViews = 0;
-          if (
-            typeof cpm?.max_views === "number" &&
-            effectiveViews > cpm.max_views
-          )
-            effectiveViews = cpm.max_views;
-          rewardAmount = Math.round(((effectiveViews * rate) / 1000) * 100);
+          rewardAmount = computeCpmRawCentsForRow(
+            {
+              views: sub.views,
+              platform: (sub as any).platform,
+              other_stats: (sub as any).other_stats,
+            },
+            ((contest as any)?.contest_based_details as Record<
+              string,
+              unknown
+            >) || null,
+            (contest as any)?.platform,
+          );
         } else if ((contest as any).contest_type === "leaderboard") {
           const {
             applyCreatorMaxEarningsCapCents,

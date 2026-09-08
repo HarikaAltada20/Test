@@ -27,39 +27,50 @@ const NATIVE_DOWNLOAD_SETTLE_MS = 2000;
 const QUEUED_DOWNLOAD_POLL_MS = 2000;
 const QUEUED_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
+function platformHasInstagramOrYouTube(platform: string): boolean {
+  return platform.includes("instagram") || platform.includes("youtube");
+}
+
+function isTikTokOnlyPlatform(platform: string): boolean {
+  return platform.includes("tiktok") && !platformHasInstagramOrYouTube(platform);
+}
+
 /**
  * Client/server helper: whether a submission can be downloaded as IG/YT video.
+ * Multi-platform contests (e.g. youtube,instagram,tiktok) still allow IG/YT rows.
  */
 export function canDownloadSubmissionVideo(input: {
   platform?: string | null;
   contestPlatform?: string | null;
   contentLink?: string | null;
 }): boolean {
-  const platform = (
-    input.platform ||
-    input.contestPlatform ||
-    ""
-  ).toLowerCase();
+  const submissionPlatform = (input.platform || "").toLowerCase();
+  const contestPlatform = (input.contestPlatform || "").toLowerCase();
   const link = input.contentLink || "";
 
-  if (platform.includes("tiktok")) return false;
+  const isInstagramLink = link.includes("instagram.com");
+  const isYouTubeLink =
+    link.includes("youtube.com") || /youtu\.?be/i.test(link);
+  const isTikTokLink = link.includes("tiktok.com");
 
-  const isInstagram =
-    platform.includes("instagram") || link.includes("instagram.com");
-  const isYouTube =
-    platform.includes("youtube") ||
-    link.includes("youtube.com") ||
-    /youtu\.?be/i.test(link);
+  if (isInstagramLink || isYouTubeLink) return true;
+  if (isTikTokLink) return false;
 
-  return isInstagram || isYouTube;
+  if (platformHasInstagramOrYouTube(submissionPlatform)) return true;
+  if (isTikTokOnlyPlatform(submissionPlatform)) return false;
+
+  // Contest CSV can include TikTok alongside IG/YT — don't treat that as TikTok-only.
+  if (isTikTokOnlyPlatform(contestPlatform)) return false;
+  if (contestPlatform.includes("tiktok") && platformHasInstagramOrYouTube(contestPlatform)) {
+    return false;
+  }
+  return platformHasInstagramOrYouTube(contestPlatform);
 }
 
 export function canBulkDownloadContestVideos(
   contestPlatform?: string | null,
 ): boolean {
-  const platform = (contestPlatform || "").toLowerCase();
-  if (platform.includes("tiktok")) return false;
-  return platform.includes("instagram") || platform.includes("youtube");
+  return platformHasInstagramOrYouTube((contestPlatform || "").toLowerCase());
 }
 
 export function chunkArray<T>(items: T[], size: number): T[][] {

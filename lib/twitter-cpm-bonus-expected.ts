@@ -29,6 +29,36 @@ export type FlatFeeBonusContestInput = {
   contest_based_details?: Record<string, unknown> | null;
 };
 
+function isTwitterFlatFeeBonusRow(
+  submission: Pick<FlatFeeBonusSubmissionInput, "is_twitter_tweet" | "platform">,
+): boolean {
+  if (submission.is_twitter_tweet === true) return true;
+  const platform = String(submission.platform || "").toLowerCase();
+  return platform === "twitter" || platform === "x";
+}
+
+/** Normalize UI/API rows so Twitter tweets and `approved` still count as verified. */
+export function toFlatFeeBonusSubmissionInput(row: {
+  id?: string | null;
+  created_at?: string | null;
+  tweet_created_at?: string | null;
+  is_twitter_tweet?: boolean;
+  moderation_status?: string | null;
+  status?: string | null;
+  paid?: boolean;
+  platform?: string | null;
+}): FlatFeeBonusSubmissionInput {
+  return {
+    id: String(row.id || ""),
+    created_at: row.created_at || row.tweet_created_at || null,
+    is_twitter_tweet: isTwitterFlatFeeBonusRow(row),
+    moderation_status: row.moderation_status ?? null,
+    status: row.status ?? null,
+    paid: row.paid === true,
+    platform: row.platform ?? null,
+  };
+}
+
 export function getFlatFeeBonusCentsFromContest(
   contest: FlatFeeBonusContestInput | null | undefined,
 ): number {
@@ -41,12 +71,13 @@ export function getFlatFeeBonusCentsFromContest(
   if (plan.shareAcrossAllPlatforms || plan.platforms.length < 2) {
     return plan.shared.amountCents;
   }
-  return Math.max(
+  const fromPlatforms = Math.max(
     0,
     ...plan.platforms.map(
       (platform) => plan.byPlatform[platform]?.amountCents || 0,
     ),
   );
+  return fromPlatforms > 0 ? fromPlatforms : plan.shared.amountCents;
 }
 
 export function getFlatFeeBonusLadderForSubmission(
@@ -69,21 +100,18 @@ export function getFlatFeeBonusLadderForSubmission(
 export function getNormalizedSubmissionStatusForFlatFeeBonus(
   submission: FlatFeeBonusSubmissionInput,
 ): string {
-  const isTwitterTweet = submission.is_twitter_tweet === true;
+  const isTwitterTweet = isTwitterFlatFeeBonusRow(submission);
   const rawStatus =
     (isTwitterTweet
       ? submission.moderation_status || submission.status
-      : submission.status) || "pending";
+      : submission.status || submission.moderation_status) || "pending";
   const statusLower = String(rawStatus).toLowerCase();
 
-  if (isTwitterTweet) {
-    if (statusLower === "paid") return "paid";
-    if (statusLower === "approved" || statusLower === "verified")
-      return "verified";
-    if (statusLower === "rejected") return "rejected";
-    return "pending";
+  if (statusLower === "paid") return "paid";
+  if (statusLower === "approved" || statusLower === "verified") {
+    return "verified";
   }
-
+  if (statusLower === "rejected") return "rejected";
   return statusLower;
 }
 
@@ -152,11 +180,12 @@ export function buildFlatFeeBonusExpectedCentsBySubmissionId(
   submissions: readonly FlatFeeBonusSubmissionInput[],
 ): Map<string, number> {
   const map = new Map<string, number>();
+  const rows = submissions.map((s) => toFlatFeeBonusSubmissionInput(s));
   if (!contest) {
-    submissions.forEach((s) => map.set(s.id, 0));
+    rows.forEach((s) => map.set(s.id, 0));
     return map;
   }
-  if (!submissions.length) return map;
+  if (!rows.length) return map;
 
   const plan = resolveFlatFeeBonusPlan(
     contest.contest_based_details,
@@ -166,21 +195,21 @@ export function buildFlatFeeBonusExpectedCentsBySubmissionId(
 
   if (plan.shareAcrossAllPlatforms || plan.platforms.length < 2) {
     allocateFlatFeeBonusWalk(
-      submissions,
+      rows,
       plan.shared.amountCents,
       plan.shared.budgetCents,
       map,
     );
-    submissions.forEach((s) => {
+    rows.forEach((s) => {
       if (!map.has(s.id)) map.set(s.id, 0);
     });
     return map;
   }
 
-  submissions.forEach((s) => map.set(s.id, 0));
+  rows.forEach((s) => map.set(s.id, 0));
   for (const platform of plan.platforms) {
     const ladder = plan.byPlatform[platform] ?? plan.shared;
-    const platformRows = submissions.filter((row) => {
+    const platformRows = rows.filter((row) => {
       const key =
         parseVideoContestPlatforms(row.platform)[0] ??
         parseVideoContestPlatforms(contest.platform)[0];

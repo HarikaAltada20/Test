@@ -12,6 +12,7 @@ import {
   buildLedgerScopedReversalDebitIdempotencyKey,
   sortUniqueTransactionIds,
 } from "@/lib/bulk-payment-rollback";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
@@ -52,6 +53,7 @@ import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
   getFlatFeeBonusLadderForSubmission,
+  toFlatFeeBonusSubmissionInput,
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
   fetchContestSubmissionsAllPages,
@@ -1005,13 +1007,15 @@ export async function processVerifySubmission(
         }
         const expectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
           contest as any,
-          (allEligibleContestSubs || []).map((s: any) => ({
-            id: String(s.id),
-            created_at: s.created_at,
-            status: s.status,
-            paid: s.paid === true,
-            platform: s.platform,
-          })),
+          (allEligibleContestSubs || []).map((s: any) =>
+            toFlatFeeBonusSubmissionInput({
+              id: String(s.id),
+              created_at: s.created_at,
+              status: s.status,
+              paid: s.paid === true,
+              platform: s.platform,
+            }),
+          ),
         );
         const expectedBonusForSubmission =
           expectedBonusMap.get(String(submissionId)) || 0;
@@ -1457,22 +1461,18 @@ export async function processVerifySubmission(
               contest.contest_type === "cpm" ||
               contest.contest_type === "dual_rewards"
             ) {
-              const cpm = (contest as any)?.contest_based_details?.cpm_contest;
-              const rate =
-                typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
-              let effectiveViews = submissionFull.views || 0;
-              if (
-                typeof cpm?.min_views === "number" &&
-                effectiveViews < cpm.min_views
-              )
-                effectiveViews = 0;
-              if (
-                typeof cpm?.max_views === "number" &&
-                effectiveViews > cpm.max_views
-              )
-                effectiveViews = cpm.max_views;
-              
-              const rawAmount = Math.round(((effectiveViews * rate) / 1000) * 100); // cents
+              const rawAmount = computeCpmRawCentsForRow(
+                {
+                  views: submissionFull.views,
+                  platform: submissionFull.platform,
+                  other_stats: submissionFull.other_stats,
+                },
+                ((contest as any)?.contest_based_details as Record<
+                  string,
+                  unknown
+                >) || null,
+                (contest as any)?.platform,
+              );
               let finalCpmCappedAmount = rawAmount;
               const hasCreatorCap =
                 isKeyedMaxEarningsMap((contest as any).max_earnings_per_creator) ||
@@ -1501,10 +1501,11 @@ export async function processVerifySubmission(
                       views?: number | null;
                       status?: string;
                       platform?: string | null;
+                      other_stats?: unknown;
                     }>(
                     supabaseAdmin,
                     submissionFull.contest_id,
-                    "id, views, status, platform",
+                    "id, views, status, platform, other_stats",
                     {
                       creatorId: submissionFull.creator_id,
                       statusIn: ["pending", "verified", "paid"],
@@ -1525,19 +1526,17 @@ export async function processVerifySubmission(
                       ) {
                         continue;
                       }
-                      let subViews = Number(sub.views) || 0;
-                      if (
-                        typeof cpm?.min_views === "number" &&
-                        subViews < cpm.min_views
-                      )
-                        subViews = 0;
-                      if (
-                        typeof cpm?.max_views === "number" &&
-                        subViews > cpm.max_views
-                      )
-                        subViews = cpm.max_views;
-                      const subRawAmount = Math.round(
-                        ((subViews * rate) / 1000) * 100,
+                      const subRawAmount = computeCpmRawCentsForRow(
+                        {
+                          views: sub.views,
+                          platform: sub.platform,
+                          other_stats: sub.other_stats,
+                        },
+                        ((contest as any)?.contest_based_details as Record<
+                          string,
+                          unknown
+                        >) || null,
+                        (contest as any)?.platform,
                       );
                       const capCents =
                         resolveMaxEarningsCentsForSubmission(
@@ -1582,7 +1581,7 @@ export async function processVerifySubmission(
             const { data: creatorSubmissions } = await fetchContestSubmissionsAllPages(
               supabaseAdmin,
               submissionFull.contest_id,
-              "id, created_at, earnings, views, status, platform",
+              "id, created_at, earnings, views, status, platform, other_stats",
               {
                 creatorId: submissionFull.creator_id,
                 statusIn: ["verified", "paid"],
@@ -1591,9 +1590,6 @@ export async function processVerifySubmission(
             );
 
             if (creatorSubmissions && creatorSubmissions.length > 0) {
-              const cpm = (contest as any)?.contest_based_details?.cpm_contest;
-              const rate =
-                typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
               let runningTotal = 0;
               let cappedForSubmission = 0;
 
@@ -1607,21 +1603,17 @@ export async function processVerifySubmission(
                 }
                 let baseAmount = Number((row as any).earnings) || 0;
                 if (baseAmount <= 0) {
-                  let effectiveViews = Number((row as any).views) || 0;
-                  if (
-                    typeof cpm?.min_views === "number" &&
-                    effectiveViews < cpm.min_views
-                  ) {
-                    effectiveViews = 0;
-                  }
-                  if (
-                    typeof cpm?.max_views === "number" &&
-                    effectiveViews > cpm.max_views
-                  ) {
-                    effectiveViews = cpm.max_views;
-                  }
-                  baseAmount = Math.round(
-                    ((effectiveViews * rate) / 1000) * 100,
+                  baseAmount = computeCpmRawCentsForRow(
+                    {
+                      views: (row as any).views,
+                      platform: (row as any).platform,
+                      other_stats: (row as any).other_stats,
+                    },
+                    ((contest as any)?.contest_based_details as Record<
+                      string,
+                      unknown
+                    >) || null,
+                    (contest as any)?.platform,
                   );
                 }
 

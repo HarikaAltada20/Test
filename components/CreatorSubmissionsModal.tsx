@@ -481,9 +481,27 @@ export function CreatorSubmissionsModal({
   const handleBulkDownloadReels = async () => {
     if (selectedSubmissions.size === 0) return;
 
-    if (selectedSubmissions.size === 1) {
-      const singleSubmissionId = Array.from(selectedSubmissions)[0];
-      await handleDownloadReel(singleSubmissionId);
+    const downloadableIds = Array.from(selectedSubmissions).filter((id) => {
+      const sub = submissions.find((entry) => entry.id === id);
+      return canDownloadSubmissionVideo({
+        platform: sub?.platform,
+        contestPlatform: contest?.platform,
+        contentLink: sub?.content_link,
+      });
+    });
+
+    if (downloadableIds.length === 0) {
+      toast({
+        title: "No downloadable videos",
+        description:
+          "TikTok videos can't be downloaded. Select Instagram or YouTube submissions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (downloadableIds.length === 1) {
+      await handleDownloadReel(downloadableIds[0]);
       return;
     }
 
@@ -504,7 +522,14 @@ export function CreatorSubmissionsModal({
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
   ) => {
-    const submissionIds = Array.from(selectedSubmissions);
+    const submissionIds = Array.from(selectedSubmissions).filter((id) => {
+      const sub = submissions.find((entry) => entry.id === id);
+      return canDownloadSubmissionVideo({
+        platform: sub?.platform,
+        contestPlatform: contest?.platform,
+        contentLink: sub?.content_link,
+      });
+    });
     if (submissionIds.length < 2) return;
     if (!contest?.id) return;
 

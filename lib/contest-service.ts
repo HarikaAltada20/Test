@@ -30,6 +30,7 @@ import { resolveMaxEarningsPerCreatorCents, withProjectedTopLevelPayout, contest
 import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
+  toFlatFeeBonusSubmissionInput,
 } from "@/lib/twitter-cpm-bonus-expected";
 
 type ContestWithDetails = {
@@ -254,15 +255,19 @@ export async function enrichContestWithCalculatedBudgets(
           platform: contest.platform,
           contest_based_details: contestDetails,
         },
-        leaderboardSubmissions.map((submission) => ({
-          id: String(submission.id || ""),
-          created_at: submission.created_at,
-          status: submission.status,
-          paid: submission.paid,
-          platform: submission.platform,
-          is_twitter_tweet: (submission as { is_twitter_tweet?: boolean })
-            .is_twitter_tweet,
-        })),
+        leaderboardSubmissions.map((submission) =>
+          toFlatFeeBonusSubmissionInput({
+            id: String(submission.id || ""),
+            created_at: submission.created_at,
+            status: submission.status,
+            paid: submission.paid,
+            platform: submission.platform,
+            is_twitter_tweet: (submission as { is_twitter_tweet?: boolean })
+              .is_twitter_tweet,
+            moderation_status: (submission as { moderation_status?: string })
+              .moderation_status,
+          }),
+        ),
       );
     let bonusSpentCents = 0;
     for (const cents of expectedBonusBySubmissionId.values()) {

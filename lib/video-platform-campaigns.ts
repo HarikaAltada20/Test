@@ -1378,6 +1378,19 @@ function flatFeeBonusLaddersEqual(
   );
 }
 
+function mergeFlatFeeBonusLadder(
+  primary: FlatFeeBonusLadder | undefined,
+  fallback: FlatFeeBonusLadder,
+): FlatFeeBonusLadder {
+  if (!primary) return fallback;
+  return {
+    amountCents:
+      primary.amountCents > 0 ? primary.amountCents : fallback.amountCents,
+    budgetCents:
+      primary.budgetCents != null ? primary.budgetCents : fallback.budgetCents,
+  };
+}
+
 /**
  * Same bonus (and bonus budget) on every platform → All-tab shared pool.
  * Different per-platform bonus/budget → independent FCFS ladders.
@@ -1395,18 +1408,27 @@ export function resolveFlatFeeBonusPlan(
       ? fromCsv
       : VIDEO_CONTEST_PLATFORMS.filter((platform) => campaigns[platform]);
 
+  const root = rootFlatFeeBonusLadder(details, contestType);
   const byPlatform: Partial<Record<VideoContestPlatform, FlatFeeBonusLadder>> =
     {};
   for (const platform of platforms) {
     byPlatform[platform] = ladderFromCampaign(campaigns[platform]);
   }
 
-  const root = rootFlatFeeBonusLadder(details, contestType);
+  const anyPlatformAmount = platforms.some(
+    (platform) => (byPlatform[platform]?.amountCents || 0) > 0,
+  );
+  if (!anyPlatformAmount && root.amountCents > 0) {
+    for (const platform of platforms) {
+      byPlatform[platform] = mergeFlatFeeBonusLadder(
+        byPlatform[platform],
+        root,
+      );
+    }
+  }
+
   const first = platforms.length > 0 ? byPlatform[platforms[0]] : undefined;
-  const shared: FlatFeeBonusLadder =
-    first && (first.amountCents > 0 || first.budgetCents != null)
-      ? first
-      : root;
+  const shared: FlatFeeBonusLadder = mergeFlatFeeBonusLadder(first, root);
 
   // Leaderboard bonus budgets are per-platform caps. Matching amounts still
   // run independent FCFS ladders so YouTube+Instagram+TikTok each keep their

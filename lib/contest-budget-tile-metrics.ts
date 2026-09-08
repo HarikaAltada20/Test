@@ -28,7 +28,11 @@ import {
   resolveLeaderboardFlatFeeBonusSpentCents,
 } from "@/lib/video-platform-campaigns";
 import { buildLeaderboardPrizeCentsBySubmissionIdForContest } from "@/lib/non-twitter-leaderboard-creator-prize";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getNormalizedSubmissionStatusForFlatFeeBonus,
+  toFlatFeeBonusSubmissionInput,
+} from "@/lib/twitter-cpm-bonus-expected";
 
 export type BudgetTileMode = "filled" | "paid";
 
@@ -80,7 +84,9 @@ function isPaidLike(s: BudgetTileSubmission): boolean {
 
 function relevantSubmissions(submissions: BudgetTileSubmission[]): BudgetTileSubmission[] {
   return submissions.filter((s) => {
-    const status = s.status?.toLowerCase();
+    const status = getNormalizedSubmissionStatusForFlatFeeBonus(
+      toFlatFeeBonusSubmissionInput(s),
+    );
     return (
       (status === "verified" || status === "paid") && !twitterExcludedFromBudget(s)
     );
@@ -422,13 +428,9 @@ export function computeBudgetFilledCents(
     );
     const bonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
       contest,
-      relevantSubmissions(submissions).map((s) => ({
-        id: String(s.id || ""),
-        created_at: s.created_at,
-        status: s.status,
-        paid: s.paid,
-        platform: s.platform,
-      })),
+      relevantSubmissions(submissions).map((s) =>
+        toFlatFeeBonusSubmissionInput(s),
+      ),
     );
     let bonusCents = 0;
     for (const cents of bonusMap.values()) bonusCents += cents;

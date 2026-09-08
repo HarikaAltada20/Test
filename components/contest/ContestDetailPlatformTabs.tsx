@@ -20,6 +20,8 @@ type ContestDetailPlatformTabsProps = {
   fullWidth?: boolean;
   /** Optional count badges (keyed by tab value, including `"all"`). */
   counts?: Partial<Record<PlatformTabValue, number>>;
+  /** When true, tab clicks are ignored (e.g. refresh metrics in progress). */
+  disabled?: boolean;
 };
 
 export function ContestDetailPlatformTabs({
@@ -29,6 +31,7 @@ export function ContestDetailPlatformTabs({
   isDark = false,
   fullWidth = false,
   counts,
+  disabled = false,
 }: ContestDetailPlatformTabsProps) {
   if (platforms.length < 2) return null;
 
@@ -45,7 +48,11 @@ export function ContestDetailPlatformTabs({
             <button
               key={tab}
               type="button"
-              onClick={() => onChange(tab)}
+              disabled={disabled}
+              onClick={() => {
+                if (disabled) return;
+                onChange(tab);
+              }}
               className={cn(
                 "h-9 px-3 rounded-lg text-sm font-medium border transition-colors inline-flex items-center gap-2",
                 isActive
@@ -53,7 +60,13 @@ export function ContestDetailPlatformTabs({
                   : isDark
                     ? "bg-transparent border-gray-600 text-white hover:bg-[#D9C0FF26]"
                     : "bg-white border-gray-300 text-foreground hover:bg-gray-50",
+                disabled && "opacity-60 cursor-not-allowed hover:bg-transparent",
               )}
+              title={
+                disabled
+                  ? "Platform tabs are locked while metrics refresh is running"
+                  : undefined
+              }
             >
               {tab !== ALL_PLATFORM_TAB ? getPlatformIcon(tab, "sm") : null}
               {label}
@@ -75,7 +88,11 @@ export function ContestDetailPlatformTabs({
           <button
             key={tab}
             type="button"
-            onClick={() => onChange(tab)}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return;
+              onChange(tab);
+            }}
             className={cn(
               "flex-1 min-w-[7.5rem] min-h-12 inline-flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-medium border transition-colors whitespace-nowrap",
               isActive
@@ -83,7 +100,13 @@ export function ContestDetailPlatformTabs({
                 : isDark
                   ? "bg-transparent text-white border-gray-400 hover:bg-[#D9C0FF26]"
                   : "bg-white text-[#7F39EC] border-[#7F39EC] hover:bg-purple-50",
+              disabled && "opacity-60 cursor-not-allowed",
             )}
+            title={
+              disabled
+                ? "Platform tabs are locked while metrics refresh is running"
+                : undefined
+            }
           >
             <div className="flex items-center gap-1.5">
               {tab === ALL_PLATFORM_TAB ? (

@@ -14,7 +14,8 @@ import {
   computeMostVerifiedBonusPaidByTrack,
 } from "@/lib/milestone-most-verified-bonus-clawback";
 import {
-  buildMilestoneMostVerifiedBonusByCreatorMap,
+  buildMilestoneMostVerifiedBonusByCreatorMapFromDetails,
+  collectMilestoneBonusConfigs,
   type MilestoneBudgetSubmission,
 } from "@/lib/milestone-contest-expected-spend";
 import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
@@ -101,7 +102,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, title, contest_type, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode",
+        "id, title, contest_type, platform, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode",
       )
       .eq("id", contestId)
       .single();
@@ -127,9 +128,11 @@ export async function POST(
       );
     }
 
-    const bonus = (contest.contest_based_details as any)?.milestone_contest
-      ?.bonus;
-    if (!bonus?.enabled) {
+    const details =
+      (contest.contest_based_details as Record<string, unknown> | null) || null;
+    const contestPlatform = (contest as { platform?: string | null }).platform;
+    const bonusConfigs = collectMilestoneBonusConfigs(details, contestPlatform);
+    if (bonusConfigs.length === 0) {
       return NextResponse.json(
         { error: "Milestone bonus is not enabled for this contest" },
         { status: 400 },
@@ -140,7 +143,7 @@ export async function POST(
       await fetchContestSubmissionsAllPages<MilestoneMostVerifiedSubmissionRow>(
         supabaseAdmin,
         contestId,
-        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout",
+        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout, platform, other_stats",
         { order: { column: "created_at", ascending: true } },
       );
 
@@ -156,8 +159,14 @@ export async function POST(
     }
 
     const submissions = subs || [];
-    const map = buildMilestoneMostVerifiedBonusByCreatorMap(submissions, bonus);
-    const row = map.get(creatorId);
+    const map = buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
+      submissions,
+      details,
+      contestPlatform,
+    );
+    const row =
+      map.get(String(creatorId).trim()) ??
+      map.get(creatorId);
     if (!row) {
       return NextResponse.json(
         { error: "No bonus data for this creator" },

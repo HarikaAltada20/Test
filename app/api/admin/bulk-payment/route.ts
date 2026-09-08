@@ -15,6 +15,7 @@ import {
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMapFromDetails } from "@/lib/milestone-contest-expected-spend";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import {
   isKeyedMaxEarningsMap,
   parseVideoContestPlatforms,
@@ -649,34 +650,20 @@ export async function POST(request: NextRequest) {
               ? storedEarnings
               : 0;
 
-          // If earnings not stored, calculate dynamically for CPM contests
+          // If earnings not stored, calculate dynamically for CPM contests.
+          // Multi-platform contests store rates under youtube|instagram|tiktok,
+          // not root cpm_contest — use the submission's platform config.
           if (!submissionEarnings && contest.contest_type === "cpm") {
-            const cpmConfig = (contest.contest_based_details as any)
-              ?.cpm_contest;
-            if (cpmConfig?.cpm_rate_usd) {
-              let effectiveViews = sub.views || 0;
-
-              // Apply min_views threshold
-              if (
-                cpmConfig.min_views != null &&
-                effectiveViews < cpmConfig.min_views
-              ) {
-                effectiveViews = 0;
-              }
-
-              // Apply max_views cap
-              if (
-                cpmConfig.max_views != null &&
-                effectiveViews > cpmConfig.max_views
-              ) {
-                effectiveViews = cpmConfig.max_views;
-              }
-
-              // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-              const calculatedEarnings =
-                (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-              submissionEarnings = Math.round(calculatedEarnings);
-            }
+            submissionEarnings = computeCpmRawCentsForRow(
+              {
+                views: sub.views,
+                platform: sub.platform,
+                other_stats: sub.other_stats,
+              },
+              (contest.contest_based_details as Record<string, unknown>) ||
+                null,
+              contest.platform,
+            );
           }
         }
 

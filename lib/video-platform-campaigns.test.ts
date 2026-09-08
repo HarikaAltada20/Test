@@ -1265,6 +1265,27 @@ describe("per-platform leaderboard prize and flat fee display", () => {
     );
   });
 
+  it("inherits root flat_fee_bonus when platform campaigns only store budget", () => {
+    const plan = resolveFlatFeeBonusPlan(
+      {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_budget: 5_000 },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_budget: 5_000 },
+        },
+        leaderboard_contest: { total_budget: 10_000, flat_fee_bonus: 200 },
+      },
+      "youtube,instagram",
+      "leaderboard",
+    );
+    assert.equal(plan.shared.amountCents, 200);
+    assert.equal(plan.byPlatform.youtube?.amountCents, 200);
+    assert.equal(plan.byPlatform.instagram?.amountCents, 200);
+  });
+
   it("uses a shared list badge when per-submission bonuses match", () => {
     const campaign = snapshotToPersistedPlatformCampaign({
       ...createDefaultPlatformCampaignSnapshot(),
