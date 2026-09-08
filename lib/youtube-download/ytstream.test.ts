@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { pickBestDownloadUrl } from "./ytstream";
+import {
+  isGoogleVideoUrl,
+  pickBestDownloadUrl,
+  pickDownloadCandidates,
+  resolveCgeoParam,
+  userAgentForStreamUrl,
+} from "./ytstream";
 
 describe("pickBestDownloadUrl", () => {
   it("prefers highest muxed MP4 from progressive formats", () => {
@@ -83,5 +89,116 @@ describe("pickBestDownloadUrl", () => {
       ],
     });
     assert.equal(url, "https://cdn.example/muxed.mp4");
+  });
+});
+
+describe("pickDownloadCandidates", () => {
+  it("returns unique URLs ranked by muxed MP4 quality", () => {
+    const urls = pickDownloadCandidates({
+      formats: [
+        {
+          url: "https://rr1---sn.googlevideo.com/videoplayback?itag=18",
+          mimeType: "video/mp4",
+          qualityLabel: "360p",
+          height: 360,
+        },
+        {
+          url: "https://rr1---sn.googlevideo.com/videoplayback?itag=22",
+          mimeType: "video/mp4",
+          qualityLabel: "720p",
+          height: 720,
+        },
+        {
+          url: "https://rr1---sn.googlevideo.com/videoplayback?itag=22",
+          mimeType: "video/mp4",
+          qualityLabel: "720p",
+          height: 720,
+        },
+      ],
+    });
+    assert.deepEqual(urls, [
+      "https://rr1---sn.googlevideo.com/videoplayback?itag=22",
+      "https://rr1---sn.googlevideo.com/videoplayback?itag=18",
+    ]);
+  });
+
+  it("inserts a proxied URL as the second candidate after the best direct URL", () => {
+    const urls = pickDownloadCandidates({
+      formats: [
+        {
+          url: "https://rr1---sn.googlevideo.com/videoplayback?itag=22",
+          mimeType: "video/mp4",
+          qualityLabel: "720p",
+          height: 720,
+        },
+        {
+          url: "https://proxy.ytjar.info/dl/360.mp4",
+          mimeType: "video/mp4",
+          qualityLabel: "360p",
+          height: 360,
+        },
+        {
+          url: "https://rr1---sn.googlevideo.com/videoplayback?itag=18",
+          mimeType: "video/mp4",
+          qualityLabel: "360p",
+          height: 360,
+        },
+      ],
+    });
+    assert.equal(urls[0], "https://rr1---sn.googlevideo.com/videoplayback?itag=22");
+    assert.equal(urls[1], "https://proxy.ytjar.info/dl/360.mp4");
+    assert.equal(urls[2], "https://rr1---sn.googlevideo.com/videoplayback?itag=18");
+  });
+});
+
+describe("userAgentForStreamUrl", () => {
+  it("uses an Android client UA for ANDROID stream URLs", () => {
+    const ua = userAgentForStreamUrl(
+      "https://rr1.googlevideo.com/videoplayback?c=ANDROID_TESTSUITE&itag=18"
+    );
+    assert.match(ua, /com\.google\.android\.youtube/);
+  });
+
+  it("uses an iOS client UA for IOS stream URLs", () => {
+    const ua = userAgentForStreamUrl(
+      "https://rr1.googlevideo.com/videoplayback?c=IOS&itag=18"
+    );
+    assert.match(ua, /com\.google\.ios\.youtube/);
+  });
+
+  it("uses Chrome for WEB / missing client", () => {
+    const ua = userAgentForStreamUrl(
+      "https://rr1.googlevideo.com/videoplayback?c=WEB&itag=18"
+    );
+    assert.match(ua, /Chrome\//);
+  });
+});
+
+describe("resolveCgeoParam", () => {
+  it("omits cgeo by default so YTStream can return proxied links", () => {
+    assert.equal(resolveCgeoParam(undefined), null);
+    assert.equal(resolveCgeoParam(""), null);
+  });
+
+  it("uses an explicit env value unless omitCgeo is set", () => {
+    assert.equal(resolveCgeoParam("US"), "US");
+    assert.equal(resolveCgeoParam("US", true), null);
+  });
+});
+
+describe("isGoogleVideoUrl", () => {
+  it("detects googlevideo CDN hosts", () => {
+    assert.equal(
+      isGoogleVideoUrl("https://rr3---sn-abc.googlevideo.com/videoplayback?id=1"),
+      true
+    );
+    assert.equal(isGoogleVideoUrl("https://proxy.ytjar.info/dl/1.mp4"), false);
+  });
+});
+
+describe("InnerTube fallback module", () => {
+  it("exports a same-IP download helper", async () => {
+    const { getYouTubeVideoStreamViaInnertube } = await import("./innertube");
+    assert.equal(typeof getYouTubeVideoStreamViaInnertube, "function");
   });
 });

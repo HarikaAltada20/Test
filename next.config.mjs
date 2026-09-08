@@ -25,6 +25,7 @@ const nextConfig = {
     staticGenerationRetryCount: 3,
   },
   outputFileTracingRoot: path.join(__dirname),
+  serverExternalPackages: ["youtubei.js"],
   eslint: {
     ignoreDuringBuilds: true,
   },
