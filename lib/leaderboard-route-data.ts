@@ -2,6 +2,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getSortedCreatorAggregates } from "@/lib/leaderboard-creator-wise";
 import { fetchPendingSubmissionCountsByCreator } from "@/lib/leaderboard-pending-counts";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
+import { leaderboardSubmissionBannerCounts } from "@/lib/leaderboard-submission-counts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function leaderboardVideoPlatformFilter(
@@ -14,6 +15,46 @@ function leaderboardVideoPlatformFilter(
     return value;
   }
   return null;
+}
+
+async function fetchLeaderboardSubmissionStatusCounts(
+  supabase: SupabaseClient,
+  contestId: string,
+  platformFilter: "youtube" | "instagram" | "tiktok" | null,
+) {
+  let totalQuery = supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("contest_id", contestId);
+  let rejectedQuery = supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("contest_id", contestId)
+    .eq("status", SUBMISSION_STATUS.rejected);
+  if (platformFilter) {
+    totalQuery = totalQuery.eq("platform", platformFilter);
+    rejectedQuery = rejectedQuery.eq("platform", platformFilter);
+  }
+  const [totalResult, rejectedResult] = await Promise.all([
+    totalQuery,
+    rejectedQuery,
+  ]);
+  if (totalResult.error) {
+    console.error(
+      "[leaderboard] total submission count failed:",
+      totalResult.error.message,
+    );
+  }
+  if (rejectedResult.error) {
+    console.error(
+      "[leaderboard] rejected submission count failed:",
+      rejectedResult.error.message,
+    );
+  }
+  return leaderboardSubmissionBannerCounts(
+    totalResult.count || 0,
+    rejectedResult.count || 0,
+  );
 }
 
 function buildCreatorDisplay(
@@ -323,11 +364,14 @@ export async function fetchLeaderboardPayload(
     throw new Error("Contest not found");
   }
 
-  const { count: totalSubmissionsCount } = await supabase
-    .from("submissions")
-    .select("id", { count: "exact", head: true })
-    .eq("contest_id", contestId);
-  const totalSubmissions = totalSubmissionsCount || 0;
+  const submissionStatusCounts = await fetchLeaderboardSubmissionStatusCounts(
+    supabase,
+    contestId,
+    platformFilter,
+  );
+  const totalSubmissions = submissionStatusCounts.total;
+  const rejectedCount = submissionStatusCounts.rejected;
+  const totalEntries = submissionStatusCounts.active;
 
   if (groupBy === "creator") {
     const creatorWiseResult = await getLeaderboardGroupedByCreator(
@@ -343,24 +387,8 @@ export async function fetchLeaderboardPayload(
       contestType: contestData.contest_type,
       groupBy: "creator",
       totalSubmissions,
+      rejectedCount,
     };
-  }
-
-  let countQuery = supabase
-    .from("submissions")
-    .select("id", { count: "exact", head: true })
-    .eq("contest_id", contestId);
-
-  countQuery = countQuery.neq("status", "rejected");
-  if (platformFilter) {
-    countQuery = countQuery.eq("platform", platformFilter);
-  }
-
-  const { count: totalEntries, error: countError } = await countQuery;
-
-  if (countError) {
-    console.error("Error fetching submission count:", countError);
-    throw new Error(`Failed to fetch submission count: ${countError.message}`);
   }
 
   const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
@@ -387,7 +415,7 @@ export async function fetchLeaderboardPayload(
     )
     .eq("contest_id", contestId);
 
-  submissionsQuery = submissionsQuery.neq("status", "rejected");
+  submissionsQuery = submissionsQuery.neq("status", SUBMISSION_STATUS.rejected);
   if (platformFilter) {
     submissionsQuery = submissionsQuery.eq("platform", platformFilter);
   }
@@ -411,6 +439,7 @@ export async function fetchLeaderboardPayload(
       totalEntries: totalEntries || 0,
       contestType: contestData.contest_type,
       totalSubmissions,
+      rejectedCount,
     };
   }
 
@@ -517,5 +546,6 @@ export async function fetchLeaderboardPayload(
     totalEntries: totalEntries || 0,
     contestType: contestData.contest_type,
     totalSubmissions,
+    rejectedCount,
   };
 }

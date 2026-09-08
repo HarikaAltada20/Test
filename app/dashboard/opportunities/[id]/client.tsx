@@ -106,6 +106,11 @@ import {
   type SubmitEntryButton,
 } from "@/lib/gtag";
 import {
+  leaderboardBannerCountsFromPayload,
+  leaderboardSubmissionBannerCounts,
+  type LeaderboardSubmissionBannerCounts,
+} from "@/lib/leaderboard-submission-counts";
+import {
   ALL_PLATFORM_TAB,
   VIDEO_PLATFORM_LABELS,
   flattenContestInspirationLinks,
@@ -468,8 +473,9 @@ export function ContestClientPage({
   const [leaderboardItemsPerPage, setLeaderboardItemsPerPage] = useState(25); // Or your preferred default
   const [totalLeaderboardEntries, setTotalLeaderboardEntries] = useState(0);
   const [totalLeaderboardPages, setTotalLeaderboardPages] = useState(0);
-  const [contestSubmissionTotalCount, setContestSubmissionTotalCount] =
-    useState(0);
+  const [leaderboardBannerByTab, setLeaderboardBannerByTab] = useState<
+    Partial<Record<PlatformTabValue, LeaderboardSubmissionBannerCounts>>
+  >({});
   const [creatorTotalEntries, setCreatorTotalEntries] = useState(0);
   const [creatorTotalPages, setCreatorTotalPages] = useState(0);
   const [allMilestoneBonusSubmissions, setAllMilestoneBonusSubmissions] =
@@ -816,6 +822,13 @@ export function ContestClientPage({
     useState<PlatformTabValue>(ALL_PLATFORM_TAB);
   const [leaderboardPlatformTab, setLeaderboardPlatformTab] =
     useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const leaderboardPlatformTabRef = useRef(leaderboardPlatformTab);
+  leaderboardPlatformTabRef.current = leaderboardPlatformTab;
+  const leaderboardBannerByTabRef = useRef(leaderboardBannerByTab);
+  leaderboardBannerByTabRef.current = leaderboardBannerByTab;
+  useEffect(() => {
+    setLeaderboardBannerByTab({});
+  }, [contestId]);
   const showLeaderboardPlatformIcons = detailVideoPlatforms.length >= 2;
   useEffect(() => {
     if (
@@ -1667,10 +1680,12 @@ export function ContestClientPage({
   const effectiveLeaderboardTotalPages = isCreatorModeTotals
     ? creatorTotalPages
     : totalLeaderboardPages;
+  const leaderboardBannerCounts =
+    leaderboardBannerByTab[leaderboardPlatformTab] ??
+    leaderboardSubmissionBannerCounts(0, 0);
   const creatorDetailSubmissionTotal = Math.max(
     Number(contest?.live_submission_count) || 0,
-    contestSubmissionTotalCount,
-    totalLeaderboardEntries,
+    leaderboardBannerByTab[ALL_PLATFORM_TAB]?.total || 0,
   );
 
   // Keep track of how many creators are on each page in creator-wise view
@@ -2150,15 +2165,16 @@ export function ContestClientPage({
     silent: boolean = false,
   ) => {
     if (!isMountedRef.current) return;
+    const requestedTab = leaderboardPlatformTabRef.current;
     if (!silent) setLoadingLeaderboard(true);
 
     if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
       const { entries: dummyEntries } =
         generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
       const platformFilter =
-        leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
-        isVideoContestPlatform(leaderboardPlatformTab)
-          ? leaderboardPlatformTab
+        requestedTab !== ALL_PLATFORM_TAB &&
+        isVideoContestPlatform(requestedTab)
+          ? requestedTab
           : null;
       const allEntries = platformFilter
         ? dummyEntries.filter(
@@ -2171,28 +2187,35 @@ export function ContestClientPage({
       const startIndex = (pageToFetch - 1) * leaderboardItemsPerPage;
       const endIndex = startIndex + leaderboardItemsPerPage;
       const paginatedEntries = allEntries.slice(startIndex, endIndex);
+      const dummyBanner = leaderboardSubmissionBannerCounts(totalEntries, 0);
 
       setTimeout(() => {
-        if (isMountedRef.current) {
-          setLeaderboard(paginatedEntries);
-          setLastUpdated(new Date().toISOString());
-          setLeaderboardCurrentPage(pageToFetch);
-          setTotalLeaderboardPages(totalPages);
-          setTotalLeaderboardEntries(totalEntries);
-          setContestType("leaderboard"); // Set dummy contest type
-
-          // Mark as loaded only after successful fetch
-          const platform = contest?.platform || "unknown";
-          const contestKey = `${contestId}-${platform}-${leaderboardPlatformTab}`;
-          leaderboardLoadedRef.current = contestKey;
-
-          // If we got data, reset the empty refetch flag
-          if (paginatedEntries.length > 0 || totalEntries > 0) {
-            emptyDataRefetchAttemptedRef.current = null;
-          }
-
-          if (!silent) setLoadingLeaderboard(false);
+        if (!isMountedRef.current) return;
+        if (!groupByCreator) {
+          setLeaderboardBannerByTab((prev) => ({
+            ...prev,
+            [requestedTab]: dummyBanner,
+          }));
         }
+        if (leaderboardPlatformTabRef.current !== requestedTab) return;
+        setLeaderboard(paginatedEntries);
+        setLastUpdated(new Date().toISOString());
+        setLeaderboardCurrentPage(pageToFetch);
+        setTotalLeaderboardPages(totalPages);
+        setTotalLeaderboardEntries(totalEntries);
+        setContestType("leaderboard"); // Set dummy contest type
+
+        // Mark as loaded only after successful fetch
+        const platform = contest?.platform || "unknown";
+        const contestKey = `${contestId}-${platform}-${requestedTab}`;
+        leaderboardLoadedRef.current = contestKey;
+
+        // If we got data, reset the empty refetch flag
+        if (paginatedEntries.length > 0 || totalEntries > 0) {
+          emptyDataRefetchAttemptedRef.current = null;
+        }
+
+        if (!silent) setLoadingLeaderboard(false);
       }, 300);
       return;
     }
@@ -2206,13 +2229,16 @@ export function ContestClientPage({
       });
       if (groupByCreator) params.set("groupBy", "creator");
       if (
-        leaderboardPlatformTab !== ALL_PLATFORM_TAB &&
-        isVideoContestPlatform(leaderboardPlatformTab)
+        requestedTab !== ALL_PLATFORM_TAB &&
+        isVideoContestPlatform(requestedTab)
       ) {
-        params.set("platform", leaderboardPlatformTab);
+        params.set("platform", requestedTab);
       }
-      // Bypass server cache when user just submitted (to avoid stale empty data)
-      if (justSubmitted) params.set("fresh", "1");
+      // Bypass 2h cache after a new submission, or the first load of each tab
+      // so All vs YouTube/Instagram/TikTok totals cannot leak from a stale payload.
+      if (justSubmitted || !leaderboardBannerByTabRef.current[requestedTab]) {
+        params.set("fresh", "1");
+      }
       const response = await fetch(
         `/api/leaderboard/${contestId}?${params.toString()}`,
       );
@@ -2221,8 +2247,10 @@ export function ContestClientPage({
         leaderboardFetchError = data.error || "Failed to fetch leaderboard";
         throw new Error(leaderboardFetchError);
       }
+      if (!isMountedRef.current) return;
       if (isMountedRef.current) {
         if (groupByCreator) {
+          if (leaderboardPlatformTabRef.current !== requestedTab) return;
           const rows = data.leaderboard || [];
           setCreatorWiseLeaderboard(
             rows.map((r: any) => ({
@@ -2255,23 +2283,28 @@ export function ContestClientPage({
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
           setCreatorTotalPages(data.totalPages ?? 0);
-          if (typeof data.totalSubmissions === "number") {
-            setContestSubmissionTotalCount(data.totalSubmissions);
-          }
         } else {
+          const banner = leaderboardBannerCountsFromPayload(data);
+          setLeaderboardBannerByTab((prev) => ({
+            ...prev,
+            [requestedTab]: banner,
+          }));
+          if (leaderboardPlatformTabRef.current !== requestedTab) return;
           setLeaderboard(data.leaderboard || []);
-          setTotalLeaderboardEntries(data.totalEntries ?? 0);
-          setTotalLeaderboardPages(data.totalPages ?? 0);
-          if (typeof data.totalSubmissions === "number") {
-            setContestSubmissionTotalCount(data.totalSubmissions);
-          }
+          setTotalLeaderboardEntries(banner.active);
+          setTotalLeaderboardPages(
+            data.totalPages ??
+              (banner.active
+                ? Math.ceil(banner.active / leaderboardItemsPerPage)
+                : 0),
+          );
         }
         setLastUpdated(data.lastUpdated);
         setLeaderboardCurrentPage(data.currentPage ?? pageToFetch);
         setContestType(data.contestType || null);
 
         const platform = contest?.platform || "unknown";
-        const contestKey = `${contestId}-${platform}-${leaderboardPlatformTab}`;
+        const contestKey = `${contestId}-${platform}-${requestedTab}`;
         leaderboardLoadedRef.current = contestKey;
       }
     } catch (err: any) {
@@ -3060,6 +3093,11 @@ export function ContestClientPage({
       }
     } else {
       if (shouldFetch) {
+        setLeaderboard([]);
+        setTotalLeaderboardEntries(
+          leaderboardBannerByTabRef.current[leaderboardPlatformTab]?.active ??
+            0,
+        );
         fetchLeaderboard(1, false);
         fetchLeaderboard(1, true, true);
       }
@@ -10836,7 +10874,7 @@ export function ContestClientPage({
                                   leaderboardDisplayMode === "creator" &&
                                   " Currently viewing by creator (all submissions grouped)."}
                               </p>
-                              {(creatorDetailSubmissionTotal > 0 ||
+                              {(leaderboardBannerCounts.total > 0 ||
                                 effectiveLeaderboardTotalEntries > 0) && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <span className="font-medium">
@@ -10846,12 +10884,14 @@ export function ContestClientPage({
                                         : "Submissions:"}
                                     </span>
                                     <span className="text-green-700 font-semibold">
-                                      {effectiveLeaderboardTotalEntries} active
+                                      {leaderboardDisplayMode === "creator" &&
+                                      creatorWiseLeaderboard.length > 0
+                                        ? effectiveLeaderboardTotalEntries
+                                        : leaderboardBannerCounts.active}{" "}
+                                      active
                                     </span>
-                                    {leaderboardPlatformTab ===
-                                      ALL_PLATFORM_TAB &&
-                                      creatorDetailSubmissionTotal >
-                                      effectiveLeaderboardTotalEntries &&
+                                    {(showLeaderboardPlatformIcons ||
+                                      leaderboardBannerCounts.rejected > 0) &&
                                       !(
                                         leaderboardDisplayMode === "creator" &&
                                         creatorWiseLeaderboard.length > 0
@@ -10868,8 +10908,7 @@ export function ContestClientPage({
                                             |
                                           </span>
                                           <span className="text-red-700 font-semibold">
-                                            {creatorDetailSubmissionTotal -
-                                              effectiveLeaderboardTotalEntries}{" "}
+                                            {leaderboardBannerCounts.rejected}{" "}
                                             rejected
                                           </span>
                                           <span
@@ -10890,7 +10929,7 @@ export function ContestClientPage({
                                                 : "text-blue-700",
                                             )}
                                           >
-                                            {creatorDetailSubmissionTotal}{" "}
+                                            {leaderboardBannerCounts.total}{" "}
                                             total
                                           </span>
                                         </>

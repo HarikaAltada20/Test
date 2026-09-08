@@ -38,6 +38,7 @@ export async function GET(request: Request) {
           load,
           [
             "leaderboard-api",
+            "status-counts-v3",
             contestId,
             String(page),
             String(limit),
