@@ -8542,76 +8542,6 @@ export default function CreateContestPage({
                           </p>
                         </div>
                       )}
-                      {contestType !== "dual_rewards" && (
-                        <div
-                          className={cn(
-                            "space-y-3 p-4 border rounded-lg",
-                            isDark
-                              ? "bg-blue-950/50 border-blue-800"
-                              : "bg-blue-50 border-blue-200",
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl">🎯</span>
-                            <Label
-                              htmlFor="milestoneMaxEarnings"
-                              className="text-base font-semibold"
-                            >
-                              Maximum Earnings Per Creator (Optional)
-                            </Label>
-                          </div>
-                          <Input
-                            id="milestoneMaxEarnings"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={maxEarningsPerCreator}
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600 text-white"
-                                : "bg-white text-black",
-                            )}
-                            onChange={(e) =>
-                              setMaxEarningsPerCreator(e.target.value)
-                            }
-                            placeholder="e.g., 500 for $500 max per creator"
-                          />
-                          <p className="text-sm text-muted-foreground">
-                            Set a maximum earning cap per creator for{" "}
-                            <strong>THIS CONTEST ONLY</strong>. Once reached,
-                            they can still submit but won't earn more from this
-                            campaign. This does NOT affect their earnings from
-                            other campaigns on the platform. Helps ensure fair
-                            reward distribution within this campaign.
-                          </p>
-                          {maxEarningsPerCreator &&
-                            parseFloat(maxEarningsPerCreator.toString()) >
-                              0 && (
-                              <Alert
-                                className={cn(
-                                  isDark
-                                    ? "bg-blue-900/30 border-blue-900"
-                                    : "bg-blue-100 border-blue-300",
-                                )}
-                              >
-                                <AlertDescription
-                                  className={cn(
-                                    isDark ? "text-blue-200" : "text-blue-800",
-                                  )}
-                                >
-                                  ℹ️ Each creator can earn up to{" "}
-                                  <strong>
-                                    $
-                                    {parseFloat(
-                                      maxEarningsPerCreator.toString(),
-                                    ).toFixed(2)}
-                                  </strong>{" "}
-                                  from this campaign.
-                                </AlertDescription>
-                              </Alert>
-                            )}
-                        </div>
-                      )}
                       <div
                         className={cn(
                           "space-y-4 p-4 border rounded-lg",
@@ -9946,79 +9876,79 @@ export default function CreateContestPage({
                             )}
                         </div>
                       )}
+                  </>
+                )}
 
-                    {/* Max Earnings Per Creator (dual rewards: only here, not in milestone block above) */}
-                    {(multipleSubmissionsEnabled ||
-                      contestType === "dual_rewards") && (
-                      <div
-                        className={cn(
-                          "space-y-3 p-4 border rounded-lg",
-                          isDark
-                            ? "bg-blue-950/50 border-blue-800"
-                            : "bg-blue-50 border-blue-200",
-                        )}
+                {/* Max Earnings Per Creator (milestone + dual: always; others: when multiple submissions) */}
+                {(multipleSubmissionsEnabled ||
+                  isMilestoneContestType(contestType)) && (
+                  <div
+                    className={cn(
+                      "space-y-3 p-4 border rounded-lg",
+                      isDark
+                        ? "bg-blue-950/50 border-blue-800"
+                        : "bg-blue-50 border-blue-200",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🎯</span>
+                      <Label
+                        htmlFor="maxEarnings"
+                        className="text-base font-semibold"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl">🎯</span>
-                          <Label
-                            htmlFor="maxEarnings"
-                            className="text-base font-semibold"
-                          >
-                            Maximum Earnings Per Creator (Optional)
-                          </Label>
-                        </div>
-                        <Input
-                          id="maxEarnings"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={maxEarningsPerCreator}
+                        Maximum Earnings Per Creator (Optional)
+                      </Label>
+                    </div>
+                    <Input
+                      id="maxEarnings"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={maxEarningsPerCreator}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black",
+                      )}
+                      onChange={(e) =>
+                        setMaxEarningsPerCreator(e.target.value)
+                      }
+                      placeholder="e.g., 500 for $500 max per creator"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Set a maximum earning cap per creator for{" "}
+                      <strong>THIS CONTEST ONLY</strong>. Once reached, they
+                      can still submit but won't earn more from this
+                      campaign. This does NOT affect their earnings from
+                      other campaigns on the platform. Helps ensure fair
+                      reward distribution within this campaign.
+                    </p>
+                    {maxEarningsPerCreator &&
+                      parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                        <Alert
                           className={cn(
                             isDark
-                              ? "bg-[#180438] border border-gray-600 text-white"
-                              : "bg-white text-black",
+                              ? "bg-blue-900/30 border-blue-900"
+                              : "bg-blue-100 border-blue-300",
                           )}
-                          onChange={(e) =>
-                            setMaxEarningsPerCreator(e.target.value)
-                          }
-                          placeholder="e.g., 500 for $500 max per creator"
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          Set a maximum earning cap per creator for{" "}
-                          <strong>THIS CONTEST ONLY</strong>. Once reached, they
-                          can still submit but won't earn more from this
-                          campaign. This does NOT affect their earnings from
-                          other contests on the platform. Helps ensure fair
-                          reward distribution within this campaign.
-                        </p>
-                        {maxEarningsPerCreator &&
-                          parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                            <Alert
-                              className={cn(
-                                isDark
-                                  ? "bg-blue-900/30 border-blue-900"
-                                  : "bg-blue-100 border-blue-300",
-                              )}
-                            >
-                              <AlertDescription
-                                className={cn(
-                                  isDark ? "text-blue-200" : "text-blue-800",
-                                )}
-                              >
-                                ℹ️ Each creator can earn up to{" "}
-                                <strong>
-                                  $
-                                  {parseFloat(
-                                    maxEarningsPerCreator.toString(),
-                                  ).toFixed(2)}
-                                </strong>{" "}
-                                from this campaign.
-                              </AlertDescription>
-                            </Alert>
-                          )}
-                      </div>
-                    )}
-                  </>
+                        >
+                          <AlertDescription
+                            className={cn(
+                              isDark ? "text-blue-200" : "text-blue-800",
+                            )}
+                          >
+                            ℹ️ Each creator can earn up to{" "}
+                            <strong>
+                              $
+                              {parseFloat(
+                                maxEarningsPerCreator.toString(),
+                              ).toFixed(2)}
+                            </strong>{" "}
+                            from this campaign.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                  </div>
                 )}
 
                 {/* Additional Bonus Section */}

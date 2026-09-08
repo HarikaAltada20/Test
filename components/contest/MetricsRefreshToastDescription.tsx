@@ -177,7 +177,7 @@ export function metricsRefreshToastTitleFromResults(
     return `${head} refresh completed`;
   }
 
-  const multiHead = prefix ? `${prefix} multi-platform` : "Multi-platform";
+  const multiHead = prefix ? `${prefix}` : "";
   if (anyFailed) return `${multiHead} refresh finished with errors`;
   return `${multiHead} refresh completed`;
 }

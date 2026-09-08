@@ -963,6 +963,97 @@ function isRpcMissingError(rpcError: { message?: string; code?: string } | null)
   );
 }
 
+function mergeDualRewardsPayoutCommit(
+  previous: unknown,
+  targetCpm: number,
+  targetMs: number,
+): Record<string, unknown> {
+  const base =
+    previous && typeof previous === "object" && !Array.isArray(previous)
+      ? { ...(previous as Record<string, unknown>) }
+      : {};
+  return {
+    ...base,
+    cpm_cents: targetCpm,
+    milestone_cents: targetMs,
+  };
+}
+
+async function persistDualRewardsPoolCommitInApp(
+  supabaseAdmin: SupabaseClient,
+  contestId: string,
+  targetSubmissionId: string,
+  targetCpm: number,
+  targetMs: number,
+): Promise<
+  | { ok: true; previous: unknown }
+  | { ok: false; error: string }
+> {
+  const { data: row, error: readError } = await supabaseAdmin
+    .from("submissions")
+    .select("dual_rewards_payout")
+    .eq("id", targetSubmissionId)
+    .eq("contest_id", contestId)
+    .maybeSingle();
+
+  if (readError) {
+    return { ok: false, error: readError.message };
+  }
+  if (!row) {
+    return { ok: false, error: "Target submission not found for this contest" };
+  }
+
+  const previous = row.dual_rewards_payout;
+  const { error: writeError } = await supabaseAdmin
+    .from("submissions")
+    .update({
+      dual_rewards_payout: mergeDualRewardsPayoutCommit(
+        previous,
+        targetCpm,
+        targetMs,
+      ),
+    })
+    .eq("id", targetSubmissionId)
+    .eq("contest_id", contestId);
+
+  if (writeError) {
+    return { ok: false, error: writeError.message };
+  }
+  return { ok: true, previous };
+}
+
+async function validatePoolBudgetFromLoadedRows(
+  supabaseAdmin: SupabaseClient,
+  contestId: string,
+  targetSubmissionId: string,
+  targetCpm: number,
+  targetMs: number,
+  poolBudgetCents: number,
+): Promise<DualPoolBudgetCheckResult> {
+  const fetchResult = await fetchDualRewardsPoolSpendRows(
+    supabaseAdmin,
+    contestId,
+  );
+  if (fetchResult.error) {
+    return {
+      allowed: false,
+      error: `Failed to load contest spend for pool check: ${fetchResult.error}`,
+      poolBudgetCents,
+      projectedSpentCents: 0,
+      remainingCents: 0,
+      committed: false,
+    };
+  }
+
+  return validateDualRewardsPoolBudget({
+    poolBudgetCents,
+    rows: fetchResult.rows ?? [],
+    targetSubmissionId,
+    targetAfter: { cpmCents: targetCpm, milestoneCents: targetMs },
+    requirePositivePool: true,
+  });
+}
+
 /**
  * Serialized pool check (Postgres advisory lock). When `commit` is true, persists
  * `dual_rewards_payout` on the target row in the same DB transaction so concurrent
@@ -1003,36 +1094,28 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
 
   if (!rpcError && rpcData != null) {
     const parsed = parseRpcPoolBudgetResult(rpcData);
-    if (commit && parsed.allowed && parsed.committed !== true) {
-      return {
-        allowed: false,
-        error:
-          "Pool budget commit did not persist (deploy migration 20260521130000_dual_rewards_pool_budget_commit)",
-        poolBudgetCents: parsed.poolBudgetCents,
-        projectedSpentCents: parsed.projectedSpentCents,
-        remainingCents: parsed.remainingCents ?? 0,
-        committed: false,
-      };
+    const rpcMissedNestedPool =
+      !parsed.allowed &&
+      parsed.error === DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR &&
+      poolBudgetCents > 0;
+    if (!rpcMissedNestedPool) {
+      if (commit && parsed.allowed && parsed.committed !== true) {
+        return {
+          allowed: false,
+          error:
+            "Pool budget commit did not persist (deploy migration 20260521130000_dual_rewards_pool_budget_commit)",
+          poolBudgetCents: parsed.poolBudgetCents,
+          projectedSpentCents: parsed.projectedSpentCents,
+          remainingCents: parsed.remainingCents ?? 0,
+          committed: false,
+        };
+      }
+      return parsed;
     }
-    return parsed;
-  }
-
-  if (!isRpcMissingError(rpcError)) {
+  } else if (!isRpcMissingError(rpcError)) {
     return {
       allowed: false,
       error: `Failed to verify contest pool budget: ${rpcError?.message || "unknown"}`,
-      poolBudgetCents,
-      projectedSpentCents: 0,
-      remainingCents: 0,
-      committed: false,
-    };
-  }
-
-  if (commit) {
-    return {
-      allowed: false,
-      error:
-        "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
       poolBudgetCents,
       projectedSpentCents: 0,
       remainingCents: 0,
@@ -1044,28 +1127,62 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
     return poolBudgetNotConfiguredResult();
   }
 
-  const fetchResult = await fetchDualRewardsPoolSpendRows(
+  const validated = await validatePoolBudgetFromLoadedRows(
     supabaseAdmin,
     contestId,
+    targetSubmissionId,
+    targetCpm,
+    targetMs,
+    poolBudgetCents,
   );
-  if (fetchResult.error) {
+  if (!validated.allowed) return validated;
+  if (!commit) return validated;
+
+  // RPC missing: refuse commit so concurrent payouts cannot skip the lock.
+  // Nested-platform miss: RPC ran but only inspected root total_budget_cents.
+  const rpcReturnedNotConfigured =
+    !rpcError &&
+    rpcData != null &&
+    parseRpcPoolBudgetResult(rpcData).error ===
+      DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR;
+  if (!rpcReturnedNotConfigured) {
     return {
       allowed: false,
-      error: `Failed to load contest spend for pool check: ${fetchResult.error}`,
+      error:
+        "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
       poolBudgetCents,
-      projectedSpentCents: 0,
-      remainingCents: 0,
+      projectedSpentCents: validated.projectedSpentCents,
+      remainingCents: validated.remainingCents ?? 0,
       committed: false,
     };
   }
 
-  return validateDualRewardsPoolBudget({
-    poolBudgetCents,
-    rows: fetchResult.rows ?? [],
+  const persisted = await persistDualRewardsPoolCommitInApp(
+    supabaseAdmin,
+    contestId,
     targetSubmissionId,
-    targetAfter: { cpmCents: targetCpm, milestoneCents: targetMs },
-    requirePositivePool: true,
-  });
+    targetCpm,
+    targetMs,
+  );
+  if (!persisted.ok) {
+    return {
+      allowed: false,
+      error: `Failed to reserve contest pool budget: ${persisted.error}`,
+      poolBudgetCents,
+      projectedSpentCents: validated.projectedSpentCents,
+      remainingCents: validated.remainingCents ?? 0,
+      committed: false,
+    };
+  }
+
+  return {
+    allowed: true,
+    poolBudgetCents: validated.poolBudgetCents,
+    projectedSpentCents: validated.projectedSpentCents,
+    remainingCents: validated.remainingCents,
+    committed: true,
+    previousDualRewardsPayout: persisted.previous,
+  };
 }
 
 /** Undo a pool commit when wallet credit fails after dual_rewards_payout was reserved. */
