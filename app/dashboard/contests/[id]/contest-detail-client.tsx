@@ -25910,11 +25910,13 @@ export default function ContestDetailClient({
                                                 View Content
                                               </a>
                                             </DropdownMenuItem>
-                                            {/* YouTube-only per-submission analytics refresh (admin only) */}
+                                            {/* YouTube per-submission analytics refresh (admin only; single + multi-platform) */}
                                             {isAdminView &&
                                               !isTwitterTweet &&
-                                              currentContest.platform?.toLowerCase() ===
-                                                "youtube" && (
+                                              submissionMatchesVideoPlatform(
+                                                submission,
+                                                "youtube",
+                                              ) && (
                                                 <>
                                                   <DropdownMenuSeparator />
                                                   <DropdownMenuLabel className="text-purple-500">
