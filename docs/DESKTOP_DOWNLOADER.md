@@ -1,6 +1,8 @@
 # Game of Creators Desktop Downloader
 
-Server-side support for the Windows desktop downloader (Tauri app under `apps/goc-downloader`). Brands and admins can download **YouTube** submissions on their machine via a signed `.gocdownload` manifest. Instagram and mixed selections continue to use the existing **cloud** Redis/Vercel ZIP path.
+Server-side support for the Windows desktop downloader. Brands and admins can download **YouTube** submissions on their machine via a signed `.gocdownload` manifest. Instagram and mixed selections continue to use the existing **cloud** Redis/Vercel ZIP path.
+
+The desktop app source is **not** kept in this monorepo (keeps `main` lean). Distribute the prebuilt Windows installer via `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL`. Rebuild the app from a separate repo or historical `goc-downloader` branch when you need a new installer.
 
 ## Architecture
 
@@ -41,8 +43,8 @@ Desktop v1 limits: at most **100** videos per `.gocdownload` manifest. HTTPS You
 ### Release notes (manual production key/signing)
 
 1. Generate a production Ed25519 keypair; store the private key in Vercel as `GOC_DOWNLOAD_SIGNING_PRIVATE_KEY` and set `GOC_DOWNLOAD_SIGNING_KEY_ID`.
-2. Before tagging a release, replace `apps/goc-downloader/src-tauri/resources/public_keys.json` with the matching production public key (do not ship `dev-*` for production).
-3. Authenticode / Tauri updater certificates are provisioned manually via GitHub secrets; the workflow documents placeholders but does not invent secrets.
+2. Ship the matching public key inside the Windows installer build (key id must match `GOC_DOWNLOAD_SIGNING_KEY_ID`, e.g. `prod-1`).
+3. Host the NSIS setup `.exe` and set `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL` to that public URL.
 
 ### Generating a signing key (OpenSSL)
 
@@ -86,8 +88,9 @@ Apply `db/migrations/20260905_bulk_video_download_desktop.sql`:
 ## Local scripts
 
 ```bash
-npm run desktop:dev    # apps/goc-downloader tauri:dev
-npm run desktop:build
-npm run desktop:test
+npm run test:goc-download
+# or:
 npx --yes tsx --test lib/bulk-download-resolve-items.test.ts lib/goc-download/*.test.ts
 ```
+
+Desktop app builds are out of this repo. Use the hosted installer for QA.
