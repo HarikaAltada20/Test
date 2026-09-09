@@ -218,10 +218,66 @@ export type GetSubmissionExportColumnsOptions = {
   ytVisibleColumnIds?: string[];
 };
 
+function pushSubmissionExportColumn(
+  cols: SubmissionExportColumnOption[],
+  seen: Set<string>,
+  id: SubmissionExportColumnId,
+) {
+  if (seen.has(id)) return;
+  seen.add(id);
+  cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+}
+
+function appendYoutubeSubmissionMetricColumns(
+  cols: SubmissionExportColumnOption[],
+  seen: Set<string>,
+  opts: GetSubmissionExportColumnsOptions,
+) {
+  const ytIds = opts.ytVisibleColumnIds ?? [];
+  const ytCol = (tableColId: string) =>
+    ytIds.length === 0 || ytIds.includes(tableColId);
+
+  const ytTableToExportId: Record<string, SubmissionExportColumnId> = {
+    views: "views",
+    likes: "likes",
+    comments: "comments",
+    dislikes: "dislikes",
+    shares: "shares",
+    avg_view_pct: "avg_view_pct",
+    watch_time: "watch_time",
+    avg_duration: "avg_duration",
+    clip_duration: "clip_duration",
+    engaged_views: "engaged_views",
+    subs_gained: "subs_gained",
+    bot_score: "bot_score",
+    top_traffic_source: "top_traffic_source",
+    insights_status: "insights_status",
+  };
+
+  for (const [tableColId, exportId] of Object.entries(ytTableToExportId)) {
+    if (!ytCol(tableColId)) continue;
+    if (YT_CORE_IDS.has(exportId) && !opts.canSeeCore) continue;
+    if (YT_TRAFFIC_IDS.has(exportId) && !opts.canSeeTraffic) continue;
+    if (exportId === "insights_status" && !opts.isAdminView) continue;
+    pushSubmissionExportColumn(cols, seen, exportId);
+  }
+
+  if (ytCol("analytics") && opts.isAdminView) {
+    pushSubmissionExportColumn(
+      cols,
+      seen,
+      SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_COLUMN_ID,
+    );
+  }
+}
+
 export function getSubmissionExportColumns(
   opts: GetSubmissionExportColumnsOptions,
 ): SubmissionExportColumnOption[] {
   const platform = opts.platform.toLowerCase();
+  const hasInstagram = platform.includes("instagram");
+  const hasTiktok = platform.includes("tiktok");
+  const hasYoutube = platform.includes("youtube");
   const baseColumnIds = opts.isTwitterTextImage
     ? SUBMISSION_EXPORT_BASE_COLUMN_IDS.filter((id) => id !== "video_title")
     : SUBMISSION_EXPORT_BASE_COLUMN_IDS;
@@ -229,63 +285,34 @@ export function getSubmissionExportColumns(
     id,
     label: SUBMISSION_EXPORT_COLUMN_LABELS[id],
   }));
+  const seen = new Set(cols.map((c) => c.id));
 
   if (opts.isTwitterTextImage) {
     for (const id of SUBMISSION_EXPORT_TWITTER_COLUMN_IDS) {
-      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+      pushSubmissionExportColumn(cols, seen, id);
     }
-  } else if (platform.includes("instagram")) {
-    for (const id of SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS) {
-      if (id === "insights_status" && !opts.isAdminView) continue;
-      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+  } else if (hasInstagram || hasTiktok || hasYoutube) {
+    // Multi-platform "All" unions every selected platform's metrics (same as table).
+    // Single-platform tabs pass one platform string and only that branch contributes.
+    if (hasYoutube) {
+      appendYoutubeSubmissionMetricColumns(cols, seen, opts);
     }
-  } else if (platform.includes("tiktok")) {
-    for (const id of SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS) {
-      if (id === "insights_status" && !opts.isAdminView) continue;
-      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+    if (hasInstagram) {
+      for (const id of SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS) {
+        if (id === "insights_status" && !opts.isAdminView) continue;
+        pushSubmissionExportColumn(cols, seen, id);
+      }
     }
-  } else if (platform.includes("youtube")) {
-    const ytIds = opts.ytVisibleColumnIds ?? [];
-    const ytCol = (tableColId: string) =>
-      ytIds.length === 0 || ytIds.includes(tableColId);
-
-    const ytTableToExportId: Record<string, SubmissionExportColumnId> = {
-      views: "views",
-      likes: "likes",
-      comments: "comments",
-      dislikes: "dislikes",
-      shares: "shares",
-      avg_view_pct: "avg_view_pct",
-      watch_time: "watch_time",
-      avg_duration: "avg_duration",
-      clip_duration: "clip_duration",
-      engaged_views: "engaged_views",
-      subs_gained: "subs_gained",
-      bot_score: "bot_score",
-      top_traffic_source: "top_traffic_source",
-      insights_status: "insights_status",
-    };
-
-    for (const [tableColId, exportId] of Object.entries(ytTableToExportId)) {
-      if (!ytCol(tableColId)) continue;
-      if (YT_CORE_IDS.has(exportId) && !opts.canSeeCore) continue;
-      if (YT_TRAFFIC_IDS.has(exportId) && !opts.canSeeTraffic) continue;
-      if (exportId === "insights_status" && !opts.isAdminView) continue;
-      cols.push({ id: exportId, label: SUBMISSION_EXPORT_COLUMN_LABELS[exportId] });
-    }
-
-    if (ytCol("analytics") && opts.isAdminView) {
-      cols.push({
-        id: SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_COLUMN_ID,
-        label: SUBMISSION_EXPORT_COLUMN_LABELS.youtube_analytics,
-      });
+    if (hasTiktok) {
+      for (const id of SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS) {
+        if (id === "insights_status" && !opts.isAdminView) continue;
+        pushSubmissionExportColumn(cols, seen, id);
+      }
     }
   } else {
-    cols.push(
-      { id: "views", label: SUBMISSION_EXPORT_COLUMN_LABELS.views },
-      { id: "likes", label: SUBMISSION_EXPORT_COLUMN_LABELS.likes },
-      { id: "comments", label: SUBMISSION_EXPORT_COLUMN_LABELS.comments },
-    );
+    pushSubmissionExportColumn(cols, seen, "views");
+    pushSubmissionExportColumn(cols, seen, "likes");
+    pushSubmissionExportColumn(cols, seen, "comments");
   }
 
   if (opts.showRewardColumns) {

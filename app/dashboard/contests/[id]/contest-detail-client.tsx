@@ -6167,9 +6167,17 @@ export default function ContestDetailClient({
     return false;
   }, [isTwitterTextImageContest, currentContest.contest_type]);
 
+  const overviewExportPlatform = useMemo(
+    () =>
+      platformsForTab(overviewPlatformTab, overviewVideoPlatforms).join(",") ||
+      currentContest.platform ||
+      "",
+    [overviewPlatformTab, overviewVideoPlatforms, currentContest.platform],
+  );
+
   const submissionExportColumnOptions = useMemo(
     () => ({
-      platform: currentContest.platform || "",
+      platform: submissionsTablePlatform || currentContest.platform || "",
       contestFormat: currentContest.contest_format,
       contestType: currentContest.contest_type,
       isTwitterTextImage: isTwitterTextImageContest,
@@ -6188,6 +6196,7 @@ export default function ContestDetailClient({
       ytVisibleColumnIds: ytVisibleColumns,
     }),
     [
+      submissionsTablePlatform,
       currentContest.platform,
       currentContest.contest_format,
       currentContest.contest_type,
@@ -6206,9 +6215,23 @@ export default function ContestDetailClient({
     ],
   );
 
+  const fullReportSubmissionColumnOptions = useMemo(
+    () => ({
+      ...submissionExportColumnOptions,
+      platform: overviewExportPlatform,
+    }),
+    [submissionExportColumnOptions, overviewExportPlatform],
+  );
+
   const submissionExportDefaultColumnIds = useMemo(
     () => getSubmissionExportDefaultColumnIds(submissionExportColumnOptions),
     [submissionExportColumnOptions],
+  );
+
+  const fullReportSubmissionDefaultColumnIds = useMemo(
+    () =>
+      getSubmissionExportDefaultColumnIds(fullReportSubmissionColumnOptions),
+    [fullReportSubmissionColumnOptions],
   );
 
   const submissionExportRewardContext = useMemo<RewardExportContext>(
@@ -6802,7 +6825,7 @@ export default function ContestDetailClient({
 
   const creatorExportColumnOptions = useMemo(
     () => ({
-      platform: currentContest.platform || "",
+      platform: submissionsTablePlatform || currentContest.platform || "",
       contestFormat: currentContest.contest_format,
       contestType: currentContest.contest_type,
       isTwitterTextImage: isTwitterTextImageContest,
@@ -6825,6 +6848,7 @@ export default function ContestDetailClient({
       showRejectionReasonColumn: showRejectionReasonInCreatorView,
     }),
     [
+      submissionsTablePlatform,
       currentContest.platform,
       currentContest.contest_format,
       currentContest.contest_type,
@@ -6846,9 +6870,22 @@ export default function ContestDetailClient({
     ],
   );
 
+  const fullReportCreatorColumnOptions = useMemo(
+    () => ({
+      ...creatorExportColumnOptions,
+      platform: overviewExportPlatform,
+    }),
+    [creatorExportColumnOptions, overviewExportPlatform],
+  );
+
   const creatorExportDefaultColumnIds = useMemo(
     () => getCreatorExportDefaultColumnIds(creatorExportColumnOptions),
     [creatorExportColumnOptions],
+  );
+
+  const fullReportCreatorDefaultColumnIds = useMemo(
+    () => getCreatorExportDefaultColumnIds(fullReportCreatorColumnOptions),
+    [fullReportCreatorColumnOptions],
   );
 
   const creatorExportContext = useMemo<CreatorExportContext>(
@@ -13036,12 +13073,6 @@ export default function ContestDetailClient({
       milestoneSubmissionExpectedPayoutCents,
     ]);
 
-  const getAnalyticsSnapshotsForTabs = useCallback(
-    (tabs: ContestAnalyticsTabId[]) =>
-      buildAllContestAnalyticsTabSnapshots(analyticsSnapshotContext, tabs),
-    [analyticsSnapshotContext],
-  );
-
   const reportExportContest = useMemo(
     () => ({
       contestId: currentContest?.id,
@@ -13078,6 +13109,154 @@ export default function ContestDetailClient({
   const reportExportSubmissions = useMemo(
     () => sortedSubmissions as unknown as ContestAnalyticsExportSubmission[],
     [sortedSubmissions],
+  );
+
+  const filterReportSubmissionsByPlatform = useCallback(
+    (
+      submissions: ContestAnalyticsExportSubmission[],
+      scopedPlatform: VideoContestPlatform | null,
+    ) => {
+      if (!scopedPlatform) return submissions;
+      return submissions.filter((submission) =>
+        submissionMatchesVideoPlatform(submission, scopedPlatform),
+      );
+    },
+    [],
+  );
+
+  const fullReportScopedSubmissions = useMemo(
+    () =>
+      filterReportSubmissionsByPlatform(
+        reportAllSubmissions,
+        overviewScopedPlatform,
+      ),
+    [
+      filterReportSubmissionsByPlatform,
+      reportAllSubmissions,
+      overviewScopedPlatform,
+    ],
+  );
+
+  const submissionsReportScopedSubmissions = useMemo(
+    () =>
+      filterReportSubmissionsByPlatform(
+        reportAllSubmissions,
+        submissionsScopedPlatform,
+      ),
+    [
+      filterReportSubmissionsByPlatform,
+      reportAllSubmissions,
+      submissionsScopedPlatform,
+    ],
+  );
+
+  const analyticsReportScopedSubmissions = useMemo(
+    () =>
+      analyticsPlatformScopedSubmissions as ContestAnalyticsExportSubmission[],
+    [analyticsPlatformScopedSubmissions],
+  );
+
+  const fullReportExportContest = useMemo(
+    () => ({
+      ...reportExportContest,
+      platform: overviewScopedPlatform ?? reportExportContest.platform,
+    }),
+    [reportExportContest, overviewScopedPlatform],
+  );
+
+  const submissionsReportExportContest = useMemo(
+    () => ({
+      ...reportExportContest,
+      platform: submissionsScopedPlatform ?? reportExportContest.platform,
+    }),
+    [reportExportContest, submissionsScopedPlatform],
+  );
+
+  const analyticsReportExportContest = useMemo(
+    () => ({
+      ...reportExportContest,
+      platform: analyticsScopedPlatform ?? reportExportContest.platform,
+    }),
+    [reportExportContest, analyticsScopedPlatform],
+  );
+
+  const buildPlatformScopedAnalyticsSnapshotContext = useCallback(
+    (
+      scopedSubmissions: ContestAnalyticsExportSubmission[],
+      scopedPlatform: VideoContestPlatform | null,
+    ): ContestAnalyticsSnapshotContext => {
+      if (!scopedPlatform) {
+        return {
+          ...analyticsSnapshotContext,
+          scopedPlatform: null,
+        };
+      }
+      return {
+        ...analyticsSnapshotContext,
+        totalSubmissionCount: scopedSubmissions.length,
+        approvedCount: scopedSubmissions.filter((submission) => {
+          const status = getStatus(submission as unknown as Submission);
+          return status === "verified" || status === "paid";
+        }).length,
+        platform: scopedPlatform,
+        scopedPlatform,
+        allSubmissions: scopedSubmissions,
+        leaderboardTotalPrizeCents: getAnalyticsCampaignBudgetCents(
+          {
+            contest_type: currentContest?.contest_type,
+            contest_based_details:
+              (currentContest?.contest_based_details as Record<
+                string,
+                unknown
+              >) || null,
+            platform: currentContest?.platform,
+          },
+          scopedPlatform,
+        ),
+      };
+    },
+    [
+      analyticsSnapshotContext,
+      getStatus,
+      currentContest?.contest_type,
+      currentContest?.contest_based_details,
+      currentContest?.platform,
+    ],
+  );
+
+  const fullReportAnalyticsSnapshotContext = useMemo(
+    () =>
+      buildPlatformScopedAnalyticsSnapshotContext(
+        fullReportScopedSubmissions,
+        overviewScopedPlatform,
+      ),
+    [
+      buildPlatformScopedAnalyticsSnapshotContext,
+      fullReportScopedSubmissions,
+      overviewScopedPlatform,
+    ],
+  );
+
+  const analyticsExportSnapshotContext = useMemo(
+    () =>
+      buildPlatformScopedAnalyticsSnapshotContext(
+        analyticsReportScopedSubmissions,
+        analyticsScopedPlatform,
+      ),
+    [
+      buildPlatformScopedAnalyticsSnapshotContext,
+      analyticsReportScopedSubmissions,
+      analyticsScopedPlatform,
+    ],
+  );
+
+  const getAnalyticsSnapshotsForTabs = useCallback(
+    (tabs: ContestAnalyticsTabId[]) =>
+      buildAllContestAnalyticsTabSnapshots(
+        analyticsExportSnapshotContext,
+        tabs,
+      ),
+    [analyticsExportSnapshotContext],
   );
 
   const reportExportDialogProps = useMemo(
@@ -19547,15 +19726,33 @@ export default function ContestDetailClient({
                 >[]
               }
               getMetrics={getSubmissionExportMetrics}
-              rewardContext={submissionExportRewardContext}
-              creatorExportContext={creatorExportContext}
-              submissionColumnOptions={submissionExportColumnOptions}
-              creatorColumnOptions={creatorExportColumnOptions}
-              submissionDefaultColumnIds={submissionExportDefaultColumnIds}
-              creatorDefaultColumnIds={creatorExportDefaultColumnIds}
-              analyticsSnapshotContext={analyticsSnapshotContext}
+              rewardContext={{
+                ...submissionExportRewardContext,
+                platform:
+                  overviewScopedPlatform ??
+                  submissionExportRewardContext.platform,
+              }}
+              creatorExportContext={{
+                ...creatorExportContext,
+                platform:
+                  overviewScopedPlatform ?? creatorExportContext.platform,
+              }}
+              submissionColumnOptions={fullReportSubmissionColumnOptions}
+              creatorColumnOptions={fullReportCreatorColumnOptions}
+              submissionDefaultColumnIds={fullReportSubmissionDefaultColumnIds}
+              creatorDefaultColumnIds={fullReportCreatorDefaultColumnIds}
+              analyticsSnapshotContext={fullReportAnalyticsSnapshotContext}
               isTwitterTextImage={isTwitterTextImageContest}
+              platformScopeLabel={
+                overviewScopedPlatform
+                  ? VIDEO_PLATFORM_LABELS[overviewScopedPlatform]
+                  : overviewVideoPlatforms.length >= 2
+                    ? "All platforms"
+                    : undefined
+              }
               {...reportExportDialogProps}
+              reportAllSubmissions={fullReportScopedSubmissions}
+              reportContest={fullReportExportContest}
             />
           </TabPanel>
 
@@ -22023,7 +22220,12 @@ export default function ContestDetailClient({
                             >[]
                           }
                           getMetrics={getSubmissionExportMetrics}
-                          rewardContext={submissionExportRewardContext}
+                          rewardContext={{
+                            ...submissionExportRewardContext,
+                            platform:
+                              submissionsScopedPlatform ??
+                              submissionExportRewardContext.platform,
+                          }}
                           columnOptions={submissionExportColumnOptions}
                           defaultSelectedColumnIds={
                             submissionExportDefaultColumnIds
@@ -22039,6 +22241,10 @@ export default function ContestDetailClient({
                             activeStatusTab as ReportSubmissionFilter
                           }
                           {...reportExportDialogProps}
+                          reportAllSubmissions={
+                            submissionsReportScopedSubmissions
+                          }
+                          reportContest={submissionsReportExportContest}
                         />
                       ) : (
                         <SubmissionLeaderboardExportDialog
@@ -22056,7 +22262,12 @@ export default function ContestDetailClient({
                               unknown
                             >[]
                           }
-                          creatorExportContext={creatorExportContext}
+                          creatorExportContext={{
+                            ...creatorExportContext,
+                            platform:
+                              submissionsScopedPlatform ??
+                              creatorExportContext.platform,
+                          }}
                           columnOptions={creatorExportColumnOptions}
                           defaultSelectedColumnIds={
                             creatorExportDefaultColumnIds
@@ -22069,6 +22280,10 @@ export default function ContestDetailClient({
                             activeStatusTab as ReportSubmissionFilter
                           }
                           {...reportExportDialogProps}
+                          reportAllSubmissions={
+                            submissionsReportScopedSubmissions
+                          }
+                          reportContest={submissionsReportExportContest}
                         />
                       )}
                       {isTwitterTextImageContest && isSubmissionTableView && (
@@ -30294,6 +30509,8 @@ export default function ContestDetailClient({
                       isDark={isDark}
                       activeTab={activeAnalyticsTab}
                       {...reportExportDialogProps}
+                      reportAllSubmissions={analyticsReportScopedSubmissions}
+                      reportContest={analyticsReportExportContest}
                     />
                   </div>
                 </div>
