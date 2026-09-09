@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FolderArchive, ExternalLink, ArrowLeft } from "lucide-react";
+import { Download, FolderArchive, ExternalLink, ArrowLeft, Monitor } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,10 @@ import {
   sortDownloadSummaryRows,
   type DownloadSummaryStatusTab,
 } from "@/lib/bulk-video-download-summary";
+import {
+  getDesktopDeepLinkImportUrl,
+  getDesktopDownloaderInstallUrl,
+} from "@/lib/goc-download/config";
 
 function countZipPartResultStatuses(
   part: BulkVideoDownloadZipPartRef,
@@ -62,6 +66,8 @@ export type BulkDownloadJobListItem = {
   qualityLabel: string;
   statusLabel: string;
   statusSlug?: string | null;
+  source?: "cloud" | "desktop";
+  deliveryMode?: string | null;
 };
 
 const JOB_LIST_PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -75,6 +81,8 @@ export function BulkVideoDownloadStatusDialog({
   progress,
   namingPattern,
   zipParts,
+  source,
+  deliveryMode,
   jobs,
   showJobList = false,
   onBackToList,
@@ -90,6 +98,8 @@ export function BulkVideoDownloadStatusDialog({
   progress: BulkVideoDownloadProgressState | null;
   namingPattern?: VideoFilenamePattern | string | null;
   zipParts?: BulkVideoDownloadZipPartRef[] | null;
+  source?: "cloud" | "desktop" | null;
+  deliveryMode?: string | null;
   jobs?: BulkDownloadJobListItem[];
   showJobList?: boolean;
   onBackToList?: () => void;
@@ -99,6 +109,10 @@ export function BulkVideoDownloadStatusDialog({
   emptyMessage?: string | null;
 }) {
   const allRows = progress?.results ?? [];
+  const isDesktopJob = source === "desktop";
+  const isCloudJob = !isDesktopJob;
+  const installUrl = getDesktopDownloaderInstallUrl() || "";
+  const deepLinkUrl = getDesktopDeepLinkImportUrl();
   const [listStatusTab, setListStatusTab] =
     useState<DownloadSummaryStatusTab>("all");
   const [jobPage, setJobPage] = useState(1);
@@ -312,6 +326,18 @@ export function BulkVideoDownloadStatusDialog({
                           >
                             {job.completedLabel}
                           </span>
+                          {job.source === "desktop" ? (
+                            <span
+                              className={cn(
+                                "ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                isDark
+                                  ? "bg-sky-500/20 text-sky-300"
+                                  : "bg-sky-100 text-sky-800",
+                              )}
+                            >
+                              Desktop
+                            </span>
+                          ) : null}
                         </p>
                         <p
                           className={cn(
@@ -496,7 +522,7 @@ export function BulkVideoDownloadStatusDialog({
             </div>
           )}
 
-          {finished && currentZipParts.length > 0 && (
+          {finished && isCloudJob && currentZipParts.length > 0 && (
             <div className="space-y-2">
               <p
                 className={cn(
@@ -609,6 +635,97 @@ export function BulkVideoDownloadStatusDialog({
                   );
                 })}
               </ul>
+            </div>
+          )}
+
+          {isDesktopJob && (
+            <div
+              className={cn(
+                "space-y-3 rounded-lg border p-3",
+                isDark
+                  ? "border-sky-500/30 bg-sky-950/20"
+                  : "border-sky-200 bg-sky-50",
+              )}
+            >
+              <div className="flex items-start gap-2.5">
+                <Monitor
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    isDark ? "text-sky-300" : "text-sky-700",
+                  )}
+                />
+                <div className="min-w-0 space-y-1">
+                  <p
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-slate-100" : "text-slate-900",
+                    )}
+                  >
+                    Desktop download
+                    {deliveryMode ? ` (${deliveryMode})` : ""}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-slate-300" : "text-slate-600",
+                    )}
+                  >
+                    Videos download in the Game of Creators desktop app. Re-open
+                    your .gocdownload file if the job is still running, or use
+                    the links below.
+                  </p>
+                  {currentZipParts.length > 0 ? (
+                    <p
+                      className={cn(
+                        "text-xs",
+                        isDark ? "text-slate-400" : "text-slate-500",
+                      )}
+                    >
+                      {currentZipParts.length} local archive
+                      {currentZipParts.length === 1 ? "" : "s"} in this manifest
+                      (saved on your computer, not as a cloud ZIP).
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {installUrl ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    asChild
+                    className={cn(
+                      "h-8 gap-1.5 text-xs font-medium",
+                      isDark
+                        ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
+                        : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
+                    )}
+                  >
+                    <a href={installUrl} target="_blank" rel="noopener noreferrer">
+                      <Download className="h-3 w-3 opacity-80" />
+                      Get the desktop app
+                    </a>
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  asChild
+                  className={cn(
+                    "h-8 gap-1.5 text-xs font-medium",
+                    isDark
+                      ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
+                      : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
+                  )}
+                >
+                  <a href={deepLinkUrl} rel="noopener">
+                    <ExternalLink className="h-3 w-3 opacity-80" />
+                    Open desktop app
+                  </a>
+                </Button>
+              </div>
             </div>
           )}
 

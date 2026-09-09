@@ -20,7 +20,11 @@ import {
   assertDesktopStatusSigningReady,
   issueDesktopStatusToken,
 } from "@/lib/goc-download/status-token";
-import { getManifestTtlSeconds } from "@/lib/goc-download/config";
+import {
+  getDesktopStatusTokenTtlSeconds,
+  getManifestTtlSeconds,
+  isDesktopDownloadApiEnabled,
+} from "@/lib/goc-download/config";
 import { gocDownloadUnsignedPayloadSchema } from "@/lib/goc-download/schemas";
 import { createBulkVideoDownloadJob } from "@/lib/bulk-video-download-jobs";
 import {
@@ -53,6 +57,13 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 export async function POST(request: Request) {
+  if (!isDesktopDownloadApiEnabled()) {
+    return NextResponse.json(
+      { error: "Desktop downloads are disabled" },
+      { status: 403 },
+    );
+  }
+
   const access = await verifyAdminOrBrandDownloadAccess();
   if (!access.allowed) {
     return NextResponse.json(
@@ -142,7 +153,17 @@ export async function POST(request: Request) {
   }
 
   // Desktop tracking requires a contest job row so status callbacks succeed.
-  if (submissionIds.length > 0 && !contestId) {
+  // URL-only manifests without contest context are not supported for tracking.
+  if (submissionIds.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "Desktop downloads require contest submission IDs. Paste URLs in the desktop app instead.",
+      },
+      { status: 400 },
+    );
+  }
+  if (!contestId) {
     return NextResponse.json(
       { error: "contestId is required for desktop downloads of submissions" },
       { status: 400 },
@@ -252,10 +273,11 @@ export async function POST(request: Request) {
 
   const jobId = randomUUID();
   const ttlSeconds = getManifestTtlSeconds();
+  const statusTokenTtlSeconds = getDesktopStatusTokenTtlSeconds();
   const statusToken = issueDesktopStatusToken({
     jobId,
     userId: user.id,
-    ttlSeconds: Math.max(ttlSeconds, 60 * 60),
+    ttlSeconds: statusTokenTtlSeconds,
   });
   const statusUrl = absoluteStatusUrl(request);
 

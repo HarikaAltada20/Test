@@ -3,7 +3,7 @@ import type { ResolvedBulkDownloadItem } from "@/lib/bulk-download-resolve-items
 import { zipPartFilename } from "@/lib/bulk-download-resolve-items";
 import { chunkArray } from "@/lib/video-download-ui";
 import { assertSafeWindowsFilename } from "@/lib/goc-download/path-safety";
-import { isAllowedYoutubeDownloadUrl } from "@/lib/goc-download/youtube-url";
+import { parseAllowedYoutubeUrl } from "@/lib/goc-download/youtube-url";
 import { getManifestTtlSeconds } from "@/lib/goc-download/config";
 import {
   GOC_DOWNLOAD_MANIFEST_VERSION,
@@ -48,8 +48,14 @@ export function buildDesktopManifestPayload(
     };
   }
 
+  const normalizedItems: Array<{
+    submissionId?: string;
+    url: string;
+    filename: string;
+  }> = [];
   for (const item of youtubeItems) {
-    if (!isAllowedYoutubeDownloadUrl(item.url)) {
+    const parsed = parseAllowedYoutubeUrl(item.url);
+    if (!parsed.ok) {
       return {
         ok: false,
         error: `URL is not an allowed YouTube host: ${item.url}`,
@@ -62,6 +68,11 @@ export function buildDesktopManifestPayload(
         error: `Unsafe filename "${item.filename}": ${safe.reason}`,
       };
     }
+    normalizedItems.push({
+      ...(item.submissionId ? { submissionId: item.submissionId } : {}),
+      url: parsed.normalized,
+      filename: item.filename,
+    });
   }
 
   const createdAt = input.createdAt ?? new Date();
@@ -69,12 +80,12 @@ export function buildDesktopManifestPayload(
   const expiresAt = new Date(createdAt.getTime() + ttl * 1000);
 
   const chunks = chunkArray(
-    youtubeItems,
+    normalizedItems,
     Math.max(1, Math.floor(input.videosPerZip) || 1),
   );
   const partTotal = chunks.length;
 
-  const items = youtubeItems.map((item) => ({
+  const items = normalizedItems.map((item) => ({
     itemId: randomUUID(),
     ...(item.submissionId ? { submissionId: item.submissionId } : {}),
     url: item.url,

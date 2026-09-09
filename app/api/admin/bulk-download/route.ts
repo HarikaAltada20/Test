@@ -27,6 +27,7 @@ import {
   resolveBulkDownloadItems,
   zipPartFilename,
 } from "@/lib/bulk-download-resolve-items";
+import { isDesktopDownloadApiEnabled } from "@/lib/goc-download/config";
 
 export const maxDuration = 300;
 
@@ -133,8 +134,26 @@ export async function POST(request: Request) {
     }
 
     // Cloud path: silently skip rejected items (ownership / unsupported / missing).
-    const resolvedItems = resolved.result.items;
+    // When desktop download is enabled, YouTube must not use the cloud ZIP path.
+    const desktopOnly = isDesktopDownloadApiEnabled();
+    const resolvedItems = desktopOnly
+      ? resolved.result.items.filter((item) => item.isInstagram)
+      : resolved.result.items;
     const contestTitle = resolved.result.contestTitle;
+
+    if (
+      desktopOnly &&
+      resolved.result.items.some((item) => !item.isInstagram) &&
+      resolvedItems.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "YouTube downloads require the desktop app. Use Download file (.gocdownload) for YouTube selections.",
+        },
+        { status: 400 },
+      );
+    }
 
     if (submissionIdList.length > 0 && resolvedItems.length === 0) {
       return NextResponse.json(
@@ -145,7 +164,7 @@ export async function POST(request: Request) {
 
     if (resolvedItems.length === 0) {
       return NextResponse.json(
-        { error: "No valid Instagram/YouTube submissions to download" },
+        { error: "No valid Instagram submissions to download" },
         { status: 400 },
       );
     }

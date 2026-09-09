@@ -36,7 +36,11 @@ import {
   parseVideosPerZip,
   readPendingBulkZipJob,
 } from "@/lib/video-download-ui";
-import { getDesktopDeepLinkImportUrl } from "@/lib/goc-download/config";
+import {
+  getDesktopDeepLinkImportUrl,
+  getDesktopDownloaderInstallUrl,
+  isDesktopDownloadEnabled,
+} from "@/lib/goc-download/config";
 import { toast } from "@/hooks/use-toast";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
 
@@ -50,10 +54,8 @@ function isValidVideosPerZipInput(raw: string): boolean {
   );
 }
 
-const DESKTOP_DOWNLOAD_ENABLED =
-  process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_ENABLED === "true";
-const INSTALL_URL =
-  process.env.NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL?.trim() || "";
+const DESKTOP_DOWNLOAD_ENABLED = isDesktopDownloadEnabled();
+const INSTALL_URL = getDesktopDownloaderInstallUrl() || "";
 
 async function downloadDesktopManifest(options: {
   submissionIds: string[];
@@ -92,7 +94,8 @@ async function downloadDesktopManifest(options: {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  URL.revokeObjectURL(objectUrl);
+  // Keep blob URL alive long enough for browsers that download asynchronously.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
 }
 
 function openDesktopAppNonNavigating() {
@@ -148,6 +151,8 @@ export function BulkVideoDownloadDialog({
   downloading = false,
   onConfirm,
   submissionIds,
+  youtubeSubmissionIds,
+  instagramSubmissionIds,
   contestId,
   hasInstagramSelection = false,
 }: {
@@ -160,11 +165,16 @@ export function BulkVideoDownloadDialog({
   onConfirm: (
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
+    options?: { submissionIds?: string[] },
   ) => void | Promise<void>;
-  /** Ordered submission IDs for desktop manifest (same order as cloud). */
+  /** Ordered submission IDs for the full selection (legacy fallback). */
   submissionIds?: string[];
+  /** Ordered YouTube IDs for desktop (.gocdownload). */
+  youtubeSubmissionIds?: string[];
+  /** Ordered Instagram IDs for cloud ZIP. */
+  instagramSubmissionIds?: string[];
   contestId?: string;
-  /** When true, Instagram/mixed selections use cloud only (no method picker). */
+  /** When true and no explicit ID lists, treat selection as including Instagram. */
   hasInstagramSelection?: boolean;
 }) {
   const { hydrateContestJobs } = useBulkVideoDownloadProgress();
@@ -178,14 +188,32 @@ export function BulkVideoDownloadDialog({
   const [desktopBusy, setDesktopBusy] = useState(false);
   const [manifestReady, setManifestReady] = useState(false);
 
-  const resolvedIds = submissionIds || [];
+  const youtubeIds = useMemo(() => {
+    if (Array.isArray(youtubeSubmissionIds)) return youtubeSubmissionIds;
+    if (hasInstagramSelection) return [];
+    return submissionIds || [];
+  }, [youtubeSubmissionIds, hasInstagramSelection, submissionIds]);
 
-  // YouTube (desktop flag on): single desktop-file path — no cloud chooser.
-  // Instagram / mixed / desktop flag off: cloud ZIP path — no method chooser.
-  const useDesktopFlow =
-    DESKTOP_DOWNLOAD_ENABLED &&
-    !hasInstagramSelection &&
-    resolvedIds.length >= 2;
+  const instagramIds = useMemo(() => {
+    if (Array.isArray(instagramSubmissionIds)) return instagramSubmissionIds;
+    if (hasInstagramSelection) return submissionIds || [];
+    return [];
+  }, [instagramSubmissionIds, hasInstagramSelection, submissionIds]);
+
+  const desktopEnabled = DESKTOP_DOWNLOAD_ENABLED;
+  const useDesktopForYoutube = desktopEnabled && youtubeIds.length >= 1;
+  const useCloudForInstagram = instagramIds.length >= 1;
+  const isMixed = useDesktopForYoutube && useCloudForInstagram;
+  const desktopOnly = useDesktopForYoutube && !useCloudForInstagram;
+  const cloudOnly = useCloudForInstagram && !useDesktopForYoutube;
+
+  // Legacy fallback when desktop is off: all selected IDs go cloud.
+  const cloudIds =
+    desktopEnabled && useCloudForInstagram
+      ? instagramIds
+      : !desktopEnabled
+        ? submissionIds || [...youtubeIds, ...instagramIds]
+        : instagramIds;
 
   useEffect(() => {
     if (open) {
@@ -202,7 +230,10 @@ export function BulkVideoDownloadDialog({
   const videosPerZip = videosPerZipValid
     ? parseVideosPerZip(videosPerZipInput)
     : DEFAULT_VIDEOS_PER_ZIP;
-  const zipCount = Math.max(1, Math.ceil(videoCount / videosPerZip));
+
+  const cloudCount = cloudIds.length;
+  const desktopCount = useDesktopForYoutube ? youtubeIds.length : 0;
+  const zipCount = Math.max(1, Math.ceil(Math.max(cloudCount, 1) / videosPerZip));
 
   const exampleZipName = useMemo(() => {
     const prefix =
@@ -216,24 +247,45 @@ export function BulkVideoDownloadDialog({
     if (!videosPerZipValid) {
       return `Enter ${MIN_BULK_VIDEO_DOWNLOADS}–${MAX_BULK_VIDEO_DOWNLOADS} videos per ZIP.`;
     }
-    if (videoCount === 1) {
-      return "1 selected video will download into a ZIP folder.";
+    if (isMixed) {
+      return `${desktopCount} YouTube → desktop file · ${cloudCount} Instagram → server ZIP (up to ${videosPerZip} each).`;
+    }
+    if (desktopOnly) {
+      return desktopCount === 1
+        ? "1 YouTube video will download via the desktop app."
+        : `${desktopCount} YouTube videos → signed .gocdownload file for the desktop app.`;
+    }
+    if (cloudCount === 1) {
+      return "1 Instagram video will download into a ZIP folder.";
     }
     if (zipCount > 1) {
-      return `${videoCount} selected videos → ${zipCount} ZIP files (up to ${videosPerZip} each).`;
+      return `${cloudCount} Instagram videos → ${zipCount} ZIP files (up to ${videosPerZip} each).`;
     }
-    return `${videoCount} selected videos → one ZIP (up to ${videosPerZip} videos).`;
-  }, [videoCount, videosPerZip, videosPerZipValid, zipCount]);
+    return `${cloudCount || videoCount} selected videos → one ZIP (up to ${videosPerZip} videos).`;
+  }, [
+    videoCount,
+    videosPerZip,
+    videosPerZipValid,
+    zipCount,
+    isMixed,
+    desktopOnly,
+    desktopCount,
+    cloudCount,
+  ]);
 
   const busy = downloading || desktopBusy;
-  const primaryDisabled = busy || videoCount < 2 || !videosPerZipValid;
+  const hasWork =
+    (useDesktopForYoutube && youtubeIds.length >= 1) ||
+    cloudIds.length >= 1 ||
+    (!desktopEnabled && videoCount >= 1);
+  const primaryDisabled = busy || !hasWork || !videosPerZipValid;
 
-  const handleDesktopDownload = async () => {
-    if (!useDesktopFlow) return;
+  const handleDesktopDownload = async (ids: string[]) => {
+    if (!ids.length) return;
     setDesktopBusy(true);
     try {
       await downloadDesktopManifest({
-        submissionIds: resolvedIds,
+        submissionIds: ids,
         contestId,
         namingPattern: pattern,
         videosPerZip,
@@ -256,22 +308,61 @@ export function BulkVideoDownloadDialog({
           error instanceof Error ? error.message : "Could not create file",
         variant: "destructive",
       });
+      throw error;
     } finally {
       setDesktopBusy(false);
     }
   };
 
-  const title = useDesktopFlow
-    ? "Download YouTube videos"
-    : hasInstagramSelection
-      ? "Download Instagram videos"
-      : "Download videos";
+  const handlePrimary = async () => {
+    if (isMixed) {
+      setDesktopBusy(true);
+      try {
+        await handleDesktopDownload(youtubeIds);
+        await onConfirm(pattern, videosPerZip, {
+          submissionIds: cloudIds,
+        });
+      } catch {
+        // Errors already toasted for desktop; cloud handler toasts separately.
+      } finally {
+        setDesktopBusy(false);
+      }
+      return;
+    }
+    if (desktopOnly) {
+      void handleDesktopDownload(youtubeIds);
+      return;
+    }
+    void onConfirm(pattern, videosPerZip, {
+      submissionIds: cloudIds.length ? cloudIds : submissionIds,
+    });
+  };
 
-  const description = useDesktopFlow
-    ? "YouTube downloads run on your computer. Get a signed file, then open it in the desktop app."
-    : hasInstagramSelection
-      ? "Instagram downloads are prepared on our servers and delivered as ZIP files."
-      : "Choose how files are named inside the ZIP and how many videos go in each archive.";
+  const title = isMixed
+    ? "Download videos"
+    : desktopOnly
+      ? "Download YouTube videos"
+      : cloudOnly || hasInstagramSelection
+        ? "Download Instagram videos"
+        : "Download videos";
+
+  const description = isMixed
+    ? "YouTube downloads run on your computer. Instagram downloads are prepared as server ZIP files."
+    : desktopOnly
+      ? "YouTube downloads run on your computer. Get a signed file, then open it in the desktop app."
+      : cloudOnly || hasInstagramSelection
+        ? "Instagram downloads are prepared on our servers and delivered as ZIP files."
+        : "Choose how files are named inside the ZIP and how many videos go in each archive.";
+
+  const primaryLabel = isMixed
+    ? "Download both"
+    : desktopOnly
+      ? manifestReady
+        ? "Download file again"
+        : "Download file"
+      : canResume
+        ? "Resume download"
+        : "Download ZIP";
 
   return (
     <Dialog
@@ -294,7 +385,7 @@ export function BulkVideoDownloadDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {useDesktopFlow ? (
+        {useDesktopForYoutube ? (
           <Section isDark={isDark}>
             <div className="flex items-start gap-2.5">
               <Monitor
@@ -310,7 +401,8 @@ export function BulkVideoDownloadDialog({
                     isDark ? "text-slate-100" : "text-slate-800",
                   )}
                 >
-                  Download on this computer
+                  YouTube on this computer
+                  {isMixed ? ` (${desktopCount})` : ""}
                 </p>
                 <ol
                   className={cn(
@@ -340,13 +432,12 @@ export function BulkVideoDownloadDialog({
                     )}
                   </li>
                   <li>
-                    Click <span className="font-medium">Download file</span> — a{" "}
-                    <code className="text-[11px]">.gocdownload</code> file
-                    saves to your computer.
+                    Download a{" "}
+                    <code className="text-[11px]">.gocdownload</code> file for
+                    the YouTube videos.
                   </li>
                   <li>
-                    Open that file with the app to download and ZIP the videos
-                    locally.
+                    Open that file with the app to download and ZIP locally.
                   </li>
                 </ol>
                 {INSTALL_URL && (
@@ -377,7 +468,9 @@ export function BulkVideoDownloadDialog({
               </div>
             </div>
           </Section>
-        ) : hasInstagramSelection ? (
+        ) : null}
+
+        {useCloudForInstagram || (!desktopEnabled && !useDesktopForYoutube) ? (
           <Section isDark={isDark}>
             <p
               className={cn(
@@ -385,8 +478,9 @@ export function BulkVideoDownloadDialog({
                 isDark ? "text-slate-400" : "text-slate-600",
               )}
             >
-              Instagram (and mixed selections) use server ZIP downloads. YouTube-only
-              selections can use the desktop app when it is enabled.
+              {isMixed
+                ? `Instagram (${cloudCount}) uses server ZIP downloads.`
+                : "Instagram downloads use server ZIP archives."}
             </p>
           </Section>
         ) : null}
@@ -514,16 +608,18 @@ export function BulkVideoDownloadDialog({
             {queueHint} Example:{" "}
             <span className="font-mono">{selectedMeta.example}</span>
           </p>
-          <p
-            className={cn(
-              "text-xs",
-              isDark ? "text-slate-400" : "text-slate-600",
-            )}
-          >
-            ZIP name:{" "}
-            <span className="font-mono break-all">{exampleZipName}</span>
-          </p>
-          {canResume && !busy && !useDesktopFlow && (
+          {(useCloudForInstagram || !desktopEnabled) && (
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-slate-400" : "text-slate-600",
+              )}
+            >
+              ZIP name:{" "}
+              <span className="font-mono break-all">{exampleZipName}</span>
+            </p>
+          )}
+          {canResume && !busy && !desktopOnly && (
             <p
               className={cn(
                 "text-xs",
@@ -534,18 +630,6 @@ export function BulkVideoDownloadDialog({
               starting over.
             </p>
           )}
-          {DESKTOP_DOWNLOAD_ENABLED &&
-            !hasInstagramSelection &&
-            resolvedIds.length < 2 && (
-              <p
-                className={cn(
-                  "text-xs",
-                  isDark ? "text-amber-300" : "text-amber-700",
-                )}
-              >
-                Select at least 2 videos to download.
-              </p>
-            )}
         </div>
 
         <DialogFooter className="flex-row justify-end gap-2 flex-wrap sm:space-x-0">
@@ -563,50 +647,39 @@ export function BulkVideoDownloadDialog({
             {manifestReady ? "Done" : "Cancel"}
           </Button>
 
-          {useDesktopFlow ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={openDesktopAppNonNavigating}
-                className={cn(
-                  isDark
-                    ? "border-gray-600 text-slate-200 hover:bg-white/5"
-                    : undefined,
-                )}
-              >
-                Open app
-              </Button>
-              <Button
-                type="button"
-                loading={desktopBusy}
-                loadingText="Preparing…"
-                disabled={primaryDisabled}
-                onClick={() => {
-                  void handleDesktopDownload();
-                }}
-                className="bg-purple-600 text-white hover:bg-purple-700"
-              >
-                <FolderDown className="h-4 w-4 mr-1" />
-                {manifestReady ? "Download file again" : "Download file"}
-              </Button>
-            </>
-          ) : (
+          {useDesktopForYoutube ? (
             <Button
               type="button"
-              loading={downloading}
-              loadingText="Starting…"
-              disabled={primaryDisabled}
-              onClick={() => {
-                void onConfirm(pattern, videosPerZip);
-              }}
-              className="bg-purple-600 text-white hover:bg-purple-700"
+              variant="outline"
+              disabled={busy}
+              onClick={openDesktopAppNonNavigating}
+              className={cn(
+                isDark
+                  ? "border-gray-600 text-slate-200 hover:bg-white/5"
+                  : undefined,
+              )}
             >
-              <Download className="h-4 w-4 mr-1" />
-              {canResume ? "Resume download" : "Download ZIP"}
+              Open app
             </Button>
-          )}
+          ) : null}
+
+          <Button
+            type="button"
+            loading={busy}
+            loadingText="Preparing…"
+            disabled={primaryDisabled}
+            onClick={() => {
+              void handlePrimary();
+            }}
+            className="bg-purple-600 text-white hover:bg-purple-700"
+          >
+            {desktopOnly || isMixed ? (
+              <FolderDown className="h-4 w-4 mr-1" />
+            ) : (
+              <Download className="h-4 w-4 mr-1" />
+            )}
+            {primaryLabel}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

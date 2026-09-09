@@ -120,6 +120,8 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   buildBulkDownloadMetaMap,
+  splitDownloadSubmissionIdsByPlatform,
+  classifyDownloadVideoPlatform,
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
@@ -128,6 +130,7 @@ import {
   BulkVideoDownloadSummaryButton,
 } from "@/components/BulkVideoDownloadContestStatus";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
+import { isDesktopDownloadEnabled } from "@/lib/goc-download/config";
 import {
   useBulkModerationProgress,
   type BulkModerationJobStatus,
@@ -3679,11 +3682,58 @@ export default function ContestDetailClient({
     }
   };
 
+  const orderedNormalViewDownloadIds = useMemo(() => {
+    const selected = normalViewSelectedSubmissions;
+    const ordered = sortedSubmissions
+      .map((submission) => submission.id)
+      .filter((id) => selected.has(id));
+    const seen = new Set(ordered);
+    for (const id of selected) {
+      if (!seen.has(id)) ordered.push(id);
+    }
+    return ordered;
+  }, [normalViewSelectedSubmissions, sortedSubmissions]);
+
+  const normalViewDownloadSplit = useMemo(
+    () =>
+      splitDownloadSubmissionIdsByPlatform(
+        orderedNormalViewDownloadIds,
+        (id) => {
+          const sub = currentSubmissions.find((entry) => entry.id === id);
+          if (!sub) return null;
+          return {
+            platform: sub.platform,
+            contestPlatform: currentContest?.platform,
+            contentLink: sub.content_link,
+          };
+        },
+      ),
+    [
+      orderedNormalViewDownloadIds,
+      currentSubmissions,
+      currentContest?.platform,
+    ],
+  );
+
   const handleNormalViewBulkDownload = async () => {
     if (normalViewSelectedSubmissions.size === 0) return;
 
     if (normalViewSelectedSubmissions.size === 1) {
-      const singleSubmissionId = Array.from(normalViewSelectedSubmissions)[0];
+      const singleSubmissionId =
+        orderedNormalViewDownloadIds[0] ||
+        Array.from(normalViewSelectedSubmissions)[0];
+      const submission = currentSubmissions.find(
+        (s) => s.id === singleSubmissionId,
+      );
+      const kind = classifyDownloadVideoPlatform({
+        platform: submission?.platform,
+        contestPlatform: currentContest?.platform,
+        contentLink: submission?.content_link,
+      });
+      if (kind === "youtube" && isDesktopDownloadEnabled()) {
+        setNormalViewBulkDownloadDialogOpen(true);
+        return;
+      }
       await handleDownloadReel(singleSubmissionId);
       return;
     }
@@ -3710,13 +3760,15 @@ export default function ContestDetailClient({
   const runNormalViewBulkDownload = async (
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
+    options?: { submissionIds?: string[] },
   ) => {
-    const selected = new Set(normalViewSelectedSubmissions);
-    // Keep leaderboard sort order (e.g. views high → low), not checkbox click order.
-    const submissionIds = sortedSubmissions
-      .map((submission) => submission.id)
-      .filter((id) => selected.has(id));
-    if (submissionIds.length < 2) return;
+    const submissionIds =
+      options?.submissionIds && options.submissionIds.length > 0
+        ? options.submissionIds
+        : normalViewDownloadSplit.instagramIds.length > 0
+          ? normalViewDownloadSplit.instagramIds
+          : orderedNormalViewDownloadIds;
+    if (submissionIds.length < 1) return;
     if (!currentContest?.id) return;
 
     setNormalViewBulkDownloadDialogOpen(false);
@@ -9169,12 +9221,24 @@ export default function ContestDetailClient({
       `[DOWNLOAD] [DEBUG] Starting download for submission: ${submissionId}`,
     );
 
+    const submission = currentSubmissions.find((s) => s.id === submissionId);
+    const kind = classifyDownloadVideoPlatform({
+      platform: submission?.platform,
+      contestPlatform: currentContest?.platform,
+      contentLink: submission?.content_link,
+    });
+
+    if (kind === "youtube" && isDesktopDownloadEnabled()) {
+      setNormalViewSelectedSubmissions(new Set([submissionId]));
+      setNormalViewBulkDownloadDialogOpen(true);
+      return;
+    }
+
     // Set loading state
     setDownloadingSubmissionId(submissionId);
 
     try {
       // Find the submission to check if it's Instagram
-      const submission = currentSubmissions.find((s) => s.id === submissionId);
       const isInstagram =
         submission?.content_link?.includes("instagram.com") || false;
 
@@ -31746,26 +31810,17 @@ export default function ContestDetailClient({
         open={normalViewBulkDownloadDialogOpen}
         onOpenChange={setNormalViewBulkDownloadDialogOpen}
         isDark={isDark}
-        videoCount={normalViewSelectedSubmissions.size}
+        videoCount={orderedNormalViewDownloadIds.length}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
         onConfirm={runNormalViewBulkDownload}
         contestId={
           currentContest?.id ? String(currentContest.id) : undefined
         }
-        submissionIds={sortedSubmissions
-          .map((submission) => submission.id)
-          .filter((id) => normalViewSelectedSubmissions.has(id))}
-        hasInstagramSelection={Array.from(normalViewSelectedSubmissions).some(
-          (id) => {
-            const sub = currentSubmissions.find((entry) => entry.id === id);
-            const link = sub?.content_link || "";
-            const platform = String(sub?.platform || "").toLowerCase();
-            return (
-              link.includes("instagram.com") || platform.includes("instagram")
-            );
-          },
-        )}
+        submissionIds={orderedNormalViewDownloadIds}
+        youtubeSubmissionIds={normalViewDownloadSplit.youtubeIds}
+        instagramSubmissionIds={normalViewDownloadSplit.instagramIds}
+        hasInstagramSelection={normalViewDownloadSplit.instagramIds.length > 0}
       />
 
       <BulkVideoDownloadContestStatus

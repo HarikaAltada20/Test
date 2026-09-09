@@ -60,10 +60,13 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   buildBulkDownloadMetaMap,
+  splitDownloadSubmissionIdsByPlatform,
+  classifyDownloadVideoPlatform,
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
+import { isDesktopDownloadEnabled } from "@/lib/goc-download/config";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -377,6 +380,20 @@ export function CreatorSubmissionsModal({
   };
 
   const handleDownloadReel = async (submissionId: string) => {
+    const submission = submissions.find((entry) => entry.id === submissionId);
+    const kind = classifyDownloadVideoPlatform({
+      platform: submission?.platform,
+      contestPlatform: contest.platform,
+      contentLink: submission?.content_link,
+    });
+
+    // YouTube always goes through the dialog → signed .gocdownload (desktop).
+    if (kind === "youtube" && isDesktopDownloadEnabled()) {
+      setSelectedSubmissions(new Set([submissionId]));
+      setBulkDownloadDialogOpen(true);
+      return;
+    }
+
     // Set loading state
     setDownloadingSubmissionId(submissionId);
 
@@ -456,7 +473,19 @@ export function CreatorSubmissionsModal({
     if (selectedSubmissions.size === 0) return;
 
     if (selectedSubmissions.size === 1) {
-      const singleSubmissionId = Array.from(selectedSubmissions)[0];
+      const singleSubmissionId = orderedSelectedDownloadIds[0] ||
+        Array.from(selectedSubmissions)[0];
+      const kind = classifyDownloadVideoPlatform({
+        platform: submissions.find((s) => s.id === singleSubmissionId)?.platform,
+        contestPlatform: contest.platform,
+        contentLink:
+          submissions.find((s) => s.id === singleSubmissionId)?.content_link,
+      });
+      // Single YouTube (desktop) or any multi-path selection opens the dialog.
+      if (kind === "youtube" && isDesktopDownloadEnabled()) {
+        setBulkDownloadDialogOpen(true);
+        return;
+      }
       await handleDownloadReel(singleSubmissionId);
       return;
     }
@@ -477,9 +506,16 @@ export function CreatorSubmissionsModal({
   const runBulkDownloadReels = async (
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
+    options?: { submissionIds?: string[] },
   ) => {
-    const submissionIds = Array.from(selectedSubmissions);
-    if (submissionIds.length < 2) return;
+    // Dialog may pass Instagram-only IDs for mixed selections.
+    const submissionIds =
+      options?.submissionIds && options.submissionIds.length > 0
+        ? options.submissionIds
+        : selectedDownloadSplit.instagramIds.length > 0
+          ? selectedDownloadSplit.instagramIds
+          : orderedSelectedDownloadIds;
+    if (submissionIds.length < 1) return;
     if (!contest?.id) return;
 
     setBulkDownloadDialogOpen(false);
@@ -1719,6 +1755,32 @@ export function CreatorSubmissionsModal({
       );
     return 0;
   });
+
+  const orderedSelectedDownloadIds = useMemo(() => {
+    const selected = selectedSubmissions;
+    const ordered = sortedSubmissions
+      .map((submission) => submission.id)
+      .filter((id) => selected.has(id));
+    const seen = new Set(ordered);
+    for (const id of selected) {
+      if (!seen.has(id)) ordered.push(id);
+    }
+    return ordered;
+  }, [selectedSubmissions, sortedSubmissions]);
+
+  const selectedDownloadSplit = useMemo(
+    () =>
+      splitDownloadSubmissionIdsByPlatform(orderedSelectedDownloadIds, (id) => {
+        const sub = submissions.find((entry) => entry.id === id);
+        if (!sub) return null;
+        return {
+          platform: sub.platform,
+          contestPlatform: contest.platform,
+          contentLink: sub.content_link,
+        };
+      }),
+    [orderedSelectedDownloadIds, submissions, contest.platform],
+  );
 
   // Pre-calculate expected rewards with cap logic (in submission time order)
   const expectedRewardsMap = new Map<string, number>();
@@ -5348,22 +5410,15 @@ export function CreatorSubmissionsModal({
         open={bulkDownloadDialogOpen}
         onOpenChange={setBulkDownloadDialogOpen}
         isDark={isDark}
-        videoCount={selectedSubmissions.size}
+        videoCount={orderedSelectedDownloadIds.length}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={bulkDownloading}
         onConfirm={runBulkDownloadReels}
         contestId={contest?.id ? String(contest.id) : undefined}
-        submissionIds={sortedSubmissions
-          .map((submission) => submission.id)
-          .filter((id) => selectedSubmissions.has(id))}
-        hasInstagramSelection={Array.from(selectedSubmissions).some((id) => {
-          const sub = submissions.find((entry) => entry.id === id);
-          const link = sub?.content_link || "";
-          const platform = String(sub?.platform || "").toLowerCase();
-          return (
-            link.includes("instagram.com") || platform.includes("instagram")
-          );
-        })}
+        submissionIds={orderedSelectedDownloadIds}
+        youtubeSubmissionIds={selectedDownloadSplit.youtubeIds}
+        instagramSubmissionIds={selectedDownloadSplit.instagramIds}
+        hasInstagramSelection={selectedDownloadSplit.instagramIds.length > 0}
       />
 
       <VerifyQualityDialog

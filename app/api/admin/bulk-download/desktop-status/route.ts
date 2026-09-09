@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/utils/supabase/admin";
 import {
   getBulkVideoDownloadJobById,
+  isTerminalBulkVideoDownloadJobStatus,
   updateBulkVideoDownloadJob,
   type BulkVideoDownloadItemStatus,
   type BulkVideoDownloadJobRow,
@@ -17,19 +17,15 @@ import {
   verifyDesktopStatusToken,
 } from "@/lib/goc-download/status-token";
 import { acquireDesktopStatusRateLimit } from "@/lib/goc-download/status-rate-limit";
+import { recordDesktopStatusEvent } from "@/lib/goc-download/desktop-event-store";
 
 export const dynamic = "force-dynamic";
-
-const TERMINAL_JOB: ReadonlySet<BulkVideoDownloadJobStatus> = new Set([
-  "completed",
-  "failed",
-]);
 
 function nextJobStatus(
   current: BulkVideoDownloadJobStatus,
   eventType: DesktopStatusEventType,
 ): BulkVideoDownloadJobStatus | undefined {
-  if (TERMINAL_JOB.has(current)) return undefined;
+  if (isTerminalBulkVideoDownloadJobStatus(current)) return undefined;
   switch (eventType) {
     case "accepted":
       return current === "queued" ? "queued" : undefined;
@@ -42,42 +38,6 @@ function nextJobStatus(
     default:
       return undefined;
   }
-}
-
-async function recordDesktopEvent(options: {
-  eventId: string;
-  jobId: string;
-  eventType: string;
-  payload: DesktopStatusEvent;
-}): Promise<{ inserted: boolean; error?: string }> {
-  const admin = createAdminClient();
-  const { error } = await admin.from("bulk_video_download_desktop_events").insert({
-    id: options.eventId,
-    job_id: options.jobId,
-    event_type: options.eventType,
-    payload: options.payload,
-  });
-
-  if (!error) return { inserted: true };
-
-  // Unique violation => already processed (idempotent success).
-  if (
-    error.code === "23505" ||
-    /duplicate|unique/i.test(error.message || "")
-  ) {
-    return { inserted: false };
-  }
-
-  // Table missing (migration not applied): still allow job updates.
-  if (/does not exist|relation/i.test(error.message || "")) {
-    console.warn(
-      "[desktop-status] desktop_events table missing; continuing without event idempotency store",
-    );
-    return { inserted: true };
-  }
-
-  console.error("[desktop-status] event insert failed:", error);
-  return { inserted: false, error: error.message };
 }
 
 function buildPatch(
@@ -93,6 +53,7 @@ function buildPatch(
   itemStatuses?: BulkVideoDownloadItemStatus[];
   errorMessage?: string | null;
   startedAt?: string | null;
+  expectedUpdatedAt: string;
 } {
   const itemStatuses: BulkVideoDownloadItemStatus[] = [];
   if (
@@ -100,7 +61,6 @@ function buildPatch(
       event.eventType === "item_failed") &&
     event.submissionId
   ) {
-    // Only accept submission IDs that belong to this job.
     if (job.submission_ids.includes(event.submissionId)) {
       itemStatuses.push({
         submissionId: event.submissionId,
@@ -114,13 +74,14 @@ function buildPatch(
   const patch: ReturnType<typeof buildPatch> = {
     id: job.id,
     userId: job.user_id,
+    expectedUpdatedAt: job.updated_at,
   };
 
-  // Do not regress terminal job states.
-  if (statusPatch && !TERMINAL_JOB.has(job.status)) {
+  // Do not regress terminal job states; late item events may still update rows.
+  if (statusPatch && !isTerminalBulkVideoDownloadJobStatus(job.status)) {
     patch.status = statusPatch;
   } else if (
-    !TERMINAL_JOB.has(job.status) &&
+    !isTerminalBulkVideoDownloadJobStatus(job.status) &&
     (event.eventType === "item_completed" ||
       event.eventType === "item_failed" ||
       event.eventType === "archive_completed")
@@ -214,13 +175,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
 
-  // Reject new mutations after terminal state (except duplicate replays of
-  // the same event, which still re-apply the idempotent merge below).
-  if (
-    TERMINAL_JOB.has(job.status) &&
-    event.eventType !== "job_completed" &&
-    event.eventType !== "job_failed"
-  ) {
+  // Late item / archive results are accepted after terminal so counts can converge.
+  // Only reject non-item mutations that would try to reopen the job.
+  const lateItemAllowed =
+    event.eventType === "item_completed" ||
+    event.eventType === "item_failed" ||
+    event.eventType === "archive_completed" ||
+    event.eventType === "job_completed" ||
+    event.eventType === "job_failed";
+  if (isTerminalBulkVideoDownloadJobStatus(job.status) && !lateItemAllowed) {
     return NextResponse.json(
       { error: "Job is already terminal; further status events are rejected" },
       { status: 409 },
@@ -242,7 +205,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Validate submissionId membership when provided.
   if (
     event.submissionId &&
     job.submission_ids.length > 0 &&
@@ -254,7 +216,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const recorded = await recordDesktopEvent({
+  const recorded = await recordDesktopStatusEvent({
     eventId: event.eventId,
     jobId: event.jobId,
     eventType: event.eventType,
@@ -263,11 +225,25 @@ export async function POST(request: Request) {
   if (recorded.error) {
     return NextResponse.json({ error: recorded.error }, { status: 500 });
   }
+  if (recorded.outcome === "duplicate_mismatch") {
+    return NextResponse.json(
+      {
+        error:
+          "eventId was already used with a different payload; refuse to reuse",
+      },
+      { status: 409 },
+    );
+  }
 
-  // IMPORTANT: On duplicates we still re-apply the idempotent job merge so a
-  // prior insert-success / update-failure cannot permanently lose state.
+  // Re-apply idempotent merge on duplicate_ok so insert-ok / update-fail recovers.
   const patch = buildPatch(job, event);
-  const updated = await updateBulkVideoDownloadJob(patch);
+  const updated = await updateBulkVideoDownloadJob(patch, { maxAttempts: 5 });
+  if (updated.conflict) {
+    return NextResponse.json(
+      { error: updated.error || "Job update conflict; retry event" },
+      { status: 409 },
+    );
+  }
   if (updated.error) {
     return NextResponse.json({ error: updated.error }, { status: 500 });
   }
@@ -275,7 +251,11 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     jobId: job.id,
-    duplicate: !recorded.inserted,
+    duplicate:
+      recorded.outcome === "duplicate_ok" ||
+      recorded.outcome === "store_unavailable"
+        ? recorded.outcome === "duplicate_ok"
+        : false,
     status: updated.data?.status ?? job.status,
   });
 }

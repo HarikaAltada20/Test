@@ -64,6 +64,9 @@ export type BulkVideoDownloadSession = {
   summaryViewed?: boolean;
   summaryViewedAt?: string | null;
   userType?: BulkDownloadSummaryUserType | null;
+  /** Job origin: cloud Redis ZIP vs desktop .gocdownload observer. */
+  source?: "cloud" | "desktop";
+  delivery_mode?: string | null;
 };
 
 type StartBulkVideoDownloadParams = {
@@ -157,16 +160,28 @@ type RemoteSessionRow = {
   summary_viewed_at?: string | null;
   user_type?: string | null;
   user_id?: string | null;
+  source?: string | null;
+  delivery_mode?: string | null;
   /** Enriched on GET by joining submissions + job_items. */
   metaById?: Record<string, BulkVideoDownloadSubmissionMeta>;
   results?: BulkVideoDownloadResultRow[];
 };
 
+function isCloudBulkDownloadSession(session: {
+  source?: string | null;
+}): boolean {
+  return (session.source ?? "cloud") !== "desktop";
+}
+
 function remoteRowToSession(row: RemoteSessionRow): BulkVideoDownloadSession | null {
   const submissionIds = Array.isArray(row.submission_ids)
     ? row.submission_ids.filter(Boolean)
     : [];
-  if (submissionIds.length < 2) return null;
+  const source: "cloud" | "desktop" =
+    row.source === "desktop" ? "desktop" : "cloud";
+  // Cloud ZIP jobs need 2+ videos; desktop manifests may be a single YouTube URL.
+  if (submissionIds.length < 1) return null;
+  if (source !== "desktop" && submissionIds.length < 2) return null;
   const namingPattern = isVideoFilenamePattern(row.naming_pattern)
     ? row.naming_pattern
     : DEFAULT_VIDEO_FILENAME_PATTERN;
@@ -231,6 +246,9 @@ function remoteRowToSession(row: RemoteSessionRow): BulkVideoDownloadSession | n
       ? String(row.summary_viewed_at)
       : null,
     userType: row.user_type === "advertiser" ? "advertiser" : "admin",
+    source,
+    delivery_mode:
+      typeof row.delivery_mode === "string" ? row.delivery_mode : null,
     progress: {
       successCount: useDerivedCounts ? successFromResults : storedSuccess,
       failedCount: useDerivedCounts ? failedFromResults : storedFailed,
@@ -514,6 +532,8 @@ export function BulkVideoDownloadProgressProvider({
       next: BulkVideoDownloadSession,
       options?: { immediate?: boolean },
     ) => {
+      // Desktop jobs are updated by the desktop app via desktop-status callbacks.
+      if (!isCloudBulkDownloadSession(next)) return;
       const jobId = next.supabaseJobId;
       if (!jobId) return;
       if (progressSyncTimerRef.current) {
@@ -563,6 +583,12 @@ export function BulkVideoDownloadProgressProvider({
   const runSession = useCallback(
     async (active: BulkVideoDownloadSession) => {
       if (activeDownloadRuns.has(active.startedAt)) return;
+      // Desktop sessions are observer-only — never start Redis ZIP resume.
+      if (!isCloudBulkDownloadSession(active)) {
+        persistSession(sessionWithDerivedProgress(active));
+        setStatusOpen(true);
+        return;
+      }
       activeDownloadRuns.add(active.startedAt);
       runningRef.current = true;
       const token = ++runTokenRef.current;
@@ -827,14 +853,22 @@ export function BulkVideoDownloadProgressProvider({
         if (pickRemote) {
           const normalized = sessionWithDerivedProgress(restored);
           persistSession(normalized);
-          if (normalized.status === "running" && !runningRef.current) {
+          if (
+            normalized.status === "running" &&
+            isCloudBulkDownloadSession(normalized) &&
+            !runningRef.current
+          ) {
             void runSession(normalized);
           }
           return;
         }
 
         if (local && local.contestId === id) {
-          if (local.status === "running" && !runningRef.current) {
+          if (
+            local.status === "running" &&
+            isCloudBulkDownloadSession(local) &&
+            !runningRef.current
+          ) {
             void runSession(sessionWithDerivedProgress(local));
           }
         }
@@ -993,7 +1027,8 @@ export function BulkVideoDownloadProgressProvider({
     });
   }, [persistSession]);
 
-  const downloading = session?.status === "running";
+  const downloading =
+    session?.status === "running" && isCloudBulkDownloadSession(session);
   const progress = session?.progress ?? null;
 
   const value = useMemo<BulkVideoDownloadProgressContextValue>(

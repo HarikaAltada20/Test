@@ -1,6 +1,7 @@
 /**
  * Rate limiting for desktop status callbacks.
  * Uses Upstash Redis when available; falls back to a process-local map.
+ * Redis failures fail-open so temporary outages do not block callbacks.
  */
 
 import { Redis } from "@upstash/redis";
@@ -38,7 +39,7 @@ function pruneLocal(key: string, now: number): number[] {
 async function hitBucket(
   key: string,
   limit: number,
-): Promise<{ ok: true } | { ok: false; retryAfterMs: number }> {
+): Promise<{ ok: true; failOpen?: boolean } | { ok: false; retryAfterMs: number }> {
   const redis = getRedis();
   const now = Date.now();
   if (!redis) {
@@ -52,16 +53,24 @@ async function hitBucket(
     return { ok: true };
   }
 
-  const bucket = Math.floor(now / WINDOW_MS);
-  const redisKey = `goc-desktop-status:${key}:${bucket}`;
-  const count = await redis.incr(redisKey);
-  if (count === 1) {
-    await redis.pexpire(redisKey, WINDOW_MS);
+  try {
+    const bucket = Math.floor(now / WINDOW_MS);
+    const redisKey = `goc-desktop-status:${key}:${bucket}`;
+    const count = await redis.incr(redisKey);
+    if (count === 1) {
+      await redis.pexpire(redisKey, WINDOW_MS);
+    }
+    if (count > limit) {
+      return { ok: false, retryAfterMs: WINDOW_MS - (now % WINDOW_MS) };
+    }
+    return { ok: true };
+  } catch (error) {
+    console.warn(
+      "[desktop-status-rate-limit] Redis unavailable; failing open",
+      error,
+    );
+    return { ok: true, failOpen: true };
   }
-  if (count > limit) {
-    return { ok: false, retryAfterMs: WINDOW_MS - (now % WINDOW_MS) };
-  }
-  return { ok: true };
 }
 
 /**
@@ -77,7 +86,10 @@ export async function acquireDesktopStatusRateLimit(options: {
   jobId: string;
   userId: string;
   itemCount: number;
-}): Promise<{ ok: true } | { ok: false; retryAfterMs: number; reason: string }> {
+}): Promise<
+  | { ok: true; failOpen?: boolean }
+  | { ok: false; retryAfterMs: number; reason: string }
+> {
   const perJob = maxEventsPerMinuteForJob(options.itemCount);
   const jobHit = await hitBucket(`job:${options.jobId}`, perJob);
   if (!jobHit.ok) {
@@ -95,7 +107,13 @@ export async function acquireDesktopStatusRateLimit(options: {
       reason: "Per-user status callback rate limit exceeded",
     };
   }
-  return { ok: true };
+  return {
+    ok: true,
+    failOpen: Boolean(
+      ("failOpen" in jobHit && jobHit.failOpen) ||
+        ("failOpen" in userHit && userHit.failOpen),
+    ),
+  };
 }
 
 /** Test helper: clear in-memory buckets. */
