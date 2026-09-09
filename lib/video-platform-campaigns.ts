@@ -1634,18 +1634,37 @@ export function normalizeHtmlForPlatformCompare(
   html: string | null | undefined,
 ): string {
   if (!html) return "";
-  return String(html)
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&#(\d+);/g, (_, code) => {
-      const n = Number(code);
-      return Number.isFinite(n) ? String.fromCharCode(n) : "";
-    })
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    String(html)
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/&#(\d+);/g, (_, code) => {
+        const n = Number(code);
+        return Number.isFinite(n) ? String.fromCharCode(n) : "";
+      })
+      .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+        const n = Number.parseInt(hex, 16);
+        return Number.isFinite(n) ? String.fromCharCode(n) : "";
+      })
+      // TipTap / editor empty nodes
+      .replace(/<p>\s*<br\s*\/?>\s*<\/p>/gi, " ")
+      .replace(/<li>\s*<p>\s*<\/p>\s*<\/li>/gi, " ")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<\/(p|div|li|h[1-6]|tr|blockquote)>/gi, " ")
+      .replace(/<(ul|ol|li|p|div|span|strong|em|b|i|u)(\s[^>]*)?>/gi, " ")
+      .replace(/<[^>]*>/g, " ")
+      // Zero-width / BOM / soft hyphen
+      .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, "")
+      // Normalize fancy punctuation that editors often insert
+      .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+  );
 }
 
 type PlatformContentContestRef = {
@@ -1656,22 +1675,76 @@ type PlatformContentContestRef = {
   platform?: string | null;
 };
 
+/** Prefer the HTML that best preserves structure when platforms share the same text. */
+export function preferRichestHtmlAmong(
+  htmls: Array<string | null | undefined>,
+): string {
+  let best = "";
+  let bestScore = -1;
+  for (const raw of htmls) {
+    const html = String(raw ?? "");
+    const text = normalizeHtmlForPlatformCompare(html);
+    if (!text && !html.trim()) continue;
+    const listItems = (html.match(/<li[\s>]/gi) || []).length;
+    const score = text.length * 10 + listItems * 100 + html.length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = html;
+    }
+  }
+  return best;
+}
+
+/** Group platforms that share the same visible brief text. */
+export function groupPlatformsByBrief(
+  contest: PlatformContentContestRef | null | undefined,
+  platforms: readonly VideoContestPlatform[],
+): VideoContestPlatform[][] {
+  const groups: VideoContestPlatform[][] = [];
+  const indexByKey = new Map<string, number>();
+  for (const platform of platforms) {
+    const key = normalizeHtmlForPlatformCompare(
+      briefHtmlForPlatform(contest, platform),
+    );
+    const existing = indexByKey.get(key);
+    if (existing != null) {
+      groups[existing]!.push(platform);
+    } else {
+      indexByKey.set(key, groups.length);
+      groups.push([platform]);
+    }
+  }
+  return groups;
+}
+
+/** Group platforms that share the same visible rules text. */
+export function groupPlatformsByRules(
+  contest: PlatformContentContestRef | null | undefined,
+  platforms: readonly VideoContestPlatform[],
+): VideoContestPlatform[][] {
+  const groups: VideoContestPlatform[][] = [];
+  const indexByKey = new Map<string, number>();
+  for (const platform of platforms) {
+    const key = normalizeHtmlForPlatformCompare(
+      rulesHtmlForPlatform(contest, platform),
+    );
+    const existing = indexByKey.get(key);
+    if (existing != null) {
+      groups[existing]!.push(platform);
+    } else {
+      indexByKey.set(key, groups.length);
+      groups.push([platform]);
+    }
+  }
+  return groups;
+}
+
 export function briefsDifferAcrossPlatforms(
   contest: PlatformContentContestRef | null | undefined,
   platforms: readonly VideoContestPlatform[],
 ): boolean {
   if (platforms.length < 2) return false;
-  const first = normalizeHtmlForPlatformCompare(
-    briefHtmlForPlatform(contest, platforms[0]),
-  );
-  return platforms
-    .slice(1)
-    .some(
-      (platform) =>
-        normalizeHtmlForPlatformCompare(
-          briefHtmlForPlatform(contest, platform),
-        ) !== first,
-    );
+  return groupPlatformsByBrief(contest, platforms).length > 1;
 }
 
 export function rulesDifferAcrossPlatforms(
@@ -1679,17 +1752,7 @@ export function rulesDifferAcrossPlatforms(
   platforms: readonly VideoContestPlatform[],
 ): boolean {
   if (platforms.length < 2) return false;
-  const first = normalizeHtmlForPlatformCompare(
-    rulesHtmlForPlatform(contest, platforms[0]),
-  );
-  return platforms
-    .slice(1)
-    .some(
-      (platform) =>
-        normalizeHtmlForPlatformCompare(
-          rulesHtmlForPlatform(contest, platform),
-        ) !== first,
-    );
+  return groupPlatformsByRules(contest, platforms).length > 1;
 }
 
 function canonicalizeInspirationLinksForCompare(
@@ -2840,6 +2903,165 @@ export function sumSnapshotChargeableCents(
   return total;
 }
 
+/** Prize pool cents from a leaderboard block (total_prize, else sum of prize rows). */
+export function getLeaderboardPrizePoolCents(
+  lb:
+    | {
+        total_prize?: number | null;
+        prizes?: Array<{ amount?: number | null }> | null;
+      }
+    | null
+    | undefined,
+): number {
+  if (!lb) return 0;
+  if (typeof lb.total_prize === "number" && lb.total_prize > 0) {
+    return lb.total_prize;
+  }
+  return (lb.prizes ?? []).reduce(
+    (sum, prize) => sum + (Number(prize?.amount) || 0),
+    0,
+  );
+}
+
+export function getLeaderboardWinnerCount(
+  lb:
+    | {
+        winner_count?: number | null;
+        prizes?: unknown[] | null;
+      }
+    | null
+    | undefined,
+): number {
+  if (!lb) return 0;
+  const count = Number(lb.winner_count) || 0;
+  if (count > 0) return count;
+  return Array.isArray(lb.prizes) ? lb.prizes.length : 0;
+}
+
+/**
+ * Display prize pool for leaderboard contests, including multi-platform payouts
+ * under youtube|instagram|tiktok (root leaderboard_contest is often empty).
+ * Same structure across platforms → one pool amount; different → sum.
+ */
+export function resolveLeaderboardPrizePoolCents(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+  preferPlatform?: VideoContestPlatform | null,
+): number {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const ordered = parseVideoContestPlatforms(platformCsv);
+  const fromCsv = ordered.filter((platform) => campaigns[platform]);
+  const platforms =
+    fromCsv.length > 0
+      ? fromCsv
+      : VIDEO_CONTEST_PLATFORMS.filter((platform) => campaigns[platform]);
+
+  if (preferPlatform && campaigns[preferPlatform]) {
+    return getLeaderboardPrizePoolCents(
+      campaigns[preferPlatform]?.leaderboard_contest,
+    );
+  }
+
+  if (platforms.length >= 2) {
+    const amounts = platforms.map((platform) =>
+      getLeaderboardPrizePoolCents(campaigns[platform]?.leaderboard_contest),
+    );
+    const positive = amounts.filter((amount) => amount > 0);
+    if (positive.length > 0) {
+      if (
+        leaderboardPrizeStructuresDifferAcrossPlatforms(campaigns, platforms)
+      ) {
+        return positive.reduce((sum, amount) => sum + amount, 0);
+      }
+      return positive[0]!;
+    }
+  } else if (platforms.length === 1) {
+    const only = getLeaderboardPrizePoolCents(
+      campaigns[platforms[0]!]?.leaderboard_contest,
+    );
+    if (only > 0) return only;
+  }
+
+  const projected = withProjectedTopLevelPayout(
+    details,
+    platformCsv,
+    preferPlatform,
+  );
+  const fromProjected = getLeaderboardPrizePoolCents(
+    projected.leaderboard_contest as
+      | { total_prize?: number; prizes?: Array<{ amount?: number }> }
+      | undefined,
+  );
+  if (fromProjected > 0) return fromProjected;
+
+  return getLeaderboardPrizePoolCents(
+    details && typeof details === "object"
+      ? ((details as { leaderboard_contest?: unknown }).leaderboard_contest as
+          | {
+              total_prize?: number;
+              prizes?: Array<{ amount?: number }>;
+            }
+          | undefined)
+      : null,
+  );
+}
+
+/** Winner count for display; multi-platform uses the scoped or primary ladder. */
+export function resolveLeaderboardWinnerCount(
+  details: Record<string, unknown> | null | undefined,
+  platformCsv?: string | null,
+  preferPlatform?: VideoContestPlatform | null,
+): number {
+  const campaigns = readPersistedPlatformCampaigns(details);
+  const ordered = parseVideoContestPlatforms(platformCsv);
+  const fromCsv = ordered.filter((platform) => campaigns[platform]);
+  const platforms =
+    fromCsv.length > 0
+      ? fromCsv
+      : VIDEO_CONTEST_PLATFORMS.filter((platform) => campaigns[platform]);
+
+  if (preferPlatform && campaigns[preferPlatform]) {
+    return getLeaderboardWinnerCount(
+      campaigns[preferPlatform]?.leaderboard_contest,
+    );
+  }
+
+  if (platforms.length >= 2) {
+    const counts = platforms.map((platform) =>
+      getLeaderboardWinnerCount(campaigns[platform]?.leaderboard_contest),
+    );
+    const positive = counts.filter((count) => count > 0);
+    if (positive.length > 0) {
+      // Independent per-platform ladders → total winners across platforms.
+      // Shared ladder (identical structures) → one winner count.
+      if (
+        leaderboardPrizeStructuresDifferAcrossPlatforms(campaigns, platforms)
+      ) {
+        return positive.reduce((sum, count) => sum + count, 0);
+      }
+      return positive[0]!;
+    }
+  } else if (platforms.length === 1) {
+    const only = getLeaderboardWinnerCount(
+      campaigns[platforms[0]!]?.leaderboard_contest,
+    );
+    if (only > 0) return only;
+  }
+
+  const projected = withProjectedTopLevelPayout(
+    details,
+    platformCsv,
+    preferPlatform,
+  );
+  return getLeaderboardWinnerCount(
+    (projected.leaderboard_contest ??
+      (details as { leaderboard_contest?: unknown } | null)
+        ?.leaderboard_contest) as
+      | { winner_count?: number; prizes?: unknown[] }
+      | undefined,
+  );
+}
+
 export function getPersistedPlatformChargeableCents(
   campaign: PersistedPlatformCampaign,
 ): number {
@@ -2847,13 +3069,7 @@ export function getPersistedPlatformChargeableCents(
   if (type === "leaderboard") {
     const lb = campaign.leaderboard_contest;
     if (!lb) return 0;
-    const totalPrize =
-      typeof lb.total_prize === "number" && lb.total_prize > 0
-        ? lb.total_prize
-        : (lb.prizes ?? []).reduce(
-            (sum, prize) => sum + (prize.amount || 0),
-            0,
-          );
+    const totalPrize = getLeaderboardPrizePoolCents(lb);
     const flatFeeBonus = Number(lb.flat_fee_bonus) || 0;
     const bonusBudget = Number(lb.total_budget) || 0;
     if (flatFeeBonus > 0 && bonusBudget > 0) return totalPrize + bonusBudget;

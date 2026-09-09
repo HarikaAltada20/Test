@@ -22,6 +22,9 @@ import {
   sumPersistedPlatformCampaignsChargeableCents,
   sumSnapshotChargeableCents,
   resolveContestPoolBudgetCents,
+  resolveLeaderboardPrizePoolCents,
+  resolveLeaderboardWinnerCount,
+  getLeaderboardPrizePoolCents,
   formatContestPlatformLabel,
   resolveContestPlatformCpmRates,
   formatContestListCpmRatesText,
@@ -41,6 +44,8 @@ import {
   sumLeaderboardBonusBudgetCents,
   briefsDifferAcrossPlatforms,
   rulesDifferAcrossPlatforms,
+  groupPlatformsByBrief,
+  groupPlatformsByRules,
   inspirationLinksDifferAcrossPlatforms,
   resourcesDifferAcrossPlatforms,
   bonusDetailsDifferAcrossPlatforms,
@@ -470,6 +475,96 @@ describe("preparePlatformCampaignsForSave", () => {
         "youtube,instagram",
       ),
       25_000,
+    );
+  });
+});
+
+describe("resolveLeaderboardPrizePoolCents", () => {
+  it("reads multi-platform prize pool when root leaderboard_contest is empty", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 8_000,
+      winnerCount: 2,
+      winnerAmounts: [5_000, 3_000],
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 8_000,
+      winnerCount: 2,
+      winnerAmounts: [5_000, 3_000],
+    });
+    assert.equal(
+      resolveLeaderboardPrizePoolCents(
+        { youtube, instagram },
+        "youtube,instagram",
+      ),
+      8_000,
+    );
+    assert.equal(
+      resolveLeaderboardWinnerCount(
+        { youtube, instagram },
+        "youtube,instagram",
+      ),
+      2,
+    );
+  });
+
+  it("sums differing per-platform prize pools", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 6_000,
+      winnerCount: 2,
+      winnerAmounts: [4_000, 2_000],
+    });
+    const instagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 4_000,
+      winnerCount: 3,
+      winnerAmounts: [2_000, 1_000, 1_000],
+    });
+    assert.equal(
+      resolveLeaderboardPrizePoolCents(
+        { youtube, instagram },
+        "youtube,instagram",
+      ),
+      10_000,
+    );
+    assert.equal(
+      resolveLeaderboardPrizePoolCents(
+        { youtube, instagram },
+        "youtube,instagram",
+        "instagram",
+      ),
+      4_000,
+    );
+    assert.equal(
+      resolveLeaderboardWinnerCount(
+        { youtube, instagram },
+        "youtube,instagram",
+      ),
+      5,
+    );
+    assert.equal(
+      resolveLeaderboardWinnerCount(
+        { youtube, instagram },
+        "youtube,instagram",
+        "instagram",
+      ),
+      3,
+    );
+  });
+
+  it("falls back to prize row sums when total_prize is zero", () => {
+    assert.equal(
+      getLeaderboardPrizePoolCents({
+        total_prize: 0,
+        prizes: [
+          { amount: 3_000 },
+          { amount: 2_000 },
+          { amount: 1_000 },
+        ],
+      }),
+      6_000,
     );
   });
 });
@@ -1371,6 +1466,66 @@ describe("content differ-across-platforms helpers", () => {
     };
     assert.equal(briefsDifferAcrossPlatforms(contest, [...platforms]), false);
     assert.equal(rulesDifferAcrossPlatforms(contest, [...platforms]), false);
+  });
+
+  it("groups platforms with the same visible brief/rules text", () => {
+    const contest = {
+      platform: "youtube,instagram,tiktok",
+      brief_html: "",
+      brief_json: {
+        youtube: {
+          html: "<ul><li>Create an engaging Reel</li><li>Use your style</li></ul>",
+          json: null,
+        },
+        instagram: {
+          html: "<ul><li>Create an engaging Reel</li><li>Use your style</li></ul>",
+          json: null,
+        },
+        tiktok: {
+          html: "<p>Create an engaging Reel</p><ul><li>Use your style</li></ul>",
+          json: null,
+        },
+      },
+      rules_html: "",
+      rules_json: {
+        youtube: { html: "<p>Rule A</p>", json: null },
+        instagram: { html: "<p>Rule A</p>", json: null },
+        tiktok: { html: "<p>Rule B</p>", json: null },
+      },
+    };
+    const all = ["youtube", "instagram", "tiktok"] as const;
+    assert.equal(briefsDifferAcrossPlatforms(contest, [...all]), false);
+    assert.deepEqual(groupPlatformsByBrief(contest, [...all]), [
+      ["youtube", "instagram", "tiktok"],
+    ]);
+    assert.equal(rulesDifferAcrossPlatforms(contest, [...all]), true);
+    assert.deepEqual(groupPlatformsByRules(contest, [...all]), [
+      ["youtube", "instagram"],
+      ["tiktok"],
+    ]);
+  });
+
+  it("ignores case and empty editor nodes when comparing briefs", () => {
+    const contest = {
+      platform: "instagram,tiktok",
+      brief_html: "",
+      brief_json: {
+        instagram: {
+          html: "<ul><li>Create an engaging Instagram Reel</li></ul><p></p>",
+          json: null,
+        },
+        tiktok: {
+          html: "<p>Create an engaging Instagram Reel</p>",
+          json: null,
+        },
+      },
+      rules_html: "",
+      rules_json: {},
+    };
+    assert.equal(
+      briefsDifferAcrossPlatforms(contest, ["instagram", "tiktok"]),
+      false,
+    );
   });
 
   it("detects differing inspiration links and resources", () => {

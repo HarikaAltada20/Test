@@ -122,6 +122,9 @@ import {
   parseVideoContestPlatforms,
   readPersistedPlatformCampaigns,
   resolveContestPoolBudgetCents,
+  resolveLeaderboardPrizePoolCents,
+  resolveLeaderboardWinnerCount,
+  getLeaderboardPrizePoolCents,
   resolveMaxEarningsCentsForSubmission,
   resourcesForPlatform,
   rulesHtmlForPlatform,
@@ -135,8 +138,11 @@ import {
   bonusDetailsDifferAcrossPlatforms,
   maxEarningsDifferAcrossPlatforms,
   groupVideoPayoutPlatformsByConfig,
+  groupPlatformsByBrief,
+  groupPlatformsByRules,
   groupPlatformsByInspirationLinks,
   groupPlatformsByResources,
+  preferRichestHtmlAmong,
   type PlatformTabValue,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
@@ -1109,17 +1115,32 @@ export function ContestClientPage({
 
   const contestPoolBudgetCents = useMemo(() => {
     if (!contest) return 0;
-    if (contest.contest_type === "leaderboard") {
-      const lb = contest.contest_based_details?.leaderboard_contest;
-      if (lb?.total_prize != null) return Number(lb.total_prize) || 0;
-      return Number(contest.total_prize) || 0;
-    }
     return resolveContestPoolBudgetCents(
       contest.contest_type,
       (contest.contest_based_details as Record<string, unknown>) || null,
       contest.platform,
     );
   }, [contest]);
+
+  const leaderboardPrizePoolCents = useMemo(() => {
+    if (!contest || contest.contest_type !== "leaderboard") return 0;
+    const resolved = resolveLeaderboardPrizePoolCents(
+      (contest.contest_based_details as Record<string, unknown>) || null,
+      contest.platform,
+      detailScopedPlatform,
+    );
+    if (resolved > 0) return resolved;
+    return Number(contest.total_prize) || 0;
+  }, [contest, detailScopedPlatform]);
+
+  const leaderboardWinnerCountDisplay = useMemo(() => {
+    if (!contest || contest.contest_type !== "leaderboard") return 0;
+    return resolveLeaderboardWinnerCount(
+      (contest.contest_based_details as Record<string, unknown>) || null,
+      contest.platform,
+      detailScopedPlatform,
+    );
+  }, [contest, detailScopedPlatform]);
 
   const hasInspirationLinks = useMemo(() => {
     if (detailVideoPlatforms.length >= 2) {
@@ -3600,12 +3621,8 @@ export function ContestClientPage({
                         : "Prize Pool"}
                     </div>
                     <div className="text-4xl lg:text-6xl font-black text-white mb-2 drop-shadow-lg">
-                      {contest.contest_type === "leaderboard" &&
-                      contest.contest_based_details?.leaderboard_contest
-                        ? formatMoney(
-                            contest.contest_based_details.leaderboard_contest
-                              .total_prize,
-                          )
+                      {contest.contest_type === "leaderboard"
+                        ? formatMoney(leaderboardPrizePoolCents)
                         : contest.contest_type === "cpm" ||
                             contest.contest_type === "milestone" ||
                             contest.contest_type === "dual_rewards"
@@ -3615,18 +3632,10 @@ export function ContestClientPage({
                             : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
-                      contest.contest_based_details?.leaderboard_contest
-                        ?.winner_count && (
+                      leaderboardWinnerCountDisplay > 0 && (
                         <div className="text-white/80 text-sm font-semibold">
-                          {
-                            contest.contest_based_details.leaderboard_contest
-                              .winner_count
-                          }{" "}
-                          winner
-                          {contest.contest_based_details.leaderboard_contest
-                            .winner_count !== 1
-                            ? "s"
-                            : ""}
+                          {leaderboardWinnerCountDisplay} winner
+                          {leaderboardWinnerCountDisplay !== 1 ? "s" : ""}
                         </div>
                       )}
                     {isCpmContestType(contest.contest_type) &&
@@ -4350,12 +4359,8 @@ export function ContestClientPage({
                     isDark ? "text-white" : "text-slate-800",
                   )}
                 >
-                  {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ? formatMoney(
-                        contest.contest_based_details.leaderboard_contest
-                          .total_prize,
-                      )
+                  {contest.contest_type === "leaderboard"
+                    ? formatMoney(leaderboardPrizePoolCents)
                     : contest.contest_type === "cpm" ||
                         contest.contest_type === "milestone" ||
                         contest.contest_type === "dual_rewards"
@@ -4372,16 +4377,9 @@ export function ContestClientPage({
                   )}
                 >
                   {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.winner_count
-                    ? `${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count
-                      } winner${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count !== 1
-                          ? "s"
-                          : ""
+                  leaderboardWinnerCountDisplay > 0
+                    ? `${leaderboardWinnerCountDisplay} winner${
+                        leaderboardWinnerCountDisplay !== 1 ? "s" : ""
                       }`
                     : contest.contest_type === "cpm"
                       ? "CPM based"
@@ -5013,13 +5011,8 @@ export function ContestClientPage({
                                   ? formatMoney(contestPoolBudgetCents)
                                   : contest.contest_type === "milestone"
                                     ? formatMoney(contestPoolBudgetCents)
-                                    : contest.contest_type === "leaderboard" &&
-                                        contest.contest_based_details
-                                          ?.leaderboard_contest
-                                      ? formatMoney(
-                                          contest.contest_based_details
-                                            .leaderboard_contest.total_prize,
-                                        )
+                                    : contest.contest_type === "leaderboard"
+                                      ? formatMoney(leaderboardPrizePoolCents)
                                       : contest.total_prize
                                         ? formatMoney(contest.total_prize || 0)
                                         : "$0.00"}
@@ -6296,7 +6289,9 @@ export function ContestClientPage({
                                           : "text-purple-900",
                                       )}
                                     >
-                                      {formatMoney(lb.total_prize)}
+                                      {formatMoney(
+                                        getLeaderboardPrizePoolCents(lb),
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -6440,13 +6435,18 @@ export function ContestClientPage({
                                                   : "text-slate-600",
                                               )}
                                             >
-                                              {lb.total_prize
-                                                ? (
-                                                    (prize.amount /
-                                                      lb.total_prize) *
-                                                    100
-                                                  ).toFixed(1)
-                                                : "0.0"}
+                                              {(() => {
+                                                const pool =
+                                                  getLeaderboardPrizePoolCents(
+                                                    lb,
+                                                  );
+                                                return pool > 0
+                                                  ? (
+                                                      (prize.amount / pool) *
+                                                      100
+                                                    ).toFixed(1)
+                                                  : "0.0";
+                                              })()}
                                               % of total
                                             </div>
                                           </div>
@@ -7731,12 +7731,19 @@ export function ContestClientPage({
                     </h4>
                     {showDetailBriefByPlatform ? (
                       <div className="space-y-3">
-                        {detailVideoPlatforms.map((platform) => {
-                          const html = briefHtmlForPlatform(contest, platform);
+                        {groupPlatformsByBrief(
+                          contest,
+                          detailVideoPlatforms,
+                        ).map((platforms) => {
+                          const html = preferRichestHtmlAmong(
+                            platforms.map((platform) =>
+                              briefHtmlForPlatform(contest, platform),
+                            ),
+                          );
                           return (
                             <ContestDetailPlatformScopeCard
-                              key={`brief-${platform}`}
-                              platforms={[platform]}
+                              key={`brief-${platforms.join("-")}`}
+                              platforms={platforms}
                               isDark={isDark}
                               variant="subtle"
                             >
@@ -7771,9 +7778,10 @@ export function ContestClientPage({
                         const sharedBriefHtml =
                           detailVideoPlatforms.length >= 2 &&
                           detailPlatformTab === ALL_PLATFORM_TAB
-                            ? briefHtmlForPlatform(
-                                contest,
-                                detailVideoPlatforms[0],
+                            ? preferRichestHtmlAmong(
+                                detailVideoPlatforms.map((platform) =>
+                                  briefHtmlForPlatform(contest, platform),
+                                ),
                               )
                             : detailContest?.brief_html;
                         return sharedBriefHtml ? (
@@ -7878,12 +7886,19 @@ export function ContestClientPage({
                     {/* Check multiple possible rule fields */}
                     {showDetailRulesByPlatform ? (
                       <div className="space-y-3">
-                        {detailVideoPlatforms.map((platform) => {
-                          const html = rulesHtmlForPlatform(contest, platform);
+                        {groupPlatformsByRules(
+                          contest,
+                          detailVideoPlatforms,
+                        ).map((platforms) => {
+                          const html = preferRichestHtmlAmong(
+                            platforms.map((platform) =>
+                              rulesHtmlForPlatform(contest, platform),
+                            ),
+                          );
                           return (
                             <ContestDetailPlatformScopeCard
-                              key={`rules-${platform}`}
-                              platforms={[platform]}
+                              key={`rules-${platforms.join("-")}`}
+                              platforms={platforms}
                               isDark={isDark}
                               variant="subtle"
                             >
@@ -7918,9 +7933,10 @@ export function ContestClientPage({
                         const sharedRulesHtml =
                           detailVideoPlatforms.length >= 2 &&
                           detailPlatformTab === ALL_PLATFORM_TAB
-                            ? rulesHtmlForPlatform(
-                                contest,
-                                detailVideoPlatforms[0],
+                            ? preferRichestHtmlAmong(
+                                detailVideoPlatforms.map((platform) =>
+                                  rulesHtmlForPlatform(contest, platform),
+                                ),
                               )
                             : (detailContest as any)?.rules_html;
                         return (

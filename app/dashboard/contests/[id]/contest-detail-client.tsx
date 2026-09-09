@@ -147,6 +147,10 @@ import {
   readPersistedPlatformCampaigns,
   resolveContestPlatformCpmRates,
   resolveContestPoolBudgetCents,
+  resolveLeaderboardPrizePoolCents,
+  resolveLeaderboardWinnerCount,
+  getLeaderboardPrizePoolCents,
+  getLeaderboardWinnerCount,
   resolveMaxEarningsCentsForSubmission,
   resourcesForPlatform,
   rulesHtmlForPlatform,
@@ -160,8 +164,11 @@ import {
   bonusDetailsDifferAcrossPlatforms,
   maxEarningsDifferAcrossPlatforms,
   groupVideoPayoutPlatformsByConfig,
+  groupPlatformsByBrief,
+  groupPlatformsByRules,
   groupPlatformsByInspirationLinks,
   groupPlatformsByResources,
+  preferRichestHtmlAmong,
   flatFeeBonusesDifferAcrossPlatforms,
   type PlatformTabValue,
   type VideoContestPlatform,
@@ -2037,6 +2044,38 @@ export default function ContestDetailClient({
     overviewVideoPlatforms,
     overviewPersistedCampaigns,
     buildOverviewPayoutContest,
+  ]);
+  const overviewLeaderboardPrizePoolCents = useMemo(() => {
+    if (overviewUniformPayoutContest.contest_type !== "leaderboard") return 0;
+    const details =
+      (contestState.contest_based_details as Record<string, unknown>) || null;
+    const resolved = resolveLeaderboardPrizePoolCents(
+      details,
+      contestState.platform,
+      overviewScopedPlatform,
+    );
+    if (resolved > 0) return resolved;
+    return getLeaderboardPrizePoolCents(
+      overviewUniformPayoutContest.contest_based_details?.leaderboard_contest,
+    );
+  }, [
+    overviewUniformPayoutContest,
+    contestState.contest_based_details,
+    contestState.platform,
+    overviewScopedPlatform,
+  ]);
+  const overviewLeaderboardWinnerCountDisplay = useMemo(() => {
+    if (overviewUniformPayoutContest.contest_type !== "leaderboard") return 0;
+    return resolveLeaderboardWinnerCount(
+      (contestState.contest_based_details as Record<string, unknown>) || null,
+      contestState.platform,
+      overviewScopedPlatform,
+    );
+  }, [
+    overviewUniformPayoutContest.contest_type,
+    contestState.contest_based_details,
+    contestState.platform,
+    overviewScopedPlatform,
   ]);
   const overviewLeaderboardPrizeSlices = useMemo(() => {
     const asSlice = (
@@ -14636,8 +14675,7 @@ export default function ContestDetailClient({
 
           {/* Prize Pool Card */}
           {overviewUniformPayoutContest.contest_type === "leaderboard" &&
-            (overviewUniformPayoutContest.contest_based_details
-              ?.leaderboard_contest?.total_prize != null ||
+            (overviewLeaderboardPrizePoolCents > 0 ||
               overviewLeaderboardPrizeSlices.length > 0) && (
               <div
                 className={cn(
@@ -14678,10 +14716,11 @@ export default function ContestDetailClient({
                       {overviewLeaderboardPrizesDiffer ? (
                         <div className="mt-1 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
                           {overviewVideoPlatforms.map((platform) => {
-                            const prize =
+                            const prize = getLeaderboardPrizePoolCents(
                               overviewPersistedCampaigns[platform]
-                                ?.leaderboard_contest?.total_prize;
-                            if (prize == null) return null;
+                                ?.leaderboard_contest,
+                            );
+                            if (prize <= 0) return null;
                             return (
                               <span
                                 key={`summary-prize-${platform}`}
@@ -14711,10 +14750,7 @@ export default function ContestDetailClient({
                               : "text-gray-900",
                           )}
                         >
-                          {formatMoney(
-                            overviewUniformPayoutContest.contest_based_details
-                              ?.leaderboard_contest?.total_prize,
-                          )}
+                          {formatMoney(overviewLeaderboardPrizePoolCents)}
                         </p>
                       )}
                     </div>
@@ -14723,10 +14759,11 @@ export default function ContestDetailClient({
                     {overviewWinnerCountsDiffer ? (
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                         {overviewVideoPlatforms.map((platform) => {
-                          const winners =
+                          const winners = getLeaderboardWinnerCount(
                             overviewPersistedCampaigns[platform]
-                              ?.leaderboard_contest?.winner_count;
-                          if (winners == null) return null;
+                              ?.leaderboard_contest,
+                          );
+                          if (winners <= 0) return null;
                           return (
                             <span
                               key={`summary-winners-${platform}`}
@@ -14745,7 +14782,7 @@ export default function ContestDetailClient({
                           );
                         })}
                       </div>
-                    ) : (
+                    ) : overviewLeaderboardWinnerCountDisplay > 0 ? (
                       <p
                         className={cn(
                           "text-sm font-medium",
@@ -14754,13 +14791,9 @@ export default function ContestDetailClient({
                             : "text-gray-600",
                         )}
                       >
-                        {
-                          overviewUniformPayoutContest.contest_based_details
-                            ?.leaderboard_contest?.winner_count
-                        }{" "}
-                        winners
+                        {overviewLeaderboardWinnerCountDisplay} winners
                       </p>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Total Budget (if set) */}
@@ -15781,19 +15814,30 @@ export default function ContestDetailClient({
                   overviewPlatformTab === ALL_PLATFORM_TAB &&
                   overviewBriefsDiffer ? (
                     <div className="space-y-3">
-                      {overviewVideoPlatforms.map((platform) => {
-                        const html = briefHtmlForPlatform(
-                          contestState as {
-                            brief_html?: string | null;
-                            brief_json?: unknown;
-                            platform?: string | null;
-                          },
-                          platform,
+                      {groupPlatformsByBrief(
+                        contestState as {
+                          brief_html?: string | null;
+                          brief_json?: unknown;
+                          platform?: string | null;
+                        },
+                        overviewVideoPlatforms,
+                      ).map((platforms) => {
+                        const html = preferRichestHtmlAmong(
+                          platforms.map((platform) =>
+                            briefHtmlForPlatform(
+                              contestState as {
+                                brief_html?: string | null;
+                                brief_json?: unknown;
+                                platform?: string | null;
+                              },
+                              platform,
+                            ),
+                          ),
                         );
                         return (
                           <ContestDetailPlatformScopeCard
-                            key={`brief-${platform}`}
-                            platforms={[platform]}
+                            key={`brief-${platforms.join("-")}`}
+                            platforms={platforms}
                             isDark={isDark}
                           >
                             {html ? (
@@ -15821,13 +15865,17 @@ export default function ContestDetailClient({
                       const sharedBriefHtml =
                         overviewVideoPlatforms.length >= 2 &&
                         overviewPlatformTab === ALL_PLATFORM_TAB
-                          ? briefHtmlForPlatform(
-                              contestState as {
-                                brief_html?: string | null;
-                                brief_json?: unknown;
-                                platform?: string | null;
-                              },
-                              overviewVideoPlatforms[0],
+                          ? preferRichestHtmlAmong(
+                              overviewVideoPlatforms.map((platform) =>
+                                briefHtmlForPlatform(
+                                  contestState as {
+                                    brief_html?: string | null;
+                                    brief_json?: unknown;
+                                    platform?: string | null;
+                                  },
+                                  platform,
+                                ),
+                              ),
                             )
                           : overviewDetailContest.brief_html;
                       return sharedBriefHtml ? (
@@ -16162,7 +16210,11 @@ export default function ContestDetailClient({
                                       Total Prize Pool
                                     </p>
                                     <p className="text-lg md:text-xl font-bold ">
-                                      {formatMoney(leaderboard.total_prize)}
+                                      {formatMoney(
+                                        getLeaderboardPrizePoolCents(
+                                          leaderboard,
+                                        ),
+                                      )}
                                     </p>
                                   </div>
                                 </div>
@@ -18055,20 +18107,31 @@ export default function ContestDetailClient({
                       Rules
                     </h3>
                     <div className="space-y-3">
-                      {overviewVideoPlatforms.map((platform) => {
-                        const html = rulesHtmlForPlatform(
-                          contestState as {
-                            rules_html?: string | null;
-                            rules_json?: unknown;
-                            platform?: string | null;
-                          },
-                          platform,
+                      {groupPlatformsByRules(
+                        contestState as {
+                          rules_html?: string | null;
+                          rules_json?: unknown;
+                          platform?: string | null;
+                        },
+                        overviewVideoPlatforms,
+                      ).map((platforms) => {
+                        const html = preferRichestHtmlAmong(
+                          platforms.map((platform) =>
+                            rulesHtmlForPlatform(
+                              contestState as {
+                                rules_html?: string | null;
+                                rules_json?: unknown;
+                                platform?: string | null;
+                              },
+                              platform,
+                            ),
+                          ),
                         );
                         if (!html) return null;
                         return (
                           <ContestDetailPlatformScopeCard
-                            key={`rules-${platform}`}
-                            platforms={[platform]}
+                            key={`rules-${platforms.join("-")}`}
+                            platforms={platforms}
                             isDark={isDark}
                           >
                             <div
@@ -18090,13 +18153,17 @@ export default function ContestDetailClient({
                     const sharedRulesHtml =
                       overviewVideoPlatforms.length >= 2 &&
                       overviewPlatformTab === ALL_PLATFORM_TAB
-                        ? rulesHtmlForPlatform(
-                            contestState as {
-                              rules_html?: string | null;
-                              rules_json?: unknown;
-                              platform?: string | null;
-                            },
-                            overviewVideoPlatforms[0],
+                        ? preferRichestHtmlAmong(
+                            overviewVideoPlatforms.map((platform) =>
+                              rulesHtmlForPlatform(
+                                contestState as {
+                                  rules_html?: string | null;
+                                  rules_json?: unknown;
+                                  platform?: string | null;
+                                },
+                                platform,
+                              ),
+                            ),
                           )
                         : overviewDetailContest.rules_html;
                     if (!sharedRulesHtml) return null;
