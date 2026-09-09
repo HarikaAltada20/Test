@@ -12,7 +12,6 @@ import ContestDetailClient from "./contest-detail-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
-import { flattenContestInspirationLinks } from "@/lib/video-platform-campaigns";
 import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export default async function ContestDetailPage({
@@ -126,10 +125,6 @@ export default async function ContestDetailPage({
     );
     redirect("/dashboard/contests");
   }
-
-  const finalInspirationLinks = flattenContestInspirationLinks(
-    contestData.inspiration_links,
-  );
 
   const isTwitterCampaign =
     (contestData.platform?.toLowerCase() === "twitter" ||
@@ -276,7 +271,7 @@ export default async function ContestDetailPage({
     end_date: contestData.end_date,
     rules_html: contestData.rules_html,
     rules_json: contestData.rules_json,
-    inspiration_links: finalInspirationLinks,
+    inspiration_links: contestData.inspiration_links,
     tracking_links: contestData.tracking_links,
     resources: contestData.resources,
     contest_type: contestData.contest_type,

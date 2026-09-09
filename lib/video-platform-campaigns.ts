@@ -220,9 +220,7 @@ export function formatPlatformList(platforms: VideoContestPlatform[]): string {
 }
 
 /** Pretty platform label for contest/opportunity list cards (multi-platform aware). */
-export function formatContestPlatformLabel(
-  platform?: string | null,
-): string {
+export function formatContestPlatformLabel(platform?: string | null): string {
   const platforms = parseVideoContestPlatforms(platform);
   if (platforms.length > 0) return formatPlatformList(platforms);
   const raw = (platform ?? "").trim();
@@ -354,9 +352,7 @@ export type PlatformCampaignsMap = Partial<
 export function isVideoContestPlatform(
   value: string | null | undefined,
 ): value is VideoContestPlatform {
-  return (
-    value === "youtube" || value === "instagram" || value === "tiktok"
-  );
+  return value === "youtube" || value === "instagram" || value === "tiktok";
 }
 
 export function parseVideoContestPlatforms(
@@ -504,9 +500,11 @@ export function patchSnapshotSection(
       next.milestoneBonusEnabled = source.milestoneBonusEnabled;
       next.milestoneBonusTopViewsMin = source.milestoneBonusTopViewsMin;
       next.milestoneBonusTopViewsPayout = source.milestoneBonusTopViewsPayout;
-      next.milestoneBonusTopViewsMinReels = source.milestoneBonusTopViewsMinReels;
+      next.milestoneBonusTopViewsMinReels =
+        source.milestoneBonusTopViewsMinReels;
       next.milestoneBonusTopReelsMin = source.milestoneBonusTopReelsMin;
-      next.milestoneBonusTopReelsMinViews = source.milestoneBonusTopReelsMinViews;
+      next.milestoneBonusTopReelsMinViews =
+        source.milestoneBonusTopReelsMinViews;
       next.milestoneBonusTopReelsPayout = source.milestoneBonusTopReelsPayout;
       break;
     case "earnings":
@@ -544,7 +542,9 @@ export function areSectionValuesEqual(
     case "contentType":
       return left.contentType === right.contentType;
     case "brief":
-      return (left.briefHtml || left.brief) === (right.briefHtml || right.brief);
+      return (
+        (left.briefHtml || left.brief) === (right.briefHtml || right.brief)
+      );
     case "rules":
       return left.rulesHtml === right.rulesHtml;
     case "prize":
@@ -589,7 +589,10 @@ export function areSectionValuesEqual(
         left.bonusHtml === right.bonusHtml
       );
     case "resources":
-      return JSON.stringify(left.resources ?? []) === JSON.stringify(right.resources ?? []);
+      return (
+        JSON.stringify(left.resources ?? []) ===
+        JSON.stringify(right.resources ?? [])
+      );
     case "inspiration":
       return (
         JSON.stringify(left.inspirationLinks ?? []) ===
@@ -621,9 +624,11 @@ export function isPlatformSectionComplete(
     // Optional extras — never block section completion.
     return true;
   }
-  return validatePlatformCampaignSnapshot(platform, snapshot, {
-    requirePayout: true,
-  }) === null;
+  return (
+    validatePlatformCampaignSnapshot(platform, snapshot, {
+      requirePayout: true,
+    }) === null
+  );
 }
 
 export function sectionCompletionByTab(
@@ -893,7 +898,9 @@ export function snapshotToPersistedPlatformCampaign(
 
   if (includeCpm) {
     const flatFeeBonusCents =
-      contestType !== "dual_rewards" ? dollarsToCents(snapshot.flatFeeBonus) : 0;
+      contestType !== "dual_rewards"
+        ? dollarsToCents(snapshot.flatFeeBonus)
+        : 0;
     const flatFeeBonusCapCents =
       contestType !== "dual_rewards"
         ? dollarsToCents(snapshot.flatFeeBonusCap)
@@ -939,7 +946,9 @@ function hydrateMilestoneRows(
     id: createDefaultMilestoneRow().id,
     target_views: typeof m.target_views === "number" ? m.target_views : "",
     payout_dollars:
-      typeof m.payout_cents === "number" ? (m.payout_cents / 100).toString() : "",
+      typeof m.payout_cents === "number"
+        ? (m.payout_cents / 100).toString()
+        : "",
     winner_limit:
       m.winner_limit === null || m.winner_limit === undefined
         ? ""
@@ -954,7 +963,9 @@ export function persistedPlatformCampaignToSnapshot(
   snapshot.contestType = persisted.contest_type || "leaderboard";
   const contentType = persisted.content_type;
   snapshot.contentType =
-    contentType === "ugc" || contentType === "clipping" || contentType === "other"
+    contentType === "ugc" ||
+    contentType === "clipping" ||
+    contentType === "other"
       ? contentType
       : "";
   snapshot.briefHtml = persisted.brief_html || "";
@@ -971,7 +982,8 @@ export function persistedPlatformCampaignToSnapshot(
 
   if (snapshot.contestType === "leaderboard" && persisted.leaderboard_contest) {
     const lc = persisted.leaderboard_contest;
-    snapshot.winnerCount = lc.winner_count || lc.prizes?.length || DEFAULT_WINNER_COUNT;
+    snapshot.winnerCount =
+      lc.winner_count || lc.prizes?.length || DEFAULT_WINNER_COUNT;
     snapshot.winnerAmounts = Array.isArray(lc.prizes)
       ? lc.prizes.map((p) => p.amount || 0)
       : [...DEFAULT_WINNER_AMOUNTS];
@@ -1007,7 +1019,10 @@ export function persistedPlatformCampaignToSnapshot(
     if (typeof cc.flat_fee_bonus === "number" && cc.flat_fee_bonus > 0) {
       snapshot.flatFeeBonus = (cc.flat_fee_bonus / 100).toString();
     }
-    if (typeof cc.flat_fee_bonus_cap === "number" && cc.flat_fee_bonus_cap > 0) {
+    if (
+      typeof cc.flat_fee_bonus_cap === "number" &&
+      cc.flat_fee_bonus_cap > 0
+    ) {
       snapshot.flatFeeBonusCap = (cc.flat_fee_bonus_cap / 100).toString();
     }
   }
@@ -1153,7 +1168,10 @@ export function readPersistedPlatformCampaigns(
   for (const [key, value] of Object.entries(
     raw as Record<string, PersistedPlatformCampaign>,
   )) {
-    if (!isVideoContestPlatform(key) || !isPersistedPlatformCampaignShape(value)) {
+    if (
+      !isVideoContestPlatform(key) ||
+      !isPersistedPlatformCampaignShape(value)
+    ) {
       continue;
     }
     map[key] = value;
@@ -1307,7 +1325,10 @@ export function readCampaignFlatFeeBonusBudgetCents(
   campaign: PersistedPlatformCampaign | null | undefined,
 ): number | null {
   if (!campaign) return null;
-  if (campaign.contest_type === "cpm" || campaign.contest_type === "dual_rewards") {
+  if (
+    campaign.contest_type === "cpm" ||
+    campaign.contest_type === "dual_rewards"
+  ) {
     const cap = Number(campaign.cpm_contest?.flat_fee_bonus_cap) || 0;
     const total = Number(campaign.cpm_contest?.total_budget) || 0;
     const budget = cap > 0 ? cap : total;
@@ -1478,9 +1499,7 @@ export function resolveFlatFeeBonusListDisplay(
   contestType?: string | null,
 ): FlatFeeBonusListDisplay | null {
   const plan = resolveFlatFeeBonusPlan(details, platformCsv, contestType);
-  const rows = (
-    plan.platforms.length > 0 ? plan.platforms : []
-  )
+  const rows = (plan.platforms.length > 0 ? plan.platforms : [])
     .map((platform) => ({
       platform,
       amountCents: Math.max(0, plan.byPlatform[platform]?.amountCents || 0),
@@ -1500,6 +1519,12 @@ export function resolveFlatFeeBonusListDisplay(
   return { kind: "byPlatform", rows };
 }
 
+function readCampaignFlatFeeBonusCapCents(
+  campaign: PersistedPlatformCampaign | null | undefined,
+): number {
+  return Number(campaign?.cpm_contest?.flat_fee_bonus_cap) || 0;
+}
+
 export function flatFeeBonusesDifferAcrossPlatforms(
   campaigns: PlatformCampaignsMap,
   platforms: VideoContestPlatform[],
@@ -1507,12 +1532,14 @@ export function flatFeeBonusesDifferAcrossPlatforms(
   if (platforms.length < 2) return false;
   if (!platforms.some((platform) => campaigns[platform])) return false;
   const first = readCampaignFlatFeeBonusCents(campaigns[platforms[0]]);
-  return platforms
-    .slice(1)
-    .some(
-      (platform) =>
-        readCampaignFlatFeeBonusCents(campaigns[platform]) !== first,
+  const firstCap = readCampaignFlatFeeBonusCapCents(campaigns[platforms[0]]);
+  return platforms.slice(1).some((platform) => {
+    const campaign = campaigns[platform];
+    return (
+      readCampaignFlatFeeBonusCents(campaign) !== first ||
+      readCampaignFlatFeeBonusCapCents(campaign) !== firstCap
     );
+  });
 }
 
 export function readLeaderboardBonusBudgetCents(
@@ -1602,14 +1629,21 @@ export function resolveLeaderboardFlatFeeBonusSpentCents(
   return Math.max(0, Number(lb?.budget_spent) || 0);
 }
 
-/** Normalize rich HTML so empty / whitespace-only briefs compare equal. */
+/** Visible text of rich HTML so equivalent briefs/rules compare equal. */
 export function normalizeHtmlForPlatformCompare(
   html: string | null | undefined,
 ): string {
-  if (!html || !String(html).replace(/<[^>]*>/g, " ").replace(/&nbsp;/gi, " ").trim()) {
-    return "";
-  }
+  if (!html) return "";
   return String(html)
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#(\d+);/g, (_, code) => {
+      const n = Number(code);
+      return Number.isFinite(n) ? String.fromCharCode(n) : "";
+    })
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1658,20 +1692,46 @@ export function rulesDifferAcrossPlatforms(
     );
 }
 
+function canonicalizeInspirationLinksForCompare(
+  links: PlatformInspirationLink[],
+): Array<{ url: string; description: string }> {
+  return links
+    .map((item) => ({
+      url: String(item?.url ?? "").trim(),
+      description: String(item?.description ?? "").trim(),
+    }))
+    .filter((item) => item.url.length > 0)
+    .sort(
+      (a, b) =>
+        a.url.localeCompare(b.url) ||
+        a.description.localeCompare(b.description),
+    );
+}
+
+function canonicalizeResourcesForCompare(
+  resources: PlatformResourceItem[],
+): Array<{ url: string; description: string; type: string }> {
+  return resources
+    .map((item) => ({
+      url: String(item?.url ?? "").trim(),
+      description: String(item?.description ?? "").trim(),
+      type: item?.type === "internal" ? "internal" : "external",
+    }))
+    .filter((item) => item.url.length > 0)
+    .sort(
+      (a, b) =>
+        a.url.localeCompare(b.url) ||
+        a.description.localeCompare(b.description) ||
+        a.type.localeCompare(b.type),
+    );
+}
+
 export function inspirationLinksDifferAcrossPlatforms(
   links: unknown,
   platforms: readonly VideoContestPlatform[],
 ): boolean {
   if (platforms.length < 2) return false;
-  const first = JSON.stringify(
-    inspirationLinksForPlatform(links, platforms[0]),
-  );
-  return platforms
-    .slice(1)
-    .some(
-      (platform) =>
-        JSON.stringify(inspirationLinksForPlatform(links, platform)) !== first,
-    );
+  return groupPlatformsByInspirationLinks(links, platforms).length > 1;
 }
 
 export function resourcesDifferAcrossPlatforms(
@@ -1679,13 +1739,55 @@ export function resourcesDifferAcrossPlatforms(
   platforms: readonly VideoContestPlatform[],
 ): boolean {
   if (platforms.length < 2) return false;
-  const first = JSON.stringify(resourcesForPlatform(resources, platforms[0]));
-  return platforms
-    .slice(1)
-    .some(
-      (platform) =>
-        JSON.stringify(resourcesForPlatform(resources, platform)) !== first,
+  return groupPlatformsByResources(resources, platforms).length > 1;
+}
+
+/** Group platforms that share the same inspiration-link list (order ignored). */
+export function groupPlatformsByInspirationLinks(
+  links: unknown,
+  platforms: readonly VideoContestPlatform[],
+): VideoContestPlatform[][] {
+  const groups: VideoContestPlatform[][] = [];
+  const indexByKey = new Map<string, number>();
+  for (const platform of platforms) {
+    const key = JSON.stringify(
+      canonicalizeInspirationLinksForCompare(
+        inspirationLinksForPlatform(links, platform),
+      ),
     );
+    const existing = indexByKey.get(key);
+    if (existing != null) {
+      groups[existing]!.push(platform);
+    } else {
+      indexByKey.set(key, groups.length);
+      groups.push([platform]);
+    }
+  }
+  return groups;
+}
+
+/** Group platforms that share the same resource list (order ignored). */
+export function groupPlatformsByResources(
+  resources: unknown,
+  platforms: readonly VideoContestPlatform[],
+): VideoContestPlatform[][] {
+  const groups: VideoContestPlatform[][] = [];
+  const indexByKey = new Map<string, number>();
+  for (const platform of platforms) {
+    const key = JSON.stringify(
+      canonicalizeResourcesForCompare(
+        resourcesForPlatform(resources, platform),
+      ),
+    );
+    const existing = indexByKey.get(key);
+    if (existing != null) {
+      groups[existing]!.push(platform);
+    } else {
+      indexByKey.set(key, groups.length);
+      groups.push([platform]);
+    }
+  }
+  return groups;
 }
 
 export function bonusDetailsDifferAcrossPlatforms(
@@ -1723,6 +1825,163 @@ export function maxEarningsDifferAcrossPlatforms(
     );
 }
 
+function asComparableNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function asOptionalViewCount(value: unknown): number | null {
+  const n = asComparableNumber(value);
+  if (n == null || n === 0) return null;
+  return n;
+}
+
+function inferPayoutContestType(
+  details: Record<string, unknown> | null | undefined,
+  platform: VideoContestPlatform,
+  projected: Record<string, unknown>,
+): string {
+  const stored = contestTypeForPlatform(details, platform);
+  if (stored) return String(stored);
+  const hasCpm =
+    projected.cpm_contest && typeof projected.cpm_contest === "object";
+  const hasMilestone =
+    projected.milestone_contest &&
+    typeof projected.milestone_contest === "object";
+  if (hasCpm && hasMilestone) return "dual_rewards";
+  if (hasCpm) return "cpm";
+  if (hasMilestone) return "milestone";
+  if (
+    projected.leaderboard_contest &&
+    typeof projected.leaderboard_contest === "object"
+  ) {
+    return "leaderboard";
+  }
+  return "";
+}
+
+function normalizeCpmPayoutForCompare(cpm: unknown) {
+  if (!cpm || typeof cpm !== "object" || Array.isArray(cpm)) return null;
+  const c = cpm as Record<string, unknown>;
+  return {
+    cpm_rate_usd: asComparableNumber(c.cpm_rate_usd) ?? 0,
+    total_budget: asComparableNumber(c.total_budget) ?? 0,
+    terms_conditions: normalizeHtmlForPlatformCompare(
+      String(c.terms_conditions ?? ""),
+    ),
+    min_views: asOptionalViewCount(c.min_views),
+    max_views: asOptionalViewCount(c.max_views),
+  };
+}
+
+function normalizeMilestoneBonusForCompare(bonus: unknown) {
+  if (!bonus || typeof bonus !== "object" || Array.isArray(bonus)) return null;
+  const b = bonus as Record<string, unknown>;
+  const views = b.most_verified_views;
+  const reels = b.most_verified_reels;
+  const viewsObj =
+    views && typeof views === "object" && !Array.isArray(views)
+      ? (views as Record<string, unknown>)
+      : null;
+  const reelsObj =
+    reels && typeof reels === "object" && !Array.isArray(reels)
+      ? (reels as Record<string, unknown>)
+      : null;
+  return {
+    enabled: Boolean(b.enabled),
+    most_verified_views: viewsObj
+      ? {
+          payout_cents: asComparableNumber(viewsObj.payout_cents) ?? 0,
+          min_total_views: asComparableNumber(viewsObj.min_total_views),
+          min_verified_reels: asComparableNumber(viewsObj.min_verified_reels),
+        }
+      : null,
+    most_verified_reels: reelsObj
+      ? {
+          payout_cents: asComparableNumber(reelsObj.payout_cents) ?? 0,
+          min_verified_reels: asComparableNumber(reelsObj.min_verified_reels),
+          min_total_views: asComparableNumber(reelsObj.min_total_views),
+        }
+      : null,
+  };
+}
+
+function normalizeMilestonePayoutForCompare(milestone: unknown) {
+  if (!milestone || typeof milestone !== "object" || Array.isArray(milestone)) {
+    return null;
+  }
+  const m = milestone as Record<string, unknown>;
+  const rows = Array.isArray(m.milestones)
+    ? m.milestones
+        .map((row) => {
+          if (!row || typeof row !== "object" || Array.isArray(row))
+            return null;
+          const r = row as Record<string, unknown>;
+          return {
+            order: asComparableNumber(r.order) ?? 0,
+            target_views: asComparableNumber(r.target_views) ?? 0,
+            payout_cents: asComparableNumber(r.payout_cents) ?? 0,
+            winner_limit: asComparableNumber(r.winner_limit),
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row != null)
+        .sort(
+          (a, b) =>
+            a.order - b.order ||
+            a.target_views - b.target_views ||
+            a.payout_cents - b.payout_cents,
+        )
+    : [];
+  return {
+    milestones: rows,
+    total_budget_cents: asComparableNumber(m.total_budget_cents) ?? 0,
+    bonus: normalizeMilestoneBonusForCompare(m.bonus),
+  };
+}
+
+/** Visible CPM / milestone contest details for All-tab grouping (ignores spend). */
+export function serializeVideoPayoutConfigForCompare(
+  details: Record<string, unknown> | null | undefined,
+  platform: VideoContestPlatform,
+  platformCsv?: string | null,
+): string {
+  const projected = withProjectedTopLevelPayout(
+    details,
+    platformCsv ?? platform,
+    platform,
+  );
+  return JSON.stringify({
+    contestType: inferPayoutContestType(details, platform, projected),
+    cpm: normalizeCpmPayoutForCompare(projected.cpm_contest),
+    milestone: normalizeMilestonePayoutForCompare(projected.milestone_contest),
+  });
+}
+
+/**
+ * Group platforms that share the same visible CPM / milestone contest details.
+ * Spend fields (budget_spent) and extra runtime keys are ignored.
+ */
+export function groupVideoPayoutPlatformsByConfig(
+  details: Record<string, unknown> | null | undefined,
+  platforms: readonly VideoContestPlatform[],
+): VideoContestPlatform[][] {
+  const groups: VideoContestPlatform[][] = [];
+  const indexByKey = new Map<string, number>();
+  const csv = platforms.join(",");
+  for (const platform of platforms) {
+    const key = serializeVideoPayoutConfigForCompare(details, platform, csv);
+    const existing = indexByKey.get(key);
+    if (existing != null) {
+      groups[existing]!.push(platform);
+    } else {
+      indexByKey.set(key, groups.length);
+      groups.push([platform]);
+    }
+  }
+  return groups;
+}
+
 /**
  * CPM / milestone payout configs differ across platforms (leaderboard prizes
  * use separate helpers). Used to decide All-tab payout section splitting.
@@ -1732,20 +1991,7 @@ export function videoPayoutConfigsDifferAcrossPlatforms(
   platforms: readonly VideoContestPlatform[],
 ): boolean {
   if (platforms.length < 2) return false;
-  const serialize = (platform: VideoContestPlatform) => {
-    const projected = withProjectedTopLevelPayout(
-      details,
-      platforms.join(","),
-      platform,
-    );
-    return JSON.stringify({
-      contestType: contestTypeForPlatform(details, platform),
-      cpm: projected.cpm_contest ?? null,
-      milestone: projected.milestone_contest ?? null,
-    });
-  };
-  const first = serialize(platforms[0]!);
-  return platforms.slice(1).some((platform) => serialize(platform) !== first);
+  return groupVideoPayoutPlatformsByConfig(details, platforms).length > 1;
 }
 
 export function attachPlatformCampaignsToDetails(
@@ -1762,8 +2008,7 @@ export function attachPlatformCampaignsToDetails(
     clearPlatformCampaignKeys(details, platforms),
   );
   for (const platform of platforms) {
-    const snap =
-      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    const snap = snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
     next[platform] = snapshotToPersistedPlatformCampaign(snap);
   }
   return next;
@@ -1832,10 +2077,12 @@ export function buildPlatformContentColumns(
     };
   }
 
-  const briefMap: Partial<Record<VideoContestPlatform, PlatformRichTextPayload>> =
-    {};
-  const rulesMap: Partial<Record<VideoContestPlatform, PlatformRichTextPayload>> =
-    {};
+  const briefMap: Partial<
+    Record<VideoContestPlatform, PlatformRichTextPayload>
+  > = {};
+  const rulesMap: Partial<
+    Record<VideoContestPlatform, PlatformRichTextPayload>
+  > = {};
   const resourcesMap: Partial<
     Record<VideoContestPlatform, PlatformResourceItem[]>
   > = {};
@@ -1844,8 +2091,7 @@ export function buildPlatformContentColumns(
   > = {};
 
   for (const platform of platforms) {
-    const snap =
-      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    const snap = snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
     briefMap[platform] = {
       html: snap.briefHtml || snap.brief || "",
       json: snap.briefJson ?? null,
@@ -1868,9 +2114,7 @@ export function buildPlatformContentColumns(
   };
 }
 
-function readRichTextPayload(
-  value: unknown,
-): PlatformRichTextPayload | null {
+function readRichTextPayload(value: unknown): PlatformRichTextPayload | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (typeof record.html === "string" || "json" in record) {
@@ -1979,7 +2223,10 @@ export function applyPlatformContentColumnsToSnapshots(
     // Legacy fallback: content previously nested under platform_campaigns.
     const legacy = existing[platform];
     if (legacy) {
-      if (!(snap.briefHtml || snap.brief) && (legacy.briefHtml || legacy.brief)) {
+      if (
+        !(snap.briefHtml || snap.brief) &&
+        (legacy.briefHtml || legacy.brief)
+      ) {
         snap.briefHtml = legacy.briefHtml || legacy.brief;
         snap.brief = legacy.briefHtml || legacy.brief;
         snap.briefJson = legacy.briefJson ?? null;
@@ -2027,9 +2274,10 @@ export type PlatformCreatorEarningsColumns = {
    * Single-platform: classic { description_html, description_json }.
    * Multi-platform: { youtube|instagram|tiktok: PlatformBonusPayload }.
    */
-  bonus_details: PlatformBonusPayload | Partial<
-    Record<VideoContestPlatform, PlatformBonusPayload>
-  > | null;
+  bonus_details:
+    | PlatformBonusPayload
+    | Partial<Record<VideoContestPlatform, PlatformBonusPayload>>
+    | null;
 };
 
 function bonusTextFromSnapshot(
@@ -2063,13 +2311,17 @@ function readBonusPayload(value: unknown): PlatformBonusPayload | null {
 
 function readMaxEarningsCents(value: unknown): number | null {
   if (typeof value === "number" && value > 0) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (
-    typeof record.max_earnings_per_creator === "number" &&
-    record.max_earnings_per_creator > 0
-  ) {
-    return record.max_earnings_per_creator;
+  const nested = record.max_earnings_per_creator;
+  if (typeof nested === "number" && nested > 0) return nested;
+  if (typeof nested === "string") {
+    const n = Number(nested);
+    return Number.isFinite(n) && n > 0 ? n : null;
   }
   return null;
 }
@@ -2106,8 +2358,7 @@ export function buildPlatformCreatorEarningsColumns(
   let anyMax = false;
 
   for (const platform of platforms) {
-    const snap =
-      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    const snap = snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
     const bonus = bonusTextFromSnapshot(snap);
     if (bonus) {
       bonusMap[platform] = bonus;
@@ -2173,9 +2424,7 @@ export function applyPlatformCreatorEarningsColumnsToSnapshots(
 
     if (maxKeyed) {
       const cents = readMaxEarningsCents(
-        (columns.max_earnings_per_creator as Record<string, unknown>)[
-          platform
-        ],
+        (columns.max_earnings_per_creator as Record<string, unknown>)[platform],
       );
       if (cents) {
         snap.maxEarningsPerCreator = (cents / 100).toString();
@@ -2225,9 +2474,7 @@ export function bonusDetailsForPlatform(
       ? platform
       : parseVideoContestPlatforms(platform)[0];
     if (key) {
-      return readBonusPayload(
-        (bonusDetails as Record<string, unknown>)[key],
-      );
+      return readBonusPayload((bonusDetails as Record<string, unknown>)[key]);
     }
     for (const p of VIDEO_CONTEST_PLATFORMS) {
       const payload = readBonusPayload(
@@ -2509,7 +2756,11 @@ export function briefHtmlForPlatform(
     if (payload) return payload.html || "";
   }
   const primary = parseVideoContestPlatforms(contest.platform)[0];
-  if (!key || key === primary || !isPlatformKeyedContentMap(contest.brief_json)) {
+  if (
+    !key ||
+    key === primary ||
+    !isPlatformKeyedContentMap(contest.brief_json)
+  ) {
     return contest.brief_html || "";
   }
   return "";
@@ -2529,7 +2780,11 @@ export function rulesHtmlForPlatform(
     if (payload) return payload.html || "";
   }
   const primary = parseVideoContestPlatforms(contest.platform)[0];
-  if (!key || key === primary || !isPlatformKeyedContentMap(contest.rules_json)) {
+  if (
+    !key ||
+    key === primary ||
+    !isPlatformKeyedContentMap(contest.rules_json)
+  ) {
     return (contest.rules_html as string | null | undefined) || "";
   }
   return "";
@@ -2579,8 +2834,7 @@ export function sumSnapshotChargeableCents(
   // Leaderboard: sum per-platform prize pools and per-platform bonus budgets.
   let total = 0;
   for (const platform of platforms) {
-    const snap =
-      snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
+    const snap = snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
     total += getSnapshotChargeableCents(snap);
   }
   return total;
@@ -2596,7 +2850,10 @@ export function getPersistedPlatformChargeableCents(
     const totalPrize =
       typeof lb.total_prize === "number" && lb.total_prize > 0
         ? lb.total_prize
-        : (lb.prizes ?? []).reduce((sum, prize) => sum + (prize.amount || 0), 0);
+        : (lb.prizes ?? []).reduce(
+            (sum, prize) => sum + (prize.amount || 0),
+            0,
+          );
     const flatFeeBonus = Number(lb.flat_fee_bonus) || 0;
     const bonusBudget = Number(lb.total_budget) || 0;
     if (flatFeeBonus > 0 && bonusBudget > 0) return totalPrize + bonusBudget;
@@ -2613,8 +2870,9 @@ export function sumPersistedPlatformCampaignsChargeableCents(
   details: Record<string, unknown> | null | undefined,
 ): number | null {
   const campaigns = readPersistedPlatformCampaigns(details);
-  const entries = VIDEO_CONTEST_PLATFORMS.map((platform) => campaigns[platform])
-    .filter((c): c is PersistedPlatformCampaign => Boolean(c));
+  const entries = VIDEO_CONTEST_PLATFORMS.map(
+    (platform) => campaigns[platform],
+  ).filter((c): c is PersistedPlatformCampaign => Boolean(c));
   if (entries.length < 2) return null;
 
   const primary = entries[0]!;
@@ -2756,8 +3014,10 @@ export function resolveCpmContestConfigForPlatform(
     };
     return {
       ...fallback,
-      min_views: raw.min_views !== undefined ? raw.min_views : fallback.min_views,
-      max_views: raw.max_views !== undefined ? raw.max_views : fallback.max_views,
+      min_views:
+        raw.min_views !== undefined ? raw.min_views : fallback.min_views,
+      max_views:
+        raw.max_views !== undefined ? raw.max_views : fallback.max_views,
       flat_fee_bonus:
         raw.flat_fee_bonus !== undefined
           ? raw.flat_fee_bonus
@@ -2771,7 +3031,9 @@ export function resolveCpmContestConfigForPlatform(
           ? raw.max_earnings_per_creator
           : fallback.max_earnings_per_creator,
       total_budget:
-        raw.total_budget !== undefined ? raw.total_budget : fallback.total_budget,
+        raw.total_budget !== undefined
+          ? raw.total_budget
+          : fallback.total_budget,
     };
   }
 
@@ -2787,8 +3049,10 @@ export function contestHasUsableCpmRate(
     const rate = readCpmRateUsd(campaigns[platform]?.cpm_contest);
     if (rate != null && rate > 0) return true;
   }
-  return resolveCpmContestConfigForPlatform(details, null, contestPlatformCsv) !=
-    null;
+  return (
+    resolveCpmContestConfigForPlatform(details, null, contestPlatformCsv) !=
+    null
+  );
 }
 
 export type ResolvedMilestoneContestConfig = {
@@ -2835,7 +3099,9 @@ function asResolvedMilestoneConfig(
       target_views: target,
       payout_cents: Number(m.payout_cents || 0),
       winner_limit:
-        parsedLimit != null && Number.isFinite(parsedLimit) ? parsedLimit : null,
+        parsedLimit != null && Number.isFinite(parsedLimit)
+          ? parsedLimit
+          : null,
     });
   }
   if (milestones.length === 0) return null;
@@ -2888,8 +3154,10 @@ export function contestHasUsableMilestoneLadder(
       return true;
     }
   }
-  return resolveMilestoneContestForPlatform(details, null, contestPlatformCsv) !=
-    null;
+  return (
+    resolveMilestoneContestForPlatform(details, null, contestPlatformCsv) !=
+    null
+  );
 }
 
 /**
@@ -2995,7 +3263,10 @@ export function validatePlatformCampaignSnapshot(
   if (options.requirePayout) {
     if (snapshot.contestType === "leaderboard") {
       for (let i = 0; i < snapshot.winnerCount; i++) {
-        if (!snapshot.winnerAmounts[i] || snapshot.winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+        if (
+          !snapshot.winnerAmounts[i] ||
+          snapshot.winnerAmounts[i] < MIN_PRIZE_PER_WINNER
+        ) {
           return `${label}: prize for winner ${i + 1} is below the minimum.`;
         }
       }
@@ -3159,6 +3430,8 @@ export function withProjectedTopLevelPayout(
     projected.total_budget_cents = targetCampaign.total_budget_cents;
   }
 
-  const base = preferPlatform ? clearTopLevelPayoutKeys({ ...details }) : details;
+  const base = preferPlatform
+    ? clearTopLevelPayoutKeys({ ...details })
+    : details;
   return { ...base, ...projected };
 }

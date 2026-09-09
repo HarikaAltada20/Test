@@ -46,6 +46,10 @@ import {
   bonusDetailsDifferAcrossPlatforms,
   maxEarningsDifferAcrossPlatforms,
   videoPayoutConfigsDifferAcrossPlatforms,
+  groupVideoPayoutPlatformsByConfig,
+  groupPlatformsByInspirationLinks,
+  groupPlatformsByResources,
+  flattenContestInspirationLinks,
 } from "./video-platform-campaigns";
 
 describe("parseVideoContestPlatforms", () => {
@@ -1351,6 +1355,24 @@ describe("content differ-across-platforms helpers", () => {
     assert.equal(rulesDifferAcrossPlatforms(contest, [...platforms]), false);
   });
 
+  it("treats visually identical briefs/rules as the same", () => {
+    const contest = {
+      platform: "youtube,instagram",
+      brief_html: "",
+      brief_json: {
+        youtube: { html: "<p>Same brief</p>", json: null },
+        instagram: { html: "<p>Same brief</p><p></p>", json: null },
+      },
+      rules_html: "",
+      rules_json: {
+        youtube: { html: "<p>Rules&nbsp;here</p>", json: null },
+        instagram: { html: "<p>Rules here</p>", json: null },
+      },
+    };
+    assert.equal(briefsDifferAcrossPlatforms(contest, [...platforms]), false);
+    assert.equal(rulesDifferAcrossPlatforms(contest, [...platforms]), false);
+  });
+
   it("detects differing inspiration links and resources", () => {
     const links = {
       youtube: [{ url: "https://yt.example", description: "a" }],
@@ -1369,11 +1391,82 @@ describe("content differ-across-platforms helpers", () => {
       false,
     );
 
+    const sameLinksExtraKeys = {
+      youtube: [{ url: "https://same.example", description: "x", id: "yt" }],
+      instagram: [{ url: "https://same.example", description: "x", id: "ig" }],
+    };
+    assert.equal(
+      inspirationLinksDifferAcrossPlatforms(sameLinksExtraKeys, [...platforms]),
+      false,
+    );
+
+    const perPlatformLinks = {
+      youtube: [{ url: "https://sdsd", description: "test" }],
+      instagram: [{ url: "https://sds", description: "test" }],
+      tiktok: [{ url: "https://sdsd", description: "test" }],
+    };
+    assert.equal(
+      inspirationLinksDifferAcrossPlatforms(perPlatformLinks, [
+        "youtube",
+        "instagram",
+        "tiktok",
+      ]),
+      true,
+    );
+    // Flattening (legacy SSR bug) incorrectly makes every platform look identical.
+    const flat = flattenContestInspirationLinks(perPlatformLinks);
+    assert.equal(
+      inspirationLinksDifferAcrossPlatforms(flat, [
+        "youtube",
+        "instagram",
+        "tiktok",
+      ]),
+      false,
+    );
+    assert.deepEqual(
+      groupPlatformsByInspirationLinks(perPlatformLinks, [
+        "youtube",
+        "instagram",
+        "tiktok",
+      ]),
+      [["youtube", "tiktok"], ["instagram"]],
+    );
+
     const resources = {
       youtube: [{ url: "https://yt.res", description: "yt", type: "link" }],
       instagram: [{ url: "https://ig.res", description: "ig", type: "link" }],
     };
     assert.equal(resourcesDifferAcrossPlatforms(resources, [...platforms]), true);
+
+    const sameResourcesExtraKeys = {
+      youtube: [
+        { url: "https://same.res", description: "shared", type: "link", id: 1 },
+      ],
+      instagram: [
+        { url: "https://same.res", description: "shared", type: "external" },
+      ],
+    };
+    assert.equal(
+      resourcesDifferAcrossPlatforms(sameResourcesExtraKeys, [...platforms]),
+      false,
+    );
+    assert.deepEqual(
+      groupPlatformsByResources(
+        {
+          youtube: [
+            { url: "https://same.res", description: "test", type: "external" },
+          ],
+          instagram: [
+            { url: "https://same.res", description: "test", type: "link" },
+          ],
+          tiktok: [
+            { url: "https://same.res", description: "test", type: "external" },
+          ],
+        },
+        ["youtube", "instagram", "tiktok"],
+      ),
+      [["youtube", "instagram", "tiktok"]],
+    );
   });
 
   it("detects differing creator bonus and max earnings", () => {
@@ -1398,6 +1491,16 @@ describe("content differ-across-platforms helpers", () => {
       false,
     );
     assert.equal(
+      bonusDetailsDifferAcrossPlatforms(
+        {
+          youtube: { description_html: "<p>Shared bonus</p>" },
+          instagram: { description_html: "<p>Shared bonus</p><p></p>" },
+        },
+        [...platforms],
+      ),
+      false,
+    );
+    assert.equal(
       maxEarningsDifferAcrossPlatforms(
         { youtube: 5000, instagram: 7000 },
         null,
@@ -1408,6 +1511,17 @@ describe("content differ-across-platforms helpers", () => {
     assert.equal(
       maxEarningsDifferAcrossPlatforms(
         { youtube: 5000, instagram: 5000 },
+        null,
+        [...platforms],
+      ),
+      false,
+    );
+    assert.equal(
+      maxEarningsDifferAcrossPlatforms(
+        {
+          youtube: { max_earnings_per_creator: 5000 },
+          instagram: "5000",
+        },
         null,
         [...platforms],
       ),
@@ -1441,6 +1555,109 @@ describe("content differ-across-platforms helpers", () => {
         [...platforms],
       ),
       false,
+    );
+  });
+
+  it("treats matching visible CPM details as one even with empty views or different flat fees", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      cpmRate: "2",
+      minViews: "",
+      maxViews: "",
+      totalBudget: "300",
+      termsConditions: "<p></p>",
+      flatFeeBonus: "5",
+    });
+    const instagram = {
+      ...youtube,
+      contest_type: undefined,
+      cpm_contest: {
+        ...youtube.cpm_contest,
+        min_views: 0,
+        max_views: null,
+        terms_conditions: "",
+        flat_fee_bonus: 900,
+        flat_fee_bonus_cap: 5000,
+      },
+    };
+    assert.equal(
+      videoPayoutConfigsDifferAcrossPlatforms(
+        { youtube, instagram },
+        [...platforms],
+      ),
+      false,
+    );
+  });
+
+  it("treats identical CPM details as one config even when spend differs", () => {
+    const youtube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      cpmRate: "2",
+      minViews: 1000,
+      maxViews: 10000,
+      totalBudget: "300",
+      termsConditions: "test",
+    });
+    const instagram = {
+      ...youtube,
+      cpm_contest: {
+        ...youtube.cpm_contest,
+        budget_spent: 4500,
+        last_metrics_updated: "2026-09-09T00:00:00.000Z",
+      },
+    };
+    const tiktok = {
+      ...youtube,
+      cpm_contest: {
+        ...youtube.cpm_contest,
+        terms_conditions: " test ",
+        min_views: 1000,
+        max_views: 10000,
+      },
+    };
+    assert.equal(
+      videoPayoutConfigsDifferAcrossPlatforms(
+        { youtube, instagram, tiktok },
+        ["youtube", "instagram", "tiktok"],
+      ),
+      false,
+    );
+    assert.deepEqual(
+      groupVideoPayoutPlatformsByConfig(
+        { youtube, instagram, tiktok },
+        ["youtube", "instagram", "tiktok"],
+      ),
+      [["youtube", "instagram", "tiktok"]],
+    );
+  });
+
+  it("groups only platforms that share the same visible CPM details", () => {
+    const shared = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      cpmRate: "2",
+      minViews: 1000,
+      maxViews: 10000,
+      totalBudget: "300",
+      termsConditions: "test",
+    });
+    const different = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      contestType: "cpm",
+      cpmRate: "3",
+      minViews: 1000,
+      maxViews: 10000,
+      totalBudget: "300",
+      termsConditions: "test",
+    });
+    assert.deepEqual(
+      groupVideoPayoutPlatformsByConfig(
+        { youtube: shared, instagram: shared, tiktok: different },
+        ["youtube", "instagram", "tiktok"],
+      ),
+      [["youtube", "instagram"], ["tiktok"]],
     );
   });
 });

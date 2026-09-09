@@ -5,16 +5,17 @@ import { CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import {
+  ContestDetailPlatformIcons,
+  ContestDetailPlatformScopeCard,
+} from "@/components/contest/ContestDetailPlatformScopeCard";
 import { getPlatformIcon } from "@/lib/platform-icons";
 import {
   isCpmContestType,
   isDualRewardsContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
-import {
-  VIDEO_PLATFORM_LABELS,
-  type VideoContestPlatform,
-} from "@/lib/video-platform-campaigns";
+import type { VideoContestPlatform } from "@/lib/video-platform-campaigns";
 import { Eye, Gift, Info, Play, Trophy, Wallet, Zap } from "lucide-react";
 
 type PayoutContestSlice = {
@@ -56,7 +57,11 @@ type ContestDetailVideoPayoutSectionsProps = {
   contest: PayoutContestSlice;
   isDark?: boolean;
   platform?: VideoContestPlatform | null;
+  /** When several platforms share the same payout config, show them together. */
+  platforms?: VideoContestPlatform[];
   showPlatformLabel?: boolean;
+  /** Icons next to CPM/Milestone headings when payout is shared on All tab. */
+  sharedPlatformIcons?: VideoContestPlatform[];
   isTwitterCpmCampaign?: boolean;
   winnerCountsByMilestone?: Map<number, number>;
 };
@@ -65,7 +70,9 @@ export function ContestDetailVideoPayoutSections({
   contest,
   isDark = false,
   platform = null,
+  platforms,
   showPlatformLabel = false,
+  sharedPlatformIcons,
   isTwitterCpmCampaign = false,
   winnerCountsByMilestone,
 }: ContestDetailVideoPayoutSectionsProps) {
@@ -75,22 +82,26 @@ export function ContestDetailVideoPayoutSections({
   const milestone = details?.milestone_contest;
   const showCpm = isCpmContestType(contestType) && !!cpm;
   const showMilestone = isMilestoneContestType(contestType) && !!milestone;
+  const labelPlatforms =
+    platforms && platforms.length > 0
+      ? platforms
+      : platform
+        ? [platform]
+        : [];
+  const singleLabelPlatform =
+    labelPlatforms.length === 1 ? labelPlatforms[0]! : null;
 
   if (!showCpm && !showMilestone) return null;
 
-  return (
+  const body = (
     <div className="space-y-6">
-      {showPlatformLabel && platform ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          {getPlatformIcon(platform)}
-          <span>{VIDEO_PLATFORM_LABELS[platform]}</span>
-        </div>
-      ) : null}
-
       {showCpm && cpm && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-lg text-foreground">
+          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
             CPM Configuration
+            {sharedPlatformIcons && sharedPlatformIcons.length >= 2 ? (
+              <ContestDetailPlatformIcons platforms={sharedPlatformIcons} />
+            ) : null}
           </h3>
           <div className="grid grid-col-1 md:grid-cols-2 gap-4">
             <div
@@ -200,6 +211,9 @@ export function ContestDetailVideoPayoutSections({
               <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-yellow-500" />
                 Milestone Rewards Ladder
+                {sharedPlatformIcons && sharedPlatformIcons.length >= 2 ? (
+                  <ContestDetailPlatformIcons platforms={sharedPlatformIcons} />
+                ) : null}
               </h3>
             </div>
 
@@ -229,8 +243,8 @@ export function ContestDetailVideoPayoutSections({
                                 : "bg-purple-50 text-purple-600 border border-purple-100",
                             )}
                           >
-                            {showPlatformLabel && platform ? (
-                              getPlatformIcon(platform)
+                            {showPlatformLabel && singleLabelPlatform ? (
+                              getPlatformIcon(singleLabelPlatform)
                             ) : (
                               <Zap className="h-5 w-5 sm:h-6 sm:w-6" />
                             )}
@@ -513,4 +527,17 @@ export function ContestDetailVideoPayoutSections({
       )}
     </div>
   );
+
+  if (showPlatformLabel && labelPlatforms.length > 0) {
+    return (
+      <ContestDetailPlatformScopeCard
+        platforms={labelPlatforms}
+        isDark={isDark}
+      >
+        {body}
+      </ContestDetailPlatformScopeCard>
+    );
+  }
+
+  return body;
 }

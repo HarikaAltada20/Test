@@ -3249,6 +3249,14 @@ export function CreatorSubmissionsModal({
                       const isTikTokRow = (submission.platform || "")
                         .toLowerCase()
                         .includes("tiktok");
+                      const isYouTubeRow = submissionMatchesVideoPlatform(
+                        submission,
+                        "youtube",
+                      );
+                      const isInstagramRow = submissionMatchesVideoPlatform(
+                        submission,
+                        "instagram",
+                      );
 
                       const likes = isTwitterTweet
                         ? submission.other_stats?.likes || 0
@@ -4232,7 +4240,9 @@ export function CreatorSubmissionsModal({
                               {/* YouTube-specific metrics for non-Twitter submissions */}
                               {isYouTubeContest && showYtColumn("dislikes") && (
                                 <TableCell className="text-center font-mono">
-                                  {formatMetricValue(ytDislikes)}
+                                  {isYouTubeRow
+                                    ? formatMetricValue(ytDislikes)
+                                    : "—"}
                                 </TableCell>
                               )}
                               {isYouTubeContest &&
@@ -4248,7 +4258,7 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("avg_view_pct") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytAvgViewPct > 0
+                                    {isYouTubeRow && ytAvgViewPct > 0
                                       ? `${ytAvgViewPct.toFixed(1)}%`
                                       : "—"}
                                   </TableCell>
@@ -4256,7 +4266,7 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("watch_time") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytWatchTimeMinutes > 0
+                                    {isYouTubeRow && ytWatchTimeMinutes > 0
                                       ? formatWatchTime(
                                           ytWatchTimeMinutes * 60 * 1000,
                                         )
@@ -4266,7 +4276,7 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("avg_duration") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytAvgDurationSeconds > 0
+                                    {isYouTubeRow && ytAvgDurationSeconds > 0
                                       ? `${ytAvgDurationSeconds}s`
                                       : "—"}
                                   </TableCell>
@@ -4274,17 +4284,19 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("clip_duration") && (
                                   <TableCell className="text-center font-mono">
-                                    {formatClipDurationSeconds(
-                                      ytClipDurationSeconds > 0
-                                        ? ytClipDurationSeconds
-                                        : null,
-                                    )}
+                                    {isYouTubeRow
+                                      ? formatClipDurationSeconds(
+                                          ytClipDurationSeconds > 0
+                                            ? ytClipDurationSeconds
+                                            : null,
+                                        )
+                                      : "—"}
                                   </TableCell>
                                 )}
                               {isYouTubeContest &&
                                 showYtColumn("engaged_views") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytEngagedViews > 0
+                                    {isYouTubeRow && ytEngagedViews > 0
                                       ? formatMetricValue(ytEngagedViews)
                                       : "—"}
                                   </TableCell>
@@ -4292,7 +4304,8 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("subs_gained") && (
                                   <TableCell className="text-center font-mono text-sm">
-                                    {youtubeStats.subscribers_gained != null ? (
+                                    {isYouTubeRow &&
+                                    youtubeStats.subscribers_gained != null ? (
                                       <span
                                         className={cn(
                                           "font-bold",
@@ -4329,7 +4342,8 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("bot_score") && (
                                   <TableCell className="text-center">
-                                    {youtubeStats.bot_score !== null &&
+                                    {isYouTubeRow &&
+                                    youtubeStats.bot_score !== null &&
                                     youtubeStats.bot_score !== undefined ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span
@@ -4528,18 +4542,27 @@ export function CreatorSubmissionsModal({
                                   {isInstagramContest && (
                                     <>
                                     <TableCell className="text-center font-mono">
-                                      {formatMetricValue(igReposts)}
+                                      {isInstagramRow
+                                        ? formatMetricValue(igReposts)
+                                        : "—"}
                                     </TableCell>
                                     <TableCell className="text-center font-mono">
-                                      {formatMetricValue(saves)}
+                                      {isInstagramRow
+                                        ? formatMetricValue(saves)
+                                        : "—"}
                                     </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatMetricValue(reach)}
+                                        {isInstagramRow
+                                          ? formatMetricValue(reach)
+                                          : "—"}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatMetricValue(totalInteractions)}
+                                        {isInstagramRow
+                                          ? formatMetricValue(totalInteractions)
+                                          : "—"}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
+                                        {isInstagramRow ? (
                                         <div className="flex flex-col items-center">
                                           <span className="font-bold">
                                             {formatWatchTime(avgWatchTimeMs)}
@@ -4555,8 +4578,12 @@ export function CreatorSubmissionsModal({
                                             avg
                                           </span>
                                         </div>
+                                        ) : (
+                                          "—"
+                                        )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
+                                        {isInstagramRow ? (
                                         <div className="flex flex-col items-center">
                                           <span className="font-bold">
                                             {formatWatchTime(totalWatchTimeMs)}
@@ -4572,36 +4599,47 @@ export function CreatorSubmissionsModal({
                                             total
                                           </span>
                                         </div>
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono">
-                                        {formatClipDurationSeconds(
-                                          igReelDurationSeconds > 0
-                                            ? igReelDurationSeconds
-                                            : null,
+                                        ) : (
+                                          "—"
                                         )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatAvgWatchPercent(
-                                          avgWatchTimeMs,
-                                          igReelDurationSeconds > 0
-                                            ? igReelDurationSeconds
-                                            : null,
-                                        )}
+                                        {isInstagramRow
+                                          ? formatClipDurationSeconds(
+                                              igReelDurationSeconds > 0
+                                                ? igReelDurationSeconds
+                                                : null,
+                                            )
+                                          : "—"}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatReelsSkipRate(igReelsSkipRate)}
+                                        {isInstagramRow
+                                          ? formatAvgWatchPercent(
+                                              avgWatchTimeMs,
+                                              igReelDurationSeconds > 0
+                                                ? igReelDurationSeconds
+                                                : null,
+                                            )
+                                          : "—"}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {isInstagramRow
+                                          ? formatReelsSkipRate(igReelsSkipRate)
+                                          : "—"}
                                       </TableCell>
                                     </>
                                   )}
                                   {isTikTokContest && (
                                     <>
                                       <TableCell className="text-center font-mono">
-                                        {formatMetricValue(
-                                          tiktokTotalEngagement,
-                                        )}
+                                        {isTikTokRow
+                                          ? formatMetricValue(
+                                              tiktokTotalEngagement,
+                                            )
+                                          : "—"}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {tiktokViewsForRate > 0
+                                        {isTikTokRow && tiktokViewsForRate > 0
                                           ? `${formatMetricValue(tiktokEngagementRatePct)}%`
                                           : "—"}
                                       </TableCell>
