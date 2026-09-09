@@ -963,65 +963,6 @@ function isRpcMissingError(rpcError: { message?: string; code?: string } | null)
   );
 }
 
-function mergeDualRewardsPayoutCommit(
-  previous: unknown,
-  targetCpm: number,
-  targetMs: number,
-): Record<string, unknown> {
-  const base =
-    previous && typeof previous === "object" && !Array.isArray(previous)
-      ? { ...(previous as Record<string, unknown>) }
-      : {};
-  return {
-    ...base,
-    cpm_cents: targetCpm,
-    milestone_cents: targetMs,
-  };
-}
-
-async function persistDualRewardsPoolCommitInApp(
-  supabaseAdmin: SupabaseClient,
-  contestId: string,
-  targetSubmissionId: string,
-  targetCpm: number,
-  targetMs: number,
-): Promise<
-  | { ok: true; previous: unknown }
-  | { ok: false; error: string }
-> {
-  const { data: row, error: readError } = await supabaseAdmin
-    .from("submissions")
-    .select("dual_rewards_payout")
-    .eq("id", targetSubmissionId)
-    .eq("contest_id", contestId)
-    .maybeSingle();
-
-  if (readError) {
-    return { ok: false, error: readError.message };
-  }
-  if (!row) {
-    return { ok: false, error: "Target submission not found for this contest" };
-  }
-
-  const previous = row.dual_rewards_payout;
-  const { error: writeError } = await supabaseAdmin
-    .from("submissions")
-    .update({
-      dual_rewards_payout: mergeDualRewardsPayoutCommit(
-        previous,
-        targetCpm,
-        targetMs,
-      ),
-    })
-    .eq("id", targetSubmissionId)
-    .eq("contest_id", contestId);
-
-  if (writeError) {
-    return { ok: false, error: writeError.message };
-  }
-  return { ok: true, previous };
-}
-
 async function validatePoolBudgetFromLoadedRows(
   supabaseAdmin: SupabaseClient,
   contestId: string,
@@ -1136,38 +1077,23 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
     poolBudgetCents,
   );
   if (!validated.allowed) return validated;
+  // Read-only checks may use in-app projection when the SQL helper is stale.
   if (!commit) return validated;
 
-  // RPC missing: refuse commit so concurrent payouts cannot skip the lock.
-  // Nested-platform miss: RPC ran but only inspected root total_budget_cents.
+  // Never commit without the Postgres advisory-lock RPC. An unlocked
+  // read→update fallback races concurrent bulk/verify payouts and can
+  // overspend — especially when the pool lives under platform keys and the
+  // pre-20260908 helper only inspected root total_budget_cents.
   const rpcReturnedNotConfigured =
     !rpcError &&
     rpcData != null &&
     parseRpcPoolBudgetResult(rpcData).error ===
       DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR;
-  if (!rpcReturnedNotConfigured) {
+  if (rpcReturnedNotConfigured) {
     return {
       allowed: false,
       error:
-        "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
-      poolBudgetCents,
-      projectedSpentCents: validated.projectedSpentCents,
-      remainingCents: validated.remainingCents ?? 0,
-      committed: false,
-    };
-  }
-
-  const persisted = await persistDualRewardsPoolCommitInApp(
-    supabaseAdmin,
-    contestId,
-    targetSubmissionId,
-    targetCpm,
-    targetMs,
-  );
-  if (!persisted.ok) {
-    return {
-      allowed: false,
-      error: `Failed to reserve contest pool budget: ${persisted.error}`,
+        "Contest prize pool is nested under platform keys; deploy migration 20260908120000_dual_rewards_pool_budget_multi_platform.sql before dual-rewards payouts",
       poolBudgetCents,
       projectedSpentCents: validated.projectedSpentCents,
       remainingCents: validated.remainingCents ?? 0,
@@ -1176,12 +1102,13 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   }
 
   return {
-    allowed: true,
-    poolBudgetCents: validated.poolBudgetCents,
+    allowed: false,
+    error:
+      "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
+    poolBudgetCents,
     projectedSpentCents: validated.projectedSpentCents,
-    remainingCents: validated.remainingCents,
-    committed: true,
-    previousDualRewardsPayout: persisted.previous,
+    remainingCents: validated.remainingCents ?? 0,
+    committed: false,
   };
 }
 

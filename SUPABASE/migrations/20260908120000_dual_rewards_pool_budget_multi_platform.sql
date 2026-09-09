@@ -2,6 +2,9 @@
 -- youtube|instagram|tiktok instead of root total_budget_cents. The previous
 -- helper only inspected root fields, so bulk pay failed with
 -- "Contest prize pool is not configured". Do not sum platform copies.
+--
+-- Deploy before dual-rewards payouts on multi-platform contests. App code
+-- refuses unlocked in-app pool commits when this helper is stale.
 
 CREATE OR REPLACE FUNCTION public.dual_rewards_pool_budget_cents_from_contest(
   p_contest_type text,

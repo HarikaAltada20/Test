@@ -6,6 +6,26 @@
 --   "instagram": { "max_earnings_per_creator": 7000 },
 --   "tiktok": { "max_earnings_per_creator": 8000 }
 -- }
+--
+-- Deploy order (same release):
+--   1) This file (ALTER max_earnings_per_creator → jsonb + recreate view)
+--   2) db/migrations/20260908130000_campaign_list_platform_token_filter.sql
+--      (restores campaign_list_page_ids / campaign_list_tab_counts dropped below)
+--
+-- campaign_list_* and contest_ids_matching_user_countries select from
+-- contests_with_status, so they must be dropped before DROP VIEW / ALTER COLUMN.
+
+DROP FUNCTION IF EXISTS public.campaign_list_page_ids(
+  text, uuid, text, text, integer, integer, text, text, text, text, text, text, text[],
+  boolean, numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
+);
+-- Pre-eligible and eligible tab_counts signatures (either may exist).
+DROP FUNCTION IF EXISTS public.campaign_list_tab_counts(text, uuid, text, text[]);
+DROP FUNCTION IF EXISTS public.campaign_list_tab_counts(
+  text, uuid, text, text[],
+  boolean, numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
+);
+DROP FUNCTION IF EXISTS public.contest_ids_matching_user_countries(text[]);
 
 -- View depends on contests.max_earnings_per_creator type; drop before ALTER.
 DROP VIEW IF EXISTS public.contests_with_status;
@@ -89,3 +109,38 @@ FROM public.contests;
 
 COMMENT ON VIEW public.contests_with_status IS
   'All contest columns plus computed status. max_earnings_per_creator is jsonb (cents number or platform-keyed map).';
+
+-- Restore opportunity country filter helper (dropped above; not covered by
+-- 20260908130000_campaign_list_platform_token_filter.sql).
+CREATE OR REPLACE FUNCTION public.contest_ids_matching_user_countries(
+  p_countries text[]
+)
+RETURNS SETOF uuid
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_countries text[];
+  v_unused_advertiser_id uuid;
+BEGIN
+  SELECT *
+  INTO v_unused_advertiser_id, v_countries
+  FROM public.campaign_list_authorize_caller(
+    'opportunities',
+    NULL,
+    p_countries
+  );
+
+  RETURN QUERY
+  SELECT c.id
+  FROM public.contests_with_status c
+  WHERE c.moderation_status = 'published'::public.contest_moderation_status_enum
+    AND public.contest_matches_user_countries(c.region, v_countries);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.contest_ids_matching_user_countries(text[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.contest_ids_matching_user_countries(text[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.contest_ids_matching_user_countries(text[]) TO service_role;

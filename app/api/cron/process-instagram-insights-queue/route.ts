@@ -14,7 +14,7 @@ import {
   type InstagramInsightsJob,
   recoverProcessingJobsToQueue,
 } from "@/lib/queue/instagram-insights-queue";
-import { updateCpmContestBudgets } from "@/lib/instagram-insights";
+import { updateCpmContestBudgets } from "@/lib/instagram-cpm-contest-budgets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { refreshContestStats } from "@/lib/contest-stats";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";

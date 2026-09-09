@@ -2,6 +2,10 @@
 -- (e.g. youtube,instagram,tiktok). List filters must match individual
 -- tokens instead of the raw CSV string, and the platform dropdown must
 -- not expose combined values as a single option.
+--
+-- Deploy after SUPABASE/migrations/20260904_max_earnings_per_creator_jsonb.sql
+-- (that migration drops campaign_list_page_ids / campaign_list_tab_counts so
+-- contests.max_earnings_per_creator can become jsonb; this file restores them).
 
 CREATE OR REPLACE FUNCTION public.contest_platform_tokens(p_platform text)
 RETURNS text[]
