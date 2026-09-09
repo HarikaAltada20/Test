@@ -20,9 +20,7 @@
     "verify:metrics-fix": "npx tsx scripts/debug-youtube-cron-eligibility.ts",
     "backfill:budget-spent": "npx tsx scripts/backfill-contest-budget-spent.ts",
     "heal:twitter-leaderboard-earnings": "npx tsx scripts/heal-twitter-leaderboard-earnings.ts",
-    "desktop:dev": "npm --prefix apps/goc-downloader run tauri:dev",
-    "desktop:build": "npm --prefix apps/goc-downloader run tauri:build",
-    "desktop:test": "npm --prefix apps/goc-downloader test"
+    "test:goc-download": "npx --yes tsx --test lib/goc-download/canonicalize.test.ts lib/goc-download/manifest-sign.test.ts lib/goc-download/path-safety.test.ts lib/goc-download/status-token.test.ts lib/goc-download/status-rate-limit.test.ts lib/goc-download/youtube-url.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",
