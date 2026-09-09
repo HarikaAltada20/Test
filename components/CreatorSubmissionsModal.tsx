@@ -5353,7 +5353,9 @@ export function CreatorSubmissionsModal({
         downloading={bulkDownloading}
         onConfirm={runBulkDownloadReels}
         contestId={contest?.id ? String(contest.id) : undefined}
-        submissionIds={Array.from(selectedSubmissions)}
+        submissionIds={sortedSubmissions
+          .map((submission) => submission.id)
+          .filter((id) => selectedSubmissions.has(id))}
         hasInstagramSelection={Array.from(selectedSubmissions).some((id) => {
           const sub = submissions.find((entry) => entry.id === id);
           const link = sub?.content_link || "";

@@ -51,6 +51,29 @@ pub struct Job {
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub items: Option<Vec<DownloadItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callback_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callback_token: Option<String>,
+    /// JSON-serialized archive plan from the signed manifest (if any).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archives_json: Option<String>,
+    /// JSON map of itemId -> submissionId from the signed manifest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub submission_map_json: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CallbackOutboxRow {
+    pub id: String,
+    pub job_id: String,
+    pub status_url: String,
+    pub status_token: String,
+    pub payload: String,
+    pub attempts: u32,
+    pub next_attempt_at: String,
+    pub last_error: Option<String>,
+    pub created_at: String,
 }
 
 pub struct Db {
@@ -81,7 +104,11 @@ impl Db {
                     completed_count INTEGER NOT NULL,
                     failed_count INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    callback_url TEXT,
+                    callback_token TEXT,
+                    archives_json TEXT,
+                    submission_map_json TEXT
                 );
                 CREATE TABLE IF NOT EXISTS items (
                     id TEXT PRIMARY KEY,
@@ -100,8 +127,28 @@ impl Db {
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY(job_id) REFERENCES jobs(id)
                 );
+                CREATE TABLE IF NOT EXISTS callback_outbox (
+                    id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL,
+                    status_url TEXT NOT NULL,
+                    status_token TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at TEXT NOT NULL,
+                    last_error TEXT,
+                    sent_at TEXT,
+                    dead INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS callback_outbox_pending_idx
+                    ON callback_outbox (dead, next_attempt_at);
                 "#,
             )?;
+            // Additive migrations for older DBs.
+            let _ = conn.execute("ALTER TABLE jobs ADD COLUMN callback_url TEXT", []);
+            let _ = conn.execute("ALTER TABLE jobs ADD COLUMN callback_token TEXT", []);
+            let _ = conn.execute("ALTER TABLE jobs ADD COLUMN archives_json TEXT", []);
+            let _ = conn.execute("ALTER TABLE jobs ADD COLUMN submission_map_json TEXT", []);
             Ok(())
         })?;
         db.recover_interrupted()?;
@@ -136,8 +183,9 @@ impl Db {
             tx.execute(
                 r#"INSERT INTO jobs (
                     id, kind, status, destination, quality, conflict, create_zip,
-                    source_label, item_count, completed_count, failed_count, created_at, updated_at
-                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)"#,
+                    source_label, item_count, completed_count, failed_count, created_at, updated_at,
+                    callback_url, callback_token, archives_json, submission_map_json
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)"#,
                 params![
                     job.id,
                     job.kind,
@@ -152,6 +200,10 @@ impl Db {
                     job.failed_count,
                     job.created_at.to_rfc3339(),
                     job.updated_at.to_rfc3339(),
+                    job.callback_url,
+                    job.callback_token,
+                    job.archives_json,
+                    job.submission_map_json,
                 ],
             )?;
             for item in items {
@@ -188,7 +240,8 @@ impl Db {
         self.with_conn(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, kind, status, destination, quality, conflict, create_zip, source_label,
-                        item_count, completed_count, failed_count, created_at, updated_at
+                        item_count, completed_count, failed_count, created_at, updated_at,
+                        callback_url, callback_token, archives_json, submission_map_json
                  FROM jobs ORDER BY updated_at DESC",
             )?;
             let rows = stmt.query_map([], map_job)?.collect::<Result<Vec<_>, _>>()?;
@@ -201,7 +254,8 @@ impl Db {
             let mut job = conn
                 .query_row(
                     "SELECT id, kind, status, destination, quality, conflict, create_zip, source_label,
-                            item_count, completed_count, failed_count, created_at, updated_at
+                            item_count, completed_count, failed_count, created_at, updated_at,
+                            callback_url, callback_token, archives_json, submission_map_json
                      FROM jobs WHERE id = ?1",
                     params![id],
                     map_job,
@@ -217,6 +271,150 @@ impl Db {
                 .collect::<Result<Vec<_>, _>>()?;
             job.items = Some(items);
             Ok(job)
+        })
+    }
+
+    pub fn pending_items_for_job(&self, job_id: &str) -> AppResult<Vec<DownloadItem>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, job_id, url, title, status, stage, output_path, bytes_downloaded,
+                        bytes_total, speed_bps, eta_seconds, error, created_at, updated_at
+                 FROM items WHERE job_id = ?1 AND status IN ('pending', 'resumable')
+                 ORDER BY created_at ASC",
+            )?;
+            let items = stmt
+                .query_map(params![job_id], map_item)?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(items)
+        })
+    }
+
+    pub fn enqueue_callback(
+        &self,
+        id: &str,
+        job_id: &str,
+        status_url: &str,
+        status_token: &str,
+        payload: &str,
+    ) -> AppResult<()> {
+        self.with_conn(|conn| {
+            let now = Utc::now().to_rfc3339();
+            conn.execute(
+                r#"INSERT OR IGNORE INTO callback_outbox (
+                    id, job_id, status_url, status_token, payload, attempts,
+                    next_attempt_at, last_error, sent_at, dead, created_at
+                ) VALUES (?1,?2,?3,?4,?5,0,?6,NULL,NULL,0,?6)"#,
+                params![id, job_id, status_url, status_token, payload, now],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn list_pending_callbacks(&self, limit: usize) -> AppResult<Vec<CallbackOutboxRow>> {
+        self.with_conn(|conn| {
+            let now = Utc::now().to_rfc3339();
+            let mut stmt = conn.prepare(
+                r#"SELECT id, job_id, status_url, status_token, payload, attempts,
+                          next_attempt_at, last_error, created_at
+                   FROM callback_outbox
+                   WHERE dead = 0 AND sent_at IS NULL AND next_attempt_at <= ?1
+                   ORDER BY created_at ASC
+                   LIMIT ?2"#,
+            )?;
+            let rows = stmt
+                .query_map(params![now, limit as i64], |row| {
+                    Ok(CallbackOutboxRow {
+                        id: row.get(0)?,
+                        job_id: row.get(1)?,
+                        status_url: row.get(2)?,
+                        status_token: row.get(3)?,
+                        payload: row.get(4)?,
+                        attempts: row.get::<_, i64>(5)? as u32,
+                        next_attempt_at: row.get(6)?,
+                        last_error: row.get(7)?,
+                        created_at: row.get(8)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    pub fn mark_callback_sent(&self, id: &str) -> AppResult<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE callback_outbox SET sent_at = ?1 WHERE id = ?2",
+                params![Utc::now().to_rfc3339(), id],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn mark_callback_retry(&self, id: &str, error: &str, next_attempt_at: &str) -> AppResult<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE callback_outbox SET attempts = attempts + 1, last_error = ?1, next_attempt_at = ?2 WHERE id = ?3",
+                params![error, next_attempt_at, id],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn mark_callback_dead(&self, id: &str, error: &str) -> AppResult<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE callback_outbox SET dead = 1, last_error = ?1, attempts = attempts + 1 WHERE id = ?2",
+                params![error, id],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Delete terminal jobs older than `max_age_days` and their items/outbox rows.
+    pub fn purge_old_history(&self, max_age_days: i64) -> AppResult<usize> {
+        self.with_conn(|conn| {
+            let cutoff = (Utc::now() - chrono::Duration::days(max_age_days)).to_rfc3339();
+            let tx = conn.unchecked_transaction()?;
+            let ids: Vec<String> = {
+                let mut stmt = tx.prepare(
+                    "SELECT id FROM jobs WHERE status IN ('completed','failed','cancelled') AND updated_at < ?1",
+                )?;
+                let mapped = stmt.query_map(params![cutoff], |row| row.get(0))?;
+                mapped.collect::<Result<Vec<_>, _>>()?
+            };
+            let mut deleted = 0usize;
+            for id in &ids {
+                tx.execute("DELETE FROM items WHERE job_id = ?1", params![id])?;
+                tx.execute("DELETE FROM callback_outbox WHERE job_id = ?1", params![id])?;
+                deleted += tx.execute("DELETE FROM jobs WHERE id = ?1", params![id])?;
+            }
+            // Also purge sent outbox older than retention.
+            tx.execute(
+                "DELETE FROM callback_outbox WHERE sent_at IS NOT NULL AND created_at < ?1",
+                params![cutoff],
+            )?;
+            tx.commit()?;
+            Ok(deleted)
+        })
+    }
+
+    pub fn clear_all_history(&self) -> AppResult<usize> {
+        self.with_conn(|conn| {
+            let tx = conn.unchecked_transaction()?;
+            let n = tx.execute(
+                "DELETE FROM jobs WHERE status IN ('completed','failed','cancelled')",
+                [],
+            )?;
+            let _ = tx.execute(
+                "DELETE FROM items WHERE job_id NOT IN (SELECT id FROM jobs)",
+                [],
+            )?;
+            let _ = tx.execute(
+                "DELETE FROM callback_outbox WHERE job_id NOT IN (SELECT id FROM jobs)",
+                [],
+            )?;
+            tx.commit()?;
+            Ok(n)
         })
     }
 
@@ -356,6 +554,10 @@ fn map_job(row: &rusqlite::Row<'_>) -> rusqlite::Result<Job> {
         created_at: parse_dt(&row.get::<_, String>(11)?),
         updated_at: parse_dt(&row.get::<_, String>(12)?),
         items: None,
+        callback_url: row.get(13).ok().flatten(),
+        callback_token: row.get(14).ok().flatten(),
+        archives_json: row.get(15).ok().flatten(),
+        submission_map_json: row.get(16).ok().flatten(),
     })
 }
 
@@ -414,6 +616,10 @@ mod tests {
             created_at: now,
             updated_at: now,
             items: None,
+            callback_url: None,
+            callback_token: None,
+            archives_json: None,
+            submission_map_json: None,
         };
         let item = DownloadItem {
             id: "item-1".into(),
@@ -462,6 +668,10 @@ mod tests {
             created_at: now,
             updated_at: now,
             items: None,
+            callback_url: None,
+            callback_token: None,
+            archives_json: None,
+            submission_map_json: None,
         };
         let make_item = |id: &str| DownloadItem {
             id: id.into(),
@@ -530,6 +740,10 @@ mod tests {
             created_at: now,
             updated_at: now,
             items: None,
+            callback_url: None,
+            callback_token: None,
+            archives_json: None,
+            submission_map_json: None,
         };
         let item = DownloadItem {
             id: "legacy-item".into(),
@@ -556,5 +770,23 @@ mod tests {
             loaded.items.unwrap()[0].status,
             JobStatus::Completed
         );
+    }
+
+    #[test]
+    fn outbox_enqueue_and_list() {
+        let dir = tempdir().unwrap();
+        let db = Db::open(dir.path().join("jobs.db")).unwrap();
+        db.enqueue_callback(
+            "evt-1",
+            "job-1",
+            "https://example.com/status",
+            "token",
+            r#"{"eventId":"evt-1"}"#,
+        )
+        .unwrap();
+        let pending = db.list_pending_callbacks(10).unwrap();
+        assert_eq!(pending.len(), 1);
+        db.mark_callback_sent("evt-1").unwrap();
+        assert!(db.list_pending_callbacks(10).unwrap().is_empty());
     }
 }

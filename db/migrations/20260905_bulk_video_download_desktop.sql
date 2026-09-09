@@ -39,8 +39,11 @@ create index if not exists bulk_video_download_desktop_events_job_idx
 create index if not exists bulk_video_download_desktop_events_type_idx
   on public.bulk_video_download_desktop_events (job_id, event_type);
 
+create index if not exists bulk_video_download_desktop_events_created_idx
+  on public.bulk_video_download_desktop_events (created_at);
+
 comment on table public.bulk_video_download_desktop_events is
-  'Idempotent desktop downloader status events (event id from client as PK). Metadata only; never stores media.';
+  'Idempotent desktop downloader status events (event id from client as PK). Metadata only; never stores media. Retain ~30 days then purge by created_at.';
 
 alter table public.bulk_video_download_desktop_events enable row level security;
 

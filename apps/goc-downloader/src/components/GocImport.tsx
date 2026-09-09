@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type DragEvent } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   getSettings,
@@ -10,11 +12,19 @@ import type {
   ConflictPolicy,
   GocManifest,
   Job,
+  ProgressEvent,
   QualityPreference,
 } from "../lib/types";
 import { EmptyState } from "./EmptyState";
+import { ProgressPanel } from "./ProgressPanel";
 
-export function GocImport() {
+export function GocImport({
+  initialPath,
+  onInitialPathConsumed,
+}: {
+  initialPath?: string | null;
+  onInitialPathConsumed?: () => void;
+} = {}) {
   const [path, setPath] = useState<string | null>(null);
   const [manifest, setManifest] = useState<GocManifest | null>(null);
   const [destination, setDestination] = useState("");
@@ -25,6 +35,7 @@ export function GocImport() {
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<ProgressEvent | null>(null);
 
   useEffect(() => {
     getSettings()
@@ -40,6 +51,7 @@ export function GocImport() {
   const loadManifest = useCallback(async (filePath: string) => {
     setError(null);
     setJob(null);
+    setProgress(null);
     setBusy(true);
     try {
       const verified = await verifyManifestFile(filePath);
@@ -53,6 +65,54 @@ export function GocImport() {
       setBusy(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!initialPath) return;
+    void loadManifest(initialPath).finally(() => onInitialPathConsumed?.());
+  }, [initialPath, loadManifest, onInitialPathConsumed]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<ProgressEvent>("download-progress", (event) => {
+      if (!job || event.payload.jobId === job.id) {
+        setProgress(event.payload);
+      }
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      unlisten?.();
+    };
+  }, [job]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (event.payload.type === "over") {
+          setDragActive(true);
+        } else if (event.payload.type === "leave") {
+          setDragActive(false);
+        } else if (event.payload.type === "drop") {
+          setDragActive(false);
+          const paths = event.payload.paths || [];
+          const match = paths.find((p) =>
+            p.toLowerCase().endsWith(".gocdownload"),
+          );
+          if (match) void loadManifest(match);
+          else setError("Only .gocdownload files are supported.");
+        }
+      })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      unlisten?.();
+    };
+  }, [loadManifest]);
 
   async function pickFile() {
     try {
@@ -85,14 +145,12 @@ export function GocImport() {
       setError("Only .gocdownload files are supported.");
       return;
     }
-    // Tauri drag-drop provides path via webkitRelativePath fallbacks in desktop;
-    // for scaffold, prefer dialog when path is unavailable.
     const anyFile = file as File & { path?: string };
     if (anyFile.path) {
       await loadManifest(anyFile.path);
       return;
     }
-    setError("Drop path unavailable in preview. Use Browse to select the file.");
+    setError("Use Browse or drop the file onto the app window.");
   }
 
   async function pickDestination() {
@@ -121,6 +179,12 @@ export function GocImport() {
         createZip,
       });
       setJob(created);
+      setProgress({
+        jobId: created.id,
+        stage: "validating",
+        percent: 0,
+        message: "Job queued",
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -177,10 +241,14 @@ export function GocImport() {
                 {manifest.items.map((item) => (
                   <tr key={item.itemId}>
                     <td>
-                      <code>{item.filename}</code>
+                      <code title={item.filename}>{item.filename}</code>
                     </td>
                     <td>
-                      <code>{item.url}</code>
+                      <code title={item.url}>
+                        {item.url.length > 64
+                          ? `${item.url.slice(0, 61)}…`
+                          : item.url}
+                      </code>
                     </td>
                   </tr>
                 ))}
@@ -232,8 +300,9 @@ export function GocImport() {
             </select>
           </div>
 
-          <label className="checkbox-row">
+          <label className="checkbox-row" htmlFor="goc-create-zip">
             <input
+              id="goc-create-zip"
               type="checkbox"
               checked={createZip}
               onChange={(e) => setCreateZip(e.target.checked)}
@@ -260,6 +329,7 @@ export function GocImport() {
           Import job {job.id.slice(0, 8)} started with {job.itemCount} items.
         </p>
       ) : null}
+      {progress ? <ProgressPanel progress={progress} /> : null}
     </div>
   );
 }

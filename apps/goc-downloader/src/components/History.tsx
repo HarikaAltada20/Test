@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { cancelJob, listJobs, openPath } from "../lib/tauri";
+import {
+  cancelJob,
+  clearHistory,
+  listJobs,
+  openPath,
+  resumeJob,
+} from "../lib/tauri";
 import type { Job } from "../lib/types";
 import { EmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
+
+function isActive(status: Job["status"]): boolean {
+  return (
+    status === "running" ||
+    status === "pending" ||
+    status === "paused" ||
+    status === "resumable"
+  );
+}
 
 export function History() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -27,15 +42,38 @@ export function History() {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const hasActive = jobs.some((j) => isActive(j.status));
+    if (!hasActive) return;
     const interval = window.setInterval(() => {
       void refresh(false);
     }, 2_000);
     return () => window.clearInterval(interval);
-  }, [refresh]);
+  }, [jobs, refresh]);
 
   async function onCancel(jobId: string) {
     try {
       await cancelJob(jobId);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onResume(jobId: string) {
+    try {
+      await resumeJob(jobId);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onClear() {
+    try {
+      await clearHistory();
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -82,6 +120,9 @@ export function History() {
         >
           Refresh
         </button>
+        <button type="button" className="btn btn-secondary" onClick={() => void onClear()}>
+          Clear finished
+        </button>
       </div>
       {error ? <p className="error-text" role="alert">{error}</p> : null}
       <div className="table-wrap">
@@ -123,6 +164,15 @@ export function History() {
                         onClick={() => onCancel(job.id)}
                       >
                         Cancel
+                      </button>
+                    )}
+                    {(job.status === "resumable" || job.status === "cancelled") && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => onResume(job.id)}
+                      >
+                        Resume
                       </button>
                     )}
                     <button

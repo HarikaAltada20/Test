@@ -1,6 +1,6 @@
 /**
  * Exact YouTube host allowlist for desktop v1 manifests.
- * Plan: youtube.com / www / m / youtu.be only.
+ * Plan: youtube.com / www / m / youtu.be only. HTTPS required.
  */
 
 const ALLOWED_HOSTS = new Set([
@@ -28,8 +28,11 @@ export function parseAllowedYoutubeUrl(raw: unknown): YoutubeUrlResult {
   } catch {
     return { ok: false, reason: "Invalid URL" };
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return { ok: false, reason: "URL must be http(s)" };
+  // Desktop and server must agree: HTTPS only (normalize http → https for known hosts).
+  if (url.protocol === "http:") {
+    url.protocol = "https:";
+  } else if (url.protocol !== "https:") {
+    return { ok: false, reason: "URL must be https" };
   }
   const host = url.hostname.toLowerCase();
   if (!isAllowedYoutubeHost(host)) {
@@ -40,6 +43,10 @@ export function parseAllowedYoutubeUrl(raw: unknown): YoutubeUrlResult {
   }
   // Strip hash; keep query (needed for watch?v=)
   url.hash = "";
+  // Reject credentials
+  if (url.username || url.password) {
+    return { ok: false, reason: "Credentials in URL are not allowed" };
+  }
   return { ok: true, normalized: url.toString(), host };
 }
 

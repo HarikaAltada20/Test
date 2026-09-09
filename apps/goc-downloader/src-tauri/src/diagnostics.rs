@@ -1,4 +1,4 @@
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -96,7 +96,10 @@ fn probe_version(path: &Path, name: &str) -> Option<String> {
         "deno" => &["--version"],
         _ => return None,
     };
-    let output = Command::new(path).args(args).output().ok()?;
+    let mut cmd = Command::new(path);
+    cmd.args(args);
+    crate::win_cmd::hide_console_std(&mut cmd);
+    let output = cmd.output().ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
     let line = text.lines().next().unwrap_or("").trim();
     if line.is_empty() {
@@ -110,6 +113,7 @@ fn probe_version(path: &Path, name: &str) -> Option<String> {
 fn check_checksum(checksums_path: &Path, binary: &Path, name: &str) -> Option<bool> {
     let raw = std::fs::read_to_string(checksums_path).ok()?;
     let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    // Prefer final executable hashes under `binaries.<name>.sha256`.
     let expected = value
         .get("binaries")?
         .get(name)?
@@ -122,6 +126,28 @@ fn check_checksum(checksums_path: &Path, binary: &Path, name: &str) -> Option<bo
     use sha2::{Digest, Sha256};
     let hash = hex::encode(Sha256::digest(&bytes));
     Some(hash.eq_ignore_ascii_case(expected))
+}
+
+/// Hard-fail when a bundled checksum manifest marks this binary as mismatched.
+pub fn assert_sidecar_checksum(sidecar_dir: &Path, name: &str) -> AppResult<()> {
+    let checksums = sidecar_dir.join("sidecar-checksums.json");
+    let alt = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../scripts/sidecar-checksums.json");
+    let path = if checksums.exists() {
+        checksums
+    } else {
+        alt
+    };
+    if !path.exists() {
+        // Dev without executable checksums: soft-pass.
+        return Ok(());
+    }
+    let exe = crate::downloader::resolve_sidecar(sidecar_dir, name)?;
+    match check_checksum(&path, &exe, name) {
+        Some(false) => Err(AppError::Download(format!(
+            "sidecar checksum mismatch for {name}"
+        ))),
+        _ => Ok(()),
+    }
 }
 
 pub fn default_sidecar_dir(resource_dir: &Path) -> PathBuf {

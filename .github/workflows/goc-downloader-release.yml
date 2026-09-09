@@ -62,7 +62,36 @@ jobs:
       - name: Fetch and verify pinned sidecars
         run: npm run fetch-sidecars
 
-      - name: Configure code signing (optional)
+      - name: Release preflight (public keys)
+        shell: pwsh
+        run: |
+          $keysPath = "src-tauri/resources/public_keys.json"
+          if (-not (Test-Path $keysPath)) {
+            Write-Error "Missing $keysPath"
+            exit 1
+          }
+          $keys = Get-Content $keysPath -Raw | ConvertFrom-Json
+          if (-not $keys.keys -or $keys.keys.Count -lt 1) {
+            Write-Error "public_keys.json has no keys"
+            exit 1
+          }
+          foreach ($key in $keys.keys) {
+            if ($key.publicKeyBase64 -eq "REPLACE_AFTER_KEYGEN") {
+              Write-Error "public_keys.json still contains REPLACE_AFTER_KEYGEN placeholder"
+              exit 1
+            }
+            if ($env:GOC_DOWNLOAD_REQUIRE_PROD_KEYS -eq "true" -and $key.keyId -like "dev-*") {
+              Write-Error "Release requires production keyId (found $($key.keyId)). Set GOC_DOWNLOAD_REQUIRE_PROD_KEYS=false only for unsigned/dev builds."
+              exit 1
+            }
+          }
+          if (-not (Test-Path "src-tauri/resources/sidecar-checksums.json")) {
+            Write-Error "Missing sidecar binary checksums — fetch-sidecars must write resources/sidecar-checksums.json"
+            exit 1
+          }
+          Write-Host "Public key preflight OK ($($keys.keys.Count) key(s))"
+
+      - name: Configure code signing (optional — manual provisioning)
         shell: pwsh
         env:
           GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.GOC_DOWNLOADER_WINDOWS_CERTIFICATE_PFX_BASE64 }}

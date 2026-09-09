@@ -51,3 +51,15 @@ export async function saveSettings(settings: AppSettings): Promise<AppSettings> 
 export async function getDiagnostics(): Promise<DiagnosticsInfo> {
   return invoke<DiagnosticsInfo>("get_diagnostics");
 }
+
+export async function resumeJob(jobId: string): Promise<Job> {
+  return invoke<Job>("resume_job", { jobId });
+}
+
+export async function clearHistory(): Promise<number> {
+  return invoke<number>("clear_history");
+}
+
+export async function flushStatusOutbox(): Promise<void> {
+  return invoke("flush_status_outbox");
+}

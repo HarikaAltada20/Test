@@ -94,6 +94,12 @@ pub fn load_public_keys(path: &Path) -> AppResult<Vec<PublicKeyEntry>> {
 }
 
 pub fn verify_manifest_file(path: &Path, keys_path: &Path) -> AppResult<Manifest> {
+    let meta = fs::metadata(path).map_err(|e| AppError::Manifest(e.to_string()))?;
+    if meta.len() > 2 * 1024 * 1024 {
+        return Err(AppError::Manifest(
+            "manifest exceeds 2 MiB size limit".into(),
+        ));
+    }
     let raw = fs::read_to_string(path).map_err(|e| AppError::Manifest(e.to_string()))?;
     verify_manifest_json(&raw, keys_path)
 }
@@ -146,11 +152,26 @@ pub fn verify_manifest_json(raw: &str, keys_path: &Path) -> AppResult<Manifest> 
     if key.algorithm != "Ed25519" || manifest.signature.algorithm != "Ed25519" {
         return Err(AppError::Manifest("unsupported algorithm".into()));
     }
-    if key.public_key_base64 == "REPLACE_AFTER_KEYGEN" {
-        return Err(AppError::Manifest(
-            "development public key placeholder not replaced — run scripts/generate-dev-keys.mjs"
-                .into(),
-        ));
+    if key.public_key_base64 == "REPLACE_AFTER_KEYGEN"
+        || key.key_id.starts_with("dev-")
+    {
+        // Allow dev keys only in debug builds.
+        #[cfg(not(debug_assertions))]
+        {
+            if key.key_id.starts_with("dev-") || key.public_key_base64 == "REPLACE_AFTER_KEYGEN"
+            {
+                return Err(AppError::Manifest(
+                    "development signing key is not accepted in release builds".into(),
+                ));
+            }
+        }
+        #[cfg(debug_assertions)]
+        if key.public_key_base64 == "REPLACE_AFTER_KEYGEN" {
+            return Err(AppError::Manifest(
+                "development public key placeholder not replaced — run scripts/generate-dev-keys.mjs"
+                    .into(),
+            ));
+        }
     }
 
     let mut signing_value = value;

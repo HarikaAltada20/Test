@@ -12,6 +12,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -114,6 +115,7 @@ function install(source, name) {
   copyFileSync(source, join(binariesDir, `${name}.exe`));
   copyFileSync(source, join(binariesDir, `${name}-${target}.exe`));
   console.log(`Installed ${name}`);
+  return sha256(join(binariesDir, `${name}.exe`));
 }
 
 async function main() {
@@ -124,28 +126,56 @@ async function main() {
   mkdirSync(binariesDir, { recursive: true });
   mkdirSync(cacheDir, { recursive: true });
 
+  const binaryHashes = {};
+
   const yt = config.downloads.ytDlp;
   const ytPath = join(cacheDir, "yt-dlp.exe");
   await acquire(yt.url, ytPath, yt.sha256);
-  install(ytPath, "yt-dlp");
+  binaryHashes["yt-dlp"] = { sha256: install(ytPath, "yt-dlp") };
 
   const deno = config.downloads.deno;
   const denoZip = join(cacheDir, "deno.zip");
   await acquire(deno.url, denoZip, deno.sha256);
   const denoDir = join(cacheDir, "deno");
   expandZip(denoZip, denoDir);
-  install(findFile(denoDir, "deno.exe"), "deno");
+  binaryHashes.deno = { sha256: install(findFile(denoDir, "deno.exe"), "deno") };
 
   const ffmpeg = config.downloads.ffmpeg;
   const ffmpegZip = join(cacheDir, "ffmpeg.zip");
   await acquire(ffmpeg.url, ffmpegZip, ffmpeg.sha256);
   const ffmpegDir = join(cacheDir, "ffmpeg");
   expandZip(ffmpegZip, ffmpegDir);
-  install(findFile(ffmpegDir, "ffmpeg.exe"), "ffmpeg");
-  install(findFile(ffmpegDir, "ffprobe.exe"), "ffprobe");
+  binaryHashes.ffmpeg = {
+    sha256: install(findFile(ffmpegDir, "ffmpeg.exe"), "ffmpeg"),
+  };
+  binaryHashes.ffprobe = {
+    sha256: install(findFile(ffmpegDir, "ffprobe.exe"), "ffprobe"),
+  };
+
+  const binaryManifest = {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    notes: "SHA-256 of installed Windows x64 sidecar executables (not archives).",
+    binaries: binaryHashes,
+  };
+  const binaryManifestPath = join(binariesDir, "sidecar-checksums.json");
+  const resourcesManifestPath = join(
+    root,
+    "src-tauri",
+    "resources",
+    "sidecar-checksums.json",
+  );
+  mkdirSync(join(root, "src-tauri", "resources"), { recursive: true });
+  const json = `${JSON.stringify(binaryManifest, null, 2)}\n`;
+  writeFileSync(binaryManifestPath, json);
+  writeFileSync(resourcesManifestPath, json);
+  // Keep scripts/sidecar-checksums.json archive pins; merge binary hashes for diagnostics.
+  config.binaries = binaryHashes;
+  writeFileSync(checksumsPath, `${JSON.stringify(config, null, 2)}\n`);
 
   console.log("\nAll sidecars downloaded and verified.");
   console.log(`Installed in: ${binariesDir}`);
+  console.log(`Binary checksums written to ${binaryManifestPath}`);
 }
 
 main().catch((error) => {

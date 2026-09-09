@@ -12,9 +12,16 @@ import {
 import { parseVideosPerZip } from "@/lib/video-download-ui";
 import { resolveBulkDownloadItems } from "@/lib/bulk-download-resolve-items";
 import { buildDesktopManifestPayload } from "@/lib/goc-download/build-manifest";
-import { buildSignedManifest } from "@/lib/goc-download/sign";
-import { issueDesktopStatusToken } from "@/lib/goc-download/status-token";
+import {
+  assertManifestSigningReady,
+  buildSignedManifest,
+} from "@/lib/goc-download/sign";
+import {
+  assertDesktopStatusSigningReady,
+  issueDesktopStatusToken,
+} from "@/lib/goc-download/status-token";
 import { getManifestTtlSeconds } from "@/lib/goc-download/config";
+import { gocDownloadUnsignedPayloadSchema } from "@/lib/goc-download/schemas";
 import { createBulkVideoDownloadJob } from "@/lib/bulk-video-download-jobs";
 import {
   assertSessionSubmissionsOnContest,
@@ -23,9 +30,26 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_MANIFEST_ITEMS = 100;
+const MAX_BODY_BYTES = 256 * 1024;
+
 function absoluteStatusUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.origin}/api/admin/bulk-download/desktop-status`;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 export async function POST(request: Request) {
@@ -37,20 +61,32 @@ export async function POST(request: Request) {
     );
   }
 
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: `Request body too large (max ${MAX_BODY_BYTES} bytes)` },
+      { status: 413 },
+    );
+  }
+
   const { user, supabase } = access;
   const body = await request.json().catch(() => ({}));
-  const submissionIds = Array.isArray(body.submissionIds)
-    ? body.submissionIds.filter(
-        (id: unknown): id is string =>
-          typeof id === "string" && id.length > 0,
-      )
-    : [];
-  const urls = Array.isArray(body.urls)
-    ? body.urls.filter(
-        (url: unknown): url is string =>
-          typeof url === "string" && url.length > 0,
-      )
-    : [];
+  const submissionIds = uniqueStrings(
+    Array.isArray(body.submissionIds)
+      ? body.submissionIds.filter(
+          (id: unknown): id is string =>
+            typeof id === "string" && id.length > 0,
+        )
+      : [],
+  );
+  const urls = uniqueStrings(
+    Array.isArray(body.urls)
+      ? body.urls.filter(
+          (url: unknown): url is string =>
+            typeof url === "string" && url.length > 0,
+        )
+      : [],
+  );
   const contestId =
     typeof body.contestId === "string" ? body.contestId.trim() : "";
   const namingPattern = parseVideoFilenamePattern(body.namingPattern);
@@ -76,7 +112,50 @@ export async function POST(request: Request) {
     );
   }
 
+  if (submissionIds.length > MAX_MANIFEST_ITEMS) {
+    return NextResponse.json(
+      {
+        error: `Desktop manifests support at most ${MAX_MANIFEST_ITEMS} submissions. Use cloud download or split the selection.`,
+        max: MAX_MANIFEST_ITEMS,
+      },
+      { status: 400 },
+    );
+  }
+
+  if (urls.length > MAX_MANIFEST_ITEMS) {
+    return NextResponse.json(
+      {
+        error: `Desktop manifests support at most ${MAX_MANIFEST_ITEMS} URLs.`,
+        max: MAX_MANIFEST_ITEMS,
+      },
+      { status: 400 },
+    );
+  }
+
+  for (const id of submissionIds) {
+    if (!UUID_RE.test(id)) {
+      return NextResponse.json(
+        { error: `Invalid submissionId (expected UUID): ${id}` },
+        { status: 400 },
+      );
+    }
+  }
+
+  // Desktop tracking requires a contest job row so status callbacks succeed.
+  if (submissionIds.length > 0 && !contestId) {
+    return NextResponse.json(
+      { error: "contestId is required for desktop downloads of submissions" },
+      { status: 400 },
+    );
+  }
+
   if (contestId) {
+    if (!UUID_RE.test(contestId)) {
+      return NextResponse.json(
+        { error: "Invalid contestId (expected UUID)" },
+        { status: 400 },
+      );
+    }
     const contestAccess = await verifyDownloadContestAccess({
       supabase,
       viewer: user,
@@ -100,6 +179,19 @@ export async function POST(request: Request) {
         );
       }
     }
+  }
+
+  // Fail fast if signing / HMAC secrets are missing (before any DB write).
+  try {
+    assertManifestSigningReady();
+    assertDesktopStatusSigningReady();
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Desktop download signing is not configured";
+    console.error("[desktop-manifest] signing not ready:", error);
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 
   const resolved = await resolveBulkDownloadItems({
@@ -134,6 +226,16 @@ export async function POST(request: Request) {
   if (items.length === 0) {
     return NextResponse.json(
       { error: "No valid YouTube submissions to download" },
+      { status: 400 },
+    );
+  }
+
+  if (items.length > MAX_MANIFEST_ITEMS) {
+    return NextResponse.json(
+      {
+        error: `Desktop manifests support at most ${MAX_MANIFEST_ITEMS} videos.`,
+        max: MAX_MANIFEST_ITEMS,
+      },
       { status: 400 },
     );
   }
@@ -176,6 +278,28 @@ export async function POST(request: Request) {
 
   if (!built.ok) {
     return NextResponse.json({ error: built.error }, { status: 400 });
+  }
+
+  // Schema-validate + sign BEFORE creating the job so we never leave orphans.
+  const parsed = gocDownloadUnsignedPayloadSchema.safeParse(built.payload);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "Desktop manifest payload failed validation",
+        details: parsed.error.flatten(),
+      },
+      { status: 400 },
+    );
+  }
+
+  let signed;
+  try {
+    signed = buildSignedManifest(parsed.data);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to sign desktop manifest";
+    console.error("[desktop-manifest] sign failed:", error);
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 
   // Create desktop job when we have a contest context (same tables as cloud sessions).
@@ -223,16 +347,6 @@ export async function POST(request: Request) {
         { status: 500 },
       );
     }
-  }
-
-  let signed;
-  try {
-    signed = buildSignedManifest(built.payload);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to sign desktop manifest";
-    console.error("[desktop-manifest] sign failed:", error);
-    return NextResponse.json({ error: message }, { status: 503 });
   }
 
   const filename = `goc-download-${jobId.slice(0, 8)}.gocdownload`;

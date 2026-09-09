@@ -36,4 +36,20 @@ describe("goc-download youtube-url", () => {
     );
     assert.equal(parseAllowedYoutubeUrl("not-a-url").ok, false);
   });
+
+  it("normalizes http to https and rejects credentials", () => {
+    const normalized = parseAllowedYoutubeUrl(
+      "http://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    );
+    assert.equal(normalized.ok, true);
+    if (normalized.ok) {
+      assert.equal(normalized.normalized.startsWith("https://"), true);
+    }
+    assert.equal(
+      parseAllowedYoutubeUrl(
+        "https://user:pass@www.youtube.com/watch?v=dQw4w9WgXcQ",
+      ).ok,
+      false,
+    );
+  });
 });

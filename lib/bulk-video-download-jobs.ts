@@ -58,6 +58,9 @@ export type BulkVideoDownloadJobRow = {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string;
+  /** cloud (default) | desktop — requires 20260905 migration. */
+  source?: "cloud" | "desktop";
+  delivery_mode?: string | null;
 };
 
 /** API/session shape returned to the client after joining submissions meta. */
@@ -166,6 +169,12 @@ function normalizeJobRow(raw: Record<string, unknown>): BulkVideoDownloadJobRow 
     started_at: raw.started_at ? String(raw.started_at) : null,
     finished_at: raw.finished_at ? String(raw.finished_at) : null,
     updated_at: String(raw.updated_at || ""),
+    source:
+      raw.source === "desktop" || raw.source === "cloud"
+        ? raw.source
+        : undefined,
+    delivery_mode:
+      typeof raw.delivery_mode === "string" ? raw.delivery_mode : null,
   };
 }
 
@@ -491,6 +500,16 @@ export async function createBulkVideoDownloadJob(
       /source|delivery_mode/i.test(message) &&
       (input.source || input.deliveryMode !== undefined);
     if (missingDesktopCols) {
+      if (process.env.NODE_ENV === "production" && input.source === "desktop") {
+        console.error(
+          "[bulk-video-download-jobs] desktop columns missing — apply 20260905 migration",
+        );
+        return {
+          data: null,
+          error:
+            "Desktop download schema is not migrated. Apply db/migrations/20260905_bulk_video_download_desktop.sql",
+        };
+      }
       delete insertRow.source;
       delete insertRow.delivery_mode;
       const retry = await admin
@@ -540,6 +559,8 @@ export type UpdateBulkVideoDownloadJobInput = {
   zipParts?: BulkVideoDownloadZipPart[];
   itemStatuses?: BulkVideoDownloadItemStatus[];
   errorMessage?: string | null;
+  /** Set when desktop reports started (first time only). */
+  startedAt?: string | null;
   /** Mark floating summary button as seen (sets summary_viewed + summary_viewed_at). */
   summaryViewed?: boolean;
 };
@@ -564,6 +585,9 @@ export async function updateBulkVideoDownloadJob(
   }
   if (input.errorMessage !== undefined) {
     patch.error_message = input.errorMessage;
+  }
+  if (input.startedAt) {
+    patch.started_at = input.startedAt;
   }
   if (input.summaryViewed === true) {
     patch.summary_viewed = true;
@@ -594,15 +618,32 @@ export async function updateBulkVideoDownloadJob(
     if (itemsResult.error) {
       return { data: null, error: itemsResult.error };
     }
-    // Terminal sessions: derive counts from all stored item rows (authoritative).
-    if (input.status === "completed" || input.status === "failed") {
-      const allItems = await loadJobItemStatuses(input.id);
-      patch.success_count = allItems.filter(
-        (item) => item.status === "success",
-      ).length;
-      patch.failed_count = allItems.filter(
-        (item) => item.status === "failed",
-      ).length;
+    // Prefer authoritative counts from stored item rows whenever items change.
+    const allItems = await loadJobItemStatuses(input.id);
+    const successFromItems = allItems.filter(
+      (item) => item.status === "success",
+    ).length;
+    const failedFromItems = allItems.filter(
+      (item) => item.status === "failed",
+    ).length;
+    if (
+      input.status === "completed" ||
+      input.status === "failed" ||
+      successFromItems > 0 ||
+      failedFromItems > 0
+    ) {
+      patch.success_count = Math.max(
+        typeof patch.success_count === "number"
+          ? (patch.success_count as number)
+          : 0,
+        successFromItems,
+      );
+      patch.failed_count = Math.max(
+        typeof patch.failed_count === "number"
+          ? (patch.failed_count as number)
+          : 0,
+        failedFromItems,
+      );
     }
   }
 

@@ -75,14 +75,15 @@ export function NewDownload() {
         filters: [{ name: "Text", extensions: ["txt"] }],
       });
       if (typeof selected !== "string") return;
-      const text = await fetch(`file://${selected}`).then((r) => r.text()).catch(() => null);
-      if (text) {
-        setBulk((prev) => (prev ? `${prev}\n${text}` : text));
-        return;
-      }
-      setError("Could not read the selected text file. Paste URLs into the list field.");
-    } catch {
-      setError("File picker is only available in the desktop app.");
+      const { readTextFile } = await import("@tauri-apps/plugin-fs");
+      const text = await readTextFile(selected);
+      setBulk((prev) => (prev ? `${prev}\n${text}` : text));
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Could not read the selected text file. Paste URLs into the list field.",
+      );
     }
   }
 

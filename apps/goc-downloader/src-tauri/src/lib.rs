@@ -10,13 +10,15 @@ mod progress;
 mod settings;
 mod status_callback;
 mod urls;
+mod win_cmd;
 
 use commands::AppState;
 use db::Db;
 use parking_lot::Mutex;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
+use tokio::sync::Mutex as AsyncMutex;
 use tracing_subscriber::EnvFilter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,7 +32,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             tracing::info!("single-instance argv: {:?}", argv);
-            // Forward deep-link / file-association args to the existing window.
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_focus();
                 if argv.len() > 1 {
@@ -55,11 +56,21 @@ pub fn run() {
             std::fs::create_dir_all(&logs)?;
 
             let db = Db::open(app_data.join("jobs.db"))?;
+            let _ = db.purge_old_history(30);
             app.manage(Arc::new(AppState {
                 db: Mutex::new(db),
                 app_data,
-                cancel_flags: Mutex::new(HashSet::new()),
+                cancel_flags: Mutex::new(HashMap::new()),
+                active_children: Arc::new(AsyncMutex::new(Vec::new())),
             }));
+
+            // Forward OS argv (file association) on first launch.
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            if !args.is_empty() {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("deep-link", args);
+                }
+            }
 
             #[cfg(desktop)]
             {
@@ -74,14 +85,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::start_manual_download,
             commands::import_manifest,
+            commands::resume_job,
             commands::cancel_job,
             commands::list_jobs,
             commands::get_job,
+            commands::clear_history,
             commands::open_path,
             commands::get_settings,
             commands::save_settings,
             commands::get_diagnostics,
             commands::verify_manifest_file,
+            commands::flush_status_outbox,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

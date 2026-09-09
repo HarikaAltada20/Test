@@ -32,9 +32,17 @@ Fixed cross-language vector: `lib/goc-download/test-vector.ts`.
 | `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL` | no | Installer / download page link in the dialog |
 | `NEXT_PUBLIC_CLOUD_DOWNLOAD_FALLBACK_ENABLED` | no | Default on; set `false` to hide cloud option when desktop is enabled |
 | `GOC_DOWNLOAD_SIGNING_PRIVATE_KEY` | yes (desktop) | Ed25519 PKCS8 PEM private key (escape newlines as `\n` in env) |
-| `GOC_DOWNLOAD_SIGNING_KEY_ID` | no | Key id embedded in manifests (default `goc-download-dev`) |
-| `GOC_DOWNLOAD_STATUS_HMAC_SECRET` | yes (desktop) | Dedicated HMAC secret for status tokens — **do not reuse `CRON_SECRET`** |
+| `GOC_DOWNLOAD_SIGNING_KEY_ID` | yes (desktop) | Key id embedded in manifests; must match a public key shipped in the desktop app |
+| `GOC_DOWNLOAD_STATUS_HMAC_SECRET` | yes (desktop) | Dedicated HMAC secret for status tokens (≥32 chars) — **do not reuse `CRON_SECRET`** |
 | `GOC_DOWNLOAD_MANIFEST_TTL_SECONDS` | no | Manifest expiry window (default `3600`) |
+
+Desktop v1 limits: at most **100** videos per `.gocdownload` manifest. HTTPS YouTube URLs only.
+
+### Release notes (manual production key/signing)
+
+1. Generate a production Ed25519 keypair; store the private key in Vercel as `GOC_DOWNLOAD_SIGNING_PRIVATE_KEY` and set `GOC_DOWNLOAD_SIGNING_KEY_ID`.
+2. Before tagging a release, replace `apps/goc-downloader/src-tauri/resources/public_keys.json` with the matching production public key (do not ship `dev-*` for production).
+3. Authenticode / Tauri updater certificates are provisioned manually via GitHub secrets; the workflow documents placeholders but does not invent secrets.
 
 ### Generating a signing key (OpenSSL)
 
