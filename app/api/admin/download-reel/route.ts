@@ -14,6 +14,7 @@ import {
   verifyAdminOrBrandDownloadAccess,
 } from "@/lib/video-download-auth";
 import { buildViewsBasedVideoFilename } from "@/lib/utils";
+import { isDesktopDownloadApiEnabled } from "@/lib/goc-download/config";
 
 function parseInstagramError(errorMessage: string): {
   userMessage: string;
@@ -439,6 +440,17 @@ export async function GET(request: Request) {
       return NextResponse.json(
         { error: "Only Instagram & YouTube supported" },
         { status: 400 }
+      );
+    }
+
+    if (isYouTube && isDesktopDownloadApiEnabled()) {
+      return NextResponse.json(
+        {
+          error:
+            "YouTube downloads require the desktop app. Use Download file (.gocdownload) instead of the server download.",
+          code: "DESKTOP_REQUIRED",
+        },
+        { status: 400 },
       );
     }
 

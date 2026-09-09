@@ -1,0 +1,9 @@
+{
+    "keys":  [
+                 {
+                     "keyId":  "prod-1",
+                     "publicKeyBase64":  "nGw3+ryKhn6sBVQlpCMGdVj3ZGFFt17UaRwgLVz+kUU=",
+                     "algorithm":  "Ed25519"
+                 }
+             ]
+}

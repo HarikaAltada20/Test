@@ -27,6 +27,68 @@ const NATIVE_DOWNLOAD_SETTLE_MS = 2000;
 const QUEUED_DOWNLOAD_POLL_MS = 2000;
 const QUEUED_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
+export type DownloadVideoPlatform = "instagram" | "youtube" | "unsupported";
+
+/**
+ * Classify a submission for bulk/single download routing.
+ * Prefer content_link host; fall back to platform / contest platform fields.
+ */
+export function classifyDownloadVideoPlatform(input: {
+  platform?: string | null;
+  contestPlatform?: string | null;
+  contentLink?: string | null;
+}): DownloadVideoPlatform {
+  const platform = (
+    input.platform ||
+    input.contestPlatform ||
+    ""
+  ).toLowerCase();
+  const link = (input.contentLink || "").toLowerCase();
+
+  if (platform.includes("tiktok") || link.includes("tiktok.com")) {
+    return "unsupported";
+  }
+  if (link.includes("instagram.com") || platform.includes("instagram")) {
+    return "instagram";
+  }
+  if (
+    link.includes("youtube.com") ||
+    link.includes("youtu.be") ||
+    platform.includes("youtube")
+  ) {
+    return "youtube";
+  }
+  return "unsupported";
+}
+
+/**
+ * Split an ordered selection into YouTube vs Instagram IDs for dual delivery.
+ */
+export function splitDownloadSubmissionIdsByPlatform(
+  orderedIds: string[],
+  lookup: (id: string) => {
+    platform?: string | null;
+    contestPlatform?: string | null;
+    contentLink?: string | null;
+  } | null,
+): {
+  youtubeIds: string[];
+  instagramIds: string[];
+  unsupportedIds: string[];
+} {
+  const youtubeIds: string[] = [];
+  const instagramIds: string[] = [];
+  const unsupportedIds: string[] = [];
+  for (const id of orderedIds) {
+    const row = lookup(id);
+    const kind = classifyDownloadVideoPlatform(row || {});
+    if (kind === "youtube") youtubeIds.push(id);
+    else if (kind === "instagram") instagramIds.push(id);
+    else unsupportedIds.push(id);
+  }
+  return { youtubeIds, instagramIds, unsupportedIds };
+}
+
 /**
  * Client/server helper: whether a submission can be downloaded as IG/YT video.
  */
@@ -35,23 +97,8 @@ export function canDownloadSubmissionVideo(input: {
   contestPlatform?: string | null;
   contentLink?: string | null;
 }): boolean {
-  const platform = (
-    input.platform ||
-    input.contestPlatform ||
-    ""
-  ).toLowerCase();
-  const link = input.contentLink || "";
-
-  if (platform.includes("tiktok")) return false;
-
-  const isInstagram =
-    platform.includes("instagram") || link.includes("instagram.com");
-  const isYouTube =
-    platform.includes("youtube") ||
-    link.includes("youtube.com") ||
-    /youtu\.?be/i.test(link);
-
-  return isInstagram || isYouTube;
+  const kind = classifyDownloadVideoPlatform(input);
+  return kind === "instagram" || kind === "youtube";
 }
 
 export function canBulkDownloadContestVideos(

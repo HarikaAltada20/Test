@@ -14,6 +14,8 @@ export type BulkVideoDownloadJobSummary = {
   fileNamePrefix: string | null;
   createdAt: string;
   finishedAt: string | null;
+  source?: "cloud" | "desktop";
+  deliveryMode?: string | null;
 };
 
 function createdAtMs(value: string | null | undefined): number {
@@ -231,6 +233,8 @@ export function jobRowToDownloadSummary(row: {
   file_name_prefix?: string | null;
   created_at?: string | null;
   finished_at?: string | null;
+  source?: string | null;
+  delivery_mode?: string | null;
 }): BulkVideoDownloadJobSummary {
   const status =
     row.status === "queued" ||
@@ -257,5 +261,8 @@ export function jobRowToDownloadSummary(row: {
         : null,
     createdAt: String(row.created_at || ""),
     finishedAt: row.finished_at ? String(row.finished_at) : null,
+    source: row.source === "desktop" ? "desktop" : "cloud",
+    deliveryMode:
+      typeof row.delivery_mode === "string" ? row.delivery_mode : null,
   };
 }
