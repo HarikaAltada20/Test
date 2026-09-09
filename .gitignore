@@ -49,3 +49,4 @@ apps/goc-downloader/*.nsis.zip
 apps/goc-downloader/logs/
 **/*.gocdownload.local
 .env.goc-download.local
+apps/goc-downloader/
