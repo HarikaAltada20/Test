@@ -1,5 +1,6 @@
 import {
   getSubmissionMetricBundle,
+  contestMatchesAnalyticsPlatforms,
   normalizeAnalyticsPlatform,
   normalizeSubmissionStatus,
   type AdminAnalyticsBaseStatus,
@@ -427,4 +428,22 @@ export function normalizeBrandPlatformKey(contest: {
     contest.platform,
     contest.contest_based_details,
   );
+}
+
+/** True when contest platform CSV overlaps any allowed analytics platform. */
+export function brandContestMatchesPlatforms(
+  contest: {
+    platform?: string | null;
+    contest_based_details?: unknown;
+  },
+  allowed: Iterable<string>,
+): boolean {
+  return contestMatchesAnalyticsPlatforms(contest, allowed);
+}
+
+export function isBrandTwitterContest(contest: {
+  platform?: string | null;
+  contest_based_details?: unknown;
+}): boolean {
+  return normalizeBrandPlatformKey(contest) === "twitter";
 }

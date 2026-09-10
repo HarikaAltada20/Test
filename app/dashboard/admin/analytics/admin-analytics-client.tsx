@@ -450,8 +450,12 @@ export default function AdminAnalyticsClient() {
           { signal, cache: "no-store" },
         );
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || "Failed to load analytics");
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          console.error("Admin analytics load failed", res.status, body);
+          toast.error(body.error || "Failed to load analytics");
+          return;
         }
         const json = await res.json();
         if (!active) return;

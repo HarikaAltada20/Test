@@ -1,3 +1,4 @@
+import { parseCampaignPlatformTokens } from "@/lib/campaign-platform-filter";
 import { computeEffectiveCpmUsd } from "@/lib/report-export-metrics";
 import {
   getPoolBudgetCentsFromDetails,
@@ -250,20 +251,140 @@ export function getContestBudgetCents(contest: AdminAnalyticsContest): number {
   return getPoolBudgetCentsFromDetails(contest.contest_type, details);
 }
 
-export function normalizeAnalyticsPlatform(
+export type AnalyticsContestPlatform = AdminAnalyticsPlatform | "twitter";
+
+/**
+ * Expand contest.platform CSV (e.g. "youtube,instagram,tiktok") into
+ * canonical analytics platform tokens. Multi-platform video campaigns store
+ * platforms as a comma-separated string on contests.platform.
+ */
+export function listAnalyticsContestPlatforms(
   raw: string | null | undefined,
   contestBasedDetails?: unknown,
-): AdminAnalyticsPlatform | "twitter" | "unknown" {
-  const p = (raw ?? "").toString().trim().toLowerCase();
-  if (p === "x" || p === "twitter") return "twitter";
-  if (p === "tiktok" || p === "tik_tok" || p === "tik-tok") return "tiktok";
-  if (p === "youtube" || p === "instagram") return p;
+): AnalyticsContestPlatform[] {
+  const asText =
+    raw == null || raw === ""
+      ? ""
+      : typeof raw === "string"
+        ? raw
+        : String(raw);
+  const tokens = parseCampaignPlatformTokens(asText);
+  const ordered: AnalyticsContestPlatform[] = [];
+  for (const token of tokens) {
+    if (token === "twitter") {
+      if (!ordered.includes("twitter")) ordered.push("twitter");
+      continue;
+    }
+    if (
+      (ADMIN_ANALYTICS_PLATFORMS as string[]).includes(token) &&
+      !ordered.includes(token)
+    ) {
+      ordered.push(token);
+    }
+  }
+  if (ordered.length > 0) return ordered;
+
   const details = contestBasedDetails as
     | { twitter_campaign?: unknown }
     | null
     | undefined;
-  if (details?.twitter_campaign != null) return "twitter";
-  return "unknown";
+  if (details?.twitter_campaign != null) return ["twitter"];
+  return [];
+}
+
+export function normalizeAnalyticsPlatform(
+  raw: string | null | undefined,
+  contestBasedDetails?: unknown,
+): AdminAnalyticsPlatform | "twitter" | "unknown" {
+  const platforms = listAnalyticsContestPlatforms(raw, contestBasedDetails);
+  if (platforms.length === 0) return "unknown";
+  const video = platforms.find((p) =>
+    (ADMIN_ANALYTICS_PLATFORMS as string[]).includes(p),
+  );
+  return video ?? platforms[0] ?? "unknown";
+}
+
+/** True when the contest overlaps any of the selected analytics platforms. */
+export function contestMatchesAnalyticsPlatforms(
+  contest: {
+    platform?: string | null;
+    contest_based_details?: unknown;
+  },
+  platforms: Iterable<string>,
+): boolean {
+  const wanted = new Set(platforms);
+  if (wanted.size === 0) return false;
+  return listAnalyticsContestPlatforms(
+    contest.platform,
+    contest.contest_based_details,
+  ).some((platform) => wanted.has(platform));
+}
+
+/**
+ * Contest types for analytics filters. Multi-platform campaigns store per-platform
+ * contest_type under contest_based_details.youtube|instagram|tiktok.
+ */
+export function listAnalyticsContestTypes(contest: {
+  contest_type?: string | null;
+  platform?: string | null;
+  contest_based_details?: unknown;
+}): AdminAnalyticsContestType[] {
+  const ordered: AdminAnalyticsContestType[] = [];
+  const add = (value: unknown) => {
+    const type = (value ?? "").toString().trim().toLowerCase();
+    if (isAdminAnalyticsContestType(type) && !ordered.includes(type)) {
+      ordered.push(type);
+    }
+  };
+
+  add(contest.contest_type);
+
+  const details =
+    contest.contest_based_details &&
+    typeof contest.contest_based_details === "object"
+      ? (contest.contest_based_details as Record<string, unknown>)
+      : null;
+  if (details) {
+    for (const platform of listAnalyticsContestPlatforms(
+      contest.platform,
+      contest.contest_based_details,
+    )) {
+      if (platform === "twitter") continue;
+      const block = details[platform];
+      if (block && typeof block === "object") {
+        add((block as { contest_type?: unknown }).contest_type);
+      }
+    }
+  }
+
+  return ordered;
+}
+
+/** True when any contest type overlaps the selected analytics type filters. */
+export function contestMatchesAnalyticsContestTypes(
+  contest: {
+    contest_type?: string | null;
+    platform?: string | null;
+    contest_based_details?: unknown;
+  },
+  contestTypes: Iterable<string>,
+): boolean {
+  const wanted = new Set(contestTypes);
+  if (wanted.size === 0) return false;
+  return listAnalyticsContestTypes(contest).some((type) => wanted.has(type));
+}
+
+/** True when the contest includes at least one admin video analytics platform. */
+export function hasAdminAnalyticsVideoPlatform(
+  contest: {
+    platform?: string | null;
+    contest_based_details?: unknown;
+  },
+): boolean {
+  return listAnalyticsContestPlatforms(
+    contest.platform,
+    contest.contest_based_details,
+  ).some((platform) => (ADMIN_ANALYTICS_PLATFORMS as string[]).includes(platform));
 }
 
 /** Admin-approved campaigns (approved or published — excludes draft/pending/rejected). */
@@ -301,14 +422,44 @@ function nestedStat(
   return 0;
 }
 
+export function resolveAnalyticsSubmissionPlatform(
+  submissionPlatform: string | null | undefined,
+  contestPlatform?: string | null,
+  contestBasedDetails?: unknown,
+  otherStats?: Record<string, unknown> | null,
+): AdminAnalyticsPlatform | "twitter" | "unknown" {
+  const fromSub = normalizeAnalyticsPlatform(
+    submissionPlatform,
+    contestBasedDetails,
+  );
+  if (fromSub !== "unknown") return fromSub;
+
+  const stats = otherStats ?? {};
+  for (const key of ["instagram", "youtube", "tiktok"] as const) {
+    const nested = stats[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      return key;
+    }
+  }
+
+  const contestPlatforms = listAnalyticsContestPlatforms(
+    contestPlatform,
+    contestBasedDetails,
+  );
+  if (contestPlatforms.length === 1) return contestPlatforms[0];
+  return "unknown";
+}
+
 export function getSubmissionMetricBundle(
   sub: AdminAnalyticsSubmission,
   contestPlatform?: string | null,
   contestBasedDetails?: unknown,
 ): { views: number; likes: number; comments: number; shares: number } {
-  const platform = normalizeAnalyticsPlatform(
-    sub.platform || contestPlatform,
+  const platform = resolveAnalyticsSubmissionPlatform(
+    sub.platform,
+    contestPlatform,
     contestBasedDetails,
+    sub.other_stats,
   );
   const stats = sub.other_stats ?? {};
   const directViews = Number(sub.views ?? 0);
@@ -329,13 +480,25 @@ export function getSubmissionMetricBundle(
 
   return {
     views: Math.max(0, views),
-    likes: nestedStat(stats, platform, ["likes", "like_count"]),
+    likes: nestedStat(stats, platform, [
+      "likes",
+      "like_count",
+      "likes_count",
+      "likeCount",
+    ]),
     comments: nestedStat(stats, platform, [
       "comments",
       "comment_count",
+      "comments_count",
       "replies",
     ]),
-    shares: nestedStat(stats, platform, ["shares", "share_count", "retweets"]),
+    shares: nestedStat(stats, platform, [
+      "shares",
+      "share_count",
+      "shares_count",
+      "retweets",
+      "reposts",
+    ]),
   };
 }
 
@@ -395,13 +558,10 @@ export function aggregateAdminAnalytics(input: {
       return false;
     }
     if (!isApprovedAnalyticsContest(c)) return false;
-    const type = (c.contest_type ?? "").toLowerCase();
-    if (!isAdminAnalyticsContestType(type) || !contestTypeSet.has(type)) {
+    if (!contestMatchesAnalyticsContestTypes(c, contestTypeSet)) {
       return false;
     }
-    const p = normalizeAnalyticsPlatform(c.platform, c.contest_based_details);
-    if (!isAdminAnalyticsPlatform(p)) return false;
-    return platformSet.has(p);
+    return contestMatchesAnalyticsPlatforms(c, platformSet);
   });
 
   const matchingContestIds = new Set(matchingContests.map((c) => c.id));
@@ -413,12 +573,18 @@ export function aggregateAdminAnalytics(input: {
     const t = new Date(sub.created_at).getTime();
     if (Number.isNaN(t) || t < fromMs || t > toMs) return false;
     const contest = contestById.get(sub.contest_id);
-    const p = normalizeAnalyticsPlatform(
-      sub.platform || contest?.platform,
-      contest?.contest_based_details,
-    );
-    if (!isAdminAnalyticsPlatform(p)) return false;
-    return platformSet.has(p);
+    if (sub.platform) {
+      const p = normalizeAnalyticsPlatform(
+        sub.platform,
+        contest?.contest_based_details,
+      );
+      if (!isAdminAnalyticsPlatform(p)) return false;
+      return platformSet.has(p);
+    }
+    // Multi-platform contests may omit submission.platform; match on contest overlap.
+    return contest
+      ? contestMatchesAnalyticsPlatforms(contest, platformSet)
+      : false;
   });
 
   const viewsByStatus: AdminAnalyticsViewsByStatus = {
