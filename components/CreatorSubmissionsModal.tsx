@@ -3258,45 +3258,59 @@ export function CreatorSubmissionsModal({
                         "instagram",
                       );
 
-                      const likes = isTwitterTweet
-                        ? submission.other_stats?.likes || 0
-                        : submission.other_stats?.youtube?.likes ||
-                          submission.other_stats?.instagram?.likes ||
-                          (isTikTokRow
-                            ? Number(tt?.like_count ?? tt?.likes ?? 0)
-                            : 0);
-                      const comments = isTwitterTweet
-                        ? submission.other_stats?.replies || 0
-                        : submission.other_stats?.youtube?.comments ||
-                          submission.other_stats?.instagram?.comments ||
-                          (isTikTokRow
-                            ? Number(tt?.comment_count ?? tt?.comments ?? 0)
-                            : 0);
-                      const platformStats =
-                        submission.other_stats?.instagram ||
-                        submission.other_stats?.tiktok ||
-                        submission.other_stats ||
-                        {};
                       const youtubeStats =
                         (submission.other_stats as any)?.youtube || {};
+                      const igStats = isInstagramRow
+                        ? ((submission.other_stats as any)?.instagram ||
+                            submission.other_stats ||
+                            {})
+                        : {};
+                      const likes = isTwitterTweet
+                        ? submission.other_stats?.likes || 0
+                        : isYouTubeRow
+                          ? Number(
+                              youtubeStats.likes ??
+                                youtubeStats.like_count ??
+                                0,
+                            )
+                          : isInstagramRow
+                            ? Number(igStats.likes ?? igStats.like_count ?? 0)
+                            : isTikTokRow
+                              ? Number(tt?.like_count ?? tt?.likes ?? 0)
+                              : 0;
+                      const comments = isTwitterTweet
+                        ? submission.other_stats?.replies || 0
+                        : isYouTubeRow
+                          ? Number(
+                              youtubeStats.comments ??
+                                youtubeStats.comment_count ??
+                                0,
+                            )
+                          : isInstagramRow
+                            ? Number(
+                                igStats.comments ?? igStats.comment_count ?? 0,
+                              )
+                            : isTikTokRow
+                              ? Number(tt?.comment_count ?? tt?.comments ?? 0)
+                              : 0;
                       const shares = isTikTokRow
                         ? Number(tt?.share_count ?? tt?.shares ?? 0)
-                        : Number(
-                            (platformStats as any)?.share_count ??
-                              (platformStats as any)?.shares ??
-                              0,
-                          );
-                      const saves =
-                        (platformStats as any)?.saves ||
-                        (platformStats as any)?.saved ||
-                        0;
-                      const reach = (platformStats as any)?.reach || 0;
-                      const totalInteractions =
-                        (platformStats as any)?.total_interactions || 0;
-                      const avgWatchTimeMs =
-                        (platformStats as any)?.avg_watch_time_ms || 0;
-                      const totalWatchTimeMs =
-                        (platformStats as any)?.total_watch_time_ms || 0;
+                        : isInstagramRow
+                          ? Number(igStats.share_count ?? igStats.shares ?? 0)
+                          : isYouTubeRow
+                            ? Number(youtubeStats.shares ?? 0)
+                            : 0;
+                      const saves = Number(igStats.saves ?? igStats.saved ?? 0);
+                      const reach = Number(igStats.reach ?? 0);
+                      const totalInteractions = Number(
+                        igStats.total_interactions ?? 0,
+                      );
+                      const avgWatchTimeMs = Number(
+                        igStats.avg_watch_time_ms ?? 0,
+                      );
+                      const totalWatchTimeMs = Number(
+                        igStats.total_watch_time_ms ?? 0,
+                      );
                       const ytDislikes = Number(youtubeStats.dislikes ?? 0);
                       const ytShares = Number(youtubeStats.shares ?? 0);
                       const ytAvgViewPct = Number(
@@ -3312,17 +3326,17 @@ export function CreatorSubmissionsModal({
                         youtubeStats.duration_seconds ?? 0,
                       );
                       const igReelDurationSeconds = Number(
-                        (platformStats as any)?.duration_seconds ?? 0,
+                        igStats.duration_seconds ?? 0,
                       );
-                      const igRepostsRaw = (platformStats as any)?.reposts;
+                      const igRepostsRaw = igStats.reposts;
                       const igReposts =
                         igRepostsRaw != null &&
                         Number.isFinite(Number(igRepostsRaw))
                           ? Number(igRepostsRaw)
                           : null;
                       const igReelsSkipRate =
-                        (platformStats as any)?.reels_skip_rate != null
-                          ? Number((platformStats as any).reels_skip_rate)
+                        igStats.reels_skip_rate != null
+                          ? Number(igStats.reels_skip_rate)
                           : null;
                       const ytEngagedViews = Number(
                         youtubeStats.engaged_views ?? 0,
@@ -3331,18 +3345,14 @@ export function CreatorSubmissionsModal({
                         youtubeStats.subscribers_gained ?? 0,
                       );
 
-                      const tiktokViewsForRate =
-                        isTikTokContest && !isTwitterTweet
-                          ? effectiveTikTokSubmissionViews(submission)
-                          : 0;
-                      const tiktokTotalEngagement =
-                        isTikTokContest && !isTwitterTweet
-                          ? Number(likes) + Number(comments) + Number(shares)
-                          : 0;
+                      const tiktokViewsForRate = isTikTokRow
+                        ? effectiveTikTokSubmissionViews(submission)
+                        : 0;
+                      const tiktokTotalEngagement = isTikTokRow
+                        ? Number(likes) + Number(comments) + Number(shares)
+                        : 0;
                       const tiktokEngagementRatePct =
-                        isTikTokContest &&
-                        !isTwitterTweet &&
-                        tiktokViewsForRate > 0
+                        isTikTokRow && tiktokViewsForRate > 0
                           ? Math.round(
                               (tiktokTotalEngagement / tiktokViewsForRate) *
                                 10000,
@@ -4220,7 +4230,7 @@ export function CreatorSubmissionsModal({
                               {/* Views, Likes, Comments for non-Twitter submissions */}
                               {(!isYouTubeContest || showYtColumn("views")) && (
                                 <TableCell className="text-center font-mono">
-                                  {(isTikTokContest && !isTwitterTweet
+                                  {(isTikTokRow
                                     ? effectiveTikTokSubmissionViews(submission)
                                     : Number(submission.views ?? 0)
                                   ).toLocaleString()}
@@ -4250,7 +4260,7 @@ export function CreatorSubmissionsModal({
                                 !isInstagramContest &&
                                 !isTikTokContest && (
                                 <TableCell className="text-center font-mono">
-                                  {ytShares > 0
+                                  {isYouTubeRow && ytShares > 0
                                     ? formatMetricValue(ytShares)
                                     : "—"}
                                 </TableCell>
@@ -4401,7 +4411,7 @@ export function CreatorSubmissionsModal({
                                             : "text-slate-400",
                                         )}
                                       >
-                                        No data
+                                        {isYouTubeRow ? "No data" : "—"}
                                       </span>
                                     )}
                                   </TableCell>
@@ -4509,6 +4519,7 @@ export function CreatorSubmissionsModal({
                                 showYtColumn("top_traffic_source") && (
                                   <TableCell className="text-center font-mono text-xs">
                                     {(() => {
+                                      if (!isYouTubeRow) return "—";
                                       const ts =
                                         youtubeStats.traffic_sources as
                                           | Record<string, number>
@@ -4537,7 +4548,11 @@ export function CreatorSubmissionsModal({
                               {(isInstagramContest || isTikTokContest) && (
                                 <>
                                   <TableCell className="text-center font-mono">
-                                    {formatMetricValue(shares)}
+                                    {isYouTubeRow ||
+                                    isInstagramRow ||
+                                    isTikTokRow
+                                      ? formatMetricValue(shares)
+                                      : "—"}
                                   </TableCell>
                                   {isInstagramContest && (
                                     <>
