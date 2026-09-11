@@ -151,33 +151,75 @@ export function Nav({
     return null;
   }
 
+  const isCreatorsPage = pathname === "/creators";
+
+  const creatorsNavLinks = [
+    { label: "Home", href: marketingHomeHref },
+    { label: "How it works", href: "/creators#how-it-works" },
+    { label: "Why GOC", href: "/creators#why-goc" },
+    { label: "FAQ", href: "/creators#faq" },
+    { label: "For Brands", href: "/brands" },
+    { label: "Contact", href: "/contact" },
+  ] as const;
+
+  const scrollToCreatorsSection = (href: string) => {
+    if (!href.includes("#")) {
+      window.location.href = href;
+      return;
+    }
+    const id = href.split("#")[1];
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      setOpen(false);
+      return;
+    }
+    window.location.href = href;
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full">
-      {/* Premium Background with Strategic Gradients */}
-      <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.1),transparent)]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.08),transparent)]"></div>
+      {isCreatorsPage ? (
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+      ) : (
+        <>
+          {/* Premium Background with Strategic Gradients */}
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.1),transparent)]"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.08),transparent)]"></div>
 
-      {/* Premium Grid Pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+          {/* Premium Grid Pattern */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
 
-      {/* Refined Border */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
+          {/* Refined Border */}
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
+        </>
+      )}
 
       <div className="relative">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-20 items-center justify-between md:justify-around">
+        <div
+          className={cn(
+            "mx-auto px-4 sm:px-6 lg:px-8",
+            isCreatorsPage ? "max-w-[1280px]" : "container"
+          )}
+        >
+          <div
+            className={cn(
+              "flex h-20 items-center justify-between",
+              !isCreatorsPage && "md:justify-around"
+            )}
+          >
             {/* Enhanced Logo Section */}
-            <div className="flex items-center">
+            <div className="flex items-center shrink-0">
               <Link
                 href={marketingHomeHref}
                 className="group flex items-center transition-all duration-300"
               >
                 <div className="relative">
-                  {/* Subtle Glow Effect */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 to-purple-600/10 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                  {!isCreatorsPage && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 to-purple-600/10 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                  )}
 
-                  {/* Refined Logo Container */}
                   <div className="relative ">
                     <Image
                       src={logo}
@@ -188,59 +230,96 @@ export function Nav({
                     />
                   </div>
 
-                  {/* Minimal Accent */}
-                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-gradient-to-r from-violet-400 to-purple-500 rounded-full opacity-40 group-hover:opacity-80 transition-opacity duration-300"></div>
+                  {!isCreatorsPage && (
+                    <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-gradient-to-r from-violet-400 to-purple-500 rounded-full opacity-40 group-hover:opacity-80 transition-opacity duration-300"></div>
+                  )}
                 </div>
               </Link>
             </div>
 
             {/* Center Navigation - Desktop */}
-            <div className="hidden md:flex items-center space-x-2">
-              <nav className="flex items-center md:ml-20 space-x-1">
-                <button
-                  onClick={() => {
-                    setBrandsLoading(true);
-                    window.location.href = '/brands';
-                  }}
-                  disabled={brandsLoading}
-                  className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
-                    pathname === "/brands"
-                      ? "text-purple-400"
-                      : "text-slate-300 hover:text-purple-400",
-                    brandsLoading && "opacity-70 cursor-not-allowed"
-                  )}
-                >
-                  {brandsLoading ? (
-                    <ButtonLoadingSpinner />
-                  ) : (
-                    <Crown className="h-4 w-4 text-purple-400 shrink-0" />
-                  )}
-                  For Brands
-                </button>
+            <div className="hidden md:flex items-center space-x-2 flex-1 justify-center">
+              {isCreatorsPage ? (
+                <nav className="flex items-center gap-1 lg:gap-2">
+                  {creatorsNavLinks.map((link) => (
+                    <button
+                      key={link.label}
+                      type="button"
+                      onClick={() => {
+                        if (link.label === "For Brands") {
+                          setBrandsLoading(true);
+                          window.location.href = "/brands";
+                          return;
+                        }
+                        if (link.href.startsWith("/creators#")) {
+                          scrollToCreatorsSection(link.href);
+                          return;
+                        }
+                        window.location.href = link.href;
+                      }}
+                      disabled={link.label === "For Brands" && brandsLoading}
+                      className={cn(
+                        "px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium text-zinc-400 transition-colors duration-200 hover:text-white whitespace-nowrap",
+                        link.label === "For Brands" &&
+                          brandsLoading &&
+                          "opacity-70 cursor-not-allowed"
+                      )}
+                    >
+                      {link.label === "For Brands" && brandsLoading ? (
+                        <ButtonLoadingSpinner />
+                      ) : (
+                        link.label
+                      )}
+                    </button>
+                  ))}
+                </nav>
+              ) : (
+                <nav className="flex items-center md:ml-20 space-x-1">
+                  <button
+                    onClick={() => {
+                      setBrandsLoading(true);
+                      window.location.href = "/brands";
+                    }}
+                    disabled={brandsLoading}
+                    className={cn(
+                      "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
+                      pathname === "/brands"
+                        ? "text-purple-400"
+                        : "text-slate-300 hover:text-purple-400",
+                      brandsLoading && "opacity-70 cursor-not-allowed"
+                    )}
+                  >
+                    {brandsLoading ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
+                      <Crown className="h-4 w-4 text-purple-400 shrink-0" />
+                    )}
+                    For Brands
+                  </button>
 
-                <button
-                  onClick={() => {
-                    setCreatorsLoading(true);
-                    window.location.href = '/creators';
-                  }}
-                  disabled={creatorsLoading}
-                  className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
-                    pathname === "/creators"
-                      ? "text-orange-400"
-                      : "text-slate-300 hover:text-orange-400",
-                    creatorsLoading && "opacity-70 cursor-not-allowed"
-                  )}
-                >
-                  {creatorsLoading ? (
-                    <ButtonLoadingSpinner />
-                  ) : (
-                    <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
-                  )}
-                  For Creators
-                </button>
-              </nav>
+                  <button
+                    onClick={() => {
+                      setCreatorsLoading(true);
+                      window.location.href = "/creators";
+                    }}
+                    disabled={creatorsLoading}
+                    className={cn(
+                      "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
+                      pathname === "/creators"
+                        ? "text-orange-400"
+                        : "text-slate-300 hover:text-orange-400",
+                      creatorsLoading && "opacity-70 cursor-not-allowed"
+                    )}
+                  >
+                    {creatorsLoading ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
+                      <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
+                    )}
+                    For Creators
+                  </button>
+                </nav>
+              )}
             </div>
 
             {/* Right Side Actions */}
@@ -431,6 +510,20 @@ export function Nav({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </>
+              ) : isCreatorsPage ? (
+                <Link href="/auth/signup" onClick={handleNavigation}>
+                  <Button
+                    disabled={isNavigating || isSigningIn}
+                    className={cn(
+                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium rounded-full bg-transparent border border-white/25 text-white hover:bg-white/10 hover:border-white/40 transition-all duration-300 min-h-[44px]",
+                      (isNavigating || isSigningIn) &&
+                        "opacity-70 cursor-not-allowed"
+                    )}
+                  >
+                    {isNavigating ? <ButtonLoadingSpinner /> : null}
+                    <span>Sign up →</span>
+                  </Button>
+                </Link>
               ) : (
                 <>
                   {/* Enhanced Sign In Button */}
@@ -445,10 +538,9 @@ export function Nav({
                       disabled={isSigningIn || isNavigating}
                       className={cn(
                         "hidden md:flex items-center gap-2 px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
-                        pathname === "/creators"
-                          ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
-                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white",
-                        (isSigningIn || isNavigating) && "opacity-70 cursor-not-allowed"
+                        "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white",
+                        (isSigningIn || isNavigating) &&
+                          "opacity-70 cursor-not-allowed"
                       )}
                     >
                       {isSigningIn ? <ButtonLoadingSpinner /> : null}
@@ -461,10 +553,9 @@ export function Nav({
                       disabled={isNavigating || isSigningIn}
                       className={cn(
                         "hidden md:flex items-center gap-2 px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
-                        pathname === "/creators"
-                          ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
-                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90",
-                        (isNavigating || isSigningIn) && "opacity-70 cursor-not-allowed"
+                        "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90",
+                        (isNavigating || isSigningIn) &&
+                          "opacity-70 cursor-not-allowed"
                       )}
                     >
                       <div className="scan-line"></div>
@@ -481,7 +572,12 @@ export function Nav({
                   <SheetTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="bg-slate-900/50 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10 backdrop-blur-sm transition-all duration-300 p-2"
+                      className={cn(
+                        "backdrop-blur-sm transition-all duration-300 p-2",
+                        isCreatorsPage
+                          ? "bg-white/5 border border-white/15 hover:bg-white/10 hover:border-white/25"
+                          : "bg-slate-900/50 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10"
+                      )}
                     >
                       <Menu className="h-5 w-5 text-slate-300" />
                       <span className="sr-only">Toggle menu</span>
@@ -489,11 +585,30 @@ export function Nav({
                   </SheetTrigger>
                   <SheetContent
                     side="right"
-                    className="w-[320px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-l border-violet-400/20 backdrop-blur-md flex flex-col h-full"
+                    className={cn(
+                      "w-[320px] border-l backdrop-blur-md flex flex-col h-full",
+                      isCreatorsPage
+                        ? "bg-black border-white/10"
+                        : "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-violet-400/20"
+                    )}
                   >
-                    <SheetHeader className="border-b border-violet-400/20 pb-6 flex-shrink-0">
-                      <SheetTitle className="text-xl font-bold text-white bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent text-left">
-                        Game Menu
+                    <SheetHeader
+                      className={cn(
+                        "pb-6 flex-shrink-0",
+                        isCreatorsPage
+                          ? "border-b border-white/10"
+                          : "border-b border-violet-400/20"
+                      )}
+                    >
+                      <SheetTitle
+                        className={cn(
+                          "text-xl font-bold text-left",
+                          isCreatorsPage
+                            ? "text-white"
+                            : "text-xl font-bold text-white bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent"
+                        )}
+                      >
+                        {isCreatorsPage ? "Menu" : "Game Menu"}
                       </SheetTitle>
                       <SheetDescription className="sr-only">
                         Main navigation menu for Game of Creators platform
@@ -516,48 +631,89 @@ export function Nav({
 
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">
-                          <button
-                            onClick={() => {
-                              setBrandsLoading(true);
-                              window.location.href = '/brands';
-                            }}
-                            disabled={brandsLoading}
-                            className={cn(
-                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
-                              pathname === "/brands"
-                                ? "text-white bg-white/5 border-l-2 border-purple-500"
-                                : "text-slate-200 hover:text-white hover:bg-white/5",
-                              brandsLoading && "opacity-70 cursor-not-allowed"
-                            )}
-                          >
-                            {brandsLoading ? (
-                              <ButtonLoadingSpinner />
-                            ) : (
-                              <Crown className="h-4 w-4 text-purple-400 shrink-0" />
-                            )}
-                            {brandsLoading ? "Loading..." : "For Brands"}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setCreatorsLoading(true);
-                              window.location.href = '/creators';
-                            }}
-                            disabled={creatorsLoading}
-                            className={cn(
-                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
-                              pathname === "/creators"
-                                ? "text-white bg-white/5 border-l-2 border-orange-400"
-                                : "text-slate-200 hover:text-white hover:bg-white/5",
-                              creatorsLoading && "opacity-70 cursor-not-allowed"
-                            )}
-                          >
-                            {creatorsLoading ? (
-                              <ButtonLoadingSpinner />
-                            ) : (
-                              <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
-                            )}
-                            {creatorsLoading ? "Loading..." : "For Creators"}
-                          </button>
+                          {isCreatorsPage ? (
+                            creatorsNavLinks.map((link) => (
+                              <button
+                                key={link.label}
+                                type="button"
+                                onClick={() => {
+                                  if (link.label === "For Brands") {
+                                    setBrandsLoading(true);
+                                    window.location.href = "/brands";
+                                    return;
+                                  }
+                                  if (link.href.startsWith("/creators#")) {
+                                    scrollToCreatorsSection(link.href);
+                                    return;
+                                  }
+                                  setOpen(false);
+                                  window.location.href = link.href;
+                                }}
+                                disabled={
+                                  link.label === "For Brands" && brandsLoading
+                                }
+                                className={cn(
+                                  "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
+                                  link.label === "For Brands" &&
+                                    brandsLoading &&
+                                    "opacity-70 cursor-not-allowed"
+                                )}
+                              >
+                                {link.label === "For Brands" && brandsLoading
+                                  ? "Loading..."
+                                  : link.label}
+                              </button>
+                            ))
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setBrandsLoading(true);
+                                  window.location.href = "/brands";
+                                }}
+                                disabled={brandsLoading}
+                                className={cn(
+                                  "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
+                                  pathname === "/brands"
+                                    ? "text-white bg-white/5 border-l-2 border-purple-500"
+                                    : "text-slate-200 hover:text-white hover:bg-white/5",
+                                  brandsLoading &&
+                                    "opacity-70 cursor-not-allowed"
+                                )}
+                              >
+                                {brandsLoading ? (
+                                  <ButtonLoadingSpinner />
+                                ) : (
+                                  <Crown className="h-4 w-4 text-purple-400 shrink-0" />
+                                )}
+                                {brandsLoading ? "Loading..." : "For Brands"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setCreatorsLoading(true);
+                                  window.location.href = "/creators";
+                                }}
+                                disabled={creatorsLoading}
+                                className={cn(
+                                  "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
+                                  pathname === "/creators"
+                                    ? "text-white bg-white/5 border-l-2 border-orange-400"
+                                    : "text-slate-200 hover:text-white hover:bg-white/5",
+                                  creatorsLoading &&
+                                    "opacity-70 cursor-not-allowed"
+                                )}
+                              >
+                                {creatorsLoading ? (
+                                  <ButtonLoadingSpinner />
+                                ) : (
+                                  <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
+                                )}
+                                {creatorsLoading
+                                  ? "Loading..."
+                                  : "For Creators"}
+                              </button>
+                            </>
+                          )}
                         </nav>
 
                         {/* Mobile User Section or Auth */}
@@ -624,6 +780,22 @@ export function Nav({
                               <LogOut className="h-5 w-5" />
                               Log out
                             </button>
+                          </div>
+                        ) : isCreatorsPage ? (
+                          <div className="space-y-4 border-t border-white/10 pt-6">
+                            <Link href="/auth/signup" onClick={handleNavigation}>
+                              <Button
+                                disabled={isNavigating || isSigningIn}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 rounded-full bg-transparent border border-white/25 text-white hover:bg-white/10",
+                                  (isNavigating || isSigningIn) &&
+                                    "opacity-70 cursor-not-allowed"
+                                )}
+                              >
+                                {isNavigating ? <ButtonLoadingSpinner /> : null}
+                                Sign up →
+                              </Button>
+                            </Link>
                           </div>
                         ) : (
                           <div className="space-y-4 border-t border-violet-400/20 pt-6">

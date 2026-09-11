@@ -2,6 +2,7 @@
 import { ArrowRight, Rocket, ShieldCheck, Zap, CheckCircle, Globe } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -162,10 +163,95 @@ export default function CtcBanner() {
 
   return (
     <section
-      className="relative flex flex-col items-center justify-center min-h-[500px] text-center text-white overflow-hidden"
+      className={
+        isCreators
+          ? "relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center text-white overflow-hidden bg-black py-16 md:py-20"
+          : "relative flex flex-col items-center justify-center min-h-[500px] text-center text-white overflow-hidden"
+      }
       ref={sectionRef}
-      style={{ background: theme.bgGradient }}
+      style={isCreators ? undefined : { background: theme.bgGradient }}
     >
+      {isCreators ? (
+        <>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-[radial-gradient(circle,rgba(255,106,26,0.06)_0%,transparent_55%)]" />
+            <div className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-[radial-gradient(circle,rgba(139,92,246,0.06)_0%,transparent_55%)]" />
+          </div>
+
+          <div className="relative z-10 flex flex-col items-center px-4 w-full">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
+              <ShieldCheck className="h-4 w-4" />
+              Pay for Performance
+            </div>
+
+            {/* Static circles around heading + buttons */}
+            <div className="relative mt-10 flex flex-col items-center justify-center w-full max-w-[780px] py-16 sm:py-20 md:py-24">
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border border-white/[0.08]" />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border border-white/[0.06]" />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border border-white/[0.04]" />
+
+              {/* Static orange→purple arc highlight */}
+              <div
+                className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full"
+                style={{
+                  background:
+                    "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.85) 70deg, rgba(168,85,247,0.85) 110deg, transparent 140deg, transparent 360deg)",
+                  maskImage:
+                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+                  WebkitMaskImage:
+                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+                }}
+              />
+
+              <div className="pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[260px] md:w-[260px] -translate-x-1/2 -translate-y-1/2 opacity-85">
+                <Image
+                  src="/images/attach-money.png"
+                  alt=""
+                  fill
+                  className="object-contain"
+                  sizes="260px"
+                  priority
+                />
+              </div>
+
+              <h2
+                className={`relative z-10 text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-center ${
+                  inView ? "slide-up" : "opacity-0 translate-y-10"
+                }`}
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                Start Earning as a Creator
+              </h2>
+
+              <div className="relative z-10 mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNavigating(true);
+                    router.push("/dashboard/opportunities");
+                  }}
+                  disabled={isNavigating || isCheckingAccount}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-transparent px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+                >
+                  {(isNavigating || isCheckingAccount) && !isCheckingAccount ? (
+                    <ButtonLoadingSpinner />
+                  ) : null}
+                  Browse Campaigns →
+                </button>
+                <a
+                  href="https://calendly.com/guptavishesh2/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm sm:text-base font-medium text-black hover:bg-zinc-100 transition-colors"
+                >
+                  Talk to team →
+                </a>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
       {/* Background Rings */}
       <div
         className={`absolute w-[500px] h-[500px] border ${theme.circleColor}/20 rounded-full`}
@@ -255,6 +341,8 @@ export default function CtcBanner() {
           <ArrowRight className="h-5 w-5" />
         </button>
       </div>
+        </>
+      )}
 
       <Dialog open={showAdvertiserModal} onOpenChange={setShowAdvertiserModal}>
         <DialogContent className="bg-[#050816] border border-orange-500/30 text-white rounded-2xl shadow-2xl shadow-orange-900/40 sm:max-w-xl p-8">
