@@ -13,6 +13,8 @@ export type CreatorQualitySnapshot = {
     score1: number;
     score2: number;
     score3: number;
+    score4: number;
+    score5: number;
   };
 };
 
@@ -37,6 +39,8 @@ async function fetchCreatorQualitySnapshotsLive(
         score1: 0,
         score2: 0,
         score3: 0,
+        score4: 0,
+        score5: 0,
       },
     };
   }

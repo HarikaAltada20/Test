@@ -412,7 +412,13 @@ function mapSubmissionRow(
         quality_score_sum: null,
         total_money_won: 0,
         total_views: 0,
-        quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+        quality_score_counts: {
+          score1: 0,
+          score2: 0,
+          score3: 0,
+          score4: 0,
+          score5: 0,
+        },
       };
     }
     const resolved = resolveCreatorEligibilityProfileFields(
@@ -430,6 +436,8 @@ function mapSubmissionRow(
         score1: 0,
         score2: 0,
         score3: 0,
+        score4: 0,
+        score5: 0,
       },
     };
   };
@@ -586,7 +594,13 @@ function mapTwitterTweetRow(
         quality_score_sum: null,
         total_money_won: 0,
         total_views: 0,
-        quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+        quality_score_counts: {
+          score1: 0,
+          score2: 0,
+          score3: 0,
+          score4: 0,
+          score5: 0,
+        },
       };
     }
     const resolved = resolveCreatorEligibilityProfileFields(
@@ -604,6 +618,8 @@ function mapTwitterTweetRow(
         score1: 0,
         score2: 0,
         score3: 0,
+        score4: 0,
+        score5: 0,
       },
     };
   };

@@ -101,7 +101,7 @@ export function formatQualityScoreDisplay(
   const formatted = Number.isInteger(rounded)
     ? String(rounded)
     : rounded.toFixed(2).replace(/\.?0+$/, "");
-  return `${formatted}/3`;
+  return `${formatted}/5`;
 }
 
 /** Total sum of explicit quality scores across verified submissions. */

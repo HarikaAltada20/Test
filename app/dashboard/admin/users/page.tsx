@@ -2135,7 +2135,7 @@ export default function AdminUsersPage() {
                 if (!counts) return 0;
                 try {
                   const c = typeof counts === "string" ? JSON.parse(counts) : counts;
-                  return (c?.score1 ?? 0) + (c?.score2 ?? 0) + (c?.score3 ?? 0);
+                  return (c?.score1 ?? 0) + (c?.score2 ?? 0) + (c?.score3 ?? 0) + (c?.score4 ?? 0) + (c?.score5 ?? 0);
                 } catch {
                   return 0;
                 }
@@ -2326,6 +2326,8 @@ export default function AdminUsersPage() {
                 Number(parsed?.score1 ?? 0),
                 Number(parsed?.score2 ?? 0),
                 Number(parsed?.score3 ?? 0),
+                Number(parsed?.score4 ?? 0),
+                Number(parsed?.score5 ?? 0),
               ];
 
               return vals.some(val => {
@@ -5381,6 +5383,8 @@ export default function AdminUsersPage() {
                                       <div>Score 1: <strong className="font-semibold text-foreground">{counts.score1 ?? 0}</strong></div>
                                       <div>Score 2: <strong className="font-semibold text-foreground">{counts.score2 ?? 0}</strong></div>
                                       <div>Score 3: <strong className="font-semibold text-foreground">{counts.score3 ?? 0}</strong></div>
+                                      <div>Score 4: <strong className="font-semibold text-foreground">{counts.score4 ?? 0}</strong></div>
+                                      <div>Score 5: <strong className="font-semibold text-foreground">{counts.score5 ?? 0}</strong></div>
                                     </div>
                                   </TableCell>
                                 );

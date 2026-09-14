@@ -276,7 +276,7 @@ export async function processBulkVerifySubmissions(
       );
     }
 
-    let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
+    let resolvedBulkQualityScore: 1 | 2 | 3 | 4 | 5 | undefined;
     if (action === "verified") {
       const { requireVerifyQualityScore } = await import("@/lib/quality-score");
       const parsed = requireVerifyQualityScore(qualityScore);
@@ -284,7 +284,7 @@ export async function processBulkVerifySubmissions(
         return NextResponse.json(
           {
             error:
-              "qualityScore is required and must be 1, 2, or 3 when bulk verifying submissions",
+              "qualityScore is required and must be 1, 2, 3, 4, or 5 when bulk verifying submissions",
           },
           { status: 400 },
         );
