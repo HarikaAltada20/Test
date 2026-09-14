@@ -50,7 +50,7 @@ type TrackedJob = {
   jobId: string;
   submissionIds: string[];
   action: BulkModerationAction;
-  qualityScore?: 1 | 2 | 3;
+  qualityScore?: 1 | 2 | 3 | 4 | 5;
   closeCreatorModalOnSuccess?: boolean;
   contestId?: string;
   /** Last known progress — restored immediately on refresh. */
@@ -262,7 +262,7 @@ export function BulkModerationProgressProvider({
           meta.action === "verified" &&
           meta.qualityScore != null &&
           totalRefundedCents <= 0
-            ? `Quality score set to ${meta.qualityScore}/3.`
+            ? `Quality score set to ${meta.qualityScore}/5.`
             : null;
         const description = formatBulkModerationRefundToast({
           actionText,

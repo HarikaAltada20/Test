@@ -269,10 +269,10 @@ export async function POST(request: Request) {
       channel === "submissions" &&
       action === "verified" &&
       (!Number.isInteger(qualityScore) ||
-        ![1, 2, 3].includes(qualityScore as number))
+        ![1, 2, 3, 4, 5].includes(qualityScore as number))
     ) {
       return NextResponse.json(
-        { error: "qualityScore is required and must be 1, 2, or 3" },
+        { error: "qualityScore is required and must be 1, 2, 3, 4, or 5" },
         { status: 400 },
       );
     }

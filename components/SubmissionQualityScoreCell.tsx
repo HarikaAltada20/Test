@@ -3,7 +3,7 @@ import { formatQualityScoreDisplay } from "@/lib/creator-profile-stats";
 import { cn } from "@/lib/utils";
 
 function getQualityScoreTone(score: number, isDark = false) {
-  if (score >= 3) {
+  if (score >= 5) {
     return {
       text: isDark ? "text-emerald-400" : "text-emerald-700",
       bg: isDark ? "bg-emerald-500/10" : "bg-emerald-50",
@@ -13,7 +13,17 @@ function getQualityScoreTone(score: number, isDark = false) {
         : "bg-emerald-100 text-emerald-700 border-emerald-300",
     };
   }
-  if (score >= 2) {
+  if (score >= 4) {
+    return {
+      text: isDark ? "text-lime-400" : "text-lime-700",
+      bg: isDark ? "bg-lime-500/10" : "bg-lime-50",
+      border: isDark ? "border-lime-500/25" : "border-lime-200",
+      badge: isDark
+        ? "bg-lime-500/15 text-lime-300 border-lime-500/30"
+        : "bg-lime-100 text-lime-700 border-lime-300",
+    };
+  }
+  if (score >= 3) {
     return {
       text: isDark ? "text-amber-400" : "text-amber-700",
       bg: isDark ? "bg-amber-500/10" : "bg-amber-50",
@@ -23,13 +33,23 @@ function getQualityScoreTone(score: number, isDark = false) {
         : "bg-amber-100 text-amber-700 border-amber-300",
     };
   }
+  if (score >= 2) {
+    return {
+      text: isDark ? "text-orange-400" : "text-orange-700",
+      bg: isDark ? "bg-orange-500/10" : "bg-orange-50",
+      border: isDark ? "border-orange-500/25" : "border-orange-200",
+      badge: isDark
+        ? "bg-orange-500/15 text-orange-300 border-orange-300"
+        : "bg-orange-100 text-orange-700 border-orange-300",
+    };
+  }
   return {
-    text: isDark ? "text-orange-400" : "text-orange-700",
-    bg: isDark ? "bg-orange-500/10" : "bg-orange-50",
-    border: isDark ? "border-orange-500/25" : "border-orange-200",
+    text: isDark ? "text-rose-400" : "text-rose-700",
+    bg: isDark ? "bg-rose-500/10" : "bg-rose-50",
+    border: isDark ? "border-rose-500/25" : "border-rose-200",
     badge: isDark
-      ? "bg-orange-500/15 text-orange-300 border-orange-300"
-      : "bg-orange-100 text-orange-700 border-orange-300",
+      ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+      : "bg-rose-100 text-rose-700 border-rose-300",
   };
 }
 

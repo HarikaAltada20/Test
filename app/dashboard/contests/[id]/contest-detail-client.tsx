@@ -3239,9 +3239,11 @@ export default function ContestDetailClient({
   const submissionQualityScoreFilterButtonLabel = useMemo(() => {
     if (submissionQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
-      { value: 3, label: "Score 3/3" },
-      { value: 2, label: "Score 2/3" },
-      { value: 1, label: "Score 1/3" },
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
@@ -3266,9 +3268,11 @@ export default function ContestDetailClient({
   const analyticsQualityScoreFilterButtonLabel = useMemo(() => {
     if (analyticsQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
-      { value: 3, label: "Score 3/3" },
-      { value: 2, label: "Score 2/3" },
-      { value: 1, label: "Score 1/3" },
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
@@ -3574,7 +3578,7 @@ export default function ContestDetailClient({
           submissionIds.length > 1
             ? "Quality scores updated"
             : "Quality score updated",
-        description: `Saved as ${qualityScore}/3.`,
+        description: `Saved as ${qualityScore}/5.`,
         variant: "success",
       });
     }
@@ -7053,7 +7057,7 @@ export default function ContestDetailClient({
     options?: {
       skipReload?: boolean;
       closeCreatorModalOnSuccess?: boolean;
-      qualityScore?: 1 | 2 | 3;
+      qualityScore?: 1 | 2 | 3 | 4 | 5;
       /** After paid-reversal confirm — run verify API without quality score modal */
       skipQualityPrompt?: boolean;
       reverseMostVerifiedBonus?: boolean;
@@ -7425,7 +7429,7 @@ export default function ContestDetailClient({
               description: options?.skipQualityPrompt
                 ? "Submission moved to Verified."
                 : isVideoContestFormat && options?.qualityScore != null
-                  ? `Content verified with quality score ${options.qualityScore}/3.`
+                  ? `Content verified with quality score ${options.qualityScore}/5.`
                   : "Content has been verified and is now eligible for rewards",
               variant: "success" as const,
             };
@@ -7751,7 +7755,7 @@ export default function ContestDetailClient({
           job: BulkModerationJobStatus;
           submissionIds: string[];
           action: "verified" | "pending" | "rejected";
-          qualityScore?: 1 | 2 | 3;
+          qualityScore?: 1 | 2 | 3 | 4 | 5;
           closeCreatorModalOnSuccess?: boolean;
           contestId?: string;
         }>
@@ -7845,7 +7849,7 @@ export default function ContestDetailClient({
     reason?: string,
     options?: {
       closeCreatorModalOnSuccess?: boolean;
-      qualityScore?: 1 | 2 | 3;
+      qualityScore?: 1 | 2 | 3 | 4 | 5;
       /** After paid-reversal confirm — run verify API without quality score modal */
       skipQualityPrompt?: boolean;
       reverseMostVerifiedBonus?: boolean;
@@ -20144,9 +20148,11 @@ export default function ContestDetailClient({
 
                                   {(
                                     [
-                                      { value: 3, label: "Score 3/3" },
-                                      { value: 2, label: "Score 2/3" },
-                                      { value: 1, label: "Score 1/3" },
+                                      { value: 5, label: "Score 5/5" },
+                                      { value: 4, label: "Score 4/5" },
+                                      { value: 3, label: "Score 3/5" },
+                                      { value: 2, label: "Score 2/5" },
+                                      { value: 1, label: "Score 1/5" },
                                       {
                                         value: "unscored",
                                         label: "No Quality Score",
@@ -28652,9 +28658,11 @@ export default function ContestDetailClient({
 
                             {(
                               [
-                                { value: 3, label: "Score 3/3" },
-                                { value: 2, label: "Score 2/3" },
-                                { value: 1, label: "Score 1/3" },
+                                { value: 5, label: "Score 5/5" },
+                                { value: 4, label: "Score 4/5" },
+                                { value: 3, label: "Score 3/5" },
+                                { value: 2, label: "Score 2/5" },
+                                { value: 1, label: "Score 1/5" },
                                 {
                                   value: "unscored",
                                   label: "No Quality Score",

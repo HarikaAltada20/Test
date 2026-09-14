@@ -16,13 +16,15 @@ describe("requireVerifyQualityScore", () => {
     assert.equal(requireVerifyQualityScore(null), null);
     assert.equal(requireVerifyQualityScore(""), null);
     assert.equal(requireVerifyQualityScore(0), null);
-    assert.equal(requireVerifyQualityScore(4), null);
+    assert.equal(requireVerifyQualityScore(6), null);
   });
 
-  it("accepts scores 1 through 3", () => {
+  it("accepts scores 1 through 5", () => {
     assert.equal(requireVerifyQualityScore(1), 1);
     assert.equal(requireVerifyQualityScore("2"), 2);
     assert.equal(requireVerifyQualityScore(3), 3);
+    assert.equal(requireVerifyQualityScore(4), 4);
+    assert.equal(requireVerifyQualityScore(5), 5);
   });
 });
 
@@ -33,9 +35,10 @@ describe("resolveVerifyQualityScore", () => {
     assert.equal(resolveVerifyQualityScore(""), null);
   });
 
-  it("accepts scores 1 through 3", () => {
+  it("accepts scores 1 through 5", () => {
     assert.equal(resolveVerifyQualityScore(2), 2);
     assert.equal(resolveVerifyQualityScore("3"), 3);
+    assert.equal(resolveVerifyQualityScore(5), 5);
   });
 });
 
@@ -102,8 +105,10 @@ describe("computePersistableQualityProfileValues", () => {
 
 describe("computeQualityMetricsFromScores", () => {
   it("includes quality_score_sum as total of explicit scores", () => {
-    const metrics = computeQualityMetricsFromScores([1, 2, 3]);
-    assert.equal(metrics.quality_score_sum, 6);
+    const metrics = computeQualityMetricsFromScores([1, 2, 3, 4, 5]);
+    assert.equal(metrics.quality_score_sum, 15);
+    assert.equal(metrics.best_quality_score, 5);
+    assert.equal(metrics.quality_score_counts.score5, 1);
   });
 });
 

@@ -1541,7 +1541,7 @@ export function CreatorSubmissionsModal({
           qualityEditSubmissionIds.length > 1
             ? "Quality scores updated"
             : "Quality score updated",
-        description: `Saved as ${qualityScore}/3.`,
+        description: `Saved as ${qualityScore}/5.`,
         variant: "success",
       });
       setQualityEditSubmissionIds([]);

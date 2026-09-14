@@ -108,7 +108,7 @@ export async function PATCH(request: Request) {
     const qualityScore = parseQualityScoreBody(body?.qualityScore);
     if (qualityScore === null) {
       return NextResponse.json(
-        { error: "qualityScore must be 1, 2, or 3" },
+        { error: "qualityScore must be 1, 2, 3, 4, or 5" },
         { status: 400 },
       );
     }

@@ -92,11 +92,11 @@ export function validateCreatorRequirementFields(
       values.min_best_quality_score = null;
     } else {
       const minBest = Number(fields.min_best_quality_score);
-      if (!Number.isInteger(minBest) || minBest < 1 || minBest > 3) {
+      if (!Number.isInteger(minBest) || minBest < 1 || minBest > 5) {
         return {
           ok: false,
           error:
-            "min_best_quality_score must be an integer between 1 and 3, or null",
+            "min_best_quality_score must be an integer between 1 and 5, or null",
         };
       }
       values.min_best_quality_score = minBest;
@@ -127,10 +127,10 @@ export function validateCreatorRequirementFields(
       values.min_avg_quality_score = null;
     } else {
       const minAvg = Number(fields.min_avg_quality_score);
-      if (!Number.isFinite(minAvg) || minAvg < 1 || minAvg > 3) {
+      if (!Number.isFinite(minAvg) || minAvg < 1 || minAvg > 5) {
         return {
           ok: false,
-          error: "min_avg_quality_score must be between 1 and 3, or null",
+          error: "min_avg_quality_score must be between 1 and 5, or null",
         };
       }
       values.min_avg_quality_score = minAvg;

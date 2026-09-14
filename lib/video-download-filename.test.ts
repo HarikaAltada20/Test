@@ -137,16 +137,20 @@ describe("video download filename patterns", () => {
     assert.equal(slugifyBulkZipStatusTab("not_rejected"), "nonrejected");
     assert.equal(slugifyBulkZipStatusTab("verified"), "verified");
     assert.equal(formatBulkZipQualityPart([]), "all_quality");
+    assert.equal(
+      formatBulkZipQualityPart([1, 2, 3, 4, 5]),
+      "Q1_Q2_Q3_Q4_Q5",
+    );
     assert.equal(formatBulkZipQualityPart([3, 1]), "Q1_Q3");
     assert.equal(formatBulkZipQualityPart([2, "unscored"]), "Q2_unscored");
     assert.equal(
       buildBulkZipFilenamePrefix({
         contestTitle: "Summer Launch",
         sort: "views_desc",
-        qualityScores: [1, 2, 3],
+        qualityScores: [1, 2, 3, 4, 5],
         statusTab: "verified",
       }),
-      "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_verified",
+      "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_Q4_Q5_verified",
     );
   });
 
@@ -158,9 +162,9 @@ describe("video download filename patterns", () => {
     assert.equal(parsed.qualityLabel, "All quality");
     assert.equal(parsed.statusLabel, "Verified");
     const quality = parseBulkZipFilenamePrefix(
-      "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_verified",
+      "bulk_submissions_Summer_Launch_views_high_to_low_Q1_Q2_Q3_Q4_Q5_verified",
     );
-    assert.equal(quality.qualityLabel, "Q1, Q2, Q3");
+    assert.equal(quality.qualityLabel, "Q1, Q2, Q3, Q4, Q5");
     assert.equal(quality.sortLabel, "Views (high to low)");
   });
 });
