@@ -25,6 +25,7 @@ import {
   Heart,
   User,
   Users2,
+  ShieldCheck,
 } from "lucide-react";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
@@ -132,7 +133,10 @@ export default function HeroContent() {
   }, [pathname, heroNavPending]);
 
   useEffect(() => {
-    const mq = typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+    const mq =
+      typeof window !== "undefined"
+        ? window.matchMedia("(prefers-reduced-motion: reduce)")
+        : null;
     if (!mq) return;
     setPrefersReducedMotion(mq.matches);
     const handler = () => setPrefersReducedMotion(mq.matches);
@@ -211,509 +215,700 @@ export default function HeroContent() {
 
   return (
     <div>
-      <section className="relative flex flex-col items-center justify-center py-16 text-center text-white overflow-hidden">
-        {/* Background Circles */}
-
-        <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-          <Sparkles
-            className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-            style={{ animationDelay: "1s" }}
-          />
-          <Star
-            className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-            style={{ animationDelay: "2s" }}
-          />
-          <Heart
-            className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-            style={{ animationDelay: "0.5s" }}
-          />
-          <Palette
-            className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-            style={{ animationDelay: "1.5s" }}
-          />
-          <Trophy
-            className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-            style={{ animationDelay: "0.8s" }}
-          />
-        </div>
-        <div
-          className={`absolute w-[600px] h-[600px] border-[2px] border-purple-500/20 rounded-full`}
-        ></div>
-        <div
-          className={`absolute w-[800px] h-[800px] border-[2px] border-purple-500/20 rounded-full`}
-        ></div>
-        <div
-          className={`absolute w-[1000px] h-[1000px] border-[2px] border-purple-500/20 rounded-full`}
-        ></div>
-
-        {/* Revolving arc */}
-        <div className="absolute w-[800px] h-[800px] rounded-full animate-spin-slow">
-          <div
-            className={`absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-500`}
-            style={{
-              clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)",
-            }}
-          ></div>
-        </div>
-        <div className="absolute w-[1000px] h-[1000px] rounded-full animate-spin-slow-reverse">
-          <div
-            className={`absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-500`}
-            style={{
-              clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)",
-            }}
-          ></div>
+      {/* Hero */}
+      <main className="relative min-h-screen overflow-hidden bg-[#000000] text-white">
+        {/* =========================================================
+          BACKGROUND
+      ========================================================= */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute left-1/2 top-[15%] h-[750px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_68%)]" />
         </div>
 
-        <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-5 py-2.5 mb-8 backdrop-blur-sm">
-          <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.5)]">
-            <Crown className="h-3.5 w-3.5 text-white" />
-          </span>
-          <span className="text-base font-semibold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-            #1 Creator Marketing Platform
-          </span>
-        </div>
-
-        {/* Logos */}
-        <div className="flex justify-center mb-8">
-          <div className="relative flex items-center justify-center gap-1">
-
-            {/* Twitter (X) Card - Far Left */}
-            <motion.div
-              initial={{
-                rotate: -14,
-                boxShadow: "0 0 12px rgba(255,255,255,0.4)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: -14,
-                  boxShadow: "0 0 26px rgba(255,255,255,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{ zIndex: 1 }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-gray-800 to-black border-[2px] border-white cursor-default"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              <svg viewBox="0 0 24 24" className="w-[28px] h-[28px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </motion.div>
-
-            {/* Instagram Card - Center Left */}
-            <motion.div
-              initial={{
-                rotate: -5,
-                boxShadow: "0 0 12px rgba(225,48,108,0.5)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: -5,
-                  boxShadow: "0 0 26px rgba(225,48,108,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{
-                zIndex: 2,
-                background:
-                  "radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)",
-              }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] border-[2px] border-white cursor-default overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              <svg viewBox="0 0 24 24" className="w-[30px] h-[30px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
-              </svg>
-            </motion.div>
-
-            {/* YouTube Card - Center Right */}
-            <motion.div
-              initial={{
-                rotate: 5,
-                boxShadow: "0 0 12px rgba(255,0,0,0.5)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: 5,
-                  boxShadow: "0 0 26px rgba(255,0,0,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{ zIndex: 2 }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-red-600 to-red-800 border-[2px] border-white cursor-default"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              {/* YouTube SVG icon */}
-              <svg viewBox="0 0 24 24" className="w-[32px] h-[32px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-              </svg>
-            </motion.div>
-
-            {/* TikTok Card - Far Right */}
-            <motion.div
-              initial={{
-                rotate: 14,
-                boxShadow: "0 0 12px rgba(0,242,234,0.4)",
-              }}
-              {...(prefersReducedMotion ? {} : {
-                whileHover: {
-                  scale: 1.15,
-                  y: -12,
-                  rotate: 14,
-                  boxShadow: "0 0 26px rgba(0,242,234,0.9)",
-                  zIndex: 20,
-                  transition: { type: "spring", stiffness: 320, damping: 22 },
-                },
-              })}
-              style={{ zIndex: 1 }}
-              className="relative flex items-center justify-center w-[60px] h-[60px] rounded-[18px] bg-gradient-to-br from-gray-900 to-black border-[2px] border-white cursor-default"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none rounded-[16px]"></div>
-              <svg viewBox="0 0 24 24" className="w-[28px] h-[28px] text-white" fill="currentColor" aria-hidden="true">
-                <path d="M12.53.02C13.84 0 15.14.01 16.44 0c.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.06-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.9-.32-1.98-.23-2.82.31-.81.53-1.36 1.43-1.44 2.39-.12 1.2.61 2.39 1.65 3.02.5.34 1.12.47 1.72.44.86-.03 1.69-.42 2.25-1.07.61-.7.86-1.65.86-2.58.04-4.8.02-9.59.03-14.39.01-.02.01-.03.01-.05z" />
-              </svg>
-            </motion.div>
-
+        {/* =========================================================
+          HERO
+      ========================================================= */}
+        <section className="relative z-20 mx-auto flex max-w-[1100px] flex-col items-center px-6 pt-[45px] text-center">
+          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
+            <ShieldCheck className="h-4 w-4" />
+            Pay for Performance
           </div>
-        </div>
-        {/* Title */}
-        <h1
-          className="text-4xl flex justify-center gap-x-3 md:text-6xl lg:text-7xl mb-6 leading-tight slide-up"
-          style={{ animationDelay: "1s" }}
-        >
-          Game <span className="text-white">Of</span>{" "}
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-            }}
+
+          <h1
+            className="max-w-[880px] text-[40px] font-semibold leading-[1.1] tracking-tight text-white sm:text-[52px] md:text-[58px]"
+            style={{ fontFamily: "Montserrat, sans-serif" }}
           >
-            Creators
-          </span>
-        </h1>
+            Brands Get Results.
+            <br />
+            Creators Get Rewarded.
+          </h1>
 
-        <p
-          className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
-          style={{ animationDelay: "2s" }}
-        >
-          Where <span className="text-orange-400">Creators</span> and{" "}
-          <span className="text-purple-400">Brands</span> Win Together
-        </p>
-
-        {/* Buttons */}
-
-        <div className="flex flex-col sm:flex-row gap-4 mt-8 sm:mt-10 relative items-center justify-center">
-          <Link
-            href="/brands"
-            prefetch
-            aria-busy={heroNavPending === "brand"}
-            onClick={() => setHeroNavPending("brand")}
-            className={cn(
-              "rounded-3xl relative text-white font-bold px-6 sm:px-8 py-3 text-base sm:text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98] sm:whitespace-nowrap",
-              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
-              heroNavPending === "brand" && "pointer-events-none opacity-85",
-            )}
-            style={{
-              background:
-                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-            }}
-          >
-            <div className="scan-line"></div>
-            {heroNavPending === "brand" ? (
-              <ButtonLoadingSpinner />
-            ) : (
-              <Crown className="h-5 w-5 shrink-0" />
-            )}
-            Launch your campaign
-            <ArrowRight className="h-5 w-5 shrink-0" />
-          </Link>
-          <Link
-            href="/creators"
-            prefetch
-            aria-busy={heroNavPending === "creator"}
-            onClick={() => setHeroNavPending("creator")}
-            className={cn(
-              "rounded-3xl relative text-white font-bold px-6 sm:px-8 py-3 text-base sm:text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98] sm:whitespace-nowrap",
-              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
-              heroNavPending === "creator" && "pointer-events-none opacity-85",
-            )}
-          >
-            <div className="scan-line"></div>
-            {heroNavPending === "creator" ? (
-              <ButtonLoadingSpinner />
-            ) : (
-              <Sparkles className="h-5 w-5 shrink-0" />
-            )}
-            Start Earning
-            <ArrowRight className="h-5 w-5 shrink-0" />
-          </Link>
-        </div>
-      </section>
-      {/* <div className="ellipse-design"></div> */}
-
-      <section
-        className="relative h-[250px] sm:h-[300px] md:h-[400px] lg:h-[500px] z-10 overflow-hidden"
-        ref={sectionRef}
-      >
-        {/* Semi-circle background */}
-        <div
-          className="absolute top-0 left-0 w-full flex flex-col text-center"
-          style={{
-            height: "50vw", // scales with screen width
-            borderTopLeftRadius: "50vw",
-            borderTopRightRadius: "50vw",
-            background:
-              "linear-gradient(360deg, rgba(55, 37, 110, 0.5) 0%, rgba(0, 8, 37, 0.5) 34.49%)",
-            boxShadow:
-              "1px -5px 20px 0px #D0BCFF42, 0px 46px 91.9px 0px #BC83FA91 inset",
-            backdropFilter: "blur(34.2px)",
-          }}
-        >
-          <div className="mt-8 sm:mt-14 md:mt-20 lg:mt-40">
-            <h2
-              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${animate ? "slide-up" : "opacity-0"
-                }`}
+          <div className="mt-11 flex w-full max-w-[500px] gap-4">
+            <button
+              type="button"
+              id="brands"
+              onClick={() => {
+                setHeroNavPending("brand");
+                router.push("/brands");
+              }}
+              disabled={heroNavPending === "brand"}
+              className="flex h-[52px] flex-1 items-center justify-center rounded-[14px] border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.015] text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200 hover:bg-white/[0.10] disabled:opacity-70"
             >
-              <span className="text-purple-400">Creative</span>{" "}
-              <span className="text-orange-400">Showcase</span>
-            </h2>
+              {heroNavPending === "brand" ? (
+                <ButtonLoadingSpinner />
+              ) : (
+                <>
+                  For Brands
+                  <span className="ml-2 text-[18px]">→</span>
+                </>
+              )}
+            </button>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-3 sm:gap-5 flex-wrap">
-              <span
-                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${animate ? "slide-left" : "opacity-0"
-                  }`}
-                style={{ animationDelay: "0.3s" }}
-              >
-                Join 8,000+ Creators
+            <button
+              type="button"
+              id="creators"
+              onClick={() => {
+                setHeroNavPending("creator");
+                router.push("/creators");
+              }}
+              disabled={heroNavPending === "creator"}
+              className="flex h-[52px] flex-1 items-center justify-center rounded-[14px] border border-white/70 bg-[#f0e7f6] text-[15px] font-semibold text-[#29183a] shadow-[0_0_25px_rgba(235,220,255,0.08)] transition-all duration-200 hover:bg-white disabled:opacity-70"
+            >
+              {heroNavPending === "creator" ? (
+                <ButtonLoadingSpinner />
+              ) : (
+                <>
+                  For Creators
+                  <span className="ml-2 text-[18px]">→</span>
+                </>
+              )}
+            </button>
+          </div>
+        </section>
+
+        {/* =========================================================
+          VISUAL / ORBIT AREA
+      ========================================================= */}
+        <section className="relative mx-auto mt-[55px] h-[620px] w-full max-w-[1400px]">
+          {/* =====================================================
+            ANIMATED ORBIT
+        ===================================================== */}
+          <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+            <svg
+              className="absolute left-1/2 top-[0px] h-[900px] w-[1400px] -translate-x-1/2"
+              viewBox="0 0 1400 900"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                {/* Orange gradient */}
+                <linearGradient id="orangeOrbit" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#b56b17" stopOpacity="0" />
+
+                  <stop offset="35%" stopColor="#c87817" stopOpacity="0.5" />
+
+                  <stop offset="50%" stopColor="#e69a2d" stopOpacity="1" />
+
+                  <stop offset="65%" stopColor="#b56b17" stopOpacity="0.35" />
+
+                  <stop offset="100%" stopColor="#b56b17" stopOpacity="0" />
+                </linearGradient>
+
+                {/* Purple gradient */}
+                <linearGradient id="purpleOrbit" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#72129a" stopOpacity="0" />
+
+                  <stop offset="35%" stopColor="#8617ae" stopOpacity="0.5" />
+
+                  <stop offset="50%" stopColor="#a526d1" stopOpacity="1" />
+
+                  <stop offset="65%" stopColor="#72129a" stopOpacity="0.35" />
+
+                  <stop offset="100%" stopColor="#72129a" stopOpacity="0" />
+                </linearGradient>
+
+                {/* Orange glow */}
+                <filter
+                  id="orangeGlow"
+                  x="-100%"
+                  y="-100%"
+                  width="300%"
+                  height="300%"
+                >
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+
+                {/* Purple glow */}
+                <filter
+                  id="purpleGlow"
+                  x="-100%"
+                  y="-100%"
+                  width="300%"
+                  height="300%"
+                >
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {/* Main orbit */}
+              <ellipse
+                cx="700"
+                cy="450"
+                rx="575"
+                ry="395"
+                stroke="white"
+                strokeOpacity="0.035"
+                strokeWidth="1"
+              />
+
+              {/* Inner orbit */}
+              <ellipse
+                cx="700"
+                cy="450"
+                rx="455"
+                ry="315"
+                stroke="white"
+                strokeOpacity="0.025"
+                strokeWidth="1"
+              />
+
+              {/* =================================================
+                ORANGE MOVING ARC
+            ================================================= */}
+              <ellipse
+                className="orbit-orange"
+                cx="700"
+                cy="450"
+                rx="575"
+                ry="395"
+                stroke="url(#orangeOrbit)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray="150 3450"
+                filter="url(#orangeGlow)"
+              />
+
+              {/* =================================================
+                PURPLE MOVING ARC
+            ================================================= */}
+              <ellipse
+                className="orbit-purple"
+                cx="700"
+                cy="450"
+                rx="575"
+                ry="395"
+                stroke="url(#purpleOrbit)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray="150 3450"
+                filter="url(#purpleGlow)"
+              />
+            </svg>
+          </div>
+
+          {/* =====================================================
+            LEFT CAMPAIGN CARD
+        ===================================================== */}
+          <div className="absolute left-[4%] top-[35px] z-20 hidden w-[220px] rotate-[7deg] rounded-[23px] border border-white/[0.08] bg-[#1d1d1e] p-[15px] shadow-[0_25px_70px_rgba(0,0,0,0.45)] lg:block">
+            {/* Card header */}
+            <div className="flex items-center gap-2">
+              <div className="flex h-[29px] w-[29px] items-center justify-center rounded-[8px] bg-[#40344c] text-[13px]">
+                👥
+              </div>
+
+              <span className="text-[13px] text-white/75">Brand</span>
+            </div>
+
+            {/* Title */}
+            <div className="mt-3 text-[15px] font-medium">
+              Podcasts Clip Challenge
+            </div>
+
+            {/* Tags */}
+            <div className="mt-3 flex gap-[7px]">
+              <span className="rounded-full bg-[#510078] px-[9px] py-[5px] text-[10px] text-[#d838ff]">
+                Clipping
               </span>
 
-              {/* Avatar Stack */}
-              <div
-                className={`flex -space-x-2 sm:-space-x-3 ${animate ? "slide-up" : "opacity-0"
-                  }`}
-                style={{ animationDelay: "0.6s" }}
-              >
-                {[
-                  "434ce5e441255007a5349fd85232df9726062927.avif",
-                  "028df62b75a0a5e07e3025b313d8b74cda06d987.avif",
-                  "f3a549313a8c77a542d9239fdd18733c34787a69.avif",
-                  "f0c4aef454fceee8af51bb454a70238d17ad978a.avif",
-                  "776584be4e29200a5a72df8ebba39153a4aa21b6.avif",
-                ].map((img, idx) => (
-                  <Image
-                    key={idx}
-                    src={`/images/${img}`}
-                    alt={`Creator ${idx + 1}`}
-                    width={48}
-                    height={48}
-                    loading="lazy"
-                    className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-full border-2 border-gray-500"
-                    sizes="(min-width: 1024px) 48px, (min-width: 640px) 40px, 32px"
-                  />
-                ))}
+              <span className="rounded-full bg-[#510078] px-[9px] py-[5px] text-[10px] text-[#d838ff]">
+                UGC
+              </span>
+
+              <span className="rounded-full bg-[#510078] px-[9px] py-[5px] text-[10px] text-[#d838ff]">
+                Beauty
+              </span>
+            </div>
+
+            {/* Bottom */}
+            <div className="mt-3 flex items-end justify-between">
+              <div className="flex h-[62px] w-[70px] items-center justify-center overflow-hidden rounded-[9px] bg-gradient-to-br from-[#ef8122] via-[#f44352] to-[#7d21bd]">
+                <span className="text-[25px]">🎙️</span>
               </div>
 
-              {/* <span
-                  className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
-                    chooseVisible ? "slide-right" : "opacity-0"
-                  }`}
-                  style={{ animationDelay: "1.2s" }}
-                >
-                  3000+ Active Creators
-                </span> */}
+              <div className="flex h-[35px] w-[35px] items-center justify-center rounded-full bg-[#351149] text-[18px] text-[#c239f5]">
+                →
+              </div>
+            </div>
+          </div>
+
+          {/* =====================================================
+            LEFT TEXT
+        ===================================================== */}
+          <div className="absolute left-[9%] top-[340px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic text-white/85 lg:block">
+            <div>Brands launch campaigns</div>
+
+            <div className="ml-[75px] mt-1 text-[27px]">↘</div>
+          </div>
+
+          {/* =====================================================
+            CENTER TEXT
+        ===================================================== */}
+          <div className="absolute left-1/2 top-[5px] z-20 -translate-x-1/2 whitespace-nowrap text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] text-white/85">
+            Creator create content
+            <br />
+            that performs
+          </div>
+
+          {/* =====================================================
+            CENTRAL CREATOR CARD
+        ===================================================== */}
+          <div className="absolute left-1/2 top-[105px] z-20 h-[455px] w-[335px] -translate-x-1/2 overflow-hidden rounded-[24px] border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]">
+            {/* Video 1 */}
+            <div className="relative h-1/3 overflow-hidden bg-gradient-to-br from-[#d9d9d0] via-[#b8aa96] to-[#65584b]">
+              {/* Background */}
+              <div className="absolute right-[12%] top-[5%] h-[80px] w-[75px] rounded-full bg-[#eee8d9]/30 blur-[2px]" />
+
+              <div className="absolute left-[7%] top-[12%] h-[80px] w-[42px] rounded-full bg-[#5f6b60]" />
+
+              {/* Person */}
+              <div className="absolute bottom-[18%] left-1/2 h-[45px] w-[45px] -translate-x-1/2 rounded-full bg-[#bd896c]" />
+
+              <div className="absolute bottom-[-5%] left-1/2 h-[125px] w-[105px] -translate-x-1/2 rounded-t-[50px] bg-[#171717]" />
+
+              {/* Desk */}
+              <div className="absolute bottom-0 left-0 right-0 h-[25px] bg-[#694c39]" />
+
+              <span className="absolute bottom-3 left-3 text-[11px] text-white/70">
+                creator
+              </span>
+            </div>
+
+            {/* Video 2 */}
+            <div className="relative h-1/3 overflow-hidden bg-gradient-to-br from-[#a96f50] via-[#654235] to-[#27201e]">
+              {/* Background light */}
+              <div className="absolute right-[12%] top-[10%] h-[100px] w-[80px] rounded-full bg-[#2c201b]" />
+
+              {/* Woman */}
+              <div className="absolute bottom-[35%] left-[50%] h-[52px] w-[52px] -translate-x-1/2 rounded-full bg-[#c77f61]" />
+
+              <div className="absolute bottom-[-8%] left-[38%] h-[125px] w-[100px] rounded-t-[45px] bg-[#242424]" />
+
+              {/* Mic */}
+              <div className="absolute bottom-[20%] right-[20%] h-[55px] w-[7px] rotate-[15deg] bg-[#222]" />
+
+              <div className="absolute bottom-[48%] right-[14%] h-[17px] w-[17px] rounded-full bg-[#151515]" />
+            </div>
+
+            {/* Video 3 */}
+            <div className="relative h-1/3 overflow-hidden bg-gradient-to-br from-[#3e5a56] via-[#574842] to-[#16191a]">
+              {/* Background */}
+              <div className="absolute left-[8%] top-[10%] h-[85px] w-[45px] bg-[#263431]" />
+
+              <div className="absolute right-[10%] top-[12%] h-[90px] w-[55px] bg-[#1b1c1c]" />
+
+              {/* Person */}
+              <div className="absolute bottom-[33%] left-[51%] h-[49px] w-[49px] -translate-x-1/2 rounded-full bg-[#a87862]" />
+
+              <div className="absolute bottom-[-10%] left-[37%] h-[115px] w-[105px] rounded-t-[45px] bg-[#222628]" />
+
+              {/* Light */}
+              <div className="absolute bottom-[12%] right-[12%] h-[26px] w-[26px] rounded-full bg-white/[0.08]" />
+            </div>
+          </div>
+
+          {/* =====================================================
+            RIGHT ANALYTICS CARD
+        ===================================================== */}
+          <div className="absolute right-[4%] top-[130px] z-20 hidden w-[270px] rotate-[-15deg] rounded-[22px] border border-white/[0.08] bg-[#202021] p-4 shadow-[0_25px_70px_rgba(0,0,0,0.55)] lg:block">
+            {/* Tabs */}
+            <div className="flex items-center gap-1 text-[11px] text-white/35">
+              <span className="rounded-[9px] bg-white/[0.08] px-3 py-[9px] text-white/80">
+                Overview
+              </span>
+
+              <span className="px-2">Submissions</span>
+
+              <span className="px-2">Analytics</span>
+            </div>
+
+            {/* Stats */}
+            <div className="mt-7 flex items-end justify-between">
+              <div>
+                <div className="text-[25px] font-medium tracking-[-1px]">
+                  46.2M
+                </div>
+
+                <div className="mt-1 text-[10px] text-white/35">Views</div>
+              </div>
+
+              {/* Chart */}
+              <div className="flex h-[65px] items-end gap-[7px]">
+                <div className="h-[20px] w-[13px] rounded-t-[3px] bg-white/20" />
+                <div className="h-[29px] w-[13px] rounded-t-[3px] bg-white/20" />
+                <div className="h-[39px] w-[13px] rounded-t-[3px] bg-white/20" />
+                <div className="h-[51px] w-[13px] rounded-t-[3px] bg-white/20" />
+                <div className="h-[62px] w-[13px] rounded-t-[3px] bg-white/20" />
+              </div>
+            </div>
+
+            <div className="mt-4 text-[10px] leading-[15px] text-white/30">
+              Your top 10% creators are
+              <br />
+              getting the most views
+            </div>
+          </div>
+
+          {/* =====================================================
+            RIGHT TEXT
+        ===================================================== */}
+          <div className="absolute right-[10%] top-[25px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] text-white/85 lg:block">
+            Performance drives
+            <br />
+            real results
+            <div className="mt-1 text-[27px]">↙</div>
+          </div>
+        </section>
+
+        {/* =========================================================
+          MOBILE VISUAL SIMPLIFICATION
+      ========================================================= */}
+        <div className="relative z-30 mx-auto -mt-[70px] flex max-w-[400px] justify-center px-6 pb-16 lg:hidden">
+          <div className="relative h-[390px] w-[280px] overflow-hidden rounded-[24px] border border-white/10 bg-[#191919] shadow-[0_30px_80px_rgba(0,0,0,.6)]">
+            <div className="relative h-1/3 bg-gradient-to-br from-[#d8d7ce] to-[#675b50]">
+              <div className="absolute bottom-[15%] left-1/2 h-[45px] w-[45px] -translate-x-1/2 rounded-full bg-[#bd896c]" />
+              <div className="absolute bottom-0 left-1/2 h-[110px] w-[100px] -translate-x-1/2 rounded-t-[45px] bg-[#171717]" />
+            </div>
+
+            <div className="relative h-1/3 bg-gradient-to-br from-[#a96f50] to-[#29201d]">
+              <div className="absolute bottom-[25%] left-1/2 h-[48px] w-[48px] -translate-x-1/2 rounded-full bg-[#c77f61]" />
+              <div className="absolute bottom-0 left-1/2 h-[110px] w-[100px] -translate-x-1/2 rounded-t-[45px] bg-[#242424]" />
+            </div>
+
+            <div className="relative h-1/3 bg-gradient-to-br from-[#3e5a56] to-[#181a1a]">
+              <div className="absolute bottom-[25%] left-1/2 h-[48px] w-[48px] -translate-x-1/2 rounded-full bg-[#a87862]" />
+              <div className="absolute bottom-0 left-1/2 h-[105px] w-[100px] -translate-x-1/2 rounded-t-[45px] bg-[#222628]" />
             </div>
           </div>
         </div>
-      </section>
 
-      <div className="absolute bottom-[80px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
-        <div className="scroll-track">
-          {[
-            { src: "/videos/SnapInsta.to_AQNd.mp4", poster: "/images/thumb_AQNd.jpg" },
-            { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4", poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
-            { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4", poster: "/images/thumb_AQNxeCNjx2k.jpg" },
-            { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4", poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
-            { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4", poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
-            { src: "/videos/SnapInsta.to_AQMa90k.mp4", poster: "/images/thumb_AQMa90k.jpg" },
-          ]
-            .concat([
-              { src: "/videos/SnapInsta.to_AQNd.mp4", poster: "/images/thumb_AQNd.jpg" },
-              { src: "/videos/SnapInsta.to_AQMAznjnb2VYJ.mp4", poster: "/images/thumb_AQMAznjnb2VYJ.jpg" },
-              { src: "/videos/SnapInsta.to_AQNxeCNjx2k.mp4", poster: "/images/thumb_AQNxeCNjx2k.jpg" },
-              { src: "/videos/SnapInsta.to_AQNVKvZ3ezk6J.mp4", poster: "/images/thumb_AQNVKvZ3ezk6J.jpg" },
-              { src: "/videos/SnapInsta.to_AQPB-nUfz2at6Wa.mp4", poster: "/images/thumb_AQPB-nUfz2at6Wa.jpg" },
-              { src: "/videos/SnapInsta.to_AQMa90k.mp4", poster: "/images/thumb_AQMa90k.jpg" },
-            ]) // duplicate videos for seamless loop
-            .map(({ src, poster }, idx) => (
-              <div
-                key={idx}
-                className="relative w-[110px] h-[180px] md:w-[190px] md:h-[300px] rounded-[10px] overflow-hidden shadow-lg mx-6 border-2 border-purple-500/70"
-              >
-                <video
-                  src={src}
-                  poster={poster}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  preload={idx < 2 ? "auto" : "metadata"}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                />
-              </div>
-            ))}
-        </div>
-      </div>
+        {/* =========================================================
+          CONTACT ANCHOR
+      ========================================================= */}
+        <div id="contact" className="absolute bottom-0 left-0" />
 
-      <section
-        ref={worksRef}
-        className="text-white px-8 py-0 md:py-16 relative"
-      >
-        <div className="max-w-7xl custom-max-w mx-auto text-center relative">
-          {/* Tagline */}
-          <div className="flex justify-center mb-5">
-            <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
-              <Image
-                src="/images/streamline-sharp_user-work-laptop-wifi.png"
-                alt="Work laptop with wifi icon"
-                width={24}
-                height={24}
-                className="w-5 h-5 sm:w-6 sm:h-6"
-                loading="lazy"
-              />
-              Enhance your Marketing skills
-            </span>
-          </div>
+        {/* =========================================================
+          ANIMATION STYLES
+      ========================================================= */}
+        <style jsx>{`
+          .orbit-orange {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: orbitOrange 12s linear infinite;
+          }
 
-          {/* Title */}
-          <h2
-            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${worksVisible ? "slide-up" : "opacity-0"
-              }`}
-          >
-            How <span className="text-purple-400">Game</span> of{" "}
-            <span className="text-orange-400">Creators</span> Works
-          </h2>
+          .orbit-purple {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: orbitPurple 12s linear infinite;
+          }
 
-          {/* Subtitle */}
-          <p
-            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${worksVisible ? "slide-left" : "opacity-0"
-              }`}
-          >
-            Three simple steps to launch your viral marketing campaign and
-            dominate the game
-          </p>
+          @keyframes orbitOrange {
+            from {
+              transform: rotate(0deg);
+            }
 
-          {/* Active Step */}
-          <div
-            {...handlers}
-            className="flex flex-col gap-1 md:flex-row max-w-[1250px] mx-auto relative"
-          >
-            {/* Left Arrow */}
-            <button
-              onClick={handlePrev}
-              aria-label="Previous slide"
-              className="hidden md:flex absolute arrow-btn -left-20 top-1/2 -translate-y-1/2 border-2 rounded-full transition w-12 h-12 items-center justify-center"
-            >
-              <ArrowLeft className="w-7 h-7 text-white" />
-            </button>
+            to {
+              transform: rotate(360deg);
+            }
+          }
 
-            {/* Image */}
-            <div className="w-full md:w-1/2 relative aspect-square md:aspect-auto md:h-auto">
-              <Image
-                src={steps[activeIndex].image}
-                alt={steps[activeIndex].title}
-                fill
-                className="object-cover rounded-xl"
-                sizes="(min-width: 1024px) 50vw, 100vw"
-              />
-            </div>
+          @keyframes orbitPurple {
+            from {
+              transform: rotate(180deg);
+            }
 
-            {/* Content */}
-            <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
-              {/* Step Indicator */}
-              <div className="flex mb-4 sm:mb-6 items-center justify-between">
-                <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
-                  {steps[activeIndex].icon}
-                </div>
+            to {
+              transform: rotate(540deg);
+            }
+          }
 
-                <div className="relative px-3 py-0.5 sm:px-5 sm:py-1 rounded-full text-md sm:text-lg font-semibold text-white border-2 border-white/60">
-                  Step {steps[activeIndex].step}
-                </div>
+          @media (prefers-reduced-motion: reduce) {
+            .orbit-orange,
+            .orbit-purple {
+              animation: none;
+            }
+          }
+        `}</style>
+      </main>
+
+      <main className="min-h-screen bg-black px-5 py-24 text-white">
+        <section className="mx-auto max-w-[1200px]">
+          {/* =====================================================
+            HEADING
+        ===================================================== */}
+          <h1 className="mx-auto max-w-[650px] text-center text-[48px] font-semibold leading-[1.03] tracking-[-2.5px] text-white md:text-[52px]">
+            Both sides work together
+            <br />
+            as one System
+          </h1>
+
+          {/* =====================================================
+            CARDS
+        ===================================================== */}
+          <div className="mt-[72px] grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {/* =================================================
+              BRANDS CARD
+          ================================================= */}
+            <div className="relative h-[545px] overflow-hidden rounded-[25px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-9 pt-9 shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
+              {/* Badge */}
+              <div className="inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
+                For Brands
               </div>
 
-              <div className="mt-6 sm:mt-10">
-                {/* Title */}
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 text-left">
-                  {steps[activeIndex].title}
-                </h3>
+              {/* Title */}
+              <h2 className="mt-5 max-w-[440px] text-[25px] font-medium leading-[1.25] tracking-[-0.8px]">
+                Pay for actual performance, not
+                <br />
+                followers
+              </h2>
 
-                {/* Description */}
-                <p className="text-gray-300 text-base sm:text-lg md:text-xl mb-6 sm:mb-10 text-left">
-                  {steps[activeIndex].description}
-                </p>
+              {/* Description */}
+              <p className="mt-3 max-w-[500px] text-[16px] leading-[23px] text-white/45">
+                Set your budget and brief. Your campaign runs across a network
+                <br className="hidden xl:block" />
+                of 15,700+ creators, and you pay for verified content and
+                <br className="hidden xl:block" />
+                performance.
+              </p>
 
-                <Link
-                  href="/dashboard"
-                  className="flex items-center gap-2 relative z-10"
-                >
-                  <button
-                    className="px-5 mb-4 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                    }}
-                    onClick={() => {
-                      setStartNowLoading(true);
-                      setTimeout(() => {
-                        window.location.href = '/dashboard';
-                      }, 100);
-                    }}
-                    disabled={startNowLoading}
-                  >
-                    <div className="scan-line"></div>
-                    {startNowLoading ? (
-                      <ButtonLoadingSpinner />
-                    ) : null}
-                    Start Now
-                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+              {/* ================================================
+                FORM MOCKUP
+            ================================================= */}
+              <div className="absolute left-[68px] right-[68px] top-[280px] h-[390px] overflow-hidden rounded-t-[18px] border border-white/[0.10] bg-[#121212] shadow-[0_-10px_40px_rgba(0,0,0,.15)]">
+                {/* Form header */}
+                <div className="flex items-center justify-between px-4 pt-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#292929] text-[10px]">
+                      1
+                    </span>
+
+                    <span className="text-[14px] font-medium">Details</span>
+                  </div>
+
+                  <button className="rounded-md border border-[#8f4f9e]/30 bg-[#3b263e] px-3 py-1 text-[13px] text-white">
+                    🚀 Launch
                   </button>
-                </Link>
+                </div>
+
+                {/* Form */}
+                <div className="mt-5 px-4">
+                  {/* Campaign title */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-white/75">
+                      Campaign title
+                      <span className="text-red-400"> *</span>
+                    </label>
+
+                    <span className="text-[9px] text-white/35">0/100</span>
+                  </div>
+
+                  <div className="mt-1 h-[30px] rounded-md border border-white/[0.06] bg-[#292929] px-3 py-2 text-[9px] text-white/25">
+                    e.g., Create a Viral shorts/video for our New App
+                  </div>
+
+                  {/* Platform + Content type */}
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-white/75">
+                        Platform
+                        <span className="text-red-400"> *</span>
+                      </label>
+
+                      <div className="mt-1 flex h-[30px] items-center justify-between rounded-md border border-white/[0.06] bg-[#292929] px-3 text-[10px] text-white/25">
+                        <span>Select platform</span>
+                        <span>⌄</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-white/75">
+                        Content Type
+                        <span className="text-white/40"> (optional)</span>
+                      </label>
+
+                      <div className="mt-1 flex h-[30px] items-center justify-between rounded-md border border-white/[0.06] bg-[#292929] px-3 text-[10px] text-white/25">
+                        <span>Select content type</span>
+                        <span>⌄</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Upload */}
+                  <div className="mt-4 flex h-[115px] items-center justify-center rounded-md border border-dashed border-white/[0.08] bg-[#242424]">
+                    <div className="text-center">
+                      <div className="text-[20px] text-white/30">⇧</div>
+
+                      <div className="mt-1 text-[10px] text-white/45">
+                        Drag, drop or <span className="underline">browse</span>{" "}
+                        thumbnail
+                      </div>
+
+                      <div className="mt-1 text-[8px] text-white/25">
+                        Max file size: 5MB
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ================================================
+                FLOATING BUDGET
+            ================================================= */}
+              <div className="absolute bottom-[34px] left-[29px] z-10 w-[176px] rounded-[15px] border border-white/[0.12] bg-[#1b1b1b] p-3 shadow-[0_15px_35px_rgba(0,0,0,.45)]">
+                <div className="flex items-center gap-2 text-[13px] font-medium">
+                  <span className="text-[15px]">▣</span>
+                  Budget
+                </div>
+
+                <div className="mt-3 h-[27px] rounded-md border border-white/[0.07] bg-[#292929] px-3 py-1.5 text-[12px] text-white/30">
+                  $ 24000
+                </div>
               </div>
             </div>
 
-            {/* Right Arrow */}
-            <button
-              onClick={handleNext}
-              aria-label="Next slide"
-              className="hidden md:flex absolute arrow-btn -right-20 top-1/2 -translate-y-1/2 border-2 rounded-full transition w-12 h-12 items-center justify-center"
-            >
-              <ArrowRight className="w-7 h-7 text-white" />
-            </button>
-          </div>
+            {/* =================================================
+              CREATORS CARD
+          ================================================= */}
+            <div className="relative h-[545px] overflow-hidden rounded-[25px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-9 pt-9 shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
+              {/* Badge */}
+              <div className="inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
+                For Creators
+              </div>
 
-          {/* Dots Navigation */}
-          <div className="flex justify-center mt-6 sm:mt-10 gap-2">
-            {steps.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setActiveIndex(index)}
-                aria-label={`Go to step ${index + 1}`}
-                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${activeIndex === index ? "bg-purple-600" : "bg-gray-600"
-                  }`}
-              ></button>
-            ))}
+              {/* Title */}
+              <h2 className="mt-5 max-w-[450px] text-[25px] font-medium leading-[1.25] tracking-[-0.8px]">
+                Get paid for performance, not
+                <br />
+                followers.
+              </h2>
+
+              {/* Description */}
+              <p className="mt-3 max-w-[510px] text-[16px] leading-[23px] text-white/45">
+                Pick brand campaigns you want. You get paid based on how well
+                <br className="hidden xl:block" />
+                your posts do even if you have 0 followers
+              </p>
+
+              {/* =================================================
+                PAYMENT POPUP - LEFT
+            ================================================= */}
+              <div className="absolute left-[25px] top-[258px] z-30 flex w-[225px] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-3 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)]">
+                <div className="flex items-center gap-2">
+                  <div className="relative h-[31px] w-[31px] overflow-hidden rounded-full">
+                    <Image
+                      src="/images/Ellipse 2355 (1).avif"
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="31px"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] font-medium">Hey Ashok</div>
+
+                    <div className="text-[8px] leading-[10px] text-white/35">
+                      You can withdraw your
+                      <br />
+                      money now
+                    </div>
+                  </div>
+                </div>
+
+                <span className="text-[11px] font-medium text-[#43df3d]">
+                  $44,090
+                </span>
+              </div>
+
+              {/* =================================================
+                PAYMENT POPUP - RIGHT
+            ================================================= */}
+              <div className="absolute right-[25px] top-[258px] z-30 flex w-[220px] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-3 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)]">
+                <div className="flex items-center gap-2">
+                  <div className="relative h-[31px] w-[31px] overflow-hidden rounded-full">
+                    <Image
+                      src="/images/Ellipse 2355 (3).avif"
+                      alt=""
+                      fill
+                      className="object-cover"
+                      sizes="31px"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] font-medium">Hey Riya!</div>
+
+                    <div className="text-[8px] leading-[10px] text-white/35">
+                      Your rank 1st in Leader board
+                      <br />
+                      Campaign
+                    </div>
+                  </div>
+                </div>
+
+                <span className="text-[11px] font-medium text-[#43df3d]">
+                  $490
+                </span>
+              </div>
+
+              {/* =================================================
+                CREATOR CONTENT GRID
+            ================================================= */}
+              <div className="absolute bottom-0 left-0 right-0 h-[245px] overflow-hidden">
+                <div className="absolute inset-0 flex flex-col gap-[2px]">
+                  <div className="relative min-h-0 flex-[135]">
+                    <Image
+                      src="/images/Frame 2147243801.png"
+                      alt=""
+                      fill
+                      className="object-cover object-center"
+                      sizes="(max-width: 1024px) 90vw, 560px"
+                    />
+                  </div>
+                  <div className="relative min-h-0 flex-[115]">
+                    <Image
+                      src="/images/Frame 2147243800.png"
+                      alt=""
+                      fill
+                      className="object-cover object-center"
+                      sizes="(max-width: 1024px) 90vw, 560px"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {/* Reasons to Select Us */}
 
@@ -736,8 +931,9 @@ export default function HeroContent() {
                 Reasons to Select Us
               </button> */}
             <h2
-              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${reasonsVisible ? "slide-up" : "opacity-0"
-                }`}
+              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
+                reasonsVisible ? "slide-up" : "opacity-0"
+              }`}
             >
               Why Choose{" "}
               <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
@@ -745,8 +941,9 @@ export default function HeroContent() {
               </span>
             </h2>
             <p
-              className={`text-gray-300 text-base sm:text-lg md:text-xl ${reasonsVisible ? "slide-left" : "opacity-0"
-                }`}
+              className={`text-gray-300 text-base sm:text-lg md:text-xl ${
+                reasonsVisible ? "slide-left" : "opacity-0"
+              }`}
             >
               We're not just a platform – we're your competitive advantage in
               the creator economy.

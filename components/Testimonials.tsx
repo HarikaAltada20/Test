@@ -277,7 +277,7 @@ export default function Testimonials() {
   }
 
   return (
-    <section className="text-white py-10 md:py-20 px-6" ref={sectionRef}>
+    <section className="bg-black text-white py-10 md:py-20 px-6" ref={sectionRef}>
       {/* Heading */}
       <div className="text-center max-w-3xl mx-auto" ref={headingRef}>
         <button className="bg-[#2C3247] text-white py-1 px-4 rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">

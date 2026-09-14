@@ -151,7 +151,7 @@ export function Footer() {
             </h3>
             <ul className="space-y-4 text-sm text-zinc-300">
               <li className="flex items-start gap-2.5">
-                <Mail className="h-4 w-4 mt-0.5 shrink-0 text-zinc-400" />
+                <Mail className="h-4 w-4 mt-0.5 shrink-0 text-[#FF6A1A]" />
                 <a
                   href="mailto:support@gameofcreators.com"
                   className="hover:text-white transition-colors break-all"
@@ -160,7 +160,7 @@ export function Footer() {
                 </a>
               </li>
               <li className="flex items-start gap-2.5">
-                <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-zinc-400" />
+                <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-[#FF6A1A]" />
                 <span>San Francisco, CA</span>
               </li>
             </ul>

@@ -1,5 +1,5 @@
 "use client";
-import { ArrowRight, Rocket, ShieldCheck, Zap, CheckCircle, Globe } from "lucide-react";
+import { ArrowRight, Rocket, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -164,14 +164,75 @@ export default function CtcBanner() {
   return (
     <section
       className={
-        isCreators
+        isCreators || isHome
           ? "relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center text-white overflow-hidden bg-black py-16 md:py-20"
           : "relative flex flex-col items-center justify-center min-h-[500px] text-center text-white overflow-hidden"
       }
       ref={sectionRef}
-      style={isCreators ? undefined : { background: theme.bgGradient }}
+      style={isCreators || isHome ? undefined : { background: theme.bgGradient }}
     >
-      {isCreators ? (
+      {isHome ? (
+        <>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {/* <div className="absolute left-[8%] top-[8%] h-[420px] w-[420px] rounded-full border border-[#FF6A1A]/25" />
+            <div className="absolute right-[6%] top-[18%] h-[520px] w-[520px] rounded-full border border-violet-500/25" /> */}
+            <div className="absolute left-1/2 top-1/2 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2 opacity-70">
+              <Image
+                src="/images/attach-money.png"
+                alt=""
+                fill
+                className="object-contain"
+                sizes="280px"
+              />
+            </div>
+          </div>
+
+          <div className="relative z-10 flex flex-col items-center px-4 w-full max-w-4xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
+              <ShieldCheck className="h-4 w-4" />
+              Pay for Performance
+            </div>
+
+            <h2
+              className={`mt-8 text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-semibold tracking-tight text-center leading-tight ${
+                inView ? "slide-up" : "opacity-0 translate-y-10"
+              }`}
+              style={{ fontFamily: "Montserrat, sans-serif" }}
+            >
+              Brands Get Results.
+              <br />
+              Creators Get Rewarded.
+            </h2>
+
+            <div className="mt-10 flex w-full max-w-[480px] flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNavigating(true);
+                  router.push("/brands");
+                }}
+                disabled={isNavigating}
+                className="inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl border border-white/20 bg-gradient-to-b from-white/[0.08] to-transparent px-6 text-sm sm:text-base font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+              >
+                {isNavigating ? <ButtonLoadingSpinner /> : null}
+                For Brands →
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNavigating(true);
+                  router.push("/creators");
+                }}
+                disabled={isNavigating}
+                className="inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl bg-[#EDE4F5] px-6 text-sm sm:text-base font-semibold text-[#1a1224] hover:bg-white transition-colors disabled:opacity-70"
+              >
+                {isNavigating ? <ButtonLoadingSpinner /> : null}
+                For Creators →
+              </button>
+            </div>
+          </div>
+        </>
+      ) : isCreators ? (
         <>
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-[radial-gradient(circle,rgba(255,106,26,0.06)_0%,transparent_55%)]" />
@@ -280,13 +341,7 @@ export default function CtcBanner() {
       {/* Tagline */}
       <div className="flex items-center mt-3 md:mt-0 gap-2 px-4 py-2 bg-[#2C3148] rounded-full text-lg z-10">
         <Rocket className="w-4 h-4" />
-        <span>
-          {isHome
-            ? "Ready to go viral?"
-            : isBrands
-              ? "Ready to go viral?"
-              : "Ready to get paid?"}
-        </span>
+        <span>Ready to go viral?</span>
       </div>
 
       {/* Main Heading */}
@@ -294,18 +349,12 @@ export default function CtcBanner() {
         className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${inView ? "slide-up" : "opacity-0 translate-y-10"
           }`}
       >
-        {isHome
-          ? "Join the "
-          : "Ready to Transform Your "}{" "}
+        Ready to Transform Your{" "}
         <span
           className="bg-clip-text text-transparent"
           style={{ backgroundImage: theme.textGradient }}
         >
-          {isCreators
-            ? "Creativity"
-            : isHome
-              ? "Creator Revolutions "
-              : "Content Strategy"}
+          Content Strategy
         </span>
         ?
       </h1>
@@ -315,11 +364,7 @@ export default function CtcBanner() {
         className={`mt-4 max-w-2xl text-xl text-gray-200 z-10 ${inView ? "slide-left" : "opacity-0 translate-x-10"
           }`}
       >
-        {isHome
-          ? "50,000+ creators, 1000+ brands, millions of viral moments. Your turn to dominate!"
-          : isCreators
-            ? "Join thousands of creators and brands. Sign up today and unlock your potential!"
-            : "Launch your first contest today and witness the power of creator-generated content."}
+        Launch your first contest today and witness the power of creator-generated content.
       </p>
 
       {/* CTA Button */}
@@ -333,11 +378,7 @@ export default function CtcBanner() {
         >
           <div className="scan-line"></div>
           {(isNavigating || isCheckingAccount) ? <ButtonLoadingSpinner /> : <Rocket className="w-4 h-4" />}
-          {isHome
-            ? "Join Game Of Creators"
-            : isCreators
-              ? "Start Earning"
-              : "Launch a Campaign"}
+          Launch a Campaign
           <ArrowRight className="h-5 w-5" />
         </button>
       </div>
@@ -462,24 +503,6 @@ export default function CtcBanner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Feature Buttons for Home */}
-      {isHome && (
-        <div className="flex flex-wrap justify-center gap-6 mt-12 z-10">
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <ShieldCheck className="w-4 h-4" /> 100% Secure
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <Zap className="w-4 h-4" /> Instant Setup
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <CheckCircle className="w-4 h-4" /> Guaranteed Results
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <Globe className="w-4 h-4" /> Global Reach
-          </div>
-        </div>
-      )}
     </section>
   );
 }

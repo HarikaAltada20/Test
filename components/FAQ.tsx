@@ -402,7 +402,7 @@ export default function FAQ() {
   }
 
   return (
-    <section id="faq" className="py-16 px-4 mb-10 text-white scroll-mt-24">
+    <section id="faq" className="bg-black py-16 px-4 mb-10 text-white scroll-mt-24">
       <div className="max-w-5xl mx-auto text-center">
         {/* Top Tag */}
         <button

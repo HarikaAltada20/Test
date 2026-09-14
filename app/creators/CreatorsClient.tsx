@@ -14,7 +14,7 @@ import {
   Eye,
   Wallet,
   DollarSign,
-  Share2,
+  Send,
   TrendingUp,
   MousePointer2,
 } from "lucide-react";
@@ -41,6 +41,7 @@ import {
   getPoolBudgetCentsFromDetails,
   isCpmContestType,
 } from "@/lib/contest-type";
+
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { cn } from "@/lib/utils";
 
@@ -165,6 +166,38 @@ const images: string[] = [
   "/images/ce93873a8bcf3c08e216b5793f968f3722178789.avif",
   "/images/844d84fa7fc8646e15494703ec37e2d880bb59e5.avif",
   "/images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.avif",
+];
+const creators = [
+  {
+    src: "/images/Ellipse 2355 (1).avif",
+    alt: "Creator 1",
+  },
+  {
+    src: "/images/Ellipse 2355 (2).avif",
+    alt: "Creator 2",
+  },
+  {
+    src: "/images/Ellipse 2355 (3).avif",
+    alt: "Creator 3",
+  },
+  {
+    src: "/images/Ellipse 2355 (4).avif",
+    alt: "Creator 4",
+  },
+  {
+    src: "/images/Ellipse 2355 (6).avif",
+    alt: "Creator 5",
+  },
+];
+
+const filters = [
+  "Content Type",
+  "Platform",
+  "Content Type",
+  "Category / Niche",
+  "Earning Potential",
+  "Reward Model",
+  "Campaign Status",
 ];
 
 interface CreatorsClientProps {
@@ -799,11 +832,8 @@ export default function CreatorsClient({
               {/* Left: copy + CTAs */}
               <div className="text-left">
                 <h1
-                  className="text-[2.35rem] leading-[1.1] sm:text-5xl md:text-[3.35rem] lg:text-[3.75rem] font-semibold tracking-tight text-white mb-5 slide-up"
-                  style={{
-                    fontFamily: "Montserrat, sans-serif",
-                    animationDelay: "0.15s",
-                  }}
+                  className="text-[2.35rem] leading-[1.1] sm:text-5xl md:text-[3.35rem] lg:text-[4rem] font-semibold tracking-tight text-transparent bg-clip-text bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] mb-5 slide-up"
+                  style={{ animationDelay: "0.15s" }}
                 >
                   Big following?
                   <br />
@@ -1307,274 +1337,383 @@ export default function CreatorsClient({
               {/* Top row — 2 wide cards */}
               <div className="grid md:grid-cols-2 gap-4 md:gap-5">
                 {/* Get Paid Directly */}
-                <div className="rounded-3xl bg-[#141414] border border-white/5 p-6 sm:p-8 flex flex-col min-h-[280px] sm:min-h-[300px]">
-                  <div className="flex-1 flex items-center justify-center mb-6">
-                    <div className="relative w-full max-w-[340px] h-[140px] flex items-center">
-                      <div className="relative z-10 rounded-2xl border border-white/10 bg-[#1c1c1c] px-4 py-3 shadow-xl w-[170px] sm:w-[190px]">
-                        <p className="text-[10px] tracking-wider text-zinc-500 mb-1">
-                          ACCOUNT BALANCE
-                        </p>
-                        <p className="text-2xl sm:text-3xl font-semibold text-white mb-3">
-                          $3,400
-                        </p>
-                        <div className="inline-flex items-center gap-1.5 rounded-lg bg-[#FF6A1A] px-3 py-1.5 text-xs font-semibold text-white">
-                          Withdraw
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </div>
-                      </div>
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-3">
-                        <div className="absolute -left-10 top-[18px] w-10 border-t border-dashed border-zinc-600" />
-                        <div className="absolute -left-10 top-[54px] w-10 border-t border-dashed border-zinc-600" />
-                        <div className="absolute -left-10 top-[90px] w-10 border-t border-dashed border-zinc-600" />
-                        {[
-                          { bg: "bg-[#5f259f]", label: "P" },
-                          { bg: "bg-white text-black", label: "▲" },
-                          { bg: "bg-[#4285F4]", label: "G" },
-                        ].map((item) => (
-                          <div
-                            key={item.label}
-                            className={`relative z-10 h-8 w-8 rounded-full ${item.bg} flex items-center justify-center text-[11px] font-bold shadow-md`}
-                          >
-                            {item.label}
-                          </div>
-                        ))}
-                      </div>
+                <div className="relative w-full max-w-[611px] overflow-hidden rounded-[20px] border border-[#303030] bg-[#151515] px-6 pb-[22px] pt-[54px] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+                  {/* Account balance card */}
+                  <div className="relative ml-[84px] h-[172px] w-[204px] rounded-[17px] border border-[#2c2c2c] bg-[#151515] px-[15px] pt-[17px]">
+                    <p className="text-[13px] font-normal uppercase tracking-[-0.1px] text-[#777]">
+                      Account Balance
+                    </p>
+
+                    <p className="mt-[5px] text-[30px] font-normal leading-none tracking-[-1px] text-[#e5e5e5]">
+                      $3,400
+                    </p>
+
+                    <button
+                      className="
+            mt-[15px]
+            flex h-[34px] items-center gap-2
+            rounded-[9px]
+            bg-gradient-to-b from-[#ff9700] to-[#ee8500]
+            px-[14px]
+            text-[13px]
+            font-medium
+            text-white
+            shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]
+            transition
+            hover:brightness-110
+          "
+                    >
+                      <span className="text-[17px] leading-none">↗</span>
+                      Withdraw
+                    </button>
+                  </div>
+
+                  {/* Dashed connector */}
+                  <div
+                    className="
+          absolute
+          left-[311px]
+          top-[137px]
+          w-[119px]
+          border-t
+          border-dashed
+          border-[#454545]
+        "
+                  />
+
+                  {/* Payment icons */}
+                  <div className="absolute right-[45px] top-[117px] flex items-center">
+                    {/* Crypto */}
+                    <div className="relative z-10 h-[43px] w-[43px] overflow-hidden rounded-full">
+                      <Image
+                        src="/images/Frame 2147243912.png"
+                        alt="Crypto"
+                        fill
+                        className="object-cover"
+                        sizes="43px"
+                      />
+                    </div>
+
+                    {/* PhonePe */}
+                    <div className="relative -ml-[9px] z-20 h-[43px] w-[43px] overflow-hidden rounded-full">
+                      <Image
+                        src="/images/Ellipse 41.png"
+                        alt="PhonePe"
+                        fill
+                        className="object-cover"
+                        sizes="43px"
+                      />
+                    </div>
+
+                    {/* GPay */}
+                    <div className="relative -ml-[9px] z-30 h-[43px] w-[43px] overflow-hidden rounded-full">
+                      <Image
+                        src="/images/Ellipse 42.png"
+                        alt="GPay"
+                        fill
+                        className="object-cover"
+                        sizes="43px"
+                      />
                     </div>
                   </div>
-                  <h3 className="text-lg sm:text-xl font-semibold text-white mb-1.5">
-                    Get Paid Directly
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    Withdraw your earnings straight to UPI and Crypto
-                  </p>
+
+                  {/* Bottom content */}
+                  <div className="mt-[40px]">
+                    <h2 className="text-[22px] font-semibold leading-[28px] tracking-[-0.5px] text-[#d0d0d0]">
+                      Get Paid Directly
+                    </h2>
+
+                    <p className="mt-[7px] text-[17px] font-normal leading-[24px] tracking-[-0.2px] text-[#858585]">
+                      Withdraw your earnings straight to UPI and Crypto
+                    </p>
+                  </div>
                 </div>
 
                 {/* Create Together */}
-                <div className="rounded-3xl bg-[#141414] border border-white/5 p-6 sm:p-8 flex flex-col min-h-[280px] sm:min-h-[300px]">
-                  <div className="flex-1 flex items-center justify-center mb-6">
-                    <div className="relative w-full max-w-[280px] h-[150px]">
-                      <div className="absolute left-1/2 top-2 -translate-x-1/2 z-20 h-14 w-14 rounded-full overflow-hidden border-2 border-white/20 shadow-lg">
+                <section className="w-full max-w-[680px] overflow-hidden rounded-[28px] border border-white/10 bg-[#151515]">
+                  {/* Illustration */}
+                  <div className="relative h-[275px] overflow-hidden">
+                    {/* Main creator */}
+                    <div className="absolute left-1/2 top-[39px] z-20 -translate-x-1/2">
+                      <div className="flex h-[70px] w-[70px] items-center justify-center rounded-full border-2 border-[#ff7438] bg-[#111] p-[3px] shadow-[0_0_0_2px_rgba(255,255,255,0.15)]">
                         <Image
                           src="/images/Ellipse 2355.avif"
-                          alt=""
-                          fill
-                          className="object-cover"
-                          sizes="56px"
+                          alt="Main creator"
+                          width={62}
+                          height={62}
+                          className="h-full w-full rounded-full object-cover"
                         />
                       </div>
+                    </div>
+
+                    {/* Connection lines */}
+                    <div className="pointer-events-none absolute left-1/2 top-[91px] h-[115px] w-[420px] -translate-x-1/2">
                       <svg
-                        className="absolute inset-0 w-full h-full"
-                        viewBox="0 0 280 150"
+                        viewBox="0 0 420 115"
+                        className="h-full w-full"
                         fill="none"
-                        aria-hidden
+                        xmlns="http://www.w3.org/2000/svg"
                       >
                         <path
-                          d="M140 40 C100 70, 60 90, 40 120"
-                          stroke="rgba(255,255,255,0.2)"
+                          d="M210 0 C210 35 55 25 25 112"
+                          stroke="white"
+                          strokeOpacity="0.12"
                           strokeWidth="1"
+                          strokeDasharray="16 14"
                         />
+
                         <path
-                          d="M140 40 C120 75, 100 95, 90 125"
-                          stroke="rgba(255,255,255,0.2)"
+                          d="M210 0 C190 45 105 35 105 112"
+                          stroke="white"
+                          strokeOpacity="0.12"
                           strokeWidth="1"
+                          strokeDasharray="16 14"
                         />
+
                         <path
-                          d="M140 40 C140 80, 140 100, 140 128"
-                          stroke="rgba(255,255,255,0.2)"
+                          d="M210 0 C210 40 210 45 210 112"
+                          stroke="white"
+                          strokeOpacity="0.12"
                           strokeWidth="1"
+                          strokeDasharray="16 14"
                         />
+
                         <path
-                          d="M140 40 C160 75, 180 95, 190 125"
-                          stroke="rgba(255,255,255,0.2)"
+                          d="M210 0 C230 45 315 35 315 112"
+                          stroke="white"
+                          strokeOpacity="0.12"
                           strokeWidth="1"
+                          strokeDasharray="16 14"
                         />
+
                         <path
-                          d="M140 40 C180 70, 220 90, 240 120"
-                          stroke="rgba(255,255,255,0.2)"
+                          d="M210 0 C210 35 365 25 395 112"
+                          stroke="white"
+                          strokeOpacity="0.12"
                           strokeWidth="1"
+                          strokeDasharray="16 14"
                         />
                       </svg>
-                      {[
-                        { src: "/images/Ellipse 2355 (1).avif", left: "8%" },
-                        { src: "/images/Ellipse 2355 (2).avif", left: "28%" },
-                        { src: "/images/Ellipse 2355 (3).avif", left: "48%" },
-                        { src: "/images/Ellipse 2355 (4).avif", left: "68%" },
-                        { src: "/images/Ellipse 2355 (6).avif", left: "86%" },
-                      ].map((avatar) => (
+                    </div>
+
+                    {/* Small creator avatars */}
+                    <div className="absolute left-1/2 top-[204px] flex -translate-x-1/2 items-center gap-[34px]">
+                      {creators.map((creator, index) => (
                         <div
-                          key={avatar.src}
-                          className="absolute bottom-1 z-10 h-9 w-9 rounded-full overflow-hidden border border-white/20"
-                          style={{
-                            left: avatar.left,
-                            transform: "translateX(-50%)",
-                          }}
+                          key={creator.alt}
+                          className="relative flex h-[43px] w-[43px] shrink-0 items-center justify-center rounded-full border border-white/60 bg-[#222] p-[2px]"
                         >
                           <Image
-                            src={avatar.src}
-                            alt=""
-                            fill
-                            className="object-cover"
-                            sizes="36px"
+                            src={creator.src}
+                            alt={creator.alt}
+                            width={39}
+                            height={39}
+                            className="h-full w-full rounded-full object-cover"
                           />
                         </div>
                       ))}
                     </div>
                   </div>
-                  <h3 className="text-lg sm:text-xl font-semibold text-white mb-1.5">
-                    Create Together
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    Connect with creators and share opportunities.
-                  </p>
-                </div>
+
+                  {/* Text */}
+                  <div className="px-9 pb-[17px]">
+                    <h2 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-white">
+                      Create Together
+                    </h2>
+
+                    <p className="mt-2 text-[16px] leading-none text-[#9b9b9b]">
+                      Connect with creators and share opportunities.
+                    </p>
+                  </div>
+                </section>
               </div>
 
               {/* Bottom row — 3 cards */}
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
                 {/* Know Your Numbers */}
-                <div className="rounded-3xl bg-[#141414] border border-white/5 p-6 flex flex-col min-h-[260px]">
-                  <div className="flex-1 relative mb-5 flex items-end justify-center px-2">
-                    <div className="absolute top-2 left-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-[#2a1f4d] border border-violet-500/30 px-2.5 py-1 text-[10px] text-violet-200">
-                      <Share2 className="h-3 w-3" />
-                      423 Shares
-                    </div>
-                    <div className="absolute top-8 right-4 z-10 h-8 w-8 rounded-full bg-emerald-500/90 flex items-center justify-center shadow-lg">
-                      <DollarSign className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="absolute bottom-8 right-2 z-10 inline-flex items-center gap-1.5 rounded-full bg-[#3d2414] border border-orange-500/30 px-2.5 py-1 text-[10px] text-orange-200">
-                      <Eye className="h-3 w-3" />
-                      1.2M Views
-                    </div>
+                <div className="relative h-[365px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/10 bg-[#171717] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+                  {/* Chart area */}
+                  <div className="absolute left-6 right-6 top-6 h-[205px]">
+                    {/* Grid */}
+                    <div
+                      className="absolute inset-0 opacity-30"
+                      style={{
+                        backgroundImage: `
+              linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)
+            `,
+                        backgroundSize: "34px 34px",
+                      }}
+                    />
+
+                    {/* Chart line */}
                     <svg
-                      className="w-full h-[100px]"
-                      viewBox="0 0 200 100"
+                      className="absolute inset-0 h-full w-full"
+                      viewBox="0 0 340 180"
                       fill="none"
-                      aria-hidden
+                      preserveAspectRatio="none"
                     >
                       <path
-                        d="M0 80 C30 75, 45 55, 70 50 C95 45, 110 60, 130 40 C150 20, 170 25, 200 10"
-                        stroke="#FF6A1A"
-                        strokeWidth="2.5"
+                        d="M38 142
+               C55 153, 67 145, 78 116
+               C91 82, 104 91, 117 113
+               C132 139, 143 149, 158 133
+               C174 115, 168 72, 192 59
+               C213 48, 229 82, 244 71
+               C256 63, 248 38, 258 28"
+                        stroke="#FF8800"
+                        strokeWidth="2"
                         strokeLinecap="round"
                       />
-                      <path
-                        d="M0 80 C30 75, 45 55, 70 50 C95 45, 110 60, 130 40 C150 20, 170 25, 200 10 L200 100 L0 100 Z"
-                        fill="url(#gocChartFade)"
-                        opacity="0.35"
-                      />
-                      <defs>
-                        <linearGradient
-                          id="gocChartFade"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop offset="0%" stopColor="#FF6A1A" />
-                          <stop
-                            offset="100%"
-                            stopColor="#FF6A1A"
-                            stopOpacity="0"
-                          />
-                        </linearGradient>
-                      </defs>
+
+                      {/* Highlight point */}
+                      <circle cx="192" cy="59" r="4" fill="white" />
                     </svg>
+
+                    {/* Shares badge */}
+                    <div className="absolute left-[18px] top-[8px] flex items-center gap-2 rounded-full bg-[#171717]/95 px-2 py-1.5 shadow-lg">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D8C2FF]">
+                        <svg
+                          width="22"
+                          height="22"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#7F39EC"
+                          strokeWidth="1.8"
+                        >
+                          <path d="M20 4L10.5 13.5" />
+                          <path d="M20 4L14 20L10.5 13.5L4 10L20 4Z" />
+                        </svg>
+                      </div>
+
+                      <div className="pr-1 leading-none">
+                        <p className="text-sm font-semibold text-white">423</p>
+                        <p className="mt-1 text-[9px] text-white/40">Shares</p>
+                      </div>
+                    </div>
+
+                    {/* Earnings icon */}
+                    <div className="absolute right-[15px] top-0 flex h-11 w-11 items-center justify-center rounded-full bg-white">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D9FFD9]">
+                        <span className="text-xl font-light text-[#36C759]">
+                          $
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Views badge */}
+                    <div className="absolute bottom-[18px] right-[3px] flex items-center gap-2 rounded-full bg-[#171717] px-2.5 py-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.4)]">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFE0C8]">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#FF8800]">
+                          <div className="h-2.5 w-2.5 rounded-full bg-[#FF8800]" />
+                        </div>
+                      </div>
+
+                      <div className="pr-1 leading-none">
+                        <p className="text-sm font-semibold text-white">1.2M</p>
+                        <p className="mt-1 text-[9px] text-white/40">Views</p>
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-1.5">
-                    Know Your Numbers
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    Track views, performance, and earnings easily.
-                  </p>
+
+                  {/* Text */}
+                  <div className="absolute bottom-6 left-6 right-6">
+                    <h3 className="text-[21px] font-semibold leading-tight text-white/80">
+                      Know Your Numbers
+                    </h3>
+
+                    <p className="mt-2 text-[16px] leading-6 text-white/45">
+                      Track views, performance, and
+                      <br />
+                      earnings easily.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Pick What Fits */}
-                <div className="rounded-3xl bg-[#141414] border border-white/5 p-6 flex flex-col min-h-[260px]">
-                  <div className="flex-1 flex items-center justify-center mb-5">
-                    <div className="relative flex flex-wrap gap-2 justify-center max-w-[240px]">
-                      {[
-                        "Platform",
-                        "Content Type",
-                        "Category / Niche",
-                        "Earning Potential",
-                        "Reward Model",
-                        "Campaign Status",
-                      ].map((tag) => (
-                        <span
-                          key={tag}
-                          className={cn(
-                            "rounded-full border px-3 py-1.5 text-[11px] whitespace-nowrap",
-                            tag === "Reward Model"
-                              ? "border-white/40 bg-white/10 text-white"
-                              : "border-white/15 bg-white/[0.03] text-zinc-400",
-                          )}
+                <div className="relative h-[365px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717]">
+                  {/* Filter chips */}
+                  <div className="absolute -left-[58px] top-[94px] w-[540px]">
+                    <div className="flex flex-wrap gap-[10px]">
+                      {filters.map((filter, index) => (
+                        <div
+                          key={`${filter}-${index}`}
+                          className="flex h-[37px] shrink-0 items-center rounded-full bg-[#555] px-4 text-[13px] font-medium leading-none text-[#e5e5e5]"
                         >
-                          {tag}
-                        </span>
+                          {filter}
+                        </div>
                       ))}
-                      <MousePointer2 className="absolute right-6 bottom-0 h-5 w-5 text-white drop-shadow-lg" />
                     </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-1.5">
-                    Pick What Fits
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    Choose campaigns that match your content style.
-                  </p>
+
+                  {/* Decorative arrow */}
+                  {/* <div className="absolute left-[103px] top-[169px]">
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="text-white/70"
+                    >
+                      <path
+                        d="M5 12H17"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M13 8L17 12L13 16"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div> */}
+
+                  {/* Text — aligned with Know Your Numbers */}
+                  <div className="absolute bottom-6 left-6 right-6">
+                    <h3 className="text-[21px] font-semibold leading-tight text-white/80">
+                      Pick What Fits
+                    </h3>
+
+                    <p className="mt-2 text-[16px] leading-6 text-white/45">
+                      Choose campaigns that match your
+                      <br />
+                      content style.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Grow With Every Campaign */}
-                <div className="rounded-3xl bg-[#141414] border border-white/5 p-6 flex flex-col min-h-[260px] sm:col-span-2 lg:col-span-1">
-                  <div className="flex-1 flex items-center justify-center mb-5">
-                    <div className="relative w-full max-w-[220px] space-y-2.5 opacity-90">
-                      <div className="absolute -inset-2 rounded-xl bg-gradient-to-b from-transparent via-transparent to-[#141414] z-10 pointer-events-none" />
-                      <div className="rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2.5 flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                          <Eye className="h-3.5 w-3.5 text-emerald-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white leading-tight">
-                            12.4M
-                          </p>
-                          <p className="text-[10px] text-zinc-500">
-                            Views generated
-                          </p>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2.5 flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-sky-500/20 flex items-center justify-center">
-                          <Wallet className="h-3.5 w-3.5 text-sky-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white leading-tight">
-                            $3,240
-                          </p>
-                          <p className="text-[10px] text-zinc-500">
-                            Money earned
-                          </p>
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-[#1a1a1a] px-3 py-2.5 flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                          <TrendingUp className="h-3.5 w-3.5 text-amber-400" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-white leading-tight">
-                            75%
-                          </p>
-                          <p className="text-[10px] text-zinc-500">
-                            Success Rate
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                <div className="relative h-[365px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717] sm:col-span-2 lg:col-span-1">
+                  {/* Dashboard image */}
+                  <div className="absolute left-6 right-6 top-6 h-[205px] overflow-hidden rounded-lg">
+                    <img
+                      src="/images/b8bc146b928ab4b457b74850bfdaf6ab72f59d8e.png"
+                      alt="Campaign dashboard"
+                      className="h-full w-full object-cover object-top"
+                    />
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-1.5">
-                    Grow With Every Campaign
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    Build experience, performance, and earning potential.
-                  </p>
+
+                  {/* Dark fade over image */}
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#171717]/[0.35] via-[#171717]/[0.72] to-[#171717]" />
+
+                  {/* Additional image fade */}
+                  <div className="pointer-events-none absolute left-0 top-0 h-[220px] w-full bg-gradient-to-b from-[#171717]/20 via-transparent to-[#171717]/90" />
+
+                  {/* Text — aligned with Know Your Numbers */}
+                  <div className="absolute bottom-6 left-6 right-6">
+                    <h3 className="text-[21px] font-semibold leading-tight text-white/80">
+                      Grow With Every Campaign
+                    </h3>
+
+                    <p className="mt-2 text-[16px] leading-6 text-white/45">
+                      Build experience, performance, and
+                      <br />
+                      earning potential.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

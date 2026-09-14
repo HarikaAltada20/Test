@@ -133,6 +133,17 @@ export function Nav({
     setIsNavigating(true);
   };
 
+  const handleDarkMarketingSignUp = () => {
+    if (pathname === "/brands") {
+      try {
+        localStorage.setItem("signupRole", "advertiser");
+      } catch {
+        // ignore storage errors
+      }
+    }
+    handleNavigation();
+  };
+
   const handleSignInNavigation = () => {
     setIsSigningIn(true);
   };
@@ -152,6 +163,9 @@ export function Nav({
   }
 
   const isCreatorsPage = pathname === "/creators";
+  const isBrandsPage = pathname === "/brands";
+  const isHomePage = pathname === "/";
+  const isDarkMarketingNav = isCreatorsPage || isBrandsPage || isHomePage;
 
   const creatorsNavLinks = [
     { label: "Home", href: marketingHomeHref },
@@ -162,7 +176,26 @@ export function Nav({
     { label: "Contact", href: "/contact" },
   ] as const;
 
-  const scrollToCreatorsSection = (href: string) => {
+  const brandsNavLinks = [
+    { label: "Home", href: marketingHomeHref },
+    { label: "How it works", href: "/brands#how-it-works" },
+    { label: "For Creators", href: "/creators" },
+    { label: "Contact", href: "/contact" },
+  ] as const;
+
+  const homeNavLinks = [
+    { label: "For Brands", href: "/brands" },
+    { label: "For Creators", href: "/creators" },
+    { label: "Contact", href: "/contact" },
+  ] as const;
+
+  const marketingPageLinks = isCreatorsPage
+    ? creatorsNavLinks
+    : isBrandsPage
+      ? brandsNavLinks
+      : null;
+
+  const scrollToHashSection = (href: string) => {
     if (!href.includes("#")) {
       window.location.href = href;
       return;
@@ -177,9 +210,30 @@ export function Nav({
     window.location.href = href;
   };
 
+  const handleMarketingLinkClick = (link: {
+    label: string;
+    href: string;
+  }) => {
+    if (link.label === "For Brands") {
+      setBrandsLoading(true);
+      window.location.href = "/brands";
+      return;
+    }
+    if (link.label === "For Creators") {
+      setCreatorsLoading(true);
+      window.location.href = "/creators";
+      return;
+    }
+    if (link.href.includes("#")) {
+      scrollToHashSection(link.href);
+      return;
+    }
+    window.location.href = link.href;
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full">
-      {isCreatorsPage ? (
+      {isDarkMarketingNav ? (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
       ) : (
         <>
@@ -200,13 +254,13 @@ export function Nav({
         <div
           className={cn(
             "mx-auto px-4 sm:px-6 lg:px-8",
-            isCreatorsPage ? "max-w-[1280px]" : "container"
+            isDarkMarketingNav ? "max-w-[1180px]" : "container"
           )}
         >
           <div
             className={cn(
               "flex h-20 items-center justify-between",
-              !isCreatorsPage && "md:justify-around"
+              !isDarkMarketingNav && "md:justify-around"
             )}
           >
             {/* Enhanced Logo Section */}
@@ -216,7 +270,7 @@ export function Nav({
                 className="group flex items-center transition-all duration-300"
               >
                 <div className="relative">
-                  {!isCreatorsPage && (
+                  {!isDarkMarketingNav && (
                     <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 to-purple-600/10 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   )}
 
@@ -230,7 +284,7 @@ export function Nav({
                     />
                   </div>
 
-                  {!isCreatorsPage && (
+                  {!isDarkMarketingNav && (
                     <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-gradient-to-r from-violet-400 to-purple-500 rounded-full opacity-40 group-hover:opacity-80 transition-opacity duration-300"></div>
                   )}
                 </div>
@@ -239,33 +293,60 @@ export function Nav({
 
             {/* Center Navigation - Desktop */}
             <div className="hidden md:flex items-center space-x-2 flex-1 justify-center">
-              {isCreatorsPage ? (
+              {marketingPageLinks ? (
                 <nav className="flex items-center gap-1 lg:gap-2">
-                  {creatorsNavLinks.map((link) => (
+                  {marketingPageLinks.map((link) => (
+                    <button
+                      key={link.label}
+                      type="button"
+                      onClick={() => handleMarketingLinkClick(link)}
+                      disabled={
+                        (link.label === "For Brands" && brandsLoading) ||
+                        (link.label === "For Creators" && creatorsLoading)
+                      }
+                      className={cn(
+                        "px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium text-zinc-400 transition-colors duration-200 hover:text-white whitespace-nowrap",
+                        ((link.label === "For Brands" && brandsLoading) ||
+                          (link.label === "For Creators" && creatorsLoading)) &&
+                          "opacity-70 cursor-not-allowed"
+                      )}
+                    >
+                      {(link.label === "For Brands" && brandsLoading) ||
+                      (link.label === "For Creators" && creatorsLoading) ? (
+                        <ButtonLoadingSpinner />
+                      ) : (
+                        link.label
+                      )}
+                    </button>
+                  ))}
+                </nav>
+              ) : isHomePage ? (
+                <nav className="flex items-center gap-6 lg:gap-8 text-[15px] lg:text-[16px] text-white/50">
+                  {homeNavLinks.map((link) => (
                     <button
                       key={link.label}
                       type="button"
                       onClick={() => {
                         if (link.label === "For Brands") {
                           setBrandsLoading(true);
-                          window.location.href = "/brands";
-                          return;
-                        }
-                        if (link.href.startsWith("/creators#")) {
-                          scrollToCreatorsSection(link.href);
-                          return;
+                        } else if (link.label === "For Creators") {
+                          setCreatorsLoading(true);
                         }
                         window.location.href = link.href;
                       }}
-                      disabled={link.label === "For Brands" && brandsLoading}
+                      disabled={
+                        (link.label === "For Brands" && brandsLoading) ||
+                        (link.label === "For Creators" && creatorsLoading)
+                      }
                       className={cn(
-                        "px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium text-zinc-400 transition-colors duration-200 hover:text-white whitespace-nowrap",
-                        link.label === "For Brands" &&
-                          brandsLoading &&
+                        "transition-colors hover:text-white whitespace-nowrap",
+                        ((link.label === "For Brands" && brandsLoading) ||
+                          (link.label === "For Creators" && creatorsLoading)) &&
                           "opacity-70 cursor-not-allowed"
                       )}
                     >
-                      {link.label === "For Brands" && brandsLoading ? (
+                      {(link.label === "For Brands" && brandsLoading) ||
+                      (link.label === "For Creators" && creatorsLoading) ? (
                         <ButtonLoadingSpinner />
                       ) : (
                         link.label
@@ -510,8 +591,8 @@ export function Nav({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </>
-              ) : isCreatorsPage ? (
-                <Link href="/auth/signup" onClick={handleNavigation}>
+              ) : isDarkMarketingNav ? (
+                <Link href="/auth/signup" onClick={handleDarkMarketingSignUp}>
                   <Button
                     disabled={isNavigating || isSigningIn}
                     className={cn(
@@ -574,7 +655,7 @@ export function Nav({
                       variant="ghost"
                       className={cn(
                         "backdrop-blur-sm transition-all duration-300 p-2",
-                        isCreatorsPage
+                        isDarkMarketingNav
                           ? "bg-white/5 border border-white/15 hover:bg-white/10 hover:border-white/25"
                           : "bg-slate-900/50 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10"
                       )}
@@ -587,7 +668,7 @@ export function Nav({
                     side="right"
                     className={cn(
                       "w-[320px] border-l backdrop-blur-md flex flex-col h-full",
-                      isCreatorsPage
+                      isDarkMarketingNav
                         ? "bg-black border-white/10"
                         : "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-violet-400/20"
                     )}
@@ -595,7 +676,7 @@ export function Nav({
                     <SheetHeader
                       className={cn(
                         "pb-6 flex-shrink-0",
-                        isCreatorsPage
+                        isDarkMarketingNav
                           ? "border-b border-white/10"
                           : "border-b border-violet-400/20"
                       )}
@@ -603,12 +684,12 @@ export function Nav({
                       <SheetTitle
                         className={cn(
                           "text-xl font-bold text-left",
-                          isCreatorsPage
+                          isDarkMarketingNav
                             ? "text-white"
                             : "text-xl font-bold text-white bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent"
                         )}
                       >
-                        {isCreatorsPage ? "Menu" : "Game Menu"}
+                        {isDarkMarketingNav ? "Menu" : "Game Menu"}
                       </SheetTitle>
                       <SheetDescription className="sr-only">
                         Main navigation menu for Game of Creators platform
@@ -631,35 +712,71 @@ export function Nav({
 
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">
-                          {isCreatorsPage ? (
-                            creatorsNavLinks.map((link) => (
+                          {marketingPageLinks ? (
+                            marketingPageLinks.map((link) => (
+                              <button
+                                key={link.label}
+                                type="button"
+                                onClick={() => {
+                                  handleMarketingLinkClick(link);
+                                  if (!link.href.includes("#")) setOpen(false);
+                                }}
+                                disabled={
+                                  (link.label === "For Brands" &&
+                                    brandsLoading) ||
+                                  (link.label === "For Creators" &&
+                                    creatorsLoading)
+                                }
+                                className={cn(
+                                  "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
+                                  ((link.label === "For Brands" &&
+                                    brandsLoading) ||
+                                    (link.label === "For Creators" &&
+                                      creatorsLoading)) &&
+                                    "opacity-70 cursor-not-allowed"
+                                )}
+                              >
+                                {(link.label === "For Brands" &&
+                                  brandsLoading) ||
+                                (link.label === "For Creators" &&
+                                  creatorsLoading)
+                                  ? "Loading..."
+                                  : link.label}
+                              </button>
+                            ))
+                          ) : isHomePage ? (
+                            homeNavLinks.map((link) => (
                               <button
                                 key={link.label}
                                 type="button"
                                 onClick={() => {
                                   if (link.label === "For Brands") {
                                     setBrandsLoading(true);
-                                    window.location.href = "/brands";
-                                    return;
-                                  }
-                                  if (link.href.startsWith("/creators#")) {
-                                    scrollToCreatorsSection(link.href);
-                                    return;
+                                  } else if (link.label === "For Creators") {
+                                    setCreatorsLoading(true);
                                   }
                                   setOpen(false);
                                   window.location.href = link.href;
                                 }}
                                 disabled={
-                                  link.label === "For Brands" && brandsLoading
+                                  (link.label === "For Brands" &&
+                                    brandsLoading) ||
+                                  (link.label === "For Creators" &&
+                                    creatorsLoading)
                                 }
                                 className={cn(
                                   "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
-                                  link.label === "For Brands" &&
-                                    brandsLoading &&
+                                  ((link.label === "For Brands" &&
+                                    brandsLoading) ||
+                                    (link.label === "For Creators" &&
+                                      creatorsLoading)) &&
                                     "opacity-70 cursor-not-allowed"
                                 )}
                               >
-                                {link.label === "For Brands" && brandsLoading
+                                {(link.label === "For Brands" &&
+                                  brandsLoading) ||
+                                (link.label === "For Creators" &&
+                                  creatorsLoading)
                                   ? "Loading..."
                                   : link.label}
                               </button>
@@ -781,9 +898,9 @@ export function Nav({
                               Log out
                             </button>
                           </div>
-                        ) : isCreatorsPage ? (
+                        ) : isDarkMarketingNav ? (
                           <div className="space-y-4 border-t border-white/10 pt-6">
-                            <Link href="/auth/signup" onClick={handleNavigation}>
+                            <Link href="/auth/signup" onClick={handleDarkMarketingSignUp}>
                               <Button
                                 disabled={isNavigating || isSigningIn}
                                 className={cn(

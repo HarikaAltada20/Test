@@ -4,12 +4,18 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
-  Heart,
-  Palette,
-  Star,
-  Crown,
-  Sparkles,
-  Trophy,
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  UserRound,
+  CalendarDays,
+  Check,
+  Grid3X3,
+  LineChart,
+  Upload,
+  UsersRound,
+  X,
+  WalletCards,
   ArrowUpRight,
 } from "lucide-react";
 import CtcBanner from "@/components/CtcBanner";
@@ -63,6 +69,78 @@ const brandImages: string[] = [
 interface BrandsClientProps {
   totalViews: number;
 }
+
+const features = [
+  {
+    icon: UserRound,
+    title: "Content Before It Goes Live",
+    description:
+      "Review and approve creator content before it reaches your audience.",
+  },
+  {
+    icon: CheckCircle2,
+    title: "Verified, Not Self-Reported",
+    description: "Real platform data. Verified views. No inflated numbers.",
+  },
+  {
+    icon: Eye,
+    title: "One Campaign. Full Visibility.",
+    description:
+      "Track content, creators, spend, and performance from one place.",
+  },
+];
+
+const comparisonItems = [
+  {
+    text: "Creators audience size",
+    icon: UsersRound,
+    status: "success",
+    rotate: "-rotate-[-2.26deg]",
+  },
+  {
+    text: "A piece of content",
+    icon: Grid3X3,
+    status: "success",
+    rotate: "rotate-[-2.81deg]",
+  },
+  {
+    text: "Performance",
+    icon: LineChart,
+    status: "error",
+    rotate: "rotate-[3.87deg]",
+  },
+];
+
+const submissions = [
+  {
+    name: "Victor Cardenas",
+    subtitle: "view content",
+    image: "",
+    status: "Approved",
+    approved: true,
+  },
+  {
+    name: "Kevin Bai",
+    subtitle: "Waiting...",
+    image: "",
+    status: "Under Review",
+    approved: false,
+  },
+  {
+    name: "Shaan Patel",
+    subtitle: "Waiting...",
+    image: "",
+    status: "Under Review",
+    approved: false,
+  },
+  {
+    name: "Jimmy Deng",
+    subtitle: "Waiting...",
+    image: "",
+    status: "Under Review",
+    approved: false,
+  },
+];
 
 export default function BrandsClient({ totalViews }: BrandsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -164,188 +242,153 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
+    <div className="min-h-screen bg-black text-white overflow-hidden">
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
-        <section className="pt-20 pb-20 relative overflow-hidden">
-          {/* Strategic Background Elements */}
-
-          {/* Floating Creative Elements */}
-          <div className="inset-0 z-10 pointer-events-none">
-            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-            <Sparkles
-              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-              style={{ animationDelay: "1s" }}
-            />
-            <Star
-              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-              style={{ animationDelay: "2s" }}
-            />
-            <Heart
-              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-              style={{ animationDelay: "0.5s" }}
-            />
-            <Palette
-              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-              style={{ animationDelay: "1.5s" }}
-            />
-            <Trophy
-              className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-              style={{ animationDelay: "0.8s" }}
-            />
+        <main className="min-h-screen overflow-hidden bg-[#030303] text-white">
+          {/* Background */}
+          <div className="pointer-events-none fixed inset-0 -z-10">
+            <div className="absolute left-1/2 top-[320px] h-[850px] w-[850px] -translate-x-1/2 rounded-full bg-[#3d246e]/20 blur-[180px]" />
+            <div className="absolute bottom-[-300px] left-1/2 h-[700px] w-[900px] -translate-x-1/2 bg-[#292052]/40 blur-[180px]" />
           </div>
-          {/* Orange Ellipse Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1200px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
 
-          <div className="container max-w-[1300px] mx-auto px-6 sm:px-10 lg:px-16 relative z-10">
-            <div className="grid lg:grid-cols-2 gap-10 xl:gap-16 items-center">
-              <div className="text-center lg:text-left">
-                {/* Premium Badge */}
-                <div className="inline-flex items-center gap-2.5 bg-[#FFFFFF0F] border border-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-5 sm:py-2.5 mb-8 mx-auto lg:mx-0 backdrop-blur-sm">
-                  <span className="relative flex h-2 w-2 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-400"></span>
-                  </span>
-                  <span className="text-xs sm:text-base font-semibold text-white leading-tight">
-                    <span className="text-purple-400">
-                      {totalViews.toLocaleString("en-US")}+
-                    </span>{" "}
-                    views generated for brands
-                  </span>
-                </div>
+          {/* Hero */}
+          <section className="relative mx-auto max-w-[1080px] px-6 pt-14 text-center md:pt-16">
+            {/* Circular rings */}
+            <div className="pointer-events-none absolute left-1/2 top-[-80px] h-[650px] w-[650px] -translate-x-1/2 rounded-full border border-white/[0.035]" />
 
-                {/* Enhanced Social Icons */}
-                <div className="flex justify-center lg:justify-start mb-8">
-                  {/* <div className="relative group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <div className="relative">
-                      <Image
-                        src={SocialPair}
-                        alt="Social Media Icons"
-                        width={150}
-                        height={40}
-                        className="relative z-10"
-                      />
-                    </div>
-                  </div> */}
-                </div>
+            <div className="pointer-events-none absolute left-1/2 top-[-40px] h-[570px] w-[570px] -translate-x-1/2 rounded-full border border-white/[0.035]">
+              <div className="absolute -left-[2px] top-[100px] h-[3px] w-[145px] -rotate-[61deg] rounded-full bg-gradient-to-r from-transparent via-[#ff8800] to-[#ff8800]" />
 
-                {/* Massive Gaming Title */}
-                <h1
-                  className="
-    text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl
-    flex flex-wrap justify-center lg:justify-start gap-x-2 md:gap-x-3
-    mb-6 leading-tight text-center lg:text-left slide-up
-  "
-                  style={{ animationDelay: "1s" }}
+              <div className="absolute -right-[2px] top-[110px] h-[3px] w-[130px] rotate-[62deg] rounded-full bg-gradient-to-r from-[#7f39ec] to-transparent" />
+            </div>
+
+            <div className="relative z-10">
+              <h1 className="mx-auto max-w-[700px] text-[38px] font-bold leading-[1.08] tracking-[-1.8px] text-white/90 md:text-[48px]">
+                Pay creators based on
+                <br />
+                how their content performs.
+              </h1>
+
+              <p className="mx-auto mt-5 max-w-[640px] text-[15px] leading-6 text-white/50 md:text-[16px]">
+                Set your campaign, your brief, and your budget. Game of Creators
+                puts it in front of a creator network, and pays out on verified
+                performance
+              </p>
+
+              <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+                <button className="group flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/50 px-5 py-3 text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.03)] transition hover:bg-white/10">
+                  Launch a Campaign
+                  <ArrowRight
+                    size={15}
+                    className="transition-transform group-hover:translate-x-1"
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    document.getElementById("how-it-works")?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
+                  className="group flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
                 >
-                  <span
-                    className="font-semibold text-white drop-shadow-2xl"
-                    style={{ fontFamily: "Montserrat, sans-serif" }}
-                  >
-                    Make your product
-                  </span>
-
-                  <span
-                    className="font-semibold text-white drop-shadow-2xl whitespace-nowrap"
-                    style={{ fontFamily: "Montserrat, sans-serif" }}
-                  >
-                    go{" "}
-                    <span className="relative inline-block">
-                      <span
-                        style={{
-                          background:
-                            "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                          WebkitBackgroundClip: "text",
-                          WebkitTextFillColor: "transparent",
-                          backgroundClip: "text",
-                          display: "inline",
-                        }}
-                      >
-                        viral
-                      </span>
-                      <span className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></span>
-                    </span>
-                  </span>
-                </h1>
-
-                {/* Strategic Subtitle */}
-                <p
-                  className="text-base sm:text-lg md:text-2xl text-slate-300 max-w-3xl mx-auto lg:mx-0 mb-10 leading-relaxed drop-shadow-lg text-center lg:text-left slide-left"
-                  style={{ animationDelay: "2s" }}
-                >
-                  Launch strategic{" "}
-                  <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                    creator campaigns
-                  </span>{" "}
-                  and drive organic viral marketing with{" "}
-                  <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
-                    1000s of creators
-                  </span>{" "}
-                  producing content that scales your brand&apos;s reach.
-                </p>
-
-                {/* Call-to-Action Buttons */}
-                <div className="flex flex-col sm:flex-row justify-center lg:justify-start items-center sm:items-start gap-4 mb-8">
-                  <BrandGetStartedButton />
-
-                  <Button
-                    variant="outline"
-                    className="w-auto rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-purple-400/50 hover:text-purple-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
-                    asChild
-                  >
-                    <a
-                      href="https://www.youtube.com/watch?v=kV4dXlWR8sY"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Watch Demo
-                    </a>
-                  </Button>
-                </div>
-
-                {/* Social Proof */}
-                <div className="flex justify-center lg:justify-start items-center text-base text-slate-300 mb-8">
-                  <span className="font-medium">
-                    Trusted by 1,000+ creators and brands
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex justify-center items-center mt-2 lg:mt-0">
-                <div className="relative w-full max-w-[320px] sm:max-w-[380px] md:max-w-[440px] lg:max-w-[520px] h-[320px] sm:h-[380px] md:h-[440px] lg:h-[520px]">
-                  {/* <div className="absolute right-10 top-20 w-[280px] h-[280px] bg-[#1F88FF] rounded-[40%] blur-[2px] opacity-90"></div> */}
-
-                  <div className="absolute left-2 sm:left-4 md:left-6 lg:left-8 top-2 sm:top-4 md:top-5 lg:top-6 w-[150px] h-[240px] sm:w-[180px] sm:h-[290px] md:w-[210px] md:h-[330px] lg:w-[240px] lg:h-[380px] rounded-[20px] sm:rounded-[24px] lg:rounded-[28px] border-2 border-white/70 bg-slate-900/90 shadow-2xl -rotate-6 overflow-hidden">
-                    <video
-                      src="/videos/SnapInsta.to_AQN_SiDJU.mp4"
-                      className="w-full h-full object-cover"
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                    />
-                  </div>
-
-                  <div className="absolute right-2 sm:right-4 md:right-6 lg:right-8 top-16 sm:top-20 md:top-24 lg:top-28 w-[140px] h-[220px] sm:w-[165px] sm:h-[270px] md:w-[190px] md:h-[310px] lg:w-[220px] lg:h-[360px] rounded-[20px] sm:rounded-[24px] lg:rounded-[28px] border-2 border-white/70 bg-slate-900/90 shadow-2xl rotate-[8deg] overflow-hidden">
-                    <video
-                      src="/videos/SnapInsta.to_AQNTex61ndS.mp4"
-                      className="w-full h-full object-cover"
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                    />
-                  </div>
-                </div>
+                  See How it works
+                  <ArrowRight
+                    size={15}
+                    className="transition-transform group-hover:translate-x-1"
+                  />
+                </button>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          {/* Dashboard / Analytics Card */}
+          <section className="relative z-20 mx-auto mt-[105px] max-w-[890px] px-5">
+            <div className="rounded-[30px] border-[9px] border-[#252525] bg-[#171717] p-2 shadow-[0_30px_100px_rgba(88,54,150,0.25)]">
+              {/* Main dashboard card */}
+              <div className="relative min-h-[390px] overflow-hidden rounded-[22px] border border-white/[0.04] bg-[#151515]">
+                {/* Fake dashboard behind */}
+                <div className="absolute inset-0 opacity-[0.18]">
+                  <div className="grid grid-cols-4 gap-3 p-5">
+                    {[1, 2, 3, 4].map((item) => (
+                      <div
+                        key={item}
+                        className="h-20 rounded-xl border border-white/10 bg-white/[0.02]"
+                      />
+                    ))}
+                  </div>
+
+                  <div className="mx-5 h-48 rounded-xl border border-white/10 bg-white/[0.015]" />
+                </div>
+
+                {/* Purple glow */}
+                <div className="absolute bottom-[-160px] right-[-100px] h-[400px] w-[650px] rounded-full bg-[#8869ff]/55 blur-[100px]" />
+
+                {/* Content */}
+                <div className="relative z-10 flex min-h-[390px] flex-col justify-center px-8 py-12 md:px-10">
+                  <h2 className="max-w-[510px] text-[28px] font-bold leading-[1.1] tracking-[-1px] md:text-[31px]">
+                    Don’t just run campaigns.
+                    <br />
+                    Know which creators perform
+                  </h2>
+
+                  <p className="mt-4 max-w-[390px] text-[14px] leading-6 text-white/45">
+                    Know which creators, content, and moments are actually
+                    driving results.
+                  </p>
+
+                  <button className="mt-5 flex w-fit items-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-white/90">
+                    Launch a Campaign
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Feature cards */}
+              <div className="mt-3 grid grid-cols-1 gap-3 rounded-[22px] bg-[#151515] p-7 md:grid-cols-3">
+                {features.map((feature) => {
+                  const Icon = feature.icon;
+
+                  return (
+                    <div key={feature.title}>
+                      <div className="mb-4 flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80">
+                        <Icon size={15} strokeWidth={1.8} />
+                      </div>
+
+                      <h3 className="text-[15px] font-semibold text-white/90">
+                        {feature.title}
+                      </h3>
+
+                      <p className="mt-2 max-w-[230px] text-[13px] leading-5 text-white/40">
+                        {feature.description}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </main>
 
         {/* Infinite Scroll Images Section */}
-        <section className="pb-12 overflow-hidden">
+        <section className="pb-12 overflow-hidden bg-black">
           <div className="overflow-hidden relative scroll-container-testimonials">
             <div className="flex justify-center items-center gap-6 animate-scroll-left">
               {[...brandImages, ...brandImages].map((image, index) => {
@@ -390,107 +433,294 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </div>
         </section>
 
-        {/* Why Brands Choose - Gaming Style */}
-        <section className="text-white py-16" ref={animationRef}>
-          <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
-            {/* Heading */}
+        <section className="relative min-h-screen overflow-hidden bg-black px-5 py-20 text-white md:px-10 lg:px-20">
+          <div className="mx-auto max-w-[1280px]">
+            {/* ================= HEADING ================= */}
+            <h2 className="mx-auto max-w-[720px] text-center text-[42px] font-semibold leading-[1.02] tracking-[-2.5px] md:text-[54px] lg:text-[56px]">
+              The Old way of promoting
+              <br />
+              your brand
+            </h2>
 
-            <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
-            >
-              <span className="text-white">Why Brands Choose </span>
-              <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
-                Game
-              </span>
-              <span className="text-white"> of </span>
-              <span className="bg-gradient-to-r from-orange-500 to-orange-300 bg-clip-text text-transparent">
-                Creators
-              </span>
-            </h1>
+            {/* ================= MAIN CONTENT ================= */}
+            <div className="relative mx-auto mt-24 max-w-[1150px] lg:h-[450px]">
+              {/* =================================================
+              CREATOR DEAL CARD
+          ================================================= */}
+              <div
+                className="
+              relative z-10 mx-auto
+              w-full max-w-[420px]
+              rotate-[-7deg]
+              rounded-[25px]
+              border border-white/[0.13]
+              bg-[#171717]
+              p-6
 
-            <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
-              style={{ animationDelay: "1s" }}
-            >
-              Simple Steps to Launch your Influencer Marketing Campaign
-            </p>
-            <div className="grid gap-6 md:grid-cols-3">
-              {[
-                {
-                  title: "Content at Scale",
-                  description:
-                    "Generate dozens of unique content pieces for a fraction of the cost of traditional production.",
-                  number: "1",
-                  image:
-                    "/images/64804a487ad8f0cf2e94705ec857e40cee3eae3f.avif",
-                },
-                {
-                  title: "Authentic Creativity",
-                  description:
-                    "Tap into creator’s authentic voices and unique perspectives to connect with audiences.",
-                  number: "2",
-                  image:
-                    "/images/b7d7011f7d816c367825ffaccca7846c99dbbfc7.avif",
-                },
-                {
-                  title: "Performance Insights",
-                  description:
-                    "See exactly how your content performs and identify winners to scale through paid ads.",
-                  number: "3",
-                  image:
-                    "/images/b4273c077c336d85dd75502201d73084ea5fba73.avif",
-                },
-              ].map((item) => (
-                <div
-                  key={item.number}
-                  className="cursor-pointer relative border border-gray-500 rounded-xl p-[40px] flex flex-col items-center text-center hover:shadow-lg transition overflow-hidden group"
-                >
-                  <div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    style={{
-                      backgroundImage: `url(${item.image})`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                    }}
-                  ></div>
+              shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]
 
-                  {/* Shade Overlay */}
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-b from-[#00000066] to-[#00000099]"></div>
-
-                  <div
-                    className="relative z-10 w-[50px] h-[50px] text-3xl flex items-center justify-center rounded-full text-white font-bold mb-4"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                    }}
+              lg:absolute
+              lg:left-[2%]
+              lg:top-[25px]
+            "
+              >
+                {/* Top labels */}
+                <div className="flex items-center justify-between">
+                  <span
+                    className="
+                  rounded-full
+                  border border-white/[0.20]
+                  bg-white/[0.01]
+                  px-3 py-1.5
+                  text-[12px]
+                  text-white/65
+                "
                   >
-                    {item.number}
+                    Typical Creator Deal
+                  </span>
+
+                  <span
+                    className="
+                  rounded-full
+                  border border-orange-500/[0.35]
+                  bg-orange-500/[0.18]
+                  px-3 py-1.5
+                  text-[12px]
+                  text-orange-400
+                "
+                  >
+                    Fixed Pay
+                  </span>
+                </div>
+
+                {/* Creator */}
+                <div className="mt-5 flex items-center gap-3">
+                  <div
+                    className="
+                  relative h-[72px] w-[72px]
+                  shrink-0 overflow-hidden
+                  rounded-xl
+                  bg-gradient-to-br
+                  from-orange-400
+                  via-red-500
+                  to-yellow-300
+                "
+                  >
+                    <div className="absolute left-[18px] top-[8px] h-[52px] w-[31px] rounded-[50%] bg-black/30 blur-[7px]" />
+
+                    <div className="absolute bottom-[-12px] right-[-3px] h-[55px] w-[48px] rounded-full bg-white/30 blur-[9px]" />
                   </div>
 
-                  {/* Title */}
-                  <h3 className="relative z-10 text-2xl md:text-3xl mt-5 font-semibold mb-2">
-                    {item.title}
-                  </h3>
+                  <div>
+                    <p className="text-[15px] text-white/50">@sarahcreates</p>
 
-                  {/* Description */}
-                  <p className="relative z-10 text-gray-300 mt-5 text-lg md:text-xl">
-                    {item.description}
-                  </p>
+                    <p className="text-[18px] font-medium text-white/80">
+                      500k followers
+                    </p>
+
+                    <p className="mt-1 text-[14px] text-white/40">
+                      Life · Tech
+                    </p>
+                  </div>
                 </div>
-              ))}
+
+                {/* Details */}
+                <div className="mt-7 grid grid-cols-2 gap-5">
+                  <div className="flex items-start gap-3">
+                    <Grid3X3
+                      size={24}
+                      strokeWidth={1.5}
+                      className="mt-1 text-white/40"
+                    />
+
+                    <div>
+                      <p className="text-[14px] text-white/40">Content</p>
+
+                      <p className="mt-1 text-[15px] text-white/80">
+                        1 Instagram Reel
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <CalendarDays
+                      size={24}
+                      strokeWidth={1.5}
+                      className="mt-1 text-white/40"
+                    />
+
+                    <div>
+                      <p className="text-[14px] text-white/40">Timeline</p>
+
+                      <p className="mt-1 text-[15px] text-white/80">1 week</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Price */}
+                <div
+                  className="
+                mt-6 flex items-center justify-between
+                rounded-lg
+                bg-[#202020]
+                px-4 py-4
+              "
+                >
+                  <span className="text-[14px] text-white/40">
+                    Creators Fee
+                  </span>
+
+                  <span className="text-[17px] font-medium text-white">
+                    $4,000
+                  </span>
+                </div>
+              </div>
+
+              {/* =================================================
+              DOTTED CONNECTOR
+          ================================================= */}
+              <div
+                className="
+              absolute
+              left-[44%]
+              top-[175px]
+              z-0
+              hidden
+              w-[205px]
+              border-t
+              border-dotted
+              border-white/30
+              lg:block
+            "
+              />
+
+              {/* =================================================
+              HANDWRITTEN TEXT
+          ================================================= */}
+              <p
+                className="
+              relative mx-auto mt-20 w-fit
+              -rotate-[2deg]
+              text-[22px]
+              font-medium
+              italic
+              text-white/75
+
+              lg:absolute
+              lg:right-[7%]
+              lg:top-[0px]
+              lg:mt-0
+            "
+                style={{
+                  fontFamily: "cursive",
+                }}
+              >
+                What you are paying for
+              </p>
+
+              {/* =================================================
+              RIGHT SIDE CARDS
+          ================================================= */}
+              <div
+                className="
+              relative mx-auto
+              mt-10
+              w-full max-w-[390px]
+
+              lg:absolute
+              lg:right-[1%]
+              lg:top-[90px]
+              lg:mt-0
+            "
+              >
+                {comparisonItems.map((item, index) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <div
+                      key={item.text}
+                      className={`
+                    relative
+                    flex
+                    h-[58px]
+                    items-center
+                    justify-between
+
+                    rounded-full
+                    border
+                    border-white/[0.14]
+                    bg-[#18181a]
+
+                    px-5
+
+                    ${item.rotate}
+
+                    /* IMAGE-LIKE SOFT WHITE SHADOW */
+                    shadow-[
+                      0_8px_22px_rgba(255,255,255,0.055),
+                      0_12px_25px_rgba(0,0,0,0.65),
+                      inset_0_1px_0_rgba(255,255,255,0.08)
+                    ]
+
+                    /* CROSS / OVERLAP */
+                    ${index !== 0 ? "mt-[15px]" : ""}
+
+                    transition-transform
+                    duration-300
+                    hover:translate-x-1
+                  `}
+                    >
+                      {/* Left content */}
+                      <div className="flex items-center gap-3 text-white/55">
+                        <Icon
+                          size={25}
+                          strokeWidth={1.5}
+                          className="shrink-0"
+                        />
+
+                        <span className="text-[16px]">{item.text}</span>
+                      </div>
+
+                      {/* Status */}
+                      {item.status === "success" ? (
+                        <span
+                          className="
+                        flex h-[20px] w-[20px]
+                        shrink-0
+                        items-center justify-center
+                        rounded-full
+                        bg-[#4ade52]
+                        text-black
+                      "
+                        >
+                          <Check size={13} strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span
+                          className="
+                        flex h-[20px] w-[20px]
+                        shrink-0
+                        items-center justify-center
+                        rounded-full
+                        bg-[#ff4141]
+                        text-black
+                      "
+                        >
+                          <X size={13} strokeWidth={3} />
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </section>
+
         {/* Services We Offer */}
-        <section className="py-16 md:py-20" ref={servicesRef}>
+        {/* <section className="py-16 md:py-20" ref={servicesRef}>
           <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
-            {/* <p className="text-xs sm:text-sm tracking-[0.3em] text-slate-400 font-semibold mb-3">
-              SERVICES
-            </p> */}
+      
             <h2
               className={`text-3xl sm:text-4xl md:text-5xl font-bold mb-4 ${
                 servicesAnimated ? "slide-up" : "hide-before-animate"
@@ -541,141 +771,449 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               ))}
             </div>
           </div>
-        </section>
+        </section> */}
+
         {/* Campaign Process Cards */}
-        <section
-          ref={howItWorksRef}
-          className="py-12 sm:py-16 px-4 md:px-8 xl:px-4 text-white"
-        >
-          <div className="container mx-auto max-w-[1380px]">
-            <h2
-              className={`text-center text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-8 sm:mb-12 ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
-              style={{ animationDelay: "0.1s" }}
-            >
-              How it Works
-            </h2>
+        <section className="bg-[#030405] py-20 md:py-28">
+          <div className="mx-auto max-w-[1200px] px-5">
+            {/* Heading */}
+            <div className="mb-16 text-center">
+              <h2 className="text-3xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">
+                The New way with
+                <br />
+                just three simple steps
+              </h2>
+            </div>
 
-            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                {
-                  id: "1",
-                  title: "Create a Campaign",
-                  description:
-                    "Set your brief, budget, duration, and payout model (Leaderboard or CPM or Milestone or Dual Rewards). Choose platforms like Instagram, YouTube, or Twitter (X).",
-                  image: "/images/GoC How It Works - 1.png",
-                  number: "1",
-                },
-                {
-                  id: "2",
-                  title: "Creators Publish Content",
-                  description:
-                    "Creators publish organic content on their own accounts, sharing videos on Instagram and YouTube and tweets on Twitter",
-                  image: "/images/GoC How It Works - 2.png",
-                  number: "2",
-                },
-                {
-                  id: "3",
-                  title: "Performance Is Tracked",
-                  description:
-                    "Performance is tracked automatically using platform APIs: views on Instagram and YouTube, and engagement points on Twitter based on likes, reposts, replies, and quotes.",
-                  image: "/images/GoC How It Works - 3.png",
-                  number: "3",
-                },
-                {
-                  id: "4",
-                  title: "Pay Only for Performance",
-                  description:
-                    "Leaderboard: Top creators get paid. CPM: Pay per 1K views (Instagram, YouTube, TikTok) or engagement points (Twitter). Milestone: Pay at view targets. Dual Rewards: CPM + milestones in one campaign.",
-                  image: "/images/GoC How It Works - 4.png",
-                  number: "4",
-                },
-              ].map((item) => (
-                <div
-                  key={item.id}
-                  className="group relative rounded-2xl border border-[#7F39EC]/70 bg-black/80 backdrop-blur-sm overflow-hidden flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_26px_70px_rgba(76,35,141,0.6)] hover:border-[#7F39EC] hover:ring-2 hover:ring-[#7F39EC]/60"
-                >
-                  {/* subtle purple glow (stronger on hover) */}
-                  <div className="pointer-events-none absolute inset-px rounded-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-500 bg-[radial-gradient(circle_at_top,_rgba(127,57,236,0.32),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(76,35,141,0.38),_transparent_55%)]" />
+            {/* Cards */}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              {/* Card 1 */}
+              <div className="relative min-h-[515px] overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]">
+                {/* =========================
+    BACKGROUND DETAILS FORM
+========================== */}
+                <div className="absolute inset-0  opacity-[0.6] blur-[0.2px]">
+                  <div className="h-full bg-[#17181d]">
+                    {/* Details */}
+                    <div className="px-3 pt-16">
+                      <div className="mb-5 flex items-center gap-2">
+                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-[8px] text-white">
+                          1
+                        </div>
 
-                  <div className="relative w-full h-full lg:h-64 bg-slate-900/10 overflow-hidden">
-                    {/* light gradient only at bottom for text readability */}
-                    <div className="pointer-events-none absolute inset-0" />
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-full h-full lg:object-contain xl:object-cover object-center group-hover:scale-[1.06] transition-transform duration-700 ease-out"
-                      style={{
-                        imageRendering: "auto",
-                      }}
+                        <span className="text-[10px] text-white">Details</span>
+                      </div>
+
+                      {/* Campaign Title */}
+                      <div className="mb-3">
+                        <label className="mb-1 block text-[7px] text-white">
+                          Campaign title <span className="text-red-400">*</span>
+                        </label>
+
+                        <div className="h-[22px] bg-white/[0.07] px-2 py-1 text-[7px] text-gray-400">
+                          e.g. Create a Viral shorts/video for our New App
+                        </div>
+                      </div>
+
+                      {/* Platform + Content */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="mb-1 block text-[7px] text-white">
+                            Platform <span className="text-red-400">*</span>
+                          </label>
+
+                          <div className="flex h-[23px] items-center justify-between bg-white/[0.07] px-2 text-[7px] text-gray-300">
+                            <span>◉ YouTube</span>
+                            <span>⌄</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-[7px] text-white">
+                            Content Type (optional)
+                          </label>
+
+                          <div className="flex h-[23px] items-center bg-white/[0.07] px-2 text-[7px] text-gray-400">
+                            Select content type
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Thumbnail */}
+                      <div className="mt-3">
+                        <label className="mb-1 block text-[7px] text-white">
+                          Thumbnail
+                        </label>
+
+                        <div className="flex h-[56px] flex-col items-center justify-center bg-white/[0.06]">
+                          <Upload size={10} className="mb-2 text-gray-400" />
+
+                          <p className="text-[7px] text-gray-300">
+                            Drag, drop or{" "}
+                            <span className="underline">browse thumbnail</span>
+                          </p>
+
+                          <p className="mt-1 text-[6px] text-gray-500">
+                            Max file size: 5MB
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* =========================
+    DARK OVERLAY
+========================== */}
+
+                <div className="absolute inset-0 bg-black/35" />
+
+                {/* Top fade */}
+                <div className="absolute inset-x-0 top-0 h-[220px] bg-gradient-to-b from-black/30 via-black/20 to-transparent" />
+
+                {/* Top-left haze */}
+                <div className="pointer-events-none absolute -left-16 -top-16 h-60 w-60 rounded-full bg-[#D9D9D9]/25 blur-[90px]" />
+
+                {/* =========================
+    BUDGET CARD
+========================== */}
+
+                <div className="absolute right-7 top-6 z-10 opacity-[0.6] blur-[0.2px]">
+                  {/* Purple glow */}
+                  <div className="absolute -inset-[2px] rounded-[14px] blur-md" />
+
+                  {/* Budget Card */}
+                  <div
+                    className="
+      relative
+      w-[170px]
+      rounded-xl
+      border
+      border-purple-400/25
+      border-r-purple-400/60
+      border-t-purple-400/40
+      bg-[#16161b]/55
+      p-3
+      backdrop-blur-xl
+      shadow-[8px_0_18px_rgba(124,58,237,0.18)]
+    "
+                  >
+                    <div className="mb-2 flex items-center gap-2 text-xs font-medium text-gray-300">
+                      <WalletCards size={14} />
+                      Budget
+                    </div>
+
+                    <div className="rounded-md bg-black/25 px-3 py-2 text-sm font-semibold text-gray-400 backdrop-blur-md">
+                      $ 24000
+                    </div>
+                  </div>
+                </div>
+
+                {/* =========================
+    BOTTOM GRADIENT
+========================== */}
+
+                <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#191919] via-[#191919]/95 to-transparent" />
+
+                {/* =========================
+    TABS
+========================== */}
+
+                <div className="absolute left-5 right-5 top-[300px] z-20">
+                  <div className="flex items-center rounded-full border border-white/10 bg-[#2a2a2a]/90 p-1 backdrop-blur-lg">
+                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-3 py-1.5 text-sm text-white shadow-[0_0_15px_rgba(124,58,237,0.6)]">
+                      CPM
+                    </button>
+
+                    <button className="flex-1 text-sm text-gray-400">
+                      Leaderboard
+                    </button>
+
+                    <button className="flex-1 text-sm text-gray-400">
+                      Milestone
+                    </button>
+
+                    <button className="flex-1 text-sm text-gray-400">
+                      Dual Rewards
+                    </button>
+                  </div>
+                </div>
+
+                {/* =========================
+    CONTENT
+========================== */}
+
+                <div className="absolute bottom-10 left-7 right-7 z-20">
+                  <h2 className="mb-3 text-[18px] font-semibold text-[#d6d6d6]">
+                    Set up your campaign
+                  </h2>
+
+                  <p className="text-[12px] leading-[1.45] text-[#a8a8a8]">
+                    Define your brief, content requirements, rules, platforms
+                    and budget to tailor your campaign strategy.
+                  </p>
+                </div>
+              </div>
+              {/* Card 2 */}
+              <div className="relative min-h-[515px] overflow-hidden rounded-[20px] border border-white/10 bg-[#1b1b1b]">
+                {/* Campaign thumbnails sitting behind the reel */}
+                <div className="absolute inset-0 scale-110 blur-[2px]">
+                  <div className="relative h-1/2 w-full">
+                    <Image
+                      src="/images/1ad1c9f574ea6d160a89ed07d1b57719736a1741.png"
+                      alt=""
+                      fill
+                      className="object-cover"
                     />
                   </div>
 
-                  <div className="relative p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 flex-1">
-                    {/* accent bar */}
-                    <div className="h-0.5 w-10 rounded-full bg-gradient-to-r from-[#4C238D] via-[#7F39EC] to-fuchsia-400 mb-1 group-hover:w-16 transition-all duration-500" />
-
-                    <h3 className="font-semibold text-sm sm:text-base lg:text-lg line-clamp-2 text-slate-50 group-hover:text-[#C4A3FF] transition-colors duration-300">
-                      {item.title}
-                    </h3>
-
-                    <p className="text-xs sm:text-sm lg:text-base text-slate-300/90 leading-relaxed line-clamp-4 sm:line-clamp-6 group-hover:text-slate-100 transition-colors">
-                      {item.description}
-                    </p>
+                  <div className="relative h-1/2 w-full">
+                    <Image
+                      src="/images/fa2936792bd0f4aac9c0930fabbd4e09bf1395f3.png"
+                      alt=""
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                 </div>
-              ))}
+
+                <div className="absolute inset-0 bg-[#1b1b1b]/80" />
+
+                {/* White haze bleeding out from behind the reel */}
+                <div className="pointer-events-none absolute inset-x-6 bottom-32 top-10 rounded-[48px] bg-white/[0.12] blur-[55px]" />
+                <div className="pointer-events-none absolute -left-6 top-20 h-52 w-32 rounded-full bg-white/20 blur-[55px]" />
+
+                {/* Creator reel */}
+                <div className="absolute inset-x-0 bottom-0 top-2">
+                  <Image
+                    src="/images/Mask group (1).png"
+                    alt="Creator publishing a reel"
+                    fill
+                    className="object-contain object-top"
+                  />
+                </div>
+
+                {/* Dark overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-[#1b1b1b]" />
+
+                {/* Publish badge */}
+                <div className="absolute right-9 top-7">
+                  <span className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-4 py-2 text-sm font-medium text-white shadow-lg">
+                    Publish
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div className="absolute bottom-8 left-7 right-7">
+                  <h3 className="mb-3 text-2xl font-semibold text-white">
+                    Creators discover & publish
+                  </h3>
+
+                  <p className="text-base leading-6 text-gray-400">
+                    Creators create content based on your brief, gets reviewed
+                    and goes live after your approval
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 3 */}
+              <div className="relative min-h-[515px] overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]">
+                {/* Rewards panel */}
+                <div className="absolute left-5 right-5 top-16 rounded-2xl border border-white/5 bg-[#202020]/90 p-5">
+                  <h4 className="mb-5 text-base font-semibold text-white">
+                    Rewards Paid
+                  </h4>
+
+                  {[
+                    {
+                      name: "@glow.with.me",
+                      category: "Fashion & Lifestyle",
+                      amount: "$420",
+                    },
+                    {
+                      name: "@editing.daily",
+                      category: "Skincare",
+                      amount: "$310",
+                    },
+                    {
+                      name: "@thatgirl.routines",
+                      category: "Beauty",
+                      amount: "$950",
+                    },
+                  ].map((user) => (
+                    <div
+                      key={user.name}
+                      className="flex items-center justify-between border-b border-white/5 py-3 last:border-0"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-yellow-500/40 to-gray-500/40" />
+
+                        <div>
+                          <p className="text-xs text-gray-300">{user.name}</p>
+                          <p className="text-[9px] text-gray-500">
+                            {user.category}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-300">
+                          {user.amount}
+                        </span>
+
+                        <span className="rounded-full bg-green-500/10 px-2 py-1 text-[9px] text-green-400">
+                          ✓ Paid
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  <p className="mt-5 text-center text-[9px] text-gray-500">
+                    ▮▮ All payments are based on verified performance
+                  </p>
+                </div>
+
+                {/* Content */}
+                <div className="absolute bottom-8 left-7 right-7">
+                  <h3 className="mb-3 text-2xl font-semibold text-white">
+                    Verified results. Rewards paid.
+                  </h3>
+
+                  <p className="text-base leading-6 text-gray-400">
+                    We track performance so creators get paid on results and you
+                    see where your budget went.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* <NumbersSection
-          items={[
-            {
-              numbers: [3000, 4000, 5000, 6000, 7000],
-              label: "Creators on Platform",
-            },
-            {
-              numbers: [100, 200, 300, 400, 500, 600],
-              label: "Campaigns Delivered",
-            },
-            {
-              numbers: [40, 50, 60, 70, 80],
-              label: "Views Generated",
-              suffix: "M",
-            },
-          ]}
-        /> */}
+        <section className="relative min-h-screen overflow-hidden bg-[#030307] py-24">
+      {/* Purple background glow */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
+        <Image
+          src="/images/eda9d4af3a5188c592e888012bb7b9e177b3c04d.png"
+          alt=""
+          fill
+          className="scale-y-[-1] object-fill"
+        />
+      </div>
 
-        {/* Epic Stats Section */}
-        {/* <section className="py-20 md:py-32 relative">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { number: "3000+", label: "Creators on Platform", icon: <Users className="h-8 w-8" />, gradient: "from-violet-600 to-purple-600" },
-              { number: "100+", label: "Campaigns Delivered", icon: <Rocket className="h-8 w-8" />, gradient: "from-blue-600 to-indigo-600" },
-              { number: "80M+", label: "Views Generated", icon: <TrendingUp className="h-8 w-8" />, gradient: "from-amber-600 to-orange-600" },
-            ].map((stat, index) => (
-              <div key={index} className="group text-center">
-                <div className="relative">
-                  <div className={`absolute inset-0 bg-gradient-to-r ${stat.gradient} rounded-3xl blur-2xl opacity-20 transition-opacity duration-500 group-hover:opacity-40`}></div>
-                  <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/60 backdrop-blur-md p-8 rounded-3xl border border-slate-600/50 group-hover:border-violet-400/50 shadow-2xl transition-all duration-300 hover:scale-105">
-                    <div className={`w-16 h-16 rounded-2xl bg-gradient-to-r ${stat.gradient} bg-opacity-20 border border-violet-400/30 flex items-center justify-center text-violet-400 mx-auto mb-6`}>
-                      {stat.icon}
-                    </div>
-                    <p className={`text-6xl md:text-7xl font-black mb-4 bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent`}>
-                      {stat.number}
+      {/* Annotation */}
+      <div className="relative z-10 mx-auto mb-24 flex max-w-[900px] justify-end px-6">
+        <div className="relative mr-4">
+          <p className="font-[cursive] text-xl italic text-white/75 md:text-2xl">
+            Get full control to approve a reel before making live
+          </p>
+
+          {/* Curved arrow */}
+          <svg
+            className="absolute -bottom-20 left-24 h-24 w-24 text-white/70"
+            viewBox="0 0 100 100"
+            fill="none"
+          >
+            <path
+              d="M15 80 C30 45, 65 40, 55 15"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+            <path
+              d="M51 18 L55 12 L58 20"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle
+              cx="54"
+              cy="50"
+              r="5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+          </svg>
+        </div>
+      </div>
+
+      {/* Main glass container */}
+      <div className="relative z-10 mx-auto flex h-[475px] w-[90%] max-w-[730px] items-start justify-center overflow-hidden rounded-[18px] border border-white/15 bg-[#121212] pt-[68px] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]">
+        {/* Dark overlay */}
+        <div className="absolute inset-0 bg-black/30" />
+
+        {/* Top-left haze */}
+        <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
+
+        {/* Submission card */}
+        <div className="relative z-10 w-[485px] rounded-[18px] border border-[#353535] bg-[#171717] px-9 py-9 shadow-[8px_8px_50px_0px_#00000080] shadow-[4px_12px_4px_0px_#0000001A]">
+          {/* Header */}
+          <div className="mb-7 flex items-start justify-between">
+            <div>
+              <h2 className="text-xl font-medium text-[#d8d8df]">
+                Creator Submissions
+              </h2>
+
+              <p className="mt-1 text-sm text-[#92929a]">
+                Payment are done after brand approves
+              </p>
+            </div>
+
+            <p className="pt-1 text-xl font-medium text-[#d8d8df]">
+              $2,000
+            </p>
+          </div>
+
+          {/* Submission list */}
+          <div>
+            {submissions.map((submission, index) => (
+              <div
+                key={submission.name}
+                className={`flex items-center justify-between py-4 ${
+                  index !== submissions.length - 1
+                    ? "border-b border-white/[0.04]"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={submission.image}
+                    alt={submission.name}
+                    className="h-11 w-11 rounded-full object-cover"
+                  />
+
+                  <div>
+                    <h3 className="text-[16px] font-medium text-[#dedee3]">
+                      {submission.name}
+                    </h3>
+
+                    <p className="mt-0.5 text-sm text-[#92929a]">
+                      {submission.subtitle}
                     </p>
-                    <p className="text-xl text-slate-300 font-semibold">{stat.label}</p>
                   </div>
                 </div>
+
+                {submission.approved ? (
+                  <span className="rounded-full bg-[#1eaa7d] px-4 py-2 text-sm font-medium text-white">
+                    ✓ Approved
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-[#a3a3aa]">
+                    <span className="flex h-3 w-3 items-center justify-center rounded-full border border-[#8b8b94] text-[8px]">
+                      ○
+                    </span>
+                    Under Review
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
-      </section> */}
+      </div>
 
+      {/* Bottom purple glow */}
+      <div className="absolute bottom-0 left-0 h-32 w-full bg-gradient-to-t from-purple-950/50 to-transparent blur-2xl" />
+    </section>
         {/* Gaming Brand Testimonials Section */}
         <Testimonials />
         {/* <section className="py-20 md:py-32 relative">
