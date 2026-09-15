@@ -1320,7 +1320,7 @@ export default function CreatorsClient({
           className="py-16 md:py-20 px-4 text-white scroll-mt-24"
           ref={howItWorksRef}
         >
-          <div className="container mx-auto max-w-[1100px]">
+          <div className="container mx-auto max-w-[1150px]">
             <h2
               className={`text-center text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-10 md:mb-14 tracking-tight ${
                 howItWorksAnimated ? "slide-up" : "hide-before-animate"
@@ -1720,6 +1720,87 @@ export default function CreatorsClient({
           </div>
         </section>
 
+
+        <section className="relative flex min-h-[700px] w-full items-center justify-center overflow-hidden bg-black">
+      {/* Orange glow */}
+      <div
+        className="
+          pointer-events-none absolute left-1/2 top-1/2
+          h-[500px] w-[500px]
+          -translate-x-1/2 -translate-y-1/2
+          rounded-full
+          bg-orange-500/10
+          blur-[100px]
+        "
+      />
+
+      {/* Content */}
+      <div className="relative z-10 flex flex-col items-center text-center">
+        {/* Number */}
+        <h1
+          className="
+            text-[72px]
+            font-bold
+            leading-none
+            tracking-[-0.04em]
+            text-white
+            sm:text-[100px]
+            md:text-[120px]
+            lg:text-[124px]
+          "
+        >
+          16,700+
+        </h1>
+
+        {/* Subtitle */}
+        <p
+          className="
+            mt-5
+            text-[18px]
+            font-semibold
+            tracking-[-0.02em]
+            text-white/70
+            sm:text-[21px]
+            md:text-[22px]
+          "
+        >
+          creators have already Joined
+        </p>
+
+        {/* Button */}
+        <button
+          type="button"
+          className="
+            group
+            mt-8
+            flex items-center gap-3
+            rounded-[22px]
+            border border-orange-400
+            bg-white
+            px-6 py-4
+            text-[17px]
+            font-semibold
+            text-orange-500
+            shadow-[0_0_25px_rgba(255,120,0,0.45)]
+            transition-all duration-300
+            hover:scale-105
+            hover:shadow-[0_0_35px_rgba(255,120,0,0.65)]
+          "
+        >
+          <span>Make you turn</span>
+
+          <ArrowRight
+            size={22}
+            strokeWidth={1.8}
+            className="
+              transition-transform duration-300
+              group-hover:translate-x-1
+            "
+          />
+        </button>
+      </div>
+    </section>
+
         {/* <NumbersSection
           items={[
             {
@@ -1765,7 +1846,10 @@ export default function CreatorsClient({
             </div>
           </div>
         </section> */}
-        <Testimonials />
+
+        {/* <Testimonials /> */}
+
+
         {/* Gaming Testimonials Section */}
         {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/50 to-slate-800/50 backdrop-blur-sm"></div>

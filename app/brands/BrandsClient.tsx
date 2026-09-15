@@ -14,16 +14,20 @@ import {
   LineChart,
   Upload,
   UsersRound,
+  Play, ShoppingCart,
   X,
   WalletCards,
   ArrowUpRight,
 } from "lucide-react";
+import { FaXTwitter } from "react-icons/fa6";
+import { SiInstagram, SiTiktok, SiYoutube } from "react-icons/si";
 import CtcBanner from "@/components/CtcBanner";
 import NumbersSection from "@/components/NumberSection";
 import Testimonials from "@/components/Testimonials";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - reuse from creators page
 import SocialPair from "@/public/images/social_pair.avif";
+import WorldMapDots from "@/public/images/image 252.png";
 import BrandGetStartedButton from "@/components/BrandGetStartedButton";
 
 // const faqItemsBrands = [
@@ -141,7 +145,134 @@ const submissions = [
     approved: false,
   },
 ];
+type Person = {
+  name: string;
+  x: number;
+  y: number;
+  /** How far the dashed connector bows upwards on its way to the campaign marker */
+  arc: number;
+  avatar: string;
+};
 
+// Percentage coordinates inside the map box, shared by the markers and the connectors
+const campaignCenter = { x: 50, y: 45 };
+
+const people: Person[] = [
+  {
+    name: "Alex Joined",
+    x: 19,
+    y: 28,
+    arc: 8,
+    avatar: "https://i.pravatar.cc/100?img=12",
+  },
+  {
+    name: "Leela Joined",
+    x: 66,
+    y: 23,
+    arc: 6,
+    avatar: "https://i.pravatar.cc/100?img=47",
+  },
+  {
+    name: "Mukesh Joined",
+    x: 66,
+    y: 42,
+    arc: 4,
+    avatar: "https://i.pravatar.cc/100?img=11",
+  },
+  {
+    name: "Sameer Joined",
+    x: 27,
+    y: 69,
+    arc: 10,
+    avatar: "https://i.pravatar.cc/100?img=13",
+  },
+  {
+    name: "Sameer Joined",
+    x: 84,
+    y: 69,
+    arc: 10,
+    avatar: "https://i.pravatar.cc/100?img=33",
+  },
+];
+
+const connectionPath = ({ x, y, arc }: Person) => {
+  const controlX = (x + campaignCenter.x) / 2;
+  const controlY = (y + campaignCenter.y) / 2 - arc;
+  return `M ${x} ${y} Q ${controlX} ${controlY} ${campaignCenter.x} ${campaignCenter.y}`;
+};
+
+const profiles = [
+  {
+    name: "@free_giveaway",
+    status: "Bot detected",
+    image: "https://i.pravatar.cc/100?img=12",
+    type: "bad",
+  },
+  {
+    name: "@free_giveaway",
+    status: "Bot detected · Fake view",
+    image: "https://i.pravatar.cc/100?img=47",
+    type: "bad",
+  },
+  {
+    name: "@riya",
+    status: "Verified Views",
+    image: "https://i.pravatar.cc/100?img=32",
+    type: "good",
+  },
+  {
+    name: "@anand",
+    status: "Verified Views",
+    image: "https://i.pravatar.cc/100?img=11",
+    type: "good",
+  },
+];
+
+
+  const creators = [
+    {
+      name: "@sarahcreates",
+      views: "125K",
+      image:
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop",
+    },
+    {
+      name: "@rohanvlogs",
+      views: "98K",
+      image:
+        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
+    },
+    {
+      name: "@themishadity",
+      views: "87K",
+      image:
+        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
+    },
+    {
+      name: "@karanfilms",
+      views: "74K",
+      image:
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
+    },
+    {
+      name: "@kairos",
+      views: "65K",
+      image:
+        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop",
+    },
+    {
+      name: "@lumina",
+      views: "58K",
+      image:
+        "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100&h=100&fit=crop",
+    },
+    {
+      name: "@northstar",
+      views: "51K",
+      image:
+        "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
+    },
+  ];
 export default function BrandsClient({ totalViews }: BrandsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
@@ -259,23 +390,18 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
     <div className="min-h-screen bg-black text-white overflow-hidden">
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
-        <main className="min-h-screen overflow-hidden bg-[#030303] text-white">
-          {/* Background */}
-          <div className="pointer-events-none fixed inset-0 -z-10">
-            <div className="absolute left-1/2 top-[320px] h-[850px] w-[850px] -translate-x-1/2 rounded-full bg-[#3d246e]/20 blur-[180px]" />
-            <div className="absolute bottom-[-300px] left-1/2 h-[700px] w-[900px] -translate-x-1/2 bg-[#292052]/40 blur-[180px]" />
-          </div>
+        <main className="min-h-screen overflow-hidden bg-black text-white">
 
           {/* Hero */}
           <section className="relative mx-auto max-w-[1080px] px-6 pt-14 text-center md:pt-16">
             {/* Circular rings */}
-            <div className="pointer-events-none absolute left-1/2 top-[-80px] h-[650px] w-[650px] -translate-x-1/2 rounded-full border border-white/[0.035]" />
+            {/* <div className="pointer-events-none absolute left-1/2 top-[-80px] h-[650px] w-[650px] -translate-x-1/2 rounded-full border border-white/[0.035]" /> */}
 
-            <div className="pointer-events-none absolute left-1/2 top-[-40px] h-[570px] w-[570px] -translate-x-1/2 rounded-full border border-white/[0.035]">
+            {/* <div className="pointer-events-none absolute left-1/2 top-[-40px] h-[570px] w-[570px] -translate-x-1/2 rounded-full border border-white/[0.035]">
               <div className="absolute -left-[2px] top-[100px] h-[3px] w-[145px] -rotate-[61deg] rounded-full bg-gradient-to-r from-transparent via-[#ff8800] to-[#ff8800]" />
 
               <div className="absolute -right-[2px] top-[110px] h-[3px] w-[130px] rotate-[62deg] rounded-full bg-gradient-to-r from-[#7f39ec] to-transparent" />
-            </div>
+            </div> */}
 
             <div className="relative z-10">
               <h1 className="mx-auto max-w-[700px] text-[38px] font-bold leading-[1.08] tracking-[-1.8px] text-white/90 md:text-[48px]">
@@ -320,10 +446,10 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </section>
 
           {/* Dashboard / Analytics Card */}
-          <section className="relative z-20 mx-auto mt-[105px] max-w-[890px] px-5">
-            <div className="rounded-[30px] border-[9px] border-[#252525] bg-[#171717] p-2 shadow-[0_30px_100px_rgba(88,54,150,0.25)]">
+          <section className="relative z-20 mx-auto mt-[105px] max-w-[1100px] px-5">
+            <div className="rounded-[30px]  bg-[#242424] p-2 shadow-[0_30px_100px_rgba(88,54,150,0.25)]">
               {/* Main dashboard card */}
-              <div className="relative min-h-[390px] overflow-hidden rounded-[22px] border border-white/[0.04] bg-[#151515]">
+              <div className="relative min-h-[450px] overflow-hidden rounded-[22px] border border-white/[0.04] bg-[#151515]">
                 {/* Fake dashboard behind */}
                 <div className="absolute inset-0 opacity-[0.18]">
                   <div className="grid grid-cols-4 gap-3 p-5">
@@ -495,21 +621,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
                 {/* Creator */}
                 <div className="mt-5 flex items-center gap-3">
-                  <div
-                    className="
-                  relative h-[72px] w-[72px]
-                  shrink-0 overflow-hidden
-                  rounded-xl
-                  bg-gradient-to-br
-                  from-orange-400
-                  via-red-500
-                  to-yellow-300
-                "
-                  >
-                    <div className="absolute left-[18px] top-[8px] h-[52px] w-[31px] rounded-[50%] bg-black/30 blur-[7px]" />
-
-                    <div className="absolute bottom-[-12px] right-[-3px] h-[55px] w-[48px] rounded-full bg-white/30 blur-[9px]" />
-                  </div>
+                 <img src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png" alt="Creator" className="h-[72px] w-[72px] rounded-md object-cover" />
 
                   <div>
                     <p className="text-[15px] text-white/50">@sarahcreates</p>
@@ -1176,11 +1288,24 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <img
-                    src={submission.image}
-                    alt={submission.name}
-                    className="h-11 w-11 rounded-full object-cover"
-                  />
+                  {submission.image ? (
+                    <img
+                      src={submission.image}
+                      alt={submission.name}
+                      className="h-11 w-11 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      aria-hidden
+                      className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-sm font-medium text-[#dedee3]"
+                    >
+                      {submission.name
+                        .split(" ")
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)}
+                    </div>
+                  )}
 
                   <div>
                     <h3 className="text-[16px] font-medium text-[#dedee3]">
@@ -1211,8 +1336,845 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         </div>
       </div>
 
-      {/* Bottom purple glow */}
-      <div className="absolute bottom-0 left-0 h-32 w-full bg-gradient-to-t from-purple-950/50 to-transparent blur-2xl" />
+    </section>
+
+
+    <section className="min-h-screen overflow-hidden bg-black px-4 py-16 text-white sm:px-6 lg:px-10">
+      <div className="mx-auto max-w-[1110px]">
+
+        {/* Heading */}
+        <h2 className="mb-16 text-center text-4xl font-bold tracking-tight sm:text-5xl">
+          Everything that you need
+        </h2>
+
+        {/* TOP TWO CARDS */}
+        <div className="grid gap-5 lg:grid-cols-2">
+
+          {/* REAL ENGAGEMENT */}
+          <div className="relative h-[425px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717]">
+            {/* Background profiles */}
+            <div className="absolute left-1/2 top-10 z-[1] flex w-[230px] -translate-x-1/2 flex-col gap-2.5">
+              {profiles.map((profile, index) => (
+                <div
+                  key={index}
+                  className={`
+                    relative flex h-[42px] items-center gap-2 rounded-[12px]
+                    border border-white/[0.07] bg-[#151515]/90 px-2
+                    shadow-[0_5px_20px_rgba(0,0,0,0.3)]
+                    ${index === 1 ? "opacity-45" : ""}
+                  `}
+                >
+                  <div className="h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full bg-[#292929]">
+                    <img
+                      src={profile.image}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1 leading-none">
+                    <div className="truncate text-[11px] font-medium text-white/65">
+                      {profile.name}
+                    </div>
+                    <div
+                      className={`mt-1 truncate text-[9px] ${
+                        profile.type === "bad"
+                          ? "text-white/20"
+                          : "text-white/25"
+                      }`}
+                    >
+                      {profile.status}
+                    </div>
+                  </div>
+
+                  <div
+                    className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full ${
+                      profile.type === "bad" ? "bg-[#d92d25]" : "bg-[#26a844]"
+                    }`}
+                  >
+                    {profile.type === "bad" ? (
+                      <svg viewBox="0 0 12 12" className="h-2 w-2" fill="none">
+                        <path
+                          d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
+                          stroke="white"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 12 12" className="h-2 w-2" fill="none">
+                        <path
+                          d="M2.5 6.2L4.8 8.3L9.5 3.7"
+                          stroke="white"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Fade over profiles */}
+            <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[2] h-[220px] bg-gradient-to-b from-transparent via-[#171717]/35 to-[#171717]" />
+
+            {/* Pinched purple curve */}
+            <div className="pointer-events-none absolute inset-x-0 top-[92px] z-[4] h-[150px]">
+              <div className="absolute inset-0 blur-[18px] opacity-70">
+                <svg
+                  viewBox="0 0 1000 200"
+                  preserveAspectRatio="none"
+                  className="h-full w-full"
+                >
+                  <path
+                    d="M0 10 C220 95, 780 95, 1000 10 L1000 190 C780 105, 220 105, 0 190 Z"
+                    fill="#754FF6"
+                  />
+                </svg>
+              </div>
+
+              <svg
+                viewBox="0 0 1000 200"
+                preserveAspectRatio="none"
+                className="relative h-full w-full"
+              >
+                <defs>
+                  <radialGradient
+                    id="engagementPurple"
+                    cx="50%"
+                    cy="51.5%"
+                    r="50%"
+                    fx="50%"
+                    fy="51.5%"
+                    gradientUnits="objectBoundingBox"
+                    gradientTransform="translate(0.5 0.515) scale(1 0.97) translate(-0.5 -0.515)"
+                  >
+                    <stop offset="0%" stopColor="#754FF6" />
+                    <stop offset="100%" stopColor="#442E90" />
+                  </radialGradient>
+                  <filter id="engagementNoise">
+                    <feTurbulence
+                      type="fractalNoise"
+                      baseFrequency="0.9"
+                      numOctaves="2"
+                      stitchTiles="stitch"
+                    />
+                    <feColorMatrix type="saturate" values="0" />
+                    <feBlend in="SourceGraphic" mode="overlay" />
+                  </filter>
+                </defs>
+                <path
+                  d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
+                  fill="url(#engagementPurple)"
+                />
+                <path
+                  d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
+                  fill="white"
+                  opacity="0.05"
+                  filter="url(#engagementNoise)"
+                />
+              </svg>
+
+              <div className="absolute inset-0 flex items-center justify-center gap-2.5">
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="shrink-0"
+                >
+                  <path
+                    d="M4 11.5L13.5 9L15.5 15L6 17.5L4 11.5Z"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M13.5 9L15.2 5.8L19.2 7.1L17.8 10.2"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M9 16.5L10.5 21"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M7.5 21H13"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M18.5 2.5V5.5M17 4H20"
+                    stroke="white"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <span className="text-[15px] font-medium tracking-[-0.02em] text-white">
+                  Authentic Data. Verified Performance
+                </span>
+              </div>
+            </div>
+
+            {/* Bottom text */}
+            <div className="absolute bottom-7 left-7 right-7 z-10">
+              <h3 className="mb-2 text-xl font-semibold">
+                Real Engagement Only
+              </h3>
+              <p className="max-w-[480px] text-[15px] leading-6 text-white/50">
+                We scan every view for suspicious activity and filter out bots,
+                clicks farms and fake traffic - so you only pay for real people
+              </p>
+            </div>
+          </div>
+
+          {/* CONNECTED AT SOURCE */}
+          <div className="relative h-[425px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717]">
+
+            {/* API status */}
+            <div className="absolute left-0 right-0 top-7 z-10 text-center text-sm text-green-400">
+              <span className="mr-2">●</span>
+              API Connected
+            </div>
+
+            {/* Semicircle orbit */}
+            <div className="absolute inset-x-0 top-10 bottom-[118px]">
+              <div className="absolute left-1/2 top-[58%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[52%] overflow-hidden">
+                  <div className="absolute left-1/2 top-[150px] h-[292px] w-[292px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
+                  <div className="absolute left-1/2 top-[150px] h-[230px] w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
+                  <div className="absolute left-1/2 top-[150px] h-[168px] w-[168px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
+                </div>
+
+                <div className="absolute left-1/2 top-1/2 z-10 flex h-[80px] w-[80px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#1c1c1c] shadow-[0_22px_40px_rgba(109,70,255,0.55)]">
+                  <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_92%,rgba(124,58,237,0.95),transparent_56%)]" />
+                  <Image
+                    src="/images/Group@2x.png"
+                    alt="Game of Creators"
+                    width={48}
+                    height={48}
+                    className="relative z-10 h-12 w-12 object-contain"
+                  />
+                </div>
+
+                <div
+                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+                  style={{ left: "calc(50% - 76px)", top: "calc(50% - 76px)" }}
+                >
+                  <SiTiktok className="h-6 w-6 text-white" />
+                </div>
+
+                <div
+                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+                  style={{ left: "calc(50% + 76px)", top: "calc(50% - 76px)" }}
+                >
+                  <FaXTwitter className="h-5 w-5 text-white" />
+                </div>
+
+                <div
+                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_0_28px_rgba(124,58,237,0.7)]"
+                  style={{ left: "calc(50% - 118px)", top: "50%" }}
+                >
+                  <SiYoutube className="h-6 w-6 text-[#FF0000]" />
+                </div>
+
+                <div
+                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
+                  style={{ left: "calc(50% + 118px)", top: "50%" }}
+                >
+                  <SiInstagram className="h-6 w-6 text-[#E1306C]" />
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom text */}
+            <div className="absolute bottom-7 left-7 right-7 z-10">
+              <h3 className="mb-2 text-xl font-semibold">
+                Connected at the source
+              </h3>
+
+              <p className="max-w-[480px] text-[15px] leading-6 text-white/50">
+                Campaign data is pulled directly from Instagram and
+                YouTube, giving you verified performance instead of
+                self-reported numbers.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* CAMPAIGN CARD */}
+        <div className="w-full mt-6 overflow-hidden rounded-[20px] border border-white/10 bg-[#151515] px-9 py-9">
+      <div className="relative flex min-h-[390px]">
+
+        {/* LEFT CONTENT */}
+        <div className="relative z-30 w-[310px] shrink-0">
+          <h2 className="text-[22px] font-semibold tracking-[-0.4px] text-white/80">
+            Run Campaigns, Your way.
+          </h2>
+
+          <p className="mt-2 max-w-[250px] text-[16px] leading-[24px] text-white/50">
+            Chose the format that fit your goals -
+            <br />
+            from guaranteed reach to
+            <br />
+            performance-based rewards
+          </p>
+        </div>
+
+        {/* CARDS AREA */}
+        <div className="absolute left-[300px] top-[-8px] h-[460px] w-[calc(100%-260px)] overflow-visible">
+
+          {/* ================= CPM CARD ================= */}
+          <div
+            className="
+              absolute left-0 top-[18px] z-[10]
+              h-[410px] w-[270px]
+              overflow-hidden rounded-[22px]
+              bg-gradient-to-br from-[#7445ef] to-[#5c36d8]
+              shadow-2xl
+            "
+          >
+            <div className="px-5 pt-6">
+              <h3 className="text-[21px] font-bold text-white">
+                CPM
+              </h3>
+
+              <p className="mt-[-2px] text-[15px] text-white/90">
+                pay per 1k verified views
+              </p>
+            </div>
+
+            {/* Video container */}
+            <div className="absolute left-[16px] right-[16px] top-[88px] bottom-0 overflow-hidden rounded-t-[14px] bg-white">
+              {/* top controls */}
+              <div className="absolute left-0 right-0 top-0 z-10 flex h-[45px] items-center justify-between bg-white px-3">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eee]">
+                  <svg
+                    width="11"
+                    height="13"
+                    viewBox="0 0 11 13"
+                    fill="none"
+                  >
+                    <path
+                      d="M10 6.5L1 1V12L10 6.5Z"
+                      fill="#7B4CF2"
+                    />
+                  </svg>
+                </div>
+
+                <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                  <svg width="13" height="13" viewBox="0 0 24 24">
+                    <path
+                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      fill="none"
+                    />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                  </svg>
+                  125K
+                </div>
+              </div>
+
+              {/* Person/video image */}
+              <div className="absolute inset-x-0 top-[45px] bottom-0">
+                <Image
+                  src="/images/01d7112f99a9d9cf991c9fb42b1f697eeeafc875.png"
+                  alt="Creator"
+                  fill
+                  className="object-cover"
+                />
+
+                {/* video dark gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+
+                {/* <div className="absolute bottom-4 left-3 right-3 text-center text-[11px] text-white/50">
+                  since I started posting
+                  <br />
+                  on social media
+                </div> */}
+              </div>
+            </div>
+          </div>
+
+          {/* ================= LEADERBOARD CARD ================= */}
+          <div
+            className="
+              absolute left-[190px] top-[28px] z-[20]
+              h-[410px] w-[270px]
+              overflow-hidden rounded-[22px]
+              bg-gradient-to-br from-[#ffc743] to-[#d69a28]
+              shadow-2xl
+            "
+            style={{ transform: "rotate(2.5deg)" }}
+          >
+              <div className="px-5 pt-6">
+                <h3 className="text-[21px] font-bold text-white">
+                  Leaderboard
+                </h3>
+
+                <p className="max-w-[180px] text-[14px] leading-[18px] text-white">
+                  Compete for top ranks and
+                  <br />
+                  earn more
+                </p>
+              </div>
+
+              {/* Gold decorative circles */}
+              <div className="absolute right-[20px] top-[55px] h-[90px] w-[90px] rounded-full bg-[#d9941d]/50" />
+              <div className="absolute right-[-15px] top-[5px] h-[100px] w-[100px] rounded-full bg-[#ffe17c]/40" />
+
+              {/* Leaderboard white panel */}
+              <div className="absolute left-[16px] right-[16px] top-[108px] bottom-0 rounded-t-[13px] bg-white px-4 pt-4">
+                <h4 className="text-[15px] font-semibold text-[#272727]">
+                  Top Creators
+                </h4>
+
+                <p className="text-[10px] text-gray-500">
+                  See who's leading this campaign
+                </p>
+
+                <div className="mt-4 space-y-[13px]">
+                  {creators.map((creator, index) => (
+                    <div
+                      key={creator.name}
+                      className="flex items-center gap-2"
+                    >
+                      <span className="w-[13px] text-[8px] text-gray-500">
+                        {index + 1}
+                      </span>
+
+                      <Image
+                        src={creator.image}
+                        alt={creator.name}
+                        width={21}
+                        height={21}
+                        className="h-[21px] w-[21px] rounded-full object-cover"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[8px] font-medium text-gray-700">
+                          {creator.name}
+                        </div>
+
+                        <div className="mt-[3px] h-[3px] w-full rounded-full bg-gray-200">
+                          <div
+                            className="h-full rounded-full bg-[#ff941d]"
+                            style={{
+                              width: `${Math.max(
+                                30,
+                                100 - index * 10
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+          </div>
+
+          {/* ================= MILESTONE CARD ================= */}
+          <div
+            className="
+              absolute left-[360px] top-[42px] z-[30]
+              h-[410px] w-[270px]
+              overflow-hidden rounded-[22px]
+              bg-gradient-to-br from-[#ed3fcd] to-[#b832bc]
+              shadow-2xl
+            "
+            style={{ transform: "rotate(4deg)" }}
+          >
+              <div className="px-5 pt-6">
+                <h3 className="text-[21px] font-bold text-white">
+                  Milestone
+                </h3>
+
+                <p className="max-w-[180px] text-[14px] leading-[18px] text-white">
+                  Hit view goals and
+                  <br />
+                  unlock rewards
+                </p>
+              </div>
+
+              {/* White milestone panel */}
+              <div className="absolute left-[16px] right-[16px] top-[110px] bottom-0 rounded-t-[14px] bg-white px-5 pt-5">
+                <h4 className="text-[15px] font-semibold text-gray-800">
+                  Milestone
+                </h4>
+
+                <p className="text-[10px] text-gray-500">
+                  Rewards at every step
+                </p>
+
+                {/* Timeline */}
+                <div className="relative mt-5">
+                  <div className="absolute left-[11px] top-[9px] bottom-[24px] w-[2px] bg-[#ff4fc9]" />
+
+                  {/* 100K */}
+                  <div className="relative flex gap-5">
+                    <div className="relative z-10 flex h-[20px] w-[20px] items-center justify-center rounded-full bg-[#ff28a8]">
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <path
+                          d="M5 12l4 4L19 6"
+                          stroke="white"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+
+                    <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
+                      <p className="text-[13px] font-semibold text-gray-800">
+                        100K views
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        ₹5,000 reward
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 500K */}
+                  <div className="relative mt-3 flex gap-5">
+                    <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
+
+                    <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
+                      <p className="text-[13px] font-semibold text-gray-800">
+                        500K views
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        ₹15,000 reward
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 1M */}
+                  <div className="relative mt-3 flex gap-5">
+                    <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
+
+                    <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
+                      <p className="text-[13px] font-semibold text-gray-800">
+                        1M views
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        ₹50,000 reward
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          </div>
+
+          {/* ================= DUAL REWARDS CARD ================= */}
+          <div
+            className="
+              absolute left-[540px] top-[64px] z-[40]
+              h-[380px] w-[300px]
+              overflow-hidden rounded-[22px]
+              bg-gradient-to-br from-[#36b4eb] to-[#2396d1]
+              shadow-2xl
+            "
+            style={{ transform: "rotate(5.5deg)" }}
+          >
+              <div className="px-5 pt-6">
+                <h3 className="text-[21px] font-bold text-white">
+                  Dual Rewards
+                </h3>
+
+                <p className="text-[15px] text-white">
+                  CPM + Milestones
+                </p>
+              </div>
+
+              {/* Main reward white panel */}
+              <div className="absolute left-[16px] right-[16px] top-[105px] bottom-0 rounded-t-[13px] bg-white/90 px-3 pt-4">
+
+                {/* CPM reward */}
+                <div className="relative rounded-[11px] bg-[#d9f2ff] px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-7 w-7 items-center justify-center">
+                      <svg
+                        width="18"
+                        height="21"
+                        viewBox="0 0 18 21"
+                        fill="none"
+                      >
+                        <path
+                          d="M16 10.5L1 2V19L16 10.5Z"
+                          fill="#069DE2"
+                        />
+                      </svg>
+                    </div>
+
+                    <div>
+                      <div className="text-[17px] font-semibold leading-[19px] text-[#079be0]">
+                        $1.00
+                      </div>
+
+                      <div className="text-[13px] leading-[16px] text-[#079be0]">
+                        per 1,000 view
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Plus */}
+                <div className="relative z-10 mx-auto my-[-3px] flex h-[40px] w-[40px] items-center justify-center">
+                  <div className="absolute h-[4px] w-[32px] rounded-full bg-[#55b8e9]" />
+                  <div className="absolute h-[32px] w-[4px] rounded-full bg-[#55b8e9]" />
+                </div>
+
+                {/* Milestone reward */}
+                <div className="rounded-[11px] bg-[#d9f2ff] px-4 py-4">
+                  <div className="flex items-start gap-3">
+                    {/* bars icon */}
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="mt-1 shrink-0"
+                    >
+                      <path
+                        d="M5 19V12M12 19V5M19 19V9"
+                        stroke="#079BE0"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+
+                    <div className="text-[#079be0]">
+                      <div className="text-[16px] font-semibold leading-[20px]">
+                        $25
+                        <span className="font-normal">
+                          {" "}
+                          at 25K views
+                        </span>
+                      </div>
+
+                      <div className="text-[16px] font-semibold leading-[20px]">
+                        $50
+                        <span className="font-normal">
+                          {" "}
+                          at 50K views
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom fade */}
+                <div className="absolute bottom-0 left-0 right-0 h-[90px] bg-gradient-to-t from-white via-white/80 to-transparent" />
+              </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+      </div>
+    </section>
+
+    <section className="min-h-screen bg-black px-6 py-16 text-white sm:px-10 lg:px-20">
+      <div className="mx-auto flex min-h-[700px] max-w-[1240px] items-center">
+        <div className="grid w-full grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_436px] lg:gap-16">
+          
+          {/* Left Content */}
+          <div className="max-w-[650px]">
+            <h2 className="text-[42px] font-semibold leading-[1.08] tracking-[-1.8px] sm:text-[48px] lg:text-[52px]">
+              Real campaigns. Proven
+              <br />
+              performance.
+            </h2>
+
+            <p className="mt-8 max-w-[640px] text-[20px] font-medium italic leading-[1.8] tracking-[-0.3px] text-[#c9c9c9] sm:text-[22px]">
+              “GOC helped us move from paying for reach to
+              understanding the actual performance behind every piece of
+              content. The visibility made campaign decisions much
+              easier.”
+            </p>
+
+            <div className="mt-7">
+              <p className="text-[15px] font-normal text-[#777]">
+                Ranveer Allahbadia
+              </p>
+              <p className="mt-1 text-[15px] font-normal text-[#777]">
+                Founder, BeerBiceps
+              </p>
+            </div>
+
+            {/* Stats */}
+            <div className="mt-12 flex w-full max-w-[545px] overflow-hidden rounded-[16px] bg-[#252525] px-8 py-4">
+              
+              <div className="flex-1">
+                <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                  3+
+                </p>
+                <p className="mt-2 text-[14px] text-[#858585]">
+                  Campaigns Launched
+                </p>
+              </div>
+
+              <div className="flex-1">
+                <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                  2.5M+
+                </p>
+                <p className="mt-2 text-[14px] text-[#858585]">
+                  Views generated
+                </p>
+              </div>
+
+              <div className="flex-1">
+                <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                  16%
+                </p>
+                <p className="mt-2 text-[14px] text-[#858585]">
+                  Engagement Rate
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Right Video / Image */}
+          <div className="relative mx-auto h-[660px] w-full max-w-[436px] overflow-hidden rounded-[48px]">
+            <Image
+              src="/images/ee0bbe0b8188b7baabb964e4fc87a704b2fbcdf8.png"
+              alt="Campaign testimonial"
+              fill
+              priority
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 436px"
+            />
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <section className="relative min-h-[900px] overflow-hidden bg-black px-5 py-24 text-white">
+      {/* Background glow */}
+      <div className="pointer-events-none absolute inset-x-0 top-[360px] h-[600px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.10),transparent_65%)]" />
+
+      {/* Top content */}
+      <div className="relative z-20 mx-auto max-w-3xl text-center">
+        <h2 className="text-4xl font-semibold leading-[1.1] tracking-[-0.04em] sm:text-5xl md:text-[52px]">
+          The results gets sharper
+          <br />
+          with every campaign.
+        </h2>
+
+        <p className="mx-auto mt-5 max-w-[620px] text-sm leading-6 text-neutral-500 sm:text-base">
+          More campaigns mean more creators participating, more content, and
+          more performance data — which makes it easier to see what a creator
+          or a piece of content is likely to do next time
+        </p>
+
+        <button className="mt-6 inline-flex items-center gap-3 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-3 text-sm font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] transition hover:bg-white/10">
+          Launch a Campaign
+          <span className="text-lg">→</span>
+        </button>
+      </div>
+
+      {/* Map */}
+      <div className="relative mx-auto mt-12 h-[580px] w-full max-w-[1250px]">
+        <Image
+          src={WorldMapDots}
+          alt=""
+          fill
+          priority
+          className="object-cover object-center"
+          sizes="(max-width: 1280px) 100vw, 1250px"
+        />
+
+        {/* Connection lines */}
+        <svg
+          aria-hidden
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+        >
+          {people.map((person, index) => (
+            <path
+              key={`connector-${person.name}-${index}`}
+              d={connectionPath(person)}
+              fill="none"
+              stroke="white"
+              strokeOpacity={0.35}
+              strokeWidth={1}
+              strokeDasharray="5 5"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </svg>
+
+        {/* Center campaign marker */}
+        <div
+          className="absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2"
+          style={{
+            left: `${campaignCenter.x}%`,
+            top: `${campaignCenter.y}%`,
+          }}
+        >
+          <div className="flex h-full w-full items-center justify-center rounded-full border border-white/50 bg-black shadow-[0_0_30px_rgba(255,255,255,0.15)]">
+            <div className="flex h-7 w-7 items-center justify-center">
+             <img src="/images/Group@2x.png" alt="Play" className="h-full w-full object-cover" />
+            </div>
+          </div>
+
+          <div className="absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-full border border-black/30 bg-white/80 px-5 py-2 text-center text-sm font-medium text-black shadow-lg backdrop-blur">
+            Campaign Launched
+          </div>
+        </div>
+
+        {/* People */}
+        {people.map((person, index) => (
+          <div
+            key={`${person.name}-${index}`}
+            className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
+            style={{
+              left: `${person.x}%`,
+              top: `${person.y}%`,
+            }}
+          >
+            <div className="mx-auto h-11 w-11 overflow-hidden rounded-full border-2 border-white/80 bg-neutral-800 shadow-[0_0_0_3px_rgba(0,0,0,0.7)]">
+              <img
+                src={person.avatar}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            </div>
+
+            {/* Location pin */}
+            <div className="mx-auto -mt-1 h-2 w-2 rotate-45 rounded-[1px] bg-white/80" />
+
+            <p className="mt-1 whitespace-nowrap text-sm font-medium text-white">
+              {person.name}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom fade */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black via-black/70 to-transparent" />
     </section>
         {/* Gaming Brand Testimonials Section */}
         <Testimonials />

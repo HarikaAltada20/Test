@@ -11,8 +11,8 @@ export function HeroSection() {
       <div className="relative z-20">
       
         <HeroContent />
-        <Testimonials />
-        <FAQ />
+        {/* <Testimonials />
+        <FAQ /> */}
         <CtcBanner />
       </div>
     </div>

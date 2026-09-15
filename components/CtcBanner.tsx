@@ -1,5 +1,5 @@
 "use client";
-import { ArrowRight, Rocket, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -31,28 +31,6 @@ export default function CtcBanner() {
   const isBrands = pathname === "/brands";
   const isCreators = pathname === "/creators";
   const isHome = pathname === "/";
-
-  // Styles
-  const styles = {
-    creators: {
-      bgGradient:
-        "linear-gradient(180deg, #161C34 0%, rgba(231, 93, 13, 0.56) 166.78%)",
-      circleColor: "border-orange-500",
-      arcColor: "border-t-orange-500",
-      textGradient: "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-      btnGradient: "linear-gradient(90deg, #DD7209 0%, #FF652D 100%)",
-    },
-    brands: {
-      bgGradient: "linear-gradient(180deg, #161C34 0%, #7F39EC 166.78%)",
-      circleColor: "border-purple-500",
-      arcColor: "border-t-purple-500",
-      textGradient: "linear-gradient(180deg, #B16FF4 33.29%, #7F39EC 81.2%)",
-      btnGradient: "linear-gradient(90deg, #7F39EC 0%, #B16FF4 100%)",
-    },
-  };
-
-  // Theme selection: / and /brands share the brands theme
-  const theme = isCreators ? styles.creators : styles.brands;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -163,13 +141,8 @@ export default function CtcBanner() {
 
   return (
     <section
-      className={
-        isCreators || isHome
-          ? "relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center text-white overflow-hidden bg-black py-16 md:py-20"
-          : "relative flex flex-col items-center justify-center min-h-[500px] text-center text-white overflow-hidden"
-      }
+      className="relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center text-white overflow-hidden bg-black py-16 md:py-20"
       ref={sectionRef}
-      style={isCreators || isHome ? undefined : { background: theme.bgGradient }}
     >
       {isHome ? (
         <>
@@ -232,13 +205,8 @@ export default function CtcBanner() {
             </div>
           </div>
         </>
-      ) : isCreators ? (
+      ) : (
         <>
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-[radial-gradient(circle,rgba(255,106,26,0.06)_0%,transparent_55%)]" />
-            <div className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-[radial-gradient(circle,rgba(139,92,246,0.06)_0%,transparent_55%)]" />
-          </div>
-
           <div className="relative z-10 flex flex-col items-center px-4 w-full">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
               <ShieldCheck className="h-4 w-4" />
@@ -281,24 +249,46 @@ export default function CtcBanner() {
                 }`}
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
-                Start Earning as a Creator
+                {isBrands ? (
+                  <>
+                    Run campaigns
+                    <br />
+                    that drive results.
+                  </>
+                ) : (
+                  "Start Earning as a Creator"
+                )}
               </h2>
 
               <div className="relative z-10 mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsNavigating(true);
-                    router.push("/dashboard/opportunities");
-                  }}
-                  disabled={isNavigating || isCheckingAccount}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-transparent px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
-                >
-                  {(isNavigating || isCheckingAccount) && !isCheckingAccount ? (
-                    <ButtonLoadingSpinner />
-                  ) : null}
-                  Browse Campaigns →
-                </button>
+                {isBrands ? (
+                  <button
+                    type="button"
+                    onClick={handleMainCtaClick}
+                    disabled={isNavigating || isCheckingAccount}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+                  >
+                    {isNavigating || isCheckingAccount ? (
+                      <ButtonLoadingSpinner />
+                    ) : null}
+                    Launch a Campaign →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNavigating(true);
+                      router.push("/dashboard/opportunities");
+                    }}
+                    disabled={isNavigating || isCheckingAccount}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-transparent px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+                  >
+                    {(isNavigating || isCheckingAccount) && !isCheckingAccount ? (
+                      <ButtonLoadingSpinner />
+                    ) : null}
+                    Browse Campaigns →
+                  </button>
+                )}
                 <a
                   href="https://calendly.com/guptavishesh2/30min"
                   target="_blank"
@@ -310,78 +300,6 @@ export default function CtcBanner() {
               </div>
             </div>
           </div>
-        </>
-      ) : (
-        <>
-      {/* Background Rings */}
-      <div
-        className={`absolute w-[500px] h-[500px] border ${theme.circleColor}/20 rounded-full`}
-      ></div>
-      <div
-        className={`absolute w-[700px] h-[700px] border ${theme.circleColor}/20 rounded-full`}
-      ></div>
-      <div
-        className={`absolute w-[900px] h-[900px] border ${theme.circleColor}/20 rounded-full`}
-      ></div>
-
-      {/* Revolving arc */}
-      <div className="absolute w-[900px] h-[900px] rounded-full animate-spin-slow">
-        <div
-          className={`absolute inset-0 rounded-full border-[3px] border-transparent ${theme.arcColor}`}
-          style={{ clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)" }}
-        ></div>
-      </div>
-      <div className="absolute w-[700px] h-[700px] rounded-full animate-spin-slow-reverse">
-        <div
-          className={`absolute inset-0 rounded-full border-[3px] border-transparent ${theme.arcColor}`}
-          style={{ clipPath: "polygon(50% 0%, 100% 0%, 100% 40%, 50% 40%)" }}
-        ></div>
-      </div>
-
-      {/* Tagline */}
-      <div className="flex items-center mt-3 md:mt-0 gap-2 px-4 py-2 bg-[#2C3148] rounded-full text-lg z-10">
-        <Rocket className="w-4 h-4" />
-        <span>Ready to go viral?</span>
-      </div>
-
-      {/* Main Heading */}
-      <h1
-        className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${inView ? "slide-up" : "opacity-0 translate-y-10"
-          }`}
-      >
-        Ready to Transform Your{" "}
-        <span
-          className="bg-clip-text text-transparent"
-          style={{ backgroundImage: theme.textGradient }}
-        >
-          Content Strategy
-        </span>
-        ?
-      </h1>
-
-      {/* Subtitle */}
-      <p
-        className={`mt-4 max-w-2xl text-xl text-gray-200 z-10 ${inView ? "slide-left" : "opacity-0 translate-x-10"
-          }`}
-      >
-        Launch your first contest today and witness the power of creator-generated content.
-      </p>
-
-      {/* CTA Button */}
-      <div className="flex justify-center items-center mt-12">
-        <button
-          type="button"
-          onClick={handleMainCtaClick}
-          disabled={isCheckingAccount}
-          className="relative z-10 rounded-3xl text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-          style={{ backgroundImage: theme.btnGradient }}
-        >
-          <div className="scan-line"></div>
-          {(isNavigating || isCheckingAccount) ? <ButtonLoadingSpinner /> : <Rocket className="w-4 h-4" />}
-          Launch a Campaign
-          <ArrowRight className="h-5 w-5" />
-        </button>
-      </div>
         </>
       )}
 

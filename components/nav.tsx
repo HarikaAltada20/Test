@@ -38,7 +38,7 @@ import {
   Star,
   Home,
 } from "lucide-react";
-import logo from "@/public/images/gold_logo_horizontal.svg";
+import logo from "@/public/images/Primary_Logo_white.png";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
 import { useClientAuth } from "@/hooks/use-client-auth";
@@ -234,7 +234,7 @@ export function Nav({
   return (
     <header className="sticky top-0 z-50 w-full">
       {isDarkMarketingNav ? (
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+        <div className="absolute inset-0 bg-black backdrop-blur-md" />
       ) : (
         <>
           {/* Premium Background with Strategic Gradients */}
@@ -278,9 +278,10 @@ export function Nav({
                     <Image
                       src={logo}
                       alt="Game Of Creators Logo"
-                      width={110}
-                      height={28}
-                      className="relative z-10 transition-all duration-300"
+                      width={200}
+                      height={48}
+                      className="relative z-10 h-14 w-auto transition-all duration-300"
+                      priority
                     />
                   </div>
 
@@ -596,7 +597,7 @@ export function Nav({
                   <Button
                     disabled={isNavigating || isSigningIn}
                     className={cn(
-                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium rounded-full bg-transparent border border-white/25 text-white hover:bg-white/10 hover:border-white/40 transition-all duration-300 min-h-[44px]",
+                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2 text-[12px] font-medium rounded-xl bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/25 text-white hover:bg-white/10 hover:border-white/40 transition-all duration-300 min-h-[40px]",
                       (isNavigating || isSigningIn) &&
                         "opacity-70 cursor-not-allowed"
                     )}
@@ -705,8 +706,9 @@ export function Nav({
                           <Image
                             src={logo}
                             alt="Game Of Creators Logo"
-                            width={100}
-                            height={24}
+                            width={140}
+                            height={38}
+                            className="h-9 w-auto"
                           />
                         </Link>
 

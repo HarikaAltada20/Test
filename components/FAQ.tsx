@@ -402,7 +402,7 @@ export default function FAQ() {
   }
 
   return (
-    <section id="faq" className="bg-black py-16 px-4 mb-10 text-white scroll-mt-24">
+    <section id="faq" className="bg-black py-16 px-4 text-white scroll-mt-24">
       <div className="max-w-5xl mx-auto text-center">
         {/* Top Tag */}
         <button
@@ -459,15 +459,7 @@ export default function FAQ() {
             >
               <button
                 onClick={() => toggleFAQ(index)}
-                className={`w-full flex justify-between items-center px-6 py-6 
-                  ${
-                    pathname.includes("brands") ||
-                    pathname === "/pricing" ||
-                    pathname === "/"
-                      ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
-                      : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
-                  } 
-                  hover:bg-[#1A1B35] transition-colors`}
+                className={`w-full flex justify-between items-center px-6 py-6 bg-[#111] hover:bg-[#161616] transition-colors`}
               >
                 <span className="text-left text-xl">{faq.question}</span>
                 <FaChevronDown

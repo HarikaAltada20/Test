@@ -418,11 +418,11 @@ export default function HeroContent() {
           {/* =====================================================
             LEFT CAMPAIGN CARD
         ===================================================== */}
-          <div className="absolute left-[4%] top-[35px] z-20 hidden w-[220px] rotate-[7deg] rounded-[23px] border border-white/[0.08] bg-[#1d1d1e] p-[15px] shadow-[0_25px_70px_rgba(0,0,0,0.45)] lg:block">
+          <div className="absolute left-[4%] top-[35px] z-20 hidden w-[220px] rotate-[7deg] rounded-[23px] border border-white/[0.08] p-[15px] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40] lg:block">
             {/* Card header */}
             <div className="flex items-center gap-2">
-              <div className="flex h-[29px] w-[29px] items-center justify-center rounded-[8px] bg-[#40344c] text-[13px]">
-                👥
+              <div className="flex h-[29px] w-[29px] items-center justify-center rounded-[8px] bg-[#40344c]">
+                <Users className="h-[15px] w-[15px] text-white/80" />
               </div>
 
               <span className="text-[13px] text-white/75">Brand</span>
@@ -435,24 +435,22 @@ export default function HeroContent() {
 
             {/* Tags */}
             <div className="mt-3 flex gap-[7px]">
-              <span className="rounded-full bg-[#510078] px-[9px] py-[5px] text-[10px] text-[#d838ff]">
+              <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
                 Clipping
               </span>
 
-              <span className="rounded-full bg-[#510078] px-[9px] py-[5px] text-[10px] text-[#d838ff]">
+              <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
                 UGC
               </span>
 
-              <span className="rounded-full bg-[#510078] px-[9px] py-[5px] text-[10px] text-[#d838ff]">
+              <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
                 Beauty
               </span>
             </div>
 
             {/* Bottom */}
             <div className="mt-3 flex items-end justify-between">
-              <div className="flex h-[62px] w-[70px] items-center justify-center overflow-hidden rounded-[9px] bg-gradient-to-br from-[#ef8122] via-[#f44352] to-[#7d21bd]">
-                <span className="text-[25px]">🎙️</span>
-              </div>
+                    <img src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png" alt="Creator" className="h-[72px] w-[72px] rounded-md object-cover" />
 
               <div className="flex h-[35px] w-[35px] items-center justify-center rounded-full bg-[#351149] text-[18px] text-[#c239f5]">
                 →
@@ -483,62 +481,49 @@ export default function HeroContent() {
         ===================================================== */}
           <div className="absolute left-1/2 top-[105px] z-20 h-[455px] w-[335px] -translate-x-1/2 overflow-hidden rounded-[24px] border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]">
             {/* Video 1 */}
-            <div className="relative h-1/3 overflow-hidden bg-gradient-to-br from-[#d9d9d0] via-[#b8aa96] to-[#65584b]">
-              {/* Background */}
-              <div className="absolute right-[12%] top-[5%] h-[80px] w-[75px] rounded-full bg-[#eee8d9]/30 blur-[2px]" />
-
-              <div className="absolute left-[7%] top-[12%] h-[80px] w-[42px] rounded-full bg-[#5f6b60]" />
-
-              {/* Person */}
-              <div className="absolute bottom-[18%] left-1/2 h-[45px] w-[45px] -translate-x-1/2 rounded-full bg-[#bd896c]" />
-
-              <div className="absolute bottom-[-5%] left-1/2 h-[125px] w-[105px] -translate-x-1/2 rounded-t-[50px] bg-[#171717]" />
-
-              {/* Desk */}
-              <div className="absolute bottom-0 left-0 right-0 h-[25px] bg-[#694c39]" />
-
+            <div className="relative h-1/3 overflow-hidden">
+              <video
+                src="/videos/SnapInsta.to_AQN_SiDJU.mp4"
+                className="h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
               <span className="absolute bottom-3 left-3 text-[11px] text-white/70">
                 creator
               </span>
             </div>
 
             {/* Video 2 */}
-            <div className="relative h-1/3 overflow-hidden bg-gradient-to-br from-[#a96f50] via-[#654235] to-[#27201e]">
-              {/* Background light */}
-              <div className="absolute right-[12%] top-[10%] h-[100px] w-[80px] rounded-full bg-[#2c201b]" />
-
-              {/* Woman */}
-              <div className="absolute bottom-[35%] left-[50%] h-[52px] w-[52px] -translate-x-1/2 rounded-full bg-[#c77f61]" />
-
-              <div className="absolute bottom-[-8%] left-[38%] h-[125px] w-[100px] rounded-t-[45px] bg-[#242424]" />
-
-              {/* Mic */}
-              <div className="absolute bottom-[20%] right-[20%] h-[55px] w-[7px] rotate-[15deg] bg-[#222]" />
-
-              <div className="absolute bottom-[48%] right-[14%] h-[17px] w-[17px] rounded-full bg-[#151515]" />
+            <div className="relative h-1/3 overflow-hidden">
+              <video
+                src="/videos/SnapInsta.to_AQNTex61ndS.mp4"
+                className="h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
             </div>
 
             {/* Video 3 */}
-            <div className="relative h-1/3 overflow-hidden bg-gradient-to-br from-[#3e5a56] via-[#574842] to-[#16191a]">
-              {/* Background */}
-              <div className="absolute left-[8%] top-[10%] h-[85px] w-[45px] bg-[#263431]" />
-
-              <div className="absolute right-[10%] top-[12%] h-[90px] w-[55px] bg-[#1b1c1c]" />
-
-              {/* Person */}
-              <div className="absolute bottom-[33%] left-[51%] h-[49px] w-[49px] -translate-x-1/2 rounded-full bg-[#a87862]" />
-
-              <div className="absolute bottom-[-10%] left-[37%] h-[115px] w-[105px] rounded-t-[45px] bg-[#222628]" />
-
-              {/* Light */}
-              <div className="absolute bottom-[12%] right-[12%] h-[26px] w-[26px] rounded-full bg-white/[0.08]" />
+            <div className="relative h-1/3 overflow-hidden">
+              <video
+                src="/videos/SnapInsta.to_AQNxeCNjx2k.mp4"
+                className="h-full w-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
             </div>
           </div>
 
           {/* =====================================================
             RIGHT ANALYTICS CARD
         ===================================================== */}
-          <div className="absolute right-[4%] top-[130px] z-20 hidden w-[270px] rotate-[-15deg] rounded-[22px] border border-white/[0.08] bg-[#202021] p-4 shadow-[0_25px_70px_rgba(0,0,0,0.55)] lg:block">
+          <div className="absolute right-[4%] top-[130px] z-20 hidden w-[280px] rotate-[-15deg] rounded-[22px] border border-white/[0.08] p-4 bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40] lg:block">
             {/* Tabs */}
             <div className="flex items-center gap-1 text-[11px] text-white/35">
               <span className="rounded-[9px] bg-white/[0.08] px-3 py-[9px] text-white/80">
@@ -551,29 +536,42 @@ export default function HeroContent() {
             </div>
 
             {/* Stats */}
-            <div className="mt-7 flex items-end justify-between">
+            <div className="mt-7 flex items-end justify-between gap-3">
               <div>
-                <div className="text-[25px] font-medium tracking-[-1px]">
-                  46.2M
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[25px] font-medium tracking-[-1px] text-white">
+                    46.2M
+                  </span>
+                  <span className="text-[10px] text-white/50">Views</span>
                 </div>
 
-                <div className="mt-1 text-[10px] text-white/35">Views</div>
+                <div className="mt-3 max-w-[120px] text-[12px] leading-[15px] text-white/35">
+                  Your top 10% creators are getting the most views
+                </div>
               </div>
 
               {/* Chart */}
-              <div className="flex h-[65px] items-end gap-[7px]">
-                <div className="h-[20px] w-[13px] rounded-t-[3px] bg-white/20" />
-                <div className="h-[29px] w-[13px] rounded-t-[3px] bg-white/20" />
-                <div className="h-[39px] w-[13px] rounded-t-[3px] bg-white/20" />
-                <div className="h-[51px] w-[13px] rounded-t-[3px] bg-white/20" />
-                <div className="h-[62px] w-[13px] rounded-t-[3px] bg-white/20" />
+              <div className="flex items-end gap-[8px] pb-0.5">
+                {[
+                  { label: "April", height: "h-[42px]", active: false },
+                  { label: "May", height: "h-[28px]", active: false },
+                  { label: "June", height: "h-[36px]", active: false },
+                  { label: "July", height: "h-[54px]", active: true },
+                ].map((bar) => (
+                  <div key={bar.label} className="flex flex-col items-center gap-1.5">
+                    <div
+                      className={`w-[14px] rounded-t-[4px] ${bar.height} ${
+                        bar.active
+                          ? "bg-[#3B82F6]"
+                          : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                      }`}
+                    />
+                    <span className="origin-top text-[10px] text-white/35">
+                      {bar.label}
+                    </span>
+                  </div>
+                ))}
               </div>
-            </div>
-
-            <div className="mt-4 text-[10px] leading-[15px] text-white/30">
-              Your top 10% creators are
-              <br />
-              getting the most views
             </div>
           </div>
 
@@ -912,272 +910,83 @@ export default function HeroContent() {
 
       {/* Reasons to Select Us */}
 
-      <section ref={reasonsRef} className="text-white px-10 py-20">
-        <div className="max-w-[1250px] mx-auto">
-          {/* Tagline */}
-          <div className="text-center mb-12">
-            <div className="flex justify-center mb-5">
-              <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
-                <img
-                  src="./images/tabler_award.png"
-                  alt="icon"
-                  className="w-5 h-5"
-                />
-                Reasons to Select Us
-              </span>
-            </div>
+       <section className="min-h-screen bg-black flex items-center justify-center px-6">
+      <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-20 md:gap-40">
+        {/* Creators Network */}
+        <div className="text-center">
+          <h2
+            className="
+              text-[64px]
+              sm:text-[76px]
+              md:text-[92px]
+              lg:text-[112px]
+              leading-none
+              font-extrabold
+              tracking-[-0.055em]
+              bg-gradient-to-b
+              from-white
+              via-[#d8d8d8]
+              to-[#777777]
+              bg-clip-text
+              text-transparent
+            "
+          >
+            16,700+
+          </h2>
 
-            {/* <button className="bg-[#2C3247] text-base sm:text-lg px-4 py-1 rounded-full mb-6">
-                Reasons to Select Us
-              </button> */}
-            <h2
-              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
-                reasonsVisible ? "slide-up" : "opacity-0"
-              }`}
-            >
-              Why Choose{" "}
-              <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
-                Game of Creators
-              </span>
-            </h2>
-            <p
-              className={`text-gray-300 text-base sm:text-lg md:text-xl ${
-                reasonsVisible ? "slide-left" : "opacity-0"
-              }`}
-            >
-              We're not just a platform – we're your competitive advantage in
-              the creator economy.
-            </p>
-          </div>
-
-          {/* Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* 1 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/5b9ccb0130cdd4c8b6a76dccd99f879f41ba8fe2.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
-                Organic Content at Scale
-              </h3>
-              <p className="text-gray-400 text-base md:text-md relative z-10">
-                With Game of Creators, you generate a high volume of diverse,
-                high-quality content-without the hassle of sourcing,
-                negotiating, or managing creators manually.
-              </p>
-            </div>
-
-            {/* 2 */}
-            <div
-              className="sm:col-span-2 h-auto border border-gray-700 rounded-xl overflow-hidden flex flex-col sm:flex-row items-center p-4 sm:p-6 relative group
-           
-              [@media(min-width:1000px)_and_(max-width:1246px)]:h-[300px] 
-              
-              [@media(min-width:1246px)]:h-[250px] "
-            >
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/477657f97d63845e03dfc9060e1005e8d8d651df.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <div className="flex-1 relative z-10 mb-4">
-                <h3 className="text-lg sm:text-xl font-semibold mb-2">
-                  Supply and Demand Based Platform
-                </h3>
-                <p className="text-gray-400 text-base sm:text-lg">
-                  Game of Creators operated on a supply and demand model.
-                  Creators complete, allowing the best ideas to surface
-                  organically and driving higher engagement and reach.
-                </p>
-              </div>
-              <div
-                className="relative w-[200px] h-[200px] 
-               sm:w-[250px] sm:h-[250px] 
-               md:w-[250px] md:h-[250px] 
-               [@media(min-width:1000px)_and_(max-width:1080px)]:w-[200px] 
-              [@media(min-width:1000px)_and_(max-width:1080px)]:h-[200px] 
-               [@media(min-width:1080px)_and_(max-width:1200px)]:w-[250px] 
-              [@media(min-width:1000px)_and_(max-width:1200px)]:h-[250px] 
-               [@media(min-width:1200px)]:w-[300px] 
-              [@media(min-width:1200px)]:h-[300px] 
-                 flex-shrink-0"
-              >
-                <Image
-                  src="/images/bb14a2a8c3979fb268076c3bbb96eaf152d1a0f8.avif"
-                  alt="Calendar"
-                  fill
-                  className="object-contain"
-                  sizes="(min-width: 1200px) 300px, (min-width: 1080px) 250px, (min-width: 1000px) 200px, 200px"
-                />
-                <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
-              </div>
-            </div>
-
-            {/* 3 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/cc72cdf71f826fc780265eb7ba34b2b7a5e3c2c2.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
-                Find Content- market Fit
-              </h3>
-              <p className="text-gray-400 text-base sm:text-lg relative z-10">
-                Validate creative concepts with real audience engagement.
-              </p>
-            </div>
-
-            {/* 4 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/55970240f7b24d6eff2af2d8d8537bd017058e58.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <Rocket className="text-white mb-4 relative z-10" size={26} />
-              <h3 className="text-lg sm:text-xl mb-2 relative z-10">
-                Only Pay for Top Performing Content
-              </h3>
-              <p className="text-gray-400 text-base sm:text-lg relative z-10">
-                Stop wasting money on content that doesn’t covert. Pay only for
-                videos that perform.
-              </p>
-            </div>
-
-            {/* 6 */}
-            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/b4273c077c336d85dd75502201d73084ea5fba73.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-              <Users2 className="text-white mb-4 relative z-10" size={26} />
-              <h3 className="text-xl sm:text-xl mb-2 relative z-10">
-                Skip the Creator Outreach Hassle
-              </h3>
-              <p className="text-gray-400 text-base sm:text-lg relative z-10">
-                No more hours spent negotiating, coordinating, and following up.
-                With Game of Creators, the creators come to you.
-              </p>
-            </div>
-
-            <div className="sm:col-span-2 border border-gray-700 rounded-xl p-4 flex flex-col sm:flex-row justify-center items-center text-start relative overflow-hidden group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/2a6d9ad13dd40e9b3b4f90b35cf0f9324af8dda7.avif')",
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
-
-              <div className="flex-1 mb-4 sm:mb-0 px-2 relative z-10">
-                <h3 className="text-lg sm:text-xl font-semibold mb-2">
-                  Scale Winners on Paid Ads
-                </h3>
-                <p className="text-gray-400 text-base sm:text-lg">
-                  Identify the best-performing content and seamlessly scale it
-                  into paid campaigns. With proven, audience-validated content,
-                  your ads drive higher engagement, lower costs, and better
-                  conversions.
-                </p>
-              </div>
-              <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] lg:w-[230px] lg:h-[230px] flex-shrink-0">
-                <Image
-                  src="/images/0045df9e9f7db84c983cc6c5675c55189fa040a2.avif"
-                  alt="Target"
-                  fill
-                  className="object-contain"
-                  sizes="(min-width: 1024px) 230px, (min-width: 640px) 200px, 180px"
-                />
-                <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/c90e07a57a2d08340f7c0d3c57b1fde4a6f0f9cd.avif')",
-                }}
-              ></div>
-
-              <Globe className="text-white mb-4 relative z-10" size={30} />
-              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
-                Democratised Brands Deals
-              </h3>
-              <p className="text-gray-400 text-base text-md md:text-lg relative z-10">
-                Every creator, no . matter their follower count, can join and
-                win. Success is based on creativity and performance-not just
-                popularity.
-              </p>
-            </div>
-
-            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/f1dc449ff317e5ede74929b2af2d4ef5b82c298f.avif')",
-                }}
-              ></div>
-
-              <Headset className="text-white mb-4 relative z-10" size={30} />
-              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
-                24/7 Support
-              </h3>
-              <p className="text-gray-400 text-base text-md md:text-xl relative z-10">
-                Our team is always ready to help you win big with Game of
-                Creators!
-              </p>
-            </div>
-
-            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
-                style={{
-                  backgroundImage:
-                    "url('/images/5ce917bc44f4c6db1590e3478c916a367eacfe8a.avif')",
-                }}
-              ></div>
-
-              <Palette className="text-white mb-4 relative z-10" size={30} />
-              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
-                Creator Freedom of Choice
-              </h3>
-              <p className="text-gray-400 text-base text-md md:text-lg relative z-10">
-                Creators choose which brands and campaigns to promote,
-                empowering them to work with what they love and get paid for it.
-              </p>
-            </div>
-          </div>
+          <p
+            className="
+              mt-5
+              text-[22px]
+              sm:text-[25px]
+              md:text-[29px]
+              font-semibold
+              tracking-[-0.02em]
+              text-[#969696]
+            "
+          >
+            Creators Network
+          </p>
         </div>
-      </section>
+
+        {/* Views Generated */}
+        <div className="text-center">
+          <h2
+            className="
+              text-[64px]
+              sm:text-[76px]
+              md:text-[92px]
+              lg:text-[112px]
+              leading-none
+              font-extrabold
+              tracking-[-0.055em]
+              bg-gradient-to-b
+              from-white
+              via-[#d8d8d8]
+              to-[#777777]
+              bg-clip-text
+              text-transparent
+            "
+          >
+            160M+
+          </h2>
+
+          <p
+            className="
+              mt-5
+              text-[22px]
+              sm:text-[25px]
+              md:text-[29px]
+              font-semibold
+              tracking-[-0.02em]
+              text-[#969696]
+            "
+          >
+            Views Generated
+          </p>
+        </div>
+      </div>
+    </section>
       {/* <NumbersSection
           items={[
             {

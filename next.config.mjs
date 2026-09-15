@@ -48,6 +48,8 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.fbcdn.net' },
       { protocol: 'https', hostname: 'scontent.cdninstagram.com' },
       { protocol: 'https', hostname: 'graph.instagram.com' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'i.pravatar.cc' },
     ],
   },
   webpack: (config, { isServer }) => {
