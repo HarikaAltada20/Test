@@ -821,18 +821,18 @@ export default function CreatorsClient({
   };
 
   return (
-    <div className="min-h-screen bg-black text-white border-b border-white/10">
+    <div className="min-h-screen overflow-x-hidden border-b border-white/10 bg-black text-white">
       <div className="relative z-20">
         <section
           id="home"
-          className="pt-10 pb-12 md:pt-16 md:pb-16 relative overflow-visible"
+          className="relative overflow-hidden pt-8 pb-10 sm:pt-10 sm:pb-12 md:pt-16 md:pb-16"
         >
-          <div className="max-w-[1280px] mx-auto px-6 sm:px-10 lg:px-12 relative z-10">
-            <div className="grid lg:grid-cols-2 gap-10 lg:gap-8 items-center">
+          <div className="relative z-10 mx-auto max-w-[1280px] px-4 sm:px-6 lg:px-12">
+            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-8">
               {/* Left: copy + CTAs */}
               <div className="text-left">
                 <h1
-                  className="text-[2.35rem] leading-[1.1] sm:text-5xl md:text-[3.35rem] lg:text-[4rem] font-semibold tracking-tight text-transparent bg-clip-text bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] mb-5 slide-up"
+                  className="mb-4 bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-[2rem] font-semibold leading-[1.1] tracking-tight text-transparent slide-up sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]"
                   style={{ animationDelay: "0.15s" }}
                 >
                   Big following?
@@ -843,19 +843,19 @@ export default function CreatorsClient({
                 </h1>
 
                 <p
-                  className="text-base sm:text-lg md:text-xl text-zinc-400 max-w-xl mb-8 leading-relaxed slide-left"
+                  className="mb-6 max-w-xl text-base leading-relaxed text-zinc-400 slide-left sm:mb-8 sm:text-lg md:text-xl"
                   style={{ animationDelay: "0.35s" }}
                 >
                   Anyone can join. What you earn depends on how your content
                   performs — not your follower count.
                 </p>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-8">
+                <div className="mb-6 flex flex-col items-stretch gap-3 sm:mb-8 sm:flex-row sm:items-center">
                   <Button
                     type="button"
                     onClick={handleStartEarningClick}
                     disabled={isCheckingStartEarning}
-                    className="rounded-full bg-[#1a1a1a] border border-white/20 text-white font-medium px-6 py-6 text-base hover:bg-[#242424] hover:border-white/35 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="rounded-full border border-white/20 bg-[#1a1a1a] px-6 py-6 text-base font-medium text-white transition-all duration-300 hover:border-white/35 hover:bg-[#242424] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
                     <span>Start Earning →</span>
@@ -865,7 +865,7 @@ export default function CreatorsClient({
                     type="button"
                     onClick={handleViewMoreClick}
                     disabled={isNavigatingViewMore}
-                    className="rounded-full bg-[#e8e8e8] text-black font-medium px-6 py-6 text-base hover:bg-white transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="rounded-full bg-[#e8e8e8] px-6 py-6 text-base font-medium text-black transition-all duration-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
                     <span>Browse Campaigns →</span>
@@ -881,7 +881,7 @@ export default function CreatorsClient({
                     ].map((src, i) => (
                       <div
                         key={src}
-                        className="relative h-8 w-8 rounded-full border-2 border-black overflow-hidden bg-zinc-800"
+                        className="relative h-8 w-8 overflow-hidden rounded-full border-2 border-black bg-zinc-800"
                         style={{ zIndex: 3 - i }}
                       >
                         <Image
@@ -902,9 +902,9 @@ export default function CreatorsClient({
 
               {/* Right: layered hero visual */}
               <div className="relative flex justify-center lg:justify-end">
-                <div className="relative w-full max-w-[500px] sm:max-w-[560px] h-[460px] sm:h-[520px] lg:h-[560px] overflow-visible">
+                <div className="relative h-[380px] w-full max-w-[420px] overflow-hidden sm:h-[480px] sm:max-w-[560px] sm:overflow-visible lg:h-[560px]">
                   {/* Dollar sign — behind girl, shifted left */}
-                  <div className="absolute left-[-18%] right-[18%] top-[-2%] bottom-[6%] z-0 pointer-events-none select-none">
+                  <div className="pointer-events-none absolute left-[-8%] right-[10%] top-[-2%] bottom-[6%] z-0 select-none sm:left-[-18%] sm:right-[18%]">
                     <Image
                       src="/images/attach-money.png"
                       alt=""
@@ -916,38 +916,38 @@ export default function CreatorsClient({
                   </div>
 
                   {/* Last Month Earnings — behind girl (tucked under right shoulder) */}
-                  <div className="absolute top-[29%] right-[6%] sm:right-[10%] z-[5] rounded-2xl border border-white/10 bg-[#141414]/95 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xl shadow-black/50 pointer-events-none">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="inline-flex h-4 w-4 sm:h-[18px] sm:w-[18px] items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] sm:text-[10px] font-bold text-black shadow-sm">
+                  <div className="pointer-events-none absolute top-[26%] right-[4%] z-[5] rounded-2xl border border-white/10 bg-[#141414]/95 px-3 py-2 shadow-xl shadow-black/50 backdrop-blur-md sm:top-[29%] sm:right-[10%] sm:px-4 sm:py-3">
+                    <div className="mb-0.5 flex items-center gap-2">
+                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[18px] sm:w-[18px] sm:text-[10px]">
                         $
                       </span>
-                      <span className="text-[11px] sm:text-xs text-zinc-300 whitespace-nowrap">
+                      <span className="whitespace-nowrap text-[11px] text-zinc-300 sm:text-xs">
                         Last Month Earnings
                       </span>
                     </div>
-                    <p className="text-xl sm:text-2xl font-semibold text-white tracking-tight pl-0.5">
+                    <p className="pl-0.5 text-xl font-semibold tracking-tight text-white sm:text-2xl">
                       $4,500
                     </p>
                   </div>
 
                   {/* Girl — in front of dollar + earnings card */}
-                  <div className="absolute inset-0 z-10 flex items-end justify-center pointer-events-none">
-                    <div className="relative h-[88%] w-[98%] sm:w-[86%] -mb-[4%]">
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-center">
+                    <div className="relative -mb-[4%] h-[88%] w-[98%] sm:w-[86%]">
                       <Image
                         src="/images/88ea43859c754cb864b7440ecca779c37d8d6e5d.png"
                         alt="Creator checking earnings on Game of Creators"
                         fill
                         priority
-                        className="object-contain object-bottom scale-[1.12] origin-bottom"
+                        className="origin-bottom scale-[1.12] object-contain object-bottom"
                         sizes="(max-width: 1024px) 90vw, 480px"
                       />
                     </div>
                   </div>
 
                   {/* $600 credited notification — in front of girl */}
-                  <div className="absolute left-[2%] sm:left-[12%] top-[65%] z-20 w-[min(94%,280px)] sm:w-[300px] rounded-2xl bg-[#f3f3f4] text-black shadow-[0_12px_40px_rgba(0,0,0,0.55)] px-3 py-2.5 sm:px-3.5 sm:py-3 pointer-events-none">
+                  <div className="pointer-events-none absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl bg-[#f3f3f4] px-3 py-2.5 text-black shadow-[0_12px_40px_rgba(0,0,0,0.55)] sm:left-[12%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3">
                     <div className="flex items-start gap-2.5">
-                      <div className="relative mt-0.5 h-8 w-8 sm:h-9 sm:w-9 shrink-0 overflow-hidden rounded-lg bg-zinc-900">
+                      <div className="relative mt-0.5 h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-zinc-900 sm:h-9 sm:w-9">
                         <Image
                           src="/images/goc_square.avif"
                           alt=""
@@ -958,17 +958,17 @@ export default function CreatorsClient({
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-[13px] sm:text-sm leading-snug text-zinc-900">
+                          <p className="text-[13px] leading-snug text-zinc-900 sm:text-sm">
                             <span className="font-semibold">GOC</span>{" "}
                             <span className="font-semibold">
                               $600 credited!
                             </span>
                           </p>
-                          <span className="shrink-0 text-[10px] sm:text-[11px] text-zinc-500 pt-0.5">
+                          <span className="shrink-0 pt-0.5 text-[10px] text-zinc-500 sm:text-[11px]">
                             now
                           </span>
                         </div>
-                        <p className="text-[11px] sm:text-xs text-zinc-600 mt-0.5 leading-snug">
+                        <p className="mt-0.5 text-[11px] leading-snug text-zinc-600 sm:text-xs">
                           from GlowNaturally Campaign 🪄
                         </p>
                       </div>
@@ -1019,13 +1019,13 @@ export default function CreatorsClient({
         </section>
 
         {/* Contests Section */}
-        <section className="text-white py-16 px-4 overflow-visible">
-          <div className="max-w-[1400px] mx-auto space-y-12 overflow-visible">
+        <section className="overflow-visible px-3 py-10 text-white sm:px-4 sm:py-16">
+          <div className="mx-auto max-w-[1400px] space-y-10 overflow-visible sm:space-y-12">
             {/* Most Popular Contests */}
             {finalMostPopularContests.length > 0 && (
               <div className="overflow-visible">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 px-2 sm:px-16 gap-3 sm:gap-0">
-                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                <div className="mb-4 flex flex-col items-start justify-between gap-3 px-2 sm:mb-6 sm:flex-row sm:items-center sm:gap-0 sm:px-8 md:px-16">
+                  <h2 className="text-xl font-bold text-white sm:text-2xl md:text-3xl">
                     Most Popular Campaigns
                   </h2>
                 </div>
@@ -1107,12 +1107,12 @@ export default function CreatorsClient({
         {/* As easy as you think */}
         <section
           id="why-goc"
-          className="text-white py-16 md:py-20 scroll-mt-24"
+          className="scroll-mt-24 py-12 text-white sm:py-16 md:py-20"
           ref={animationRef}
         >
-          <div className="max-w-[1200px] mx-auto px-4 md:px-8 xl:px-4">
+          <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
-              className={`text-center text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-10 md:mb-14 tracking-tight ${
+              className={`mb-8 text-center text-[28px] font-semibold tracking-tight text-white sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl ${
                 isAnimated ? "slide-up" : "hide-before-animate"
               }`}
               style={{
@@ -1123,7 +1123,7 @@ export default function CreatorsClient({
               As easy as you think
             </h2>
 
-            <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
               {/* Left: campaign collage + CTA */}
               <div
                 className={`relative rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a0a] ${
@@ -1317,12 +1317,12 @@ export default function CreatorsClient({
         {/* Why Creators Choose GoC */}
         <section
           id="how-it-works"
-          className="py-16 md:py-20 px-4 text-white scroll-mt-24"
+          className="scroll-mt-24 px-4 py-12 text-white sm:py-16 md:py-20"
           ref={howItWorksRef}
         >
           <div className="container mx-auto max-w-[1150px]">
             <h2
-              className={`text-center text-3xl sm:text-4xl md:text-5xl font-semibold text-white mb-10 md:mb-14 tracking-tight ${
+              className={`mb-8 text-center text-[28px] font-semibold tracking-tight text-white sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl ${
                 howItWorksAnimated ? "slide-up" : "hide-before-animate"
               }`}
               style={{
@@ -1335,21 +1335,22 @@ export default function CreatorsClient({
 
             <div className="grid gap-4 md:gap-5">
               {/* Top row — 2 wide cards */}
-              <div className="grid md:grid-cols-2 gap-4 md:gap-5">
+              <div className="grid gap-4 md:grid-cols-2 md:gap-5">
                 {/* Get Paid Directly */}
-                <div className="relative w-full max-w-[611px] overflow-hidden rounded-[20px] border border-[#303030] bg-[#151515] px-6 pb-[22px] pt-[54px] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-                  {/* Account balance card */}
-                  <div className="relative ml-[84px] h-[172px] w-[204px] rounded-[17px] border border-[#2c2c2c] bg-[#151515] px-[15px] pt-[17px]">
-                    <p className="text-[13px] font-normal uppercase tracking-[-0.1px] text-[#777]">
-                      Account Balance
-                    </p>
+                <div className="relative w-full overflow-hidden rounded-[20px] border border-[#303030] bg-[#151515] px-4 pb-5 pt-8 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:px-6 sm:pb-[22px] sm:pt-[54px]">
+                  <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    {/* Account balance card */}
+                    <div className="relative h-auto w-full max-w-[204px] rounded-[17px] border border-[#2c2c2c] bg-[#151515] px-[15px] pb-4 pt-[17px] sm:h-[172px] sm:w-[204px] sm:pb-0">
+                      <p className="text-[13px] font-normal uppercase tracking-[-0.1px] text-[#777]">
+                        Account Balance
+                      </p>
 
-                    <p className="mt-[5px] text-[30px] font-normal leading-none tracking-[-1px] text-[#e5e5e5]">
-                      $3,400
-                    </p>
+                      <p className="mt-[5px] text-[30px] font-normal leading-none tracking-[-1px] text-[#e5e5e5]">
+                        $3,400
+                      </p>
 
-                    <button
-                      className="
+                      <button
+                        className="
             mt-[15px]
             flex h-[34px] items-center gap-2
             rounded-[9px]
@@ -1362,80 +1363,71 @@ export default function CreatorsClient({
             transition
             hover:brightness-110
           "
-                    >
-                      <span className="text-[17px] leading-none">↗</span>
-                      Withdraw
-                    </button>
-                  </div>
-
-                  {/* Dashed connector */}
-                  <div
-                    className="
-          absolute
-          left-[311px]
-          top-[137px]
-          w-[119px]
-          border-t
-          border-dashed
-          border-[#454545]
-        "
-                  />
-
-                  {/* Payment icons */}
-                  <div className="absolute right-[45px] top-[117px] flex items-center">
-                    {/* Crypto */}
-                    <div className="relative z-10 h-[43px] w-[43px] overflow-hidden rounded-full">
-                      <Image
-                        src="/images/Frame 2147243912.png"
-                        alt="Crypto"
-                        fill
-                        className="object-cover"
-                        sizes="43px"
-                      />
+                      >
+                        <span className="text-[17px] leading-none">↗</span>
+                        Withdraw
+                      </button>
                     </div>
 
-                    {/* PhonePe */}
-                    <div className="relative -ml-[9px] z-20 h-[43px] w-[43px] overflow-hidden rounded-full">
-                      <Image
-                        src="/images/Ellipse 41.png"
-                        alt="PhonePe"
-                        fill
-                        className="object-cover"
-                        sizes="43px"
-                      />
-                    </div>
+                    {/* Dashed connector — desktop only */}
+                    <div className="hidden h-px flex-1 border-t border-dashed border-[#454545] sm:block" />
 
-                    {/* GPay */}
-                    <div className="relative -ml-[9px] z-30 h-[43px] w-[43px] overflow-hidden rounded-full">
-                      <Image
-                        src="/images/Ellipse 42.png"
-                        alt="GPay"
-                        fill
-                        className="object-cover"
-                        sizes="43px"
-                      />
+                    {/* Payment icons */}
+                    <div className="flex items-center sm:shrink-0">
+                      {/* Crypto */}
+                      <div className="relative z-10 h-[43px] w-[43px] overflow-hidden rounded-full">
+                        <Image
+                          src="/images/Frame 2147243912.png"
+                          alt="Crypto"
+                          fill
+                          className="object-cover"
+                          sizes="43px"
+                        />
+                      </div>
+
+                      {/* PhonePe */}
+                      <div className="relative -ml-[9px] z-20 h-[43px] w-[43px] overflow-hidden rounded-full">
+                        <Image
+                          src="/images/Ellipse 41.png"
+                          alt="PhonePe"
+                          fill
+                          className="object-cover"
+                          sizes="43px"
+                        />
+                      </div>
+
+                      {/* GPay */}
+                      <div className="relative -ml-[9px] z-30 h-[43px] w-[43px] overflow-hidden rounded-full">
+                        <Image
+                          src="/images/Ellipse 42.png"
+                          alt="GPay"
+                          fill
+                          className="object-cover"
+                          sizes="43px"
+                        />
+                      </div>
                     </div>
                   </div>
 
                   {/* Bottom content */}
-                  <div className="mt-[40px]">
-                    <h2 className="text-[22px] font-semibold leading-[28px] tracking-[-0.5px] text-[#d0d0d0]">
+                  <div className="mt-6 sm:mt-[40px]">
+                    <h2 className="text-[18px] font-semibold leading-[26px] tracking-[-0.5px] text-[#d0d0d0] sm:text-[22px] sm:leading-[28px]">
                       Get Paid Directly
                     </h2>
 
-                    <p className="mt-[7px] text-[17px] font-normal leading-[24px] tracking-[-0.2px] text-[#858585]">
+                    <p className="mt-[7px] text-[14px] font-normal leading-[22px] tracking-[-0.2px] text-[#858585] sm:text-[17px] sm:leading-[24px]">
                       Withdraw your earnings straight to UPI and Crypto
                     </p>
                   </div>
                 </div>
 
                 {/* Create Together */}
-                <section className="w-full max-w-[680px] overflow-hidden rounded-[28px] border border-white/10 bg-[#151515]">
+                <section className="w-full overflow-hidden rounded-[20px] border border-white/10 bg-[#151515] sm:rounded-[28px]">
                   {/* Illustration */}
-                  <div className="relative h-[275px] overflow-hidden">
+                  <div className="relative h-[220px] overflow-hidden sm:h-[275px]">
                     {/* Main creator */}
-                    <div className="absolute left-1/2 top-[39px] z-20 -translate-x-1/2">
-                      <div className="flex h-[70px] w-[70px] items-center justify-center rounded-full border-2 border-[#ff7438] bg-[#111] p-[3px] shadow-[0_0_0_2px_rgba(255,255,255,0.15)]">
+                    <div className="absolute left-1/2 top-[28px] z-20 -translate-x-1/2 sm:top-[39px]">
+                      <div className="flex h-[56px] w-[56px] items-center justify-center rounded-full border-2 border-[#ff7438] bg-[#111] p-[3px] shadow-[0_0_0_2px_rgba(255,255,255,0.15)] sm:h-[70px] sm:w-[70px]">
                         <Image
                           src="/images/Ellipse 2355.avif"
                           alt="Main creator"
@@ -1447,7 +1439,7 @@ export default function CreatorsClient({
                     </div>
 
                     {/* Connection lines */}
-                    <div className="pointer-events-none absolute left-1/2 top-[91px] h-[115px] w-[420px] -translate-x-1/2">
+                    <div className="pointer-events-none absolute left-1/2 top-[70px] h-[90px] w-[min(100%,420px)] -translate-x-1/2 sm:top-[91px] sm:h-[115px]">
                       <svg
                         viewBox="0 0 420 115"
                         className="h-full w-full"
@@ -1497,11 +1489,11 @@ export default function CreatorsClient({
                     </div>
 
                     {/* Small creator avatars */}
-                    <div className="absolute left-1/2 top-[204px] flex -translate-x-1/2 items-center gap-[34px]">
-                      {creators.map((creator, index) => (
+                    <div className="absolute left-1/2 top-[155px] flex -translate-x-1/2 items-center gap-3 sm:top-[204px] sm:gap-[34px]">
+                      {creators.map((creator) => (
                         <div
                           key={creator.alt}
-                          className="relative flex h-[43px] w-[43px] shrink-0 items-center justify-center rounded-full border border-white/60 bg-[#222] p-[2px]"
+                          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/60 bg-[#222] p-[2px] sm:h-[43px] sm:w-[43px]"
                         >
                           <Image
                             src={creator.src}
@@ -1516,12 +1508,12 @@ export default function CreatorsClient({
                   </div>
 
                   {/* Text */}
-                  <div className="px-9 pb-[17px]">
-                    <h2 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-white">
+                  <div className="px-5 pb-4 sm:px-9 sm:pb-[17px]">
+                    <h2 className="text-[18px] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[22px]">
                       Create Together
                     </h2>
 
-                    <p className="mt-2 text-[16px] leading-none text-[#9b9b9b]">
+                    <p className="mt-2 text-[14px] leading-snug text-[#9b9b9b] sm:text-[16px] sm:leading-none">
                       Connect with creators and share opportunities.
                     </p>
                   </div>
@@ -1529,11 +1521,11 @@ export default function CreatorsClient({
               </div>
 
               {/* Bottom row — 3 cards */}
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+              <div className="grid gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3">
                 {/* Know Your Numbers */}
-                <div className="relative h-[365px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/10 bg-[#171717] shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+                <div className="relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/10 bg-[#171717] shadow-[0_8px_30px_rgba(0,0,0,0.35)] sm:h-[365px]">
                   {/* Chart area */}
-                  <div className="absolute left-6 right-6 top-6 h-[205px]">
+                  <div className="absolute left-4 right-4 top-4 h-[180px] sm:left-6 sm:right-6 sm:top-6 sm:h-[205px]">
                     {/* Grid */}
                     <div
                       className="absolute inset-0 opacity-30"
@@ -1571,7 +1563,7 @@ export default function CreatorsClient({
                     </svg>
 
                     {/* Shares badge */}
-                    <div className="absolute left-[18px] top-[8px] flex items-center gap-2 rounded-full bg-[#171717]/95 px-2 py-1.5 shadow-lg">
+                    <div className="absolute left-[8px] top-[8px] flex items-center gap-2 rounded-full bg-[#171717]/95 px-2 py-1.5 shadow-lg sm:left-[18px]">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D8C2FF]">
                         <svg
                           width="22"
@@ -1593,7 +1585,7 @@ export default function CreatorsClient({
                     </div>
 
                     {/* Earnings icon */}
-                    <div className="absolute right-[15px] top-0 flex h-11 w-11 items-center justify-center rounded-full bg-white">
+                    <div className="absolute right-[8px] top-0 flex h-11 w-11 items-center justify-center rounded-full bg-white sm:right-[15px]">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D9FFD9]">
                         <span className="text-xl font-light text-[#36C759]">
                           $
@@ -1602,7 +1594,7 @@ export default function CreatorsClient({
                     </div>
 
                     {/* Views badge */}
-                    <div className="absolute bottom-[18px] right-[3px] flex items-center gap-2 rounded-full bg-[#171717] px-2.5 py-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.4)]">
+                    <div className="absolute bottom-[12px] right-[0px] flex items-center gap-2 rounded-full bg-[#171717] px-2.5 py-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.4)] sm:bottom-[18px] sm:right-[3px]">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFE0C8]">
                         <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#FF8800]">
                           <div className="h-2.5 w-2.5 rounded-full bg-[#FF8800]" />
@@ -1617,28 +1609,28 @@ export default function CreatorsClient({
                   </div>
 
                   {/* Text */}
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <h3 className="text-[21px] font-semibold leading-tight text-white/80">
+                  <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
+                    <h3 className="text-[18px] font-semibold leading-tight text-white/80 sm:text-[21px]">
                       Know Your Numbers
                     </h3>
 
-                    <p className="mt-2 text-[16px] leading-6 text-white/45">
+                    <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
                       Track views, performance, and
-                      <br />
-                      earnings easily.
+                      <br className="hidden sm:block" />
+                      {" "}earnings easily.
                     </p>
                   </div>
                 </div>
 
                 {/* Pick What Fits */}
-                <div className="relative h-[365px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717]">
+                <div className="relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717] sm:h-[365px]">
                   {/* Filter chips */}
-                  <div className="absolute -left-[58px] top-[94px] w-[540px]">
-                    <div className="flex flex-wrap gap-[10px]">
+                  <div className="absolute inset-x-0 top-[72px] px-4 sm:top-[94px] sm:px-0">
+                    <div className="mx-auto flex max-w-[540px] flex-wrap justify-center gap-2 sm:absolute sm:-left-[58px] sm:top-0 sm:w-[540px] sm:justify-start sm:gap-[10px]">
                       {filters.map((filter, index) => (
                         <div
                           key={`${filter}-${index}`}
-                          className="flex h-[37px] shrink-0 items-center rounded-full bg-[#555] px-4 text-[13px] font-medium leading-none text-[#e5e5e5]"
+                          className="flex h-[32px] shrink-0 items-center rounded-full bg-[#555] px-3 text-[12px] font-medium leading-none text-[#e5e5e5] sm:h-[37px] sm:px-4 sm:text-[13px]"
                         >
                           {filter}
                         </div>
@@ -1646,49 +1638,24 @@ export default function CreatorsClient({
                     </div>
                   </div>
 
-                  {/* Decorative arrow */}
-                  {/* <div className="absolute left-[103px] top-[169px]">
-                    <svg
-                      width="22"
-                      height="22"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      className="text-white/70"
-                    >
-                      <path
-                        d="M5 12H17"
-                        stroke="currentColor"
-                        strokeWidth="1.7"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M13 8L17 12L13 16"
-                        stroke="currentColor"
-                        strokeWidth="1.7"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div> */}
-
                   {/* Text — aligned with Know Your Numbers */}
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <h3 className="text-[21px] font-semibold leading-tight text-white/80">
+                  <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
+                    <h3 className="text-[18px] font-semibold leading-tight text-white/80 sm:text-[21px]">
                       Pick What Fits
                     </h3>
 
-                    <p className="mt-2 text-[16px] leading-6 text-white/45">
+                    <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
                       Choose campaigns that match your
-                      <br />
-                      content style.
+                      <br className="hidden sm:block" />
+                      {" "}content style.
                     </p>
                   </div>
                 </div>
 
                 {/* Grow With Every Campaign */}
-                <div className="relative h-[365px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717] sm:col-span-2 lg:col-span-1">
+                <div className="relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717] sm:col-span-2 sm:h-[365px] lg:col-span-1">
                   {/* Dashboard image */}
-                  <div className="absolute left-6 right-6 top-6 h-[205px] overflow-hidden rounded-lg">
+                  <div className="absolute left-4 right-4 top-4 h-[180px] overflow-hidden rounded-lg sm:left-6 sm:right-6 sm:top-6 sm:h-[205px]">
                     <img
                       src="/images/b8bc146b928ab4b457b74850bfdaf6ab72f59d8e.png"
                       alt="Campaign dashboard"
@@ -1703,15 +1670,15 @@ export default function CreatorsClient({
                   <div className="pointer-events-none absolute left-0 top-0 h-[220px] w-full bg-gradient-to-b from-[#171717]/20 via-transparent to-[#171717]/90" />
 
                   {/* Text — aligned with Know Your Numbers */}
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <h3 className="text-[21px] font-semibold leading-tight text-white/80">
+                  <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
+                    <h3 className="text-[18px] font-semibold leading-tight text-white/80 sm:text-[21px]">
                       Grow With Every Campaign
                     </h3>
 
-                    <p className="mt-2 text-[16px] leading-6 text-white/45">
+                    <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
                       Build experience, performance, and
-                      <br />
-                      earning potential.
+                      <br className="hidden sm:block" />
+                      {" "}earning potential.
                     </p>
                   </div>
                 </div>
@@ -1721,25 +1688,26 @@ export default function CreatorsClient({
         </section>
 
 
-        <section className="relative flex min-h-[700px] w-full items-center justify-center overflow-hidden bg-black">
+        <section className="relative flex min-h-[420px] w-full items-center justify-center overflow-hidden bg-black px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[700px]">
       {/* Orange glow */}
       <div
         className="
           pointer-events-none absolute left-1/2 top-1/2
-          h-[500px] w-[500px]
+          h-[320px] w-[320px]
           -translate-x-1/2 -translate-y-1/2
           rounded-full
           bg-orange-500/10
           blur-[100px]
+          sm:h-[500px] sm:w-[500px]
         "
       />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-center text-center">
+      <div className="relative z-10 flex flex-col items-center px-2 text-center">
         {/* Number */}
         <h1
           className="
-            text-[72px]
+            text-[52px]
             font-bold
             leading-none
             tracking-[-0.04em]
@@ -1755,11 +1723,12 @@ export default function CreatorsClient({
         {/* Subtitle */}
         <p
           className="
-            mt-5
-            text-[18px]
+            mt-4
+            text-[16px]
             font-semibold
             tracking-[-0.02em]
             text-white/70
+            sm:mt-5
             sm:text-[21px]
             md:text-[22px]
           "
@@ -1772,19 +1741,22 @@ export default function CreatorsClient({
           type="button"
           className="
             group
-            mt-8
+            mt-6
             flex items-center gap-3
             rounded-[22px]
             border border-orange-400
             bg-white
-            px-6 py-4
-            text-[17px]
+            px-5 py-3.5
+            text-[15px]
             font-semibold
             text-orange-500
             shadow-[0_0_25px_rgba(255,120,0,0.45)]
             transition-all duration-300
             hover:scale-105
             hover:shadow-[0_0_35px_rgba(255,120,0,0.65)]
+            sm:mt-8
+            sm:px-6 sm:py-4
+            sm:text-[17px]
           "
         >
           <span>Make you turn</span>

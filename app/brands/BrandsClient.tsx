@@ -387,13 +387,13 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden">
+    <div className="min-h-screen overflow-x-hidden bg-black text-white">
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
-        <main className="min-h-screen overflow-hidden bg-black text-white">
+        <main className="min-h-screen overflow-x-hidden bg-black text-white">
 
           {/* Hero */}
-          <section className="relative mx-auto max-w-[1080px] px-6 pt-14 text-center md:pt-16">
+          <section className="relative mx-auto max-w-[1080px] px-4 pt-10 text-center sm:px-6 sm:pt-14 md:pt-16">
             {/* Circular rings */}
             {/* <div className="pointer-events-none absolute left-1/2 top-[-80px] h-[650px] w-[650px] -translate-x-1/2 rounded-full border border-white/[0.035]" /> */}
 
@@ -404,20 +404,20 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             </div> */}
 
             <div className="relative z-10">
-              <h1 className="mx-auto max-w-[700px] text-[38px] font-bold leading-[1.08] tracking-[-1.8px] text-white/90 md:text-[48px]">
+              <h1 className="mx-auto max-w-[700px] text-[28px] font-bold leading-[1.1] tracking-[-1.2px] text-white/90 sm:text-[36px] sm:tracking-[-1.5px] md:text-[48px] md:tracking-[-1.8px]">
                 Pay creators based on
                 <br />
                 how their content performs.
               </h1>
 
-              <p className="mx-auto mt-5 max-w-[640px] text-[15px] leading-6 text-white/50 md:text-[16px]">
+              <p className="mx-auto mt-4 max-w-[640px] text-[14px] leading-6 text-white/50 sm:mt-5 sm:text-[15px] md:text-[16px]">
                 Set your campaign, your brief, and your budget. Game of Creators
                 puts it in front of a creator network, and pays out on verified
                 performance
               </p>
 
-              <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-                <button className="group flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/50 px-5 py-3 text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.03)] transition hover:bg-white/10">
+              <div className="mt-6 flex w-full flex-col justify-center gap-3 sm:mt-7 sm:flex-row sm:items-center">
+                <button className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/50 px-5 py-3 text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.03)] transition hover:bg-white/10 sm:w-auto">
                   Launch a Campaign
                   <ArrowRight
                     size={15}
@@ -433,7 +433,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       block: "start",
                     })
                   }
-                  className="group flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 sm:w-auto"
                 >
                   See How it works
                   <ArrowRight
@@ -446,41 +446,42 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </section>
 
           {/* Dashboard / Analytics Card */}
-          <section className="relative z-20 mx-auto mt-[105px] max-w-[1100px] px-5">
-            <div className="rounded-[30px]  bg-[#242424] p-2 shadow-[0_30px_100px_rgba(88,54,150,0.25)]">
+          <section className="relative z-20 mx-auto mt-12 max-w-[1100px] px-4 sm:mt-16 sm:px-5 md:mt-[105px]">
+            <div className="rounded-[20px] bg-[#242424] p-1.5 shadow-[0_30px_100px_rgba(88,54,150,0.25)] sm:rounded-[30px] sm:p-2">
               {/* Main dashboard card */}
-              <div className="relative min-h-[450px] overflow-hidden rounded-[22px] border border-white/[0.04] bg-[#151515]">
-                {/* Fake dashboard behind */}
-                <div className="absolute inset-0 opacity-[0.18]">
-                  <div className="grid grid-cols-4 gap-3 p-5">
-                    {[1, 2, 3, 4].map((item) => (
-                      <div
-                        key={item}
-                        className="h-20 rounded-xl border border-white/10 bg-white/[0.02]"
-                      />
-                    ))}
-                  </div>
-
-                  <div className="mx-5 h-48 rounded-xl border border-white/10 bg-white/[0.015]" />
+              <div className="relative min-h-[320px] overflow-hidden rounded-[18px] border border-white/[0.04] bg-[#151515] sm:min-h-[450px] sm:rounded-[22px]">
+                {/* Dashboard image behind purple glow */}
+                <div className="pointer-events-none absolute inset-0">
+                  <Image
+                    src="/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
+                    alt=""
+                    fill
+                    className="object-cover object-left-top opacity-40 sm:object-[20%_0%] sm:opacity-50"
+                    sizes="(max-width: 1100px) 100vw, 1100px"
+                    priority
+                  />
+                  {/* Soft fade so left copy stays readable */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#151515] via-[#151515]/85 to-transparent sm:via-[#151515]/70" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#151515] via-transparent to-[#151515]/40" />
                 </div>
 
                 {/* Purple glow */}
-                <div className="absolute bottom-[-160px] right-[-100px] h-[400px] w-[650px] rounded-full bg-[#8869ff]/55 blur-[100px]" />
+                <div className="absolute bottom-[-160px] right-[-100px] z-[1] h-[400px] w-[650px] rounded-full bg-[#8869ff]/55 blur-[100px]" />
 
                 {/* Content */}
-                <div className="relative z-10 flex min-h-[390px] flex-col justify-center px-8 py-12 md:px-10">
-                  <h2 className="max-w-[510px] text-[28px] font-bold leading-[1.1] tracking-[-1px] md:text-[31px]">
+                <div className="relative z-10 flex min-h-[280px] flex-col justify-center px-5 py-10 sm:min-h-[390px] sm:px-8 sm:py-12 md:px-10">
+                  <h2 className="max-w-[510px] text-[22px] font-bold leading-[1.15] tracking-[-0.8px] sm:text-[28px] sm:tracking-[-1px] md:text-[31px]">
                     Don’t just run campaigns.
                     <br />
                     Know which creators perform
                   </h2>
 
-                  <p className="mt-4 max-w-[390px] text-[14px] leading-6 text-white/45">
+                  <p className="mt-4 max-w-[390px] text-[13px] leading-6 text-white/45 sm:text-[14px]">
                     Know which creators, content, and moments are actually
                     driving results.
                   </p>
 
-                  <button className="mt-5 flex w-fit items-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-white/90">
+                  <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-white/90 sm:w-fit">
                     Launch a Campaign
                     <ArrowRight size={14} />
                   </button>
@@ -488,7 +489,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               </div>
 
               {/* Feature cards */}
-              <div className="mt-3 grid grid-cols-1 gap-3 rounded-[22px] bg-[#151515] p-7 md:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-6 rounded-[18px] bg-[#151515] p-5 sm:gap-3 sm:rounded-[22px] sm:p-7 md:grid-cols-3">
                 {features.map((feature) => {
                   const Icon = feature.icon;
 
@@ -559,17 +560,17 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </div>
         </section>
 
-        <section className="relative min-h-screen overflow-hidden bg-black px-5 py-20 text-white md:px-10 lg:px-20">
+        <section className="relative overflow-hidden bg-black px-4 py-14 text-white sm:px-5 sm:py-20 md:px-10 lg:px-20">
           <div className="mx-auto max-w-[1280px]">
             {/* ================= HEADING ================= */}
-            <h2 className="mx-auto max-w-[720px] text-center text-[42px] font-semibold leading-[1.02] tracking-[-2.5px] md:text-[54px] lg:text-[56px]">
+            <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px] lg:text-[56px]">
               The Old way of promoting
               <br />
               your brand
             </h2>
 
             {/* ================= MAIN CONTENT ================= */}
-            <div className="relative mx-auto mt-24 max-w-[1150px] lg:h-[450px]">
+            <div className="relative mx-auto mt-12 max-w-[1150px] sm:mt-16 lg:mt-24 lg:h-[450px]">
               {/* =================================================
               CREATOR DEAL CARD
           ================================================= */}
@@ -577,11 +578,11 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 className="
               relative z-10 mx-auto
               w-full max-w-[420px]
-              rotate-[-7deg]
+              rotate-[-3deg] sm:rotate-[-7deg]
               rounded-[25px]
               border border-white/[0.13]
               bg-[#171717]
-              p-6
+              p-5 sm:p-6
 
               shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]
 
@@ -711,17 +712,21 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           ================================================= */}
               <p
                 className="
-              relative mx-auto mt-20 w-fit
+              relative mx-auto mt-12 w-fit
               -rotate-[2deg]
-              text-[22px]
+              text-center
+              text-[18px]
               font-medium
               italic
               text-white/75
+              sm:mt-20
+              sm:text-[22px]
 
               lg:absolute
               lg:right-[7%]
               lg:top-[0px]
               lg:mt-0
+              lg:text-left
             "
                 style={{
                   fontFamily: "cursive",
@@ -886,11 +891,11 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         </section> */}
 
         {/* Campaign Process Cards */}
-        <section className="bg-[#030405] py-20 md:py-28">
-          <div className="mx-auto max-w-[1200px] px-5">
+        <section className="bg-[#030405] py-14 sm:py-20 md:py-28">
+          <div className="mx-auto max-w-[1200px] px-4 sm:px-5">
             {/* Heading */}
-            <div className="mb-16 text-center">
-              <h2 className="text-3xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">
+            <div className="mb-10 text-center sm:mb-16">
+              <h2 className="text-[28px] font-bold leading-tight text-white sm:text-3xl md:text-5xl lg:text-6xl">
                 The New way with
                 <br />
                 just three simple steps
@@ -900,7 +905,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             {/* Cards */}
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               {/* Card 1 */}
-              <div className="relative min-h-[515px] overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]">
+              <div className="relative min-h-[460px] overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717] sm:min-h-[515px]">
                 {/* =========================
     BACKGROUND DETAILS FORM
 ========================== */}
@@ -1031,21 +1036,21 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
     TABS
 ========================== */}
 
-                <div className="absolute left-5 right-5 top-[300px] z-20">
+                <div className="absolute inset-x-0 top-[260px] z-20 px-4 sm:left-5 sm:right-5 sm:top-[300px] sm:px-0">
                   <div className="flex items-center rounded-full border border-white/10 bg-[#2a2a2a]/90 p-1 backdrop-blur-lg">
-                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-3 py-1.5 text-sm text-white shadow-[0_0_15px_rgba(124,58,237,0.6)]">
+                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-2.5 py-1.5 text-xs text-white shadow-[0_0_15px_rgba(124,58,237,0.6)] sm:px-3 sm:text-sm">
                       CPM
                     </button>
 
-                    <button className="flex-1 text-sm text-gray-400">
+                    <button className="flex-1 text-xs text-gray-400 sm:text-sm">
                       Leaderboard
                     </button>
 
-                    <button className="flex-1 text-sm text-gray-400">
+                    <button className="flex-1 text-xs text-gray-400 sm:text-sm">
                       Milestone
                     </button>
 
-                    <button className="flex-1 text-sm text-gray-400">
+                    <button className="flex-1 text-xs text-gray-400 sm:text-sm">
                       Dual Rewards
                     </button>
                   </div>
@@ -1201,7 +1206,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </div>
         </section>
 
-        <section className="relative min-h-screen overflow-hidden bg-[#030307] py-24">
+        <section className="relative overflow-hidden bg-[#030307] px-4 py-16 sm:py-20 md:py-24">
       {/* Purple background glow */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
         <Image
@@ -1213,15 +1218,15 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
       </div>
 
       {/* Annotation */}
-      <div className="relative z-10 mx-auto mb-24 flex max-w-[900px] justify-end px-6">
-        <div className="relative mr-4">
-          <p className="font-[cursive] text-xl italic text-white/75 md:text-2xl">
+      <div className="relative z-10 mx-auto mb-10 flex max-w-[900px] justify-center px-2 sm:mb-16 sm:justify-end sm:px-6 md:mb-24">
+        <div className="relative mr-0 text-center sm:mr-4 sm:text-left">
+          <p className="font-[cursive] text-lg italic text-white/75 sm:text-xl md:text-2xl">
             Get full control to approve a reel before making live
           </p>
 
           {/* Curved arrow */}
           <svg
-            className="absolute -bottom-20 left-24 h-24 w-24 text-white/70"
+            className="absolute -bottom-16 left-1/2 hidden h-20 w-20 -translate-x-1/2 text-white/70 sm:-bottom-20 sm:left-24 sm:block sm:h-24 sm:w-24 sm:translate-x-0"
             viewBox="0 0 100 100"
             fill="none"
           >
@@ -1250,7 +1255,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
       </div>
 
       {/* Main glass container */}
-      <div className="relative z-10 mx-auto flex h-[475px] w-[90%] max-w-[730px] items-start justify-center overflow-hidden rounded-[18px] border border-white/15 bg-[#121212] pt-[68px] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]">
+      <div className="relative z-10 mx-auto flex min-h-[420px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] border border-white/15 bg-[#121212] px-3 pb-6 pt-8 shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] sm:min-h-[475px] sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-[68px]">
         {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/30" />
 
@@ -1258,20 +1263,20 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
 
         {/* Submission card */}
-        <div className="relative z-10 w-[485px] rounded-[18px] border border-[#353535] bg-[#171717] px-9 py-9 shadow-[8px_8px_50px_0px_#00000080] shadow-[4px_12px_4px_0px_#0000001A]">
+        <div className="relative z-10 w-full max-w-[485px] rounded-[16px] border border-[#353535] bg-[#171717] px-4 py-6 shadow-[8px_8px_50px_0px_#00000080] sm:rounded-[18px] sm:px-9 sm:py-9 sm:shadow-[4px_12px_4px_0px_#0000001A]">
           {/* Header */}
-          <div className="mb-7 flex items-start justify-between">
-            <div>
-              <h2 className="text-xl font-medium text-[#d8d8df]">
+          <div className="mb-5 flex items-start justify-between gap-3 sm:mb-7">
+            <div className="min-w-0">
+              <h2 className="text-lg font-medium text-[#d8d8df] sm:text-xl">
                 Creator Submissions
               </h2>
 
-              <p className="mt-1 text-sm text-[#92929a]">
+              <p className="mt-1 text-xs text-[#92929a] sm:text-sm">
                 Payment are done after brand approves
               </p>
             </div>
 
-            <p className="pt-1 text-xl font-medium text-[#d8d8df]">
+            <p className="shrink-0 pt-1 text-lg font-medium text-[#d8d8df] sm:text-xl">
               $2,000
             </p>
           </div>
@@ -1281,23 +1286,23 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             {submissions.map((submission, index) => (
               <div
                 key={submission.name}
-                className={`flex items-center justify-between py-4 ${
+                className={`flex flex-wrap items-center justify-between gap-3 py-3 sm:py-4 ${
                   index !== submissions.length - 1
                     ? "border-b border-white/[0.04]"
                     : ""
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   {submission.image ? (
                     <img
                       src={submission.image}
                       alt={submission.name}
-                      className="h-11 w-11 rounded-full object-cover"
+                      className="h-10 w-10 rounded-full object-cover sm:h-11 sm:w-11"
                     />
                   ) : (
                     <div
                       aria-hidden
-                      className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-sm font-medium text-[#dedee3]"
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-medium text-[#dedee3] sm:h-11 sm:w-11"
                     >
                       {submission.name
                         .split(" ")
@@ -1307,23 +1312,23 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                     </div>
                   )}
 
-                  <div>
-                    <h3 className="text-[16px] font-medium text-[#dedee3]">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-[14px] font-medium text-[#dedee3] sm:text-[16px]">
                       {submission.name}
                     </h3>
 
-                    <p className="mt-0.5 text-sm text-[#92929a]">
+                    <p className="mt-0.5 text-xs text-[#92929a] sm:text-sm">
                       {submission.subtitle}
                     </p>
                   </div>
                 </div>
 
                 {submission.approved ? (
-                  <span className="rounded-full bg-[#1eaa7d] px-4 py-2 text-sm font-medium text-white">
+                  <span className="rounded-full bg-[#1eaa7d] px-3 py-1.5 text-xs font-medium text-white sm:px-4 sm:py-2 sm:text-sm">
                     ✓ Approved
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-[#a3a3aa]">
+                  <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1.5 text-xs text-[#a3a3aa] sm:px-3 sm:py-2 sm:text-sm">
                     <span className="flex h-3 w-3 items-center justify-center rounded-full border border-[#8b8b94] text-[8px]">
                       ○
                     </span>
@@ -1339,11 +1344,11 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
     </section>
 
 
-    <section className="min-h-screen overflow-hidden bg-black px-4 py-16 text-white sm:px-6 lg:px-10">
+    <section className="overflow-hidden bg-black px-4 py-12 text-white sm:px-6 sm:py-16 lg:px-10">
       <div className="mx-auto max-w-[1110px]">
 
         {/* Heading */}
-        <h2 className="mb-16 text-center text-4xl font-bold tracking-tight sm:text-5xl">
+        <h2 className="mb-10 text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-4xl md:text-5xl">
           Everything that you need
         </h2>
 
@@ -1351,7 +1356,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         <div className="grid gap-5 lg:grid-cols-2">
 
           {/* REAL ENGAGEMENT */}
-          <div className="relative h-[425px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717]">
+          <div className="relative h-[380px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717] sm:h-[425px]">
             {/* Background profiles */}
             <div className="absolute left-1/2 top-10 z-[1] flex w-[230px] -translate-x-1/2 flex-col gap-2.5">
               {profiles.map((profile, index) => (
@@ -1477,13 +1482,13 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 />
               </svg>
 
-              <div className="absolute inset-0 flex items-center justify-center gap-2.5">
+              <div className="absolute inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
                 <svg
                   width="22"
                   height="22"
                   viewBox="0 0 24 24"
                   fill="none"
-                  className="shrink-0"
+                  className="hidden shrink-0 sm:block"
                 >
                   <path
                     d="M4 11.5L13.5 9L15.5 15L6 17.5L4 11.5Z"
@@ -1516,18 +1521,18 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                     strokeLinecap="round"
                   />
                 </svg>
-                <span className="text-[15px] font-medium tracking-[-0.02em] text-white">
+                <span className="text-center text-[12px] font-medium tracking-[-0.02em] text-white sm:text-[15px]">
                   Authentic Data. Verified Performance
                 </span>
               </div>
             </div>
 
             {/* Bottom text */}
-            <div className="absolute bottom-7 left-7 right-7 z-10">
-              <h3 className="mb-2 text-xl font-semibold">
+            <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
+              <h3 className="mb-2 text-lg font-semibold sm:text-xl">
                 Real Engagement Only
               </h3>
-              <p className="max-w-[480px] text-[15px] leading-6 text-white/50">
+              <p className="max-w-[480px] text-[13px] leading-5 text-white/50 sm:text-[15px] sm:leading-6">
                 We scan every view for suspicious activity and filter out bots,
                 clicks farms and fake traffic - so you only pay for real people
               </p>
@@ -1535,7 +1540,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </div>
 
           {/* CONNECTED AT SOURCE */}
-          <div className="relative h-[425px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717]">
+          <div className="relative h-[380px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717] sm:h-[425px]">
 
             {/* API status */}
             <div className="absolute left-0 right-0 top-7 z-10 text-center text-sm text-green-400">
@@ -1594,12 +1599,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             </div>
 
             {/* Bottom text */}
-            <div className="absolute bottom-7 left-7 right-7 z-10">
-              <h3 className="mb-2 text-xl font-semibold">
+            <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
+              <h3 className="mb-2 text-lg font-semibold sm:text-xl">
                 Connected at the source
               </h3>
 
-              <p className="max-w-[480px] text-[15px] leading-6 text-white/50">
+              <p className="max-w-[480px] text-[13px] leading-5 text-white/50 sm:text-[15px] sm:leading-6">
                 Campaign data is pulled directly from Instagram and
                 YouTube, giving you verified performance instead of
                 self-reported numbers.
@@ -1609,35 +1614,37 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         </div>
 
         {/* CAMPAIGN CARD */}
-        <div className="w-full mt-6 overflow-hidden rounded-[20px] border border-white/10 bg-[#151515] px-9 py-9">
-      <div className="relative flex min-h-[390px]">
+        <div className="mt-6 w-full overflow-hidden rounded-[16px] border border-white/10 bg-[#151515] px-4 py-6 sm:rounded-[20px] sm:px-6 sm:py-8 lg:px-9 lg:py-9">
+      <div className="relative flex flex-col xl:min-h-[390px] xl:flex-row">
 
         {/* LEFT CONTENT */}
-        <div className="relative z-30 w-[310px] shrink-0">
-          <h2 className="text-[22px] font-semibold tracking-[-0.4px] text-white/80">
+        <div className="relative z-30 w-full shrink-0 xl:w-[310px]">
+          <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-white/80 sm:text-[22px]">
             Run Campaigns, Your way.
           </h2>
 
-          <p className="mt-2 max-w-[250px] text-[16px] leading-[24px] text-white/50">
+          <p className="mt-2 max-w-[280px] text-[14px] leading-[22px] text-white/50 sm:max-w-[250px] sm:text-[16px] sm:leading-[24px]">
             Chose the format that fit your goals -
-            <br />
+            <br className="hidden sm:block" />
             from guaranteed reach to
-            <br />
+            <br className="hidden sm:block" />
             performance-based rewards
           </p>
         </div>
 
-        {/* CARDS AREA */}
-        <div className="absolute left-[300px] top-[-8px] h-[460px] w-[calc(100%-260px)] overflow-visible">
+        {/* CARDS AREA — horizontal scroll on small screens, fan on xl */}
+        <div className="relative -mx-4 mt-6 overflow-x-auto pb-2 xl:absolute xl:left-[280px] xl:top-[-8px] xl:mx-0 xl:mt-0 xl:h-[460px] xl:w-[calc(100%-240px)] xl:overflow-visible xl:pb-0 2xl:left-[300px]">
+          <div className="relative h-[400px] w-[780px] sm:h-[430px] sm:w-[860px] xl:h-[460px] xl:w-full">
 
           {/* ================= CPM CARD ================= */}
           <div
             className="
               absolute left-0 top-[18px] z-[10]
-              h-[410px] w-[270px]
+              h-[380px] w-[240px]
               overflow-hidden rounded-[22px]
               bg-gradient-to-br from-[#7445ef] to-[#5c36d8]
               shadow-2xl
+              sm:h-[410px] sm:w-[270px]
             "
           >
             <div className="px-5 pt-6">
@@ -1712,11 +1719,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           {/* ================= LEADERBOARD CARD ================= */}
           <div
             className="
-              absolute left-[190px] top-[28px] z-[20]
-              h-[410px] w-[270px]
+              absolute left-[160px] top-[28px] z-[20]
+              h-[380px] w-[240px]
               overflow-hidden rounded-[22px]
               bg-gradient-to-br from-[#ffc743] to-[#d69a28]
               shadow-2xl
+              sm:left-[190px] sm:h-[410px] sm:w-[270px]
             "
             style={{ transform: "rotate(2.5deg)" }}
           >
@@ -1790,11 +1798,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           {/* ================= MILESTONE CARD ================= */}
           <div
             className="
-              absolute left-[360px] top-[42px] z-[30]
-              h-[410px] w-[270px]
+              absolute left-[310px] top-[42px] z-[30]
+              h-[380px] w-[240px]
               overflow-hidden rounded-[22px]
               bg-gradient-to-br from-[#ed3fcd] to-[#b832bc]
               shadow-2xl
+              sm:left-[360px] sm:h-[410px] sm:w-[270px]
             "
             style={{ transform: "rotate(4deg)" }}
           >
@@ -1887,11 +1896,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           {/* ================= DUAL REWARDS CARD ================= */}
           <div
             className="
-              absolute left-[540px] top-[64px] z-[40]
-              h-[380px] w-[300px]
+              absolute left-[460px] top-[58px] z-[40]
+              h-[360px] w-[250px]
               overflow-hidden rounded-[22px]
               bg-gradient-to-br from-[#36b4eb] to-[#2396d1]
               shadow-2xl
+              sm:left-[540px] sm:top-[64px] sm:h-[380px] sm:w-[300px]
             "
             style={{ transform: "rotate(5.5deg)" }}
           >
@@ -1987,25 +1997,26 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               </div>
           </div>
 
+          </div>
         </div>
       </div>
     </div>
       </div>
     </section>
 
-    <section className="min-h-screen bg-black px-6 py-16 text-white sm:px-10 lg:px-20">
-      <div className="mx-auto flex min-h-[700px] max-w-[1240px] items-center">
-        <div className="grid w-full grid-cols-1 items-center gap-12 lg:grid-cols-[1fr_436px] lg:gap-16">
+    <section className="bg-black px-4 py-12 text-white sm:px-6 sm:py-16 md:min-h-screen lg:px-20">
+      <div className="mx-auto flex max-w-[1240px] items-center md:min-h-[700px]">
+        <div className="grid w-full grid-cols-1 items-center gap-10 lg:grid-cols-[1fr_436px] lg:gap-16">
           
           {/* Left Content */}
           <div className="max-w-[650px]">
-            <h2 className="text-[42px] font-semibold leading-[1.08] tracking-[-1.8px] sm:text-[48px] lg:text-[52px]">
+            <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-1.2px] sm:text-[42px] sm:tracking-[-1.8px] lg:text-[52px]">
               Real campaigns. Proven
               <br />
               performance.
             </h2>
 
-            <p className="mt-8 max-w-[640px] text-[20px] font-medium italic leading-[1.8] tracking-[-0.3px] text-[#c9c9c9] sm:text-[22px]">
+            <p className="mt-5 max-w-[640px] text-[16px] font-medium italic leading-[1.7] tracking-[-0.3px] text-[#c9c9c9] sm:mt-8 sm:text-[20px] sm:leading-[1.8] md:text-[22px]">
               “GOC helped us move from paying for reach to
               understanding the actual performance behind every piece of
               content. The visibility made campaign decisions much
@@ -2055,7 +2066,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </div>
 
           {/* Right Video / Image */}
-          <div className="relative mx-auto h-[660px] w-full max-w-[436px] overflow-hidden rounded-[48px]">
+          <div className="relative mx-auto h-[420px] w-full max-w-[436px] overflow-hidden rounded-[28px] sm:h-[560px] sm:rounded-[40px] md:h-[660px] md:rounded-[48px]">
             <Image
               src="/images/ee0bbe0b8188b7baabb964e4fc87a704b2fbcdf8.png"
               alt="Campaign testimonial"
@@ -2070,19 +2081,19 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
       </div>
     </section>
 
-    <section className="relative min-h-[900px] overflow-hidden bg-black px-5 py-24 text-white">
+    <section className="relative min-h-[640px] overflow-hidden bg-black px-4 py-14 text-white sm:min-h-[780px] sm:px-5 sm:py-20 md:min-h-[900px] md:py-24">
       {/* Background glow */}
-      <div className="pointer-events-none absolute inset-x-0 top-[360px] h-[600px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.10),transparent_65%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-[280px] h-[400px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.10),transparent_65%)] sm:top-[360px] sm:h-[600px]" />
 
       {/* Top content */}
       <div className="relative z-20 mx-auto max-w-3xl text-center">
-        <h2 className="text-4xl font-semibold leading-[1.1] tracking-[-0.04em] sm:text-5xl md:text-[52px]">
+        <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.04em] sm:text-4xl md:text-5xl md:text-[52px]">
           The results gets sharper
           <br />
           with every campaign.
         </h2>
 
-        <p className="mx-auto mt-5 max-w-[620px] text-sm leading-6 text-neutral-500 sm:text-base">
+        <p className="mx-auto mt-4 max-w-[620px] text-sm leading-6 text-neutral-500 sm:mt-5 sm:text-base">
           More campaigns mean more creators participating, more content, and
           more performance data — which makes it easier to see what a creator
           or a piece of content is likely to do next time
@@ -2095,7 +2106,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
       </div>
 
       {/* Map */}
-      <div className="relative mx-auto mt-12 h-[580px] w-full max-w-[1250px]">
+      <div className="relative mx-auto mt-8 h-[320px] w-full max-w-[1250px] sm:mt-12 sm:h-[420px] md:h-[520px] lg:h-[580px]">
         <Image
           src={WorldMapDots}
           alt=""
@@ -2128,19 +2139,19 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
         {/* Center campaign marker */}
         <div
-          className="absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2"
+          className="absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 sm:h-14 sm:w-14"
           style={{
             left: `${campaignCenter.x}%`,
             top: `${campaignCenter.y}%`,
           }}
         >
           <div className="flex h-full w-full items-center justify-center rounded-full border border-white/50 bg-black shadow-[0_0_30px_rgba(255,255,255,0.15)]">
-            <div className="flex h-7 w-7 items-center justify-center">
+            <div className="flex h-5 w-5 items-center justify-center sm:h-7 sm:w-7">
              <img src="/images/Group@2x.png" alt="Play" className="h-full w-full object-cover" />
             </div>
           </div>
 
-          <div className="absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-full border border-black/30 bg-white/80 px-5 py-2 text-center text-sm font-medium text-black shadow-lg backdrop-blur">
+          <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full border border-black/30 bg-white/80 px-3 py-1 text-center text-[10px] font-medium text-black shadow-lg backdrop-blur sm:mt-2 sm:px-5 sm:py-2 sm:text-sm">
             Campaign Launched
           </div>
         </div>
@@ -2155,7 +2166,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               top: `${person.y}%`,
             }}
           >
-            <div className="mx-auto h-11 w-11 overflow-hidden rounded-full border-2 border-white/80 bg-neutral-800 shadow-[0_0_0_3px_rgba(0,0,0,0.7)]">
+            <div className="mx-auto h-7 w-7 overflow-hidden rounded-full border-2 border-white/80 bg-neutral-800 shadow-[0_0_0_3px_rgba(0,0,0,0.7)] sm:h-11 sm:w-11">
               <img
                 src={person.avatar}
                 alt=""
@@ -2164,9 +2175,9 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             </div>
 
             {/* Location pin */}
-            <div className="mx-auto -mt-1 h-2 w-2 rotate-45 rounded-[1px] bg-white/80" />
+            <div className="mx-auto -mt-1 h-1.5 w-1.5 rotate-45 rounded-[1px] bg-white/80 sm:h-2 sm:w-2" />
 
-            <p className="mt-1 whitespace-nowrap text-sm font-medium text-white">
+            <p className="mt-0.5 hidden whitespace-nowrap text-sm font-medium text-white sm:mt-1 sm:block">
               {person.name}
             </p>
           </div>

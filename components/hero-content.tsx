@@ -227,14 +227,14 @@ export default function HeroContent() {
         {/* =========================================================
           HERO
       ========================================================= */}
-        <section className="relative z-20 mx-auto flex max-w-[1100px] flex-col items-center px-6 pt-[45px] text-center">
-          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
-            <ShieldCheck className="h-4 w-4" />
+        <section className="relative z-20 mx-auto flex max-w-[1100px] flex-col items-center px-4 pt-8 text-center sm:px-6 sm:pt-10 md:pt-[45px]">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 sm:mb-7 sm:px-4 sm:py-2 sm:text-sm">
+            <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Pay for Performance
           </div>
 
           <h1
-            className="max-w-[880px] text-[40px] font-semibold leading-[1.1] tracking-tight text-white sm:text-[52px] md:text-[58px]"
+            className="max-w-[880px] text-[32px] font-semibold leading-[1.1] tracking-tight text-white sm:text-[44px] md:text-[52px] lg:text-[58px]"
             style={{ fontFamily: "Montserrat, sans-serif" }}
           >
             Brands Get Results.
@@ -242,7 +242,7 @@ export default function HeroContent() {
             Creators Get Rewarded.
           </h1>
 
-          <div className="mt-11 flex w-full max-w-[500px] gap-4">
+          <div className="mt-8 flex w-full max-w-[500px] flex-col gap-3 sm:mt-11 sm:flex-row sm:gap-4">
             <button
               type="button"
               id="brands"
@@ -251,7 +251,7 @@ export default function HeroContent() {
                 router.push("/brands");
               }}
               disabled={heroNavPending === "brand"}
-              className="flex h-[52px] flex-1 items-center justify-center rounded-[14px] border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.015] text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200 hover:bg-white/[0.10] disabled:opacity-70"
+              className="flex h-12 flex-1 items-center justify-center rounded-[14px] border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.015] text-[14px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200 hover:bg-white/[0.10] disabled:opacity-70 sm:h-[52px] sm:text-[15px]"
             >
               {heroNavPending === "brand" ? (
                 <ButtonLoadingSpinner />
@@ -271,7 +271,7 @@ export default function HeroContent() {
                 router.push("/creators");
               }}
               disabled={heroNavPending === "creator"}
-              className="flex h-[52px] flex-1 items-center justify-center rounded-[14px] border border-white/70 bg-[#f0e7f6] text-[15px] font-semibold text-[#29183a] shadow-[0_0_25px_rgba(235,220,255,0.08)] transition-all duration-200 hover:bg-white disabled:opacity-70"
+              className="flex h-12 flex-1 items-center justify-center rounded-[14px] border border-white/70 bg-[#f0e7f6] text-[14px] font-semibold text-[#29183a] shadow-[0_0_25px_rgba(235,220,255,0.08)] transition-all duration-200 hover:bg-white disabled:opacity-70 sm:h-[52px] sm:text-[15px]"
             >
               {heroNavPending === "creator" ? (
                 <ButtonLoadingSpinner />
@@ -288,16 +288,17 @@ export default function HeroContent() {
         {/* =========================================================
           VISUAL / ORBIT AREA
       ========================================================= */}
-        <section className="relative mx-auto mt-[55px] h-[620px] w-full max-w-[1400px]">
+        <section className="relative mx-auto mt-8 w-full max-w-[1400px] px-4 pb-12 sm:mt-10 sm:px-6 sm:pb-16 lg:mt-[55px] lg:h-[620px] lg:px-0 lg:pb-0">
           {/* =====================================================
             ANIMATED ORBIT
         ===================================================== */}
           <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
             <svg
-              className="absolute left-1/2 top-[0px] h-[900px] w-[1400px] -translate-x-1/2"
+              className="absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 opacity-70 sm:h-[700px] sm:w-[1100px] lg:h-[900px] lg:w-[1400px] lg:opacity-100"
               viewBox="0 0 1400 900"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
+              preserveAspectRatio="xMidYMid meet"
             >
               <defs>
                 {/* Orange gradient */}
@@ -418,7 +419,7 @@ export default function HeroContent() {
           {/* =====================================================
             LEFT CAMPAIGN CARD
         ===================================================== */}
-          <div className="absolute left-[4%] top-[35px] z-20 hidden w-[220px] rotate-[7deg] rounded-[23px] border border-white/[0.08] p-[15px] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40] lg:block">
+          <div className="absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] border border-white/[0.08] bg-[#1E1E1E] p-[15px] shadow-[inset_0_0_6.02px_0_#FFFFFF40] xl:left-[4%] xl:w-[220px] lg:block">
             {/* Card header */}
             <div className="flex items-center gap-2">
               <div className="flex h-[29px] w-[29px] items-center justify-center rounded-[8px] bg-[#40344c]">
@@ -434,7 +435,7 @@ export default function HeroContent() {
             </div>
 
             {/* Tags */}
-            <div className="mt-3 flex gap-[7px]">
+            <div className="mt-3 flex flex-wrap gap-[7px]">
               <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
                 Clipping
               </span>
@@ -450,7 +451,11 @@ export default function HeroContent() {
 
             {/* Bottom */}
             <div className="mt-3 flex items-end justify-between">
-                    <img src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png" alt="Creator" className="h-[72px] w-[72px] rounded-md object-cover" />
+              <img
+                src="/images/e9ecc19156964f29ca20b5f8080671042162b486.png"
+                alt="Creator"
+                className="h-[72px] w-[72px] rounded-md object-cover"
+              />
 
               <div className="flex h-[35px] w-[35px] items-center justify-center rounded-full bg-[#351149] text-[18px] text-[#c239f5]">
                 →
@@ -461,7 +466,7 @@ export default function HeroContent() {
           {/* =====================================================
             LEFT TEXT
         ===================================================== */}
-          <div className="absolute left-[9%] top-[340px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic text-white/85 lg:block">
+          <div className="absolute left-[6%] top-[340px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic text-white/85 xl:left-[9%] lg:block">
             <div>Brands launch campaigns</div>
 
             <div className="ml-[75px] mt-1 text-[27px]">↘</div>
@@ -470,7 +475,7 @@ export default function HeroContent() {
           {/* =====================================================
             CENTER TEXT
         ===================================================== */}
-          <div className="absolute left-1/2 top-[5px] z-20 -translate-x-1/2 whitespace-nowrap text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] text-white/85">
+          <div className="relative z-20 mx-auto mb-4 text-center font-['Comic_Sans_MS'] text-[14px] italic leading-[20px] text-white/85 sm:text-[16px] sm:leading-[22px] lg:absolute lg:left-1/2 lg:top-[5px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[17px] lg:leading-[24px]">
             Creator create content
             <br />
             that performs
@@ -479,7 +484,7 @@ export default function HeroContent() {
           {/* =====================================================
             CENTRAL CREATOR CARD
         ===================================================== */}
-          <div className="absolute left-1/2 top-[105px] z-20 h-[455px] w-[335px] -translate-x-1/2 overflow-hidden rounded-[24px] border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]">
+          <div className="relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[105px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2">
             {/* Video 1 */}
             <div className="relative h-1/3 overflow-hidden">
               <video
@@ -523,9 +528,9 @@ export default function HeroContent() {
           {/* =====================================================
             RIGHT ANALYTICS CARD
         ===================================================== */}
-          <div className="absolute right-[4%] top-[130px] z-20 hidden w-[280px] rotate-[-15deg] rounded-[22px] border border-white/[0.08] p-4 bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40] lg:block">
+          <div className="absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] border border-white/[0.08] bg-[#1E1E1E] p-4 shadow-[inset_0_0_6.02px_0_#FFFFFF40] xl:right-[4%] xl:w-[280px] lg:block">
             {/* Tabs */}
-            <div className="flex items-center gap-1 text-[11px] text-white/35">
+            <div className="flex flex-wrap items-center gap-1 text-[11px] text-white/35">
               <span className="rounded-[9px] bg-white/[0.08] px-3 py-[9px] text-white/80">
                 Overview
               </span>
@@ -558,7 +563,10 @@ export default function HeroContent() {
                   { label: "June", height: "h-[36px]", active: false },
                   { label: "July", height: "h-[54px]", active: true },
                 ].map((bar) => (
-                  <div key={bar.label} className="flex flex-col items-center gap-1.5">
+                  <div
+                    key={bar.label}
+                    className="flex flex-col items-center gap-1.5"
+                  >
                     <div
                       className={`w-[14px] rounded-t-[4px] ${bar.height} ${
                         bar.active
@@ -578,35 +586,13 @@ export default function HeroContent() {
           {/* =====================================================
             RIGHT TEXT
         ===================================================== */}
-          <div className="absolute right-[10%] top-[25px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] text-white/85 lg:block">
+          <div className="absolute right-[6%] top-[25px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] text-white/85 xl:right-[10%] lg:block">
             Performance drives
             <br />
             real results
             <div className="mt-1 text-[27px]">↙</div>
           </div>
         </section>
-
-        {/* =========================================================
-          MOBILE VISUAL SIMPLIFICATION
-      ========================================================= */}
-        <div className="relative z-30 mx-auto -mt-[70px] flex max-w-[400px] justify-center px-6 pb-16 lg:hidden">
-          <div className="relative h-[390px] w-[280px] overflow-hidden rounded-[24px] border border-white/10 bg-[#191919] shadow-[0_30px_80px_rgba(0,0,0,.6)]">
-            <div className="relative h-1/3 bg-gradient-to-br from-[#d8d7ce] to-[#675b50]">
-              <div className="absolute bottom-[15%] left-1/2 h-[45px] w-[45px] -translate-x-1/2 rounded-full bg-[#bd896c]" />
-              <div className="absolute bottom-0 left-1/2 h-[110px] w-[100px] -translate-x-1/2 rounded-t-[45px] bg-[#171717]" />
-            </div>
-
-            <div className="relative h-1/3 bg-gradient-to-br from-[#a96f50] to-[#29201d]">
-              <div className="absolute bottom-[25%] left-1/2 h-[48px] w-[48px] -translate-x-1/2 rounded-full bg-[#c77f61]" />
-              <div className="absolute bottom-0 left-1/2 h-[110px] w-[100px] -translate-x-1/2 rounded-t-[45px] bg-[#242424]" />
-            </div>
-
-            <div className="relative h-1/3 bg-gradient-to-br from-[#3e5a56] to-[#181a1a]">
-              <div className="absolute bottom-[25%] left-1/2 h-[48px] w-[48px] -translate-x-1/2 rounded-full bg-[#a87862]" />
-              <div className="absolute bottom-0 left-1/2 h-[105px] w-[100px] -translate-x-1/2 rounded-t-[45px] bg-[#222628]" />
-            </div>
-          </div>
-        </div>
 
         {/* =========================================================
           CONTACT ANCHOR
@@ -658,12 +644,12 @@ export default function HeroContent() {
         `}</style>
       </main>
 
-      <main className="min-h-screen bg-black px-5 py-24 text-white">
+      <main className="min-h-screen bg-black px-4 py-16 text-white sm:px-5 sm:py-20 md:py-24">
         <section className="mx-auto max-w-[1200px]">
           {/* =====================================================
             HEADING
         ===================================================== */}
-          <h1 className="mx-auto max-w-[650px] text-center text-[48px] font-semibold leading-[1.03] tracking-[-2.5px] text-white md:text-[52px]">
+          <h1 className="mx-auto max-w-[650px] text-center text-[32px] font-semibold leading-[1.08] tracking-[-1.5px] text-white sm:text-[40px] sm:tracking-[-2px] md:text-[52px] md:tracking-[-2.5px]">
             Both sides work together
             <br />
             as one System
@@ -672,25 +658,25 @@ export default function HeroContent() {
           {/* =====================================================
             CARDS
         ===================================================== */}
-          <div className="mt-[72px] grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-14 md:mt-[72px] lg:grid-cols-2">
             {/* =================================================
               BRANDS CARD
           ================================================= */}
-            <div className="relative h-[545px] overflow-hidden rounded-[25px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-9 pt-9 shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
+            <div className="relative min-h-[480px] overflow-hidden rounded-[20px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-5 pt-7 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0">
               {/* Badge */}
               <div className="inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
                 For Brands
               </div>
 
               {/* Title */}
-              <h2 className="mt-5 max-w-[440px] text-[25px] font-medium leading-[1.25] tracking-[-0.8px]">
+              <h2 className="mt-5 max-w-[440px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]">
                 Pay for actual performance, not
-                <br />
-                followers
+                <br className="hidden sm:block" />
+                {" "}followers
               </h2>
 
               {/* Description */}
-              <p className="mt-3 max-w-[500px] text-[16px] leading-[23px] text-white/45">
+              <p className="mt-3 max-w-[500px] text-[14px] leading-[21px] text-white/45 sm:text-[16px] sm:leading-[23px]">
                 Set your budget and brief. Your campaign runs across a network
                 <br className="hidden xl:block" />
                 of 15,700+ creators, and you pay for verified content and
@@ -701,7 +687,7 @@ export default function HeroContent() {
               {/* ================================================
                 FORM MOCKUP
             ================================================= */}
-              <div className="absolute left-[68px] right-[68px] top-[280px] h-[390px] overflow-hidden rounded-t-[18px] border border-white/[0.10] bg-[#121212] shadow-[0_-10px_40px_rgba(0,0,0,.15)]">
+              <div className="absolute left-4 right-4 top-[260px] h-[390px] overflow-hidden rounded-t-[18px] border border-white/[0.10] bg-[#121212] shadow-[0_-10px_40px_rgba(0,0,0,.15)] sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]">
                 {/* Form header */}
                 <div className="flex items-center justify-between px-4 pt-4">
                   <div className="flex items-center gap-2">
@@ -796,21 +782,21 @@ export default function HeroContent() {
             {/* =================================================
               CREATORS CARD
           ================================================= */}
-            <div className="relative h-[545px] overflow-hidden rounded-[25px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-9 pt-9 shadow-[inset_0_1px_0_rgba(255,255,255,.025)]">
+            <div className="relative min-h-[480px] overflow-hidden rounded-[20px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-5 pt-7 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0">
               {/* Badge */}
               <div className="inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
                 For Creators
               </div>
 
               {/* Title */}
-              <h2 className="mt-5 max-w-[450px] text-[25px] font-medium leading-[1.25] tracking-[-0.8px]">
+              <h2 className="mt-5 max-w-[450px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]">
                 Get paid for performance, not
-                <br />
-                followers.
+                <br className="hidden sm:block" />
+                {" "}followers.
               </h2>
 
               {/* Description */}
-              <p className="mt-3 max-w-[510px] text-[16px] leading-[23px] text-white/45">
+              <p className="mt-3 max-w-[510px] text-[14px] leading-[21px] text-white/45 sm:text-[16px] sm:leading-[23px]">
                 Pick brand campaigns you want. You get paid based on how well
                 <br className="hidden xl:block" />
                 your posts do even if you have 0 followers
@@ -819,9 +805,9 @@ export default function HeroContent() {
               {/* =================================================
                 PAYMENT POPUP - LEFT
             ================================================= */}
-              <div className="absolute left-[25px] top-[258px] z-30 flex w-[225px] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-3 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)]">
-                <div className="flex items-center gap-2">
-                  <div className="relative h-[31px] w-[31px] overflow-hidden rounded-full">
+              <div className="absolute left-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-2 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)] sm:left-[25px] sm:top-[258px] sm:w-[225px] sm:px-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
                     <Image
                       src="/images/Ellipse 2355 (1).avif"
                       alt=""
@@ -831,8 +817,8 @@ export default function HeroContent() {
                     />
                   </div>
 
-                  <div>
-                    <div className="text-[10px] font-medium">Hey Ashok</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[10px] font-medium">Hey Ashok</div>
 
                     <div className="text-[8px] leading-[10px] text-white/35">
                       You can withdraw your
@@ -842,7 +828,7 @@ export default function HeroContent() {
                   </div>
                 </div>
 
-                <span className="text-[11px] font-medium text-[#43df3d]">
+                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
                   $44,090
                 </span>
               </div>
@@ -850,9 +836,9 @@ export default function HeroContent() {
               {/* =================================================
                 PAYMENT POPUP - RIGHT
             ================================================= */}
-              <div className="absolute right-[25px] top-[258px] z-30 flex w-[220px] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-3 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)]">
-                <div className="flex items-center gap-2">
-                  <div className="relative h-[31px] w-[31px] overflow-hidden rounded-full">
+              <div className="absolute right-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-2 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)] sm:right-[25px] sm:top-[258px] sm:w-[220px] sm:px-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
                     <Image
                       src="/images/Ellipse 2355 (3).avif"
                       alt=""
@@ -862,8 +848,8 @@ export default function HeroContent() {
                     />
                   </div>
 
-                  <div>
-                    <div className="text-[10px] font-medium">Hey Riya!</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-[10px] font-medium">Hey Riya!</div>
 
                     <div className="text-[8px] leading-[10px] text-white/35">
                       Your rank 1st in Leader board
@@ -873,7 +859,7 @@ export default function HeroContent() {
                   </div>
                 </div>
 
-                <span className="text-[11px] font-medium text-[#43df3d]">
+                <span className="shrink-0 text-[11px] font-medium text-[#43df3d]">
                   $490
                 </span>
               </div>
@@ -910,8 +896,8 @@ export default function HeroContent() {
 
       {/* Reasons to Select Us */}
 
-       <section className="min-h-screen bg-black flex items-center justify-center px-6">
-      <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-20 md:gap-40">
+       <section className="flex min-h-[50vh] items-center justify-center bg-black px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen">
+      <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
         {/* Creators Network */}
         <div className="text-center">
           <h2
