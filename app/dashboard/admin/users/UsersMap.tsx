@@ -836,10 +836,11 @@ export function UsersMap({
       });
       mapRef.current = leafletMap;
 
-      // Theme-aware tiles
+      // Theme-aware CARTO tiles (NEXT_PUBLIC_CARTO_API_KEY from env)
+      const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY ?? "";
       const tileUrl = dark
-        ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+        ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
+        : `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${cartoKey}`;
       L.tileLayer(tileUrl, {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
