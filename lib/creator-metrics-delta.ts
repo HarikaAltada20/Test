@@ -1,5 +1,6 @@
 import {
   CREATOR_DEFAULT_QUALITY_SCORE,
+  EMPTY_QUALITY_SCORE_COUNTS,
   parseQualityScore,
   type QualityScoreCounts,
 } from "@/lib/quality-score";
@@ -57,7 +58,7 @@ export function emptyCreatorMetricsDelta(): CreatorMetricsDelta {
     pending_reels: 0,
     quality_score_sum: 0,
     scored_verified_count: 0,
-    quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+    quality_score_counts: { ...EMPTY_QUALITY_SCORE_COUNTS },
   };
 }
 
@@ -94,7 +95,9 @@ export function submissionMetricsContribution(
       delta.scored_verified_count = 1;
       if (score === 1) delta.quality_score_counts.score1 = 1;
       else if (score === 2) delta.quality_score_counts.score2 = 1;
-      else delta.quality_score_counts.score3 = 1;
+      else if (score === 3) delta.quality_score_counts.score3 = 1;
+      else if (score === 4) delta.quality_score_counts.score4 = 1;
+      else delta.quality_score_counts.score5 = 1;
     }
   } else if (isRejectedStatus(status)) {
     delta.rejected_reels = 1;
@@ -119,6 +122,8 @@ export function negateCreatorMetricsDelta(
       score1: -delta.quality_score_counts.score1,
       score2: -delta.quality_score_counts.score2,
       score3: -delta.quality_score_counts.score3,
+      score4: -delta.quality_score_counts.score4,
+      score5: -delta.quality_score_counts.score5,
     },
   };
 }
@@ -137,6 +142,8 @@ export function addCreatorMetricsDeltas(
     result.quality_score_counts.score1 += delta.quality_score_counts.score1;
     result.quality_score_counts.score2 += delta.quality_score_counts.score2;
     result.quality_score_counts.score3 += delta.quality_score_counts.score3;
+    result.quality_score_counts.score4 += delta.quality_score_counts.score4;
+    result.quality_score_counts.score5 += delta.quality_score_counts.score5;
   }
   return result;
 }
@@ -161,6 +168,8 @@ export function computeSubmissionMetricsDelta(
 export function bestQualityFromCounts(
   counts: QualityScoreCounts,
 ): number | null {
+  if (counts.score5 > 0) return 5;
+  if (counts.score4 > 0) return 4;
   if (counts.score3 > 0) return 3;
   if (counts.score2 > 0) return 2;
   if (counts.score1 > 0) return 1;
@@ -199,6 +208,16 @@ export function applyCreatorMetricsDeltaToCounters(
         0,
         counters.quality_score_counts.score3 +
           delta.quality_score_counts.score3,
+      ),
+      score4: Math.max(
+        0,
+        counters.quality_score_counts.score4 +
+          delta.quality_score_counts.score4,
+      ),
+      score5: Math.max(
+        0,
+        counters.quality_score_counts.score5 +
+          delta.quality_score_counts.score5,
       ),
     },
   };

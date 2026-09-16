@@ -19,21 +19,42 @@ const QUALITY_OPTIONS: {
   value: QualityScore;
   description: string;
 }[] = [
-  { value: 1, description: "Meets brief, acceptable (default)" },
-  { value: 2, description: "Strong — good hook, edit, creativity" },
-  { value: 3, description: "Exceptional — best-in-class reel" },
+  {
+    value: 1,
+    description: "Meets brief — simple clip, room to grow",
+  },
+  {
+    value: 2,
+    description: "Below average quality — basic edit",
+  },
+  {
+    value: 3,
+    description: "Decent edit — solid and usable",
+  },
+  {
+    value: 4,
+    description: "Strong — hook, subtitles, music, and polished edit",
+  },
+  {
+    value: 5,
+    description: "Exceptional — stands out; feels premium end-to-end",
+  },
 ];
 
 const VERIFY_BUTTON_LABELS: Record<QualityScore, string> = {
-  1: "Verify — Acceptable (1)",
-  2: "Verify — Strong (2)",
-  3: "Verify — Exceptional (3)",
+  1: "Verify — Meets brief (1)",
+  2: "Verify — Below average (2)",
+  3: "Verify — Decent edit (3)",
+  4: "Verify — Strong (4)",
+  5: "Verify — Exceptional (5)",
 };
 
 const EDIT_BUTTON_LABELS: Record<QualityScore, string> = {
-  1: "Save — Acceptable (1)",
-  2: "Save — Strong (2)",
-  3: "Save — Exceptional (3)",
+  1: "Save — Meets brief (1)",
+  2: "Save — Below average (2)",
+  3: "Save — Decent edit (3)",
+  4: "Save — Strong (4)",
+  5: "Save — Exceptional (5)",
 };
 
 type VerifyQualityDialogProps = {
@@ -94,15 +115,15 @@ export function VerifyQualityDialog({
           <DialogDescription>
             {isEdit
               ? submissionCount > 1
-                ? `Choose a quality score (1–3), then click Save to update ${submissionCount} submissions.`
-                : "Choose a quality score (1–3), then click Save to update this submission."
-              : "Select a quality score (1–3), then click Verify to confirm."}
+                ? `Choose a quality score (1–5), then click Save to update ${submissionCount} submissions.`
+                : "Choose a quality score (1–5), then click Save to update this submission."
+              : "Select a quality score (1–5), then click Verify to confirm."}
           </DialogDescription>
         </DialogHeader>
         <div
           role="radiogroup"
           aria-label="Quality score"
-          className="space-y-2 py-2"
+          className="space-y-2 py-2 max-h-[50vh] overflow-y-auto"
         >
           {QUALITY_OPTIONS.map((option) => {
             const isSelected = selectedQuality === option.value;
@@ -155,7 +176,7 @@ export function VerifyQualityDialog({
           </Button>
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             className="w-full"
             onClick={() => onOpenChange(false)}
             disabled={loading}

@@ -955,9 +955,11 @@ export default function SubmissionsClient({
   const qualityScoreFilterButtonLabel = useMemo(() => {
     if (qualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
-      { value: 3, label: "Score 3/3" },
-      { value: 2, label: "Score 2/3" },
-      { value: 1, label: "Score 1/3" },
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
@@ -2657,9 +2659,11 @@ export default function SubmissionsClient({
 
               {(
                 [
-                  { value: 3, label: "Score 3/3" },
-                  { value: 2, label: "Score 2/3" },
-                  { value: 1, label: "Score 1/3" },
+                  { value: 5, label: "Score 5/5" },
+                  { value: 4, label: "Score 4/5" },
+                  { value: 3, label: "Score 3/5" },
+                  { value: 2, label: "Score 2/5" },
+                  { value: 1, label: "Score 1/5" },
                   { value: "unscored", label: "No Quality Score" },
                 ] as Array<{ value: QualityScore | "unscored"; label: string }>
               ).map((opt) => {

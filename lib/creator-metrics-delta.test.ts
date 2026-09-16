@@ -34,6 +34,18 @@ describe("computeSubmissionMetricsDelta", () => {
     assert.equal(delta.quality_score_counts.score2, -1);
   });
 
+  it("swaps quality tier on verified score edit including 4–5", () => {
+    const delta = computeSubmissionMetricsDelta(
+      { status: "verified", quality_score: 3 },
+      { status: "verified", quality_score: 5 },
+    );
+    assert.equal(delta.verified_reels, 0);
+    assert.equal(delta.quality_score_sum, 2);
+    assert.equal(delta.scored_verified_count, 0);
+    assert.equal(delta.quality_score_counts.score3, -1);
+    assert.equal(delta.quality_score_counts.score5, 1);
+  });
+
   it("swaps quality tier on verified score edit", () => {
     const delta = computeSubmissionMetricsDelta(
       { status: "verified", quality_score: 2 },
@@ -58,7 +70,7 @@ describe("computeSubmissionMetricsDelta", () => {
       pending_reels: 0,
       quality_score_sum: 0,
       scored_verified_count: 0,
-      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+      quality_score_counts: { score1: 0, score2: 0, score3: 0, score4: 0, score5: 0 },
     });
   });
 
@@ -100,7 +112,7 @@ describe("buildCreatorProfileMetricsFromCounters", () => {
         pending_reels: 0,
         quality_score_sum: 0,
         scored_verified_count: 0,
-        quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+        quality_score_counts: { score1: 0, score2: 0, score3: 0, score4: 0, score5: 0 },
       },
       addCreatorMetricsDeltas(
         submissionMetricsContribution({
@@ -109,15 +121,15 @@ describe("buildCreatorProfileMetricsFromCounters", () => {
         }),
         submissionMetricsContribution({
           status: "verified",
-          quality_score: 3,
+          quality_score: 5,
         }),
       ),
     );
 
     const profile = buildCreatorProfileMetricsFromCounters(counters);
-    assert.equal(profile.avg_quality_score, 2);
-    assert.equal(profile.best_quality_score, 3);
-    assert.equal(profile.quality_score_sum, 4);
+    assert.equal(profile.avg_quality_score, 3);
+    assert.equal(profile.best_quality_score, 5);
+    assert.equal(profile.quality_score_sum, 6);
     assert.equal(profile.trust_score_metrics.verified_reels, 2);
     assert.equal(profile.trust_score_metrics.trust_number, 2);
     assert.equal(profile.trust_score_metrics.trust_score, 100);

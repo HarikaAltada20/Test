@@ -529,7 +529,7 @@ export async function processVerifySubmission(
         return NextResponse.json(
           {
             error:
-              "qualityScore is required and must be 1, 2, or 3 when verifying a submission",
+              "qualityScore is required and must be 1, 2, 3, 4, or 5 when verifying a submission",
           },
           { status: 400 },
         );

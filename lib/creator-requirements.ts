@@ -253,7 +253,7 @@ function formatQualityThreshold(value: number): string {
   const formatted = Number.isInteger(rounded)
     ? String(rounded)
     : rounded.toFixed(2).replace(/\.?0+$/, "");
-  return `${formatted} / 3`;
+  return `${formatted} / 5`;
 }
 
 /** Creator- or brand-facing eligibility cards for campaign detail pages. */
@@ -290,11 +290,11 @@ export function buildContestEligibilityDisplayItems(
       key: "best-quality",
       label: isBrand ? "Best Quality" : "Best quality score",
       value: isBrand
-        ? `${req.minBestQuality} / 3`
+        ? `${req.minBestQuality} / 5`
         : formatQualityThreshold(req.minBestQuality),
       description: isBrand
         ? "Creators must have reached at least this best content quality rating."
-        : "Your highest content quality rating (1–3) from verified submissions. The brand requires at least this level.",
+        : "Your highest content quality rating (1–5) from verified submissions. The brand requires at least this level.",
     });
   }
   if (req.minQuality !== null) {
@@ -304,7 +304,7 @@ export function buildContestEligibilityDisplayItems(
       value: String(req.minQuality),
       description: isBrand
         ? "Creators must have at least this total quality score sum from verified submissions."
-        : "Sum of your content quality ratings (1–3 each) from verified submissions. The brand requires at least this total.",
+        : "Sum of your content quality ratings (1–5 each) from verified submissions. The brand requires at least this total.",
     });
   }
   if (req.minAvgQuality !== null) {
@@ -315,7 +315,7 @@ export function buildContestEligibilityDisplayItems(
     items.push({
       key: "avg-quality",
       label: isBrand ? "Avg Quality" : "Average quality score",
-      value: isBrand ? `${formatted} / 3` : formatQualityThreshold(req.minAvgQuality),
+      value: isBrand ? `${formatted} / 5` : formatQualityThreshold(req.minAvgQuality),
       description: isBrand
         ? "Creators must maintain at least this average content quality rating."
         : "Your average quality across verified submissions. Consistent quality helps you qualify for selective campaigns.",
@@ -425,7 +425,7 @@ export function buildRequirementChecklist(input: {
     items.push({
       code: "best_quality_too_low",
       label: "Best quality score",
-      requiredLabel: `${req.minBestQuality}/3`,
+      requiredLabel: `${req.minBestQuality}/5`,
       yoursLabel: yours,
       passed:
         snapshot.bestQualityScore !== null &&
@@ -451,7 +451,7 @@ export function buildRequirementChecklist(input: {
     items.push({
       code: "avg_quality_too_low",
       label: "Average quality score",
-      requiredLabel: `${req.minAvgQuality}/3`,
+      requiredLabel: `${req.minAvgQuality}/5`,
       yoursLabel: yours,
       passed:
         snapshot.avgQualityScore !== null &&
@@ -519,7 +519,7 @@ export function evaluateCreatorRequirements(input: {
     ) {
       failures.push({
         code: "best_quality_too_low",
-        message: `Best quality too low. Yours is ${formatQualityScoreDisplay(snapshot.bestQualityScore)}; this campaign requires at least ${req.minBestQuality}/3.`,
+        message: `Best quality too low. Yours is ${formatQualityScoreDisplay(snapshot.bestQualityScore)}; this campaign requires at least ${req.minBestQuality}/5.`,
       });
     }
   }
@@ -543,7 +543,7 @@ export function evaluateCreatorRequirements(input: {
     ) {
       failures.push({
         code: "avg_quality_too_low",
-        message: `Average quality too low. Yours is ${formatQualityScoreDisplay(snapshot.avgQualityScore)}; this campaign requires at least ${req.minAvgQuality}/3.`,
+        message: `Average quality too low. Yours is ${formatQualityScoreDisplay(snapshot.avgQualityScore)}; this campaign requires at least ${req.minAvgQuality}/5.`,
       });
     }
   }
