@@ -25,12 +25,10 @@ import {
   Heart,
   User,
   Users2,
-  ShieldCheck,
 } from "lucide-react";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
-import CtcBanner from "./CtcBanner";
 import NumbersSection from "./NumberSection";
 const steps = [
   {
@@ -227,64 +225,181 @@ export default function HeroContent() {
         {/* =========================================================
           HERO
       ========================================================= */}
-        <section className="relative z-20 mx-auto flex max-w-[1100px] flex-col items-center px-4 pt-8 text-center sm:px-6 sm:pt-10 md:pt-[45px]">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 sm:mb-7 sm:px-4 sm:py-2 sm:text-sm">
-            <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Pay for Performance
-          </div>
+       {/* =========================================================
+          HERO CONTENT
+      ========================================================== */}
 
+<div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
+        {/* Trusted */}
+        <div className="flex justify-center pt-10 sm:pt-14">
+          <div className="flex items-center gap-2.5">
+            {/* Avatar 1 */}
+            <div className="relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 border-[#030303] bg-white">
+              <Image
+                src="/images/39da146881792a5ee763fad443e4c9b4c3e835a5.png"
+                alt=""
+                fill
+                className="object-cover"
+                sizes="32px"
+              />
+            </div>
+
+            {/* Avatar 2 */}
+            <div className="relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 border-[#030303] bg-yellow-300">
+              <Image
+                src="/images/7a17402e3a42cf5d6cf5d8f830d884ce8a940dcc.png"
+                alt=""
+                fill
+                className="object-cover"
+                sizes="32px"
+              />
+            </div>
+
+            <span className="ml-1 text-sm text-white/65">
+              Trusted by Top Brands &amp; Creators
+            </span>
+          </div>
+        </div>
+
+        {/* Heading */}
+        <div className="mx-auto mt-7 max-w-[1000px] text-center">
           <h1
-            className="max-w-[880px] text-[32px] font-semibold leading-[1.1] tracking-tight text-white sm:text-[44px] md:text-[52px] lg:text-[58px]"
-            style={{ fontFamily: "Montserrat, sans-serif" }}
+            className="
+              text-[42px]
+              font-semibold
+              leading-[1.05]
+              tracking-[-0.05em]
+              text-white/70
+              sm:text-[50px]
+              md:text-[58px]
+              lg:text-[64px]
+          "
           >
-            Brands Get Results.
+            Creators earn on{" "}
+            <span className="inline-flex items-center gap-2 text-white">
+              {/* Performance icon */}
+              <span
+                className="
+                  inline-flex
+                  h-[50px]
+                  w-[60px]
+                  rotate-[7deg]
+                  items-center
+                  justify-center
+                  rounded-[15px]
+                bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
+    shadow-[4.95px_4.95px_4.95px_0px_#FFFFFF1A_inset,-1px_2px_4px_0px_#000000]
+                  sm:h-[48px]
+                  sm:w-[60px]
+                "
+              >
+                <Image
+                  src="/images/Vector1234.png"
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 object-contain sm:h-8 sm:w-8"
+                />
+              </span>
+
+              performance
+            </span>
             <br />
-            Creators Get Rewarded.
+            Brands grow on results.
           </h1>
 
-          <div className="mt-8 flex w-full max-w-[500px] flex-col gap-3 sm:mt-11 sm:flex-row sm:gap-4">
-            <button
-              type="button"
-              id="brands"
-              onClick={() => {
-                setHeroNavPending("brand");
-                router.push("/brands");
-              }}
-              disabled={heroNavPending === "brand"}
-              className="flex h-12 flex-1 items-center justify-center rounded-[14px] border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.015] text-[14px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200 hover:bg-white/[0.10] disabled:opacity-70 sm:h-[52px] sm:text-[15px]"
-            >
-              {heroNavPending === "brand" ? (
-                <ButtonLoadingSpinner />
-              ) : (
-                <>
-                  For Brands
-                  <span className="ml-2 text-[18px]">→</span>
-                </>
-              )}
-            </button>
+          {/* Description */}
+          <p
+            className="
+              mx-auto
+              mt-7
+              max-w-[650px]
+              text-[15px]
+              leading-6
+              text-white/45
+              sm:text-base
+            "
+          >
+            Launch performance-driven campaigns that turn creator content into
+            measurable results.
+          </p>
 
-            <button
-              type="button"
-              id="creators"
-              onClick={() => {
-                setHeroNavPending("creator");
-                router.push("/creators");
-              }}
-              disabled={heroNavPending === "creator"}
-              className="flex h-12 flex-1 items-center justify-center rounded-[14px] border border-white/70 bg-[#f0e7f6] text-[14px] font-semibold text-[#29183a] shadow-[0_0_25px_rgba(235,220,255,0.08)] transition-all duration-200 hover:bg-white disabled:opacity-70 sm:h-[52px] sm:text-[15px]"
+          {/* =====================================================
+              CTA BUTTONS
+          ====================================================== */}
+
+          <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              href="/brands"
+              className="
+                group
+                flex
+                h-[51px]
+                min-w-[238px]
+                items-center
+                justify-center
+                rounded-xl
+                border
+                border-white/20
+                bg-gradient-to-b
+                from-white/[0.10]
+                to-white/[0.02]
+                text-md
+                font-semibold
+                text-white
+                shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]
+                transition
+                hover:border-white/30
+                hover:bg-white/[0.08]
+              "
             >
-              {heroNavPending === "creator" ? (
-                <ButtonLoadingSpinner />
-              ) : (
-                <>
-                  For Creators
-                  <span className="ml-2 text-[18px]">→</span>
-                </>
-              )}
-            </button>
+              For Brands
+
+              <ArrowRight
+                className="
+                  ml-2
+                  h-4
+                  w-4
+                  transition-transform
+                  group-hover:translate-x-1
+                "
+              />
+            </Link>
+
+            <Link
+              href="/creators"
+              className="
+                group
+                flex
+                h-[51px]
+                min-w-[238px]
+                items-center
+                justify-center
+                rounded-xl
+                bg-[#eee6f8]
+                text-md
+                font-semibold
+                text-[#26133d]
+                shadow-[0_10px_35px_rgba(200,170,230,0.10)]
+                transition
+                hover:bg-white
+              "
+            >
+              For Creators
+
+              <ArrowRight
+                className="
+                  ml-2
+                  h-4
+                  w-4
+                  transition-transform
+                  group-hover:translate-x-1
+                "
+              />
+            </Link>
           </div>
-        </section>
-
+        </div>
+      </div>
         {/* =========================================================
           VISUAL / ORBIT AREA
       ========================================================= */}
@@ -602,7 +717,9 @@ export default function HeroContent() {
         {/* =========================================================
           ANIMATION STYLES
       ========================================================= */}
-        <style jsx>{`
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
           .orbit-orange {
             transform-box: fill-box;
             transform-origin: center;
@@ -616,23 +733,13 @@ export default function HeroContent() {
           }
 
           @keyframes orbitOrange {
-            from {
-              transform: rotate(0deg);
-            }
-
-            to {
-              transform: rotate(360deg);
-            }
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
           }
 
           @keyframes orbitPurple {
-            from {
-              transform: rotate(180deg);
-            }
-
-            to {
-              transform: rotate(540deg);
-            }
+            from { transform: rotate(180deg); }
+            to { transform: rotate(540deg); }
           }
 
           @media (prefers-reduced-motion: reduce) {
@@ -641,7 +748,9 @@ export default function HeroContent() {
               animation: none;
             }
           }
-        `}</style>
+        `,
+          }}
+        />
       </main>
 
       <main className="min-h-screen bg-black px-4 py-16 text-white sm:px-5 sm:py-20 md:py-24">
@@ -973,6 +1082,8 @@ export default function HeroContent() {
         </div>
       </div>
     </section>
+
+      <FAQ />
       {/* <NumbersSection
           items={[
             {

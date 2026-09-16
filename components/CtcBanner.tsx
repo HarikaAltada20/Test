@@ -283,7 +283,7 @@ export default function CtcBanner() {
                     disabled={isNavigating || isCheckingAccount}
                     className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-transparent px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
                   >
-                    {(isNavigating || isCheckingAccount) && !isCheckingAccount ? (
+                    {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
                     ) : null}
                     Browse Campaigns →
@@ -341,20 +341,20 @@ export default function CtcBanner() {
           <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
               onClick={handleContinueAsAdvertiser}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Continue as Brand
+              <span>Continue as Brand</span>
             </Button>
             <Button
-              className="w-full sm:w-auto bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-base text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-base text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueCreator}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Sign out & Continue as Creator
+              <span>Sign out & Continue as Creator</span>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -403,20 +403,20 @@ export default function CtcBanner() {
           <DialogFooter className="mt-2 flex-col gap-4 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
-              className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
               onClick={handleContinueAsCreator}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Continue as Creator
+              <span>Continue as Creator</span>
             </Button>
             <Button
-              className="w-full sm:w-auto bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-base text-md text-white hover:from-[#4C238B]/90 hover:to-[#7F39EC]/90 px-6 py-5"
+              className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-base text-md text-white hover:from-[#4C238B]/90 hover:to-[#7F39EC]/90 px-6 py-5 sm:w-auto"
               onClick={handleSignOutAndContinueBrand}
               disabled={isSigningOut}
             >
               {isSigningOut ? <ButtonLoadingSpinner /> : null}
-              Sign out & Continue as Brand
+              <span>Sign out & Continue as Brand</span>
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -95,6 +95,20 @@ import { cn } from "@/lib/utils";
 //     avatar: "/images/avatar_placeholder.png",
 //   },
 // ];
+const brandImages: string[] = [
+  "/images/song-gpt.logo.avif",
+  "/images/vows-streams-logo.avif",
+  "/images/catch-phrase.avif",
+  "/images/deepvid.avif",
+  "/images/warner-music.avif",
+  "/images/sony.avif",
+  "/images/10k-projects.avif",
+  "/images/ada.avif",
+  "/images/artistpg.avif",
+  "/images/capital-music.avif",
+  "/images/create-music-group.avif",
+  "/images/empire-distribution.avif",
+];
 const creatorsteps = [
   {
     number: "1",
@@ -446,10 +460,13 @@ export default function CreatorsClient({
   // Get pathname for route change detection
   const pathname = usePathname();
 
-  // Reset navigating contest ID when route changes
+  // Reset navigating state when route changes
   useEffect(() => {
     setNavigatingContestId(null);
     setIsNavigatingViewMore(false);
+    setIsCheckingStartEarning(false);
+    setIsSigningOut(false);
+    setIsNavigating(false);
   }, [pathname]);
 
   // Smooth-scroll to hash targets (navbar anchors)
@@ -493,6 +510,7 @@ export default function CreatorsClient({
 
         if (userData?.user_type === "advertiser") {
           setShowAdvertiserModal(true);
+          setIsCheckingStartEarning(false);
           return;
         }
       }
@@ -506,8 +524,6 @@ export default function CreatorsClient({
       );
       localStorage.setItem("signupRole", "creator");
       router.push("/auth/signup");
-    } finally {
-      setIsCheckingStartEarning(false);
     }
   };
 
@@ -525,12 +541,12 @@ export default function CreatorsClient({
         "Failed to sign out advertiser before creator sign-up:",
         error,
       );
-    } finally {
       setIsSigningOut(false);
     }
   };
 
   const handleContinueAsAdvertiser = () => {
+    setIsNavigating(true);
     setShowAdvertiserModal(false);
     router.push("/dashboard/contests");
   };
@@ -855,7 +871,7 @@ export default function CreatorsClient({
                     type="button"
                     onClick={handleStartEarningClick}
                     disabled={isCheckingStartEarning}
-                    className="rounded-full border border-white/20 bg-[#1a1a1a] px-6 py-6 text-base font-medium text-white transition-all duration-300 hover:border-white/35 hover:bg-[#242424] disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-[#1a1a1a] px-6 py-6 text-base font-medium text-white transition-all duration-300 hover:border-white/35 hover:bg-[#242424] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
                     <span>Start Earning →</span>
@@ -865,7 +881,7 @@ export default function CreatorsClient({
                     type="button"
                     onClick={handleViewMoreClick}
                     disabled={isNavigatingViewMore}
-                    className="rounded-full bg-[#e8e8e8] px-6 py-6 text-base font-medium text-black transition-all duration-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#e8e8e8] px-6 py-6 text-base font-medium text-black transition-all duration-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
                     <span>Browse Campaigns →</span>
@@ -980,40 +996,48 @@ export default function CreatorsClient({
           </div>
         </section>
 
-        {/* Brand logos strip */}
-        <section className="pb-14 pt-2 overflow-hidden">
-          <p className="text-center text-sm sm:text-base text-zinc-500 mb-8 px-4">
+        {/* Brand logos strip — same logos & design as brands page */}
+        <section className="overflow-hidden bg-black pb-14 pt-2">
+          <p className="px-4 text-center text-sm text-zinc-500 sm:text-base">
             Work with Top Brands with the network of 16k+ Creators
           </p>
-          <div className="overflow-hidden relative">
-            <div className="flex justify-center items-center gap-8 md:gap-12 animate-scroll-left px-4">
-              {[
-                "/images/sony.avif",
-                "/images/warner-music.avif",
-                "/images/universal-music.avif",
-                "/images/capital-music.avif",
-                "/images/empire-distribution.avif",
-                "/images/10k-projects.avif",
-                "/images/sony.avif",
-                "/images/warner-music.avif",
-                "/images/universal-music.avif",
-                "/images/capital-music.avif",
-                "/images/empire-distribution.avif",
-                "/images/10k-projects.avif",
-              ].map((image, index) => (
-                <div
-                  key={`${image}-${index}`}
-                  className="flex-shrink-0 w-[110px] h-[56px] md:w-[140px] md:h-[70px] flex items-center justify-center opacity-50 grayscale"
-                >
-                  <Image
-                    src={image}
-                    alt=""
-                    width={140}
-                    height={70}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              ))}
+          <div className="relative overflow-hidden scroll-container-testimonials">
+            <div className="flex animate-scroll-left items-center justify-center gap-6">
+              {[...brandImages, ...brandImages].map((image, index) => {
+                const isLarge =
+                  image === "/images/vows-streams-logo.avif" ||
+                  image === "/images/song-gpt.logo.avif";
+                const isCatchPhrase = image === "/images/catch-phrase.avif";
+                const allImages = [...brandImages, ...brandImages];
+                const nextImage =
+                  index < allImages.length - 1 ? allImages[index + 1] : null;
+                const isNextToLarge =
+                  (isLarge || isCatchPhrase) &&
+                  nextImage &&
+                  (nextImage === "/images/vows-streams-logo.avif" ||
+                    nextImage === "/images/song-gpt.logo.avif" ||
+                    nextImage === "/images/catch-phrase.avif");
+                return (
+                  <div
+                    key={`${image}-${index}`}
+                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-lg ${
+                      isCatchPhrase
+                        ? "h-[96px] w-[160px] md:h-[120px] md:w-[200px]"
+                        : isLarge
+                          ? "h-[108px] w-[180px] md:h-[190px] md:w-[240px]"
+                          : "h-[72px] w-[120px] md:h-[90px] md:w-[150px]"
+                    } ${isNextToLarge ? "-mr-4 md:-mr-8" : ""}`}
+                  >
+                    <Image
+                      src={image}
+                      alt={`Brand logo ${index + 1}`}
+                      width={isCatchPhrase ? 200 : isLarge ? 235 : 150}
+                      height={isCatchPhrase ? 120 : isLarge ? 190 : 90}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -1152,7 +1176,7 @@ export default function CreatorsClient({
                       type="button"
                       onClick={handleViewMoreClick}
                       disabled={isNavigatingViewMore}
-                      className="rounded-full bg-[#FF6A1A] hover:bg-[#ff7a33] text-white font-semibold px-6 py-6 text-sm sm:text-base shadow-lg shadow-orange-900/40 disabled:opacity-70"
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-[#FF6A1A] hover:bg-[#ff7a33] text-white font-semibold px-6 py-6 text-sm sm:text-base shadow-lg shadow-orange-900/40 disabled:opacity-70"
                     >
                       {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
                       <span>Explore Campaigns →</span>
@@ -1616,8 +1640,7 @@ export default function CreatorsClient({
 
                     <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
                       Track views, performance, and
-                      <br className="hidden sm:block" />
-                      {" "}earnings easily.
+                      <br className="hidden sm:block" /> earnings easily.
                     </p>
                   </div>
                 </div>
@@ -1646,8 +1669,7 @@ export default function CreatorsClient({
 
                     <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
                       Choose campaigns that match your
-                      <br className="hidden sm:block" />
-                      {" "}content style.
+                      <br className="hidden sm:block" /> content style.
                     </p>
                   </div>
                 </div>
@@ -1677,8 +1699,7 @@ export default function CreatorsClient({
 
                     <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
                       Build experience, performance, and
-                      <br className="hidden sm:block" />
-                      {" "}earning potential.
+                      <br className="hidden sm:block" /> earning potential.
                     </p>
                   </div>
                 </div>
@@ -1687,11 +1708,10 @@ export default function CreatorsClient({
           </div>
         </section>
 
-
         <section className="relative flex min-h-[420px] w-full items-center justify-center overflow-hidden bg-black px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[700px]">
-      {/* Orange glow */}
-      <div
-        className="
+          {/* Orange glow */}
+          <div
+            className="
           pointer-events-none absolute left-1/2 top-1/2
           h-[320px] w-[320px]
           -translate-x-1/2 -translate-y-1/2
@@ -1700,13 +1720,13 @@ export default function CreatorsClient({
           blur-[100px]
           sm:h-[500px] sm:w-[500px]
         "
-      />
+          />
 
-      {/* Content */}
-      <div className="relative z-10 flex flex-col items-center px-2 text-center">
-        {/* Number */}
-        <h1
-          className="
+          {/* Content */}
+          <div className="relative z-10 flex flex-col items-center px-2 text-center">
+            {/* Number */}
+            <h1
+              className="
             text-[52px]
             font-bold
             leading-none
@@ -1716,13 +1736,13 @@ export default function CreatorsClient({
             md:text-[120px]
             lg:text-[124px]
           "
-        >
-          16,700+
-        </h1>
+            >
+              16,700+
+            </h1>
 
-        {/* Subtitle */}
-        <p
-          className="
+            {/* Subtitle */}
+            <p
+              className="
             mt-4
             text-[16px]
             font-semibold
@@ -1732,14 +1752,14 @@ export default function CreatorsClient({
             sm:text-[21px]
             md:text-[22px]
           "
-        >
-          creators have already Joined
-        </p>
+            >
+              creators have already Joined
+            </p>
 
-        {/* Button */}
-        <button
-          type="button"
-          className="
+            {/* Button */}
+            <button
+              type="button"
+              className="
             group
             mt-6
             flex items-center gap-3
@@ -1758,20 +1778,20 @@ export default function CreatorsClient({
             sm:px-6 sm:py-4
             sm:text-[17px]
           "
-        >
-          <span>Make you turn</span>
+            >
+              <span>Make you turn</span>
 
-          <ArrowRight
-            size={22}
-            strokeWidth={1.8}
-            className="
+              <ArrowRight
+                size={22}
+                strokeWidth={1.8}
+                className="
               transition-transform duration-300
               group-hover:translate-x-1
             "
-          />
-        </button>
-      </div>
-    </section>
+              />
+            </button>
+          </div>
+        </section>
 
         {/* <NumbersSection
           items={[
@@ -1820,7 +1840,6 @@ export default function CreatorsClient({
         </section> */}
 
         {/* <Testimonials /> */}
-
 
         {/* Gaming Testimonials Section */}
         {/* <section className="py-20 md:py-32 relative">
@@ -1968,18 +1987,20 @@ export default function CreatorsClient({
             <DialogFooter className="mt-4 flex-col gap-4 sm:flex-row sm:justify-center">
               <Button
                 variant="outline"
-                className="w-full sm:w-auto border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+                className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-base text-md text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
                 onClick={handleContinueAsAdvertiser}
-                disabled={isSigningOut}
+                disabled={isSigningOut || isNavigating}
               >
-                Continue as Brand
+                {isNavigating ? <ButtonLoadingSpinner /> : null}
+                <span>Continue as Brand</span>
               </Button>
               <Button
-                className="w-full sm:w-auto bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5"
+                className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#DD7209] to-[#FF652D] text-md text-white hover:from-[#DD7209]/90 hover:to-[#FF652D]/90 px-6 py-5 sm:w-auto"
                 onClick={handleSignOutAndContinueCreator}
-                disabled={isSigningOut}
+                disabled={isSigningOut || isNavigating}
               >
-                Sign out & Continue as Creator
+                {isSigningOut ? <ButtonLoadingSpinner /> : null}
+                <span>Sign out & Continue as Creator</span>
               </Button>
             </DialogFooter>
           </DialogContent>

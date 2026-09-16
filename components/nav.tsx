@@ -296,64 +296,56 @@ export function Nav({
             <div className="hidden md:flex items-center space-x-2 flex-1 justify-center">
               {marketingPageLinks ? (
                 <nav className="flex items-center gap-1 lg:gap-2">
-                  {marketingPageLinks.map((link) => (
-                    <button
-                      key={link.label}
-                      type="button"
-                      onClick={() => handleMarketingLinkClick(link)}
-                      disabled={
-                        (link.label === "For Brands" && brandsLoading) ||
-                        (link.label === "For Creators" && creatorsLoading)
-                      }
-                      className={cn(
-                        "px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium text-zinc-400 transition-colors duration-200 hover:text-white whitespace-nowrap",
-                        ((link.label === "For Brands" && brandsLoading) ||
-                          (link.label === "For Creators" && creatorsLoading)) &&
-                          "opacity-70 cursor-not-allowed"
-                      )}
-                    >
-                      {(link.label === "For Brands" && brandsLoading) ||
-                      (link.label === "For Creators" && creatorsLoading) ? (
-                        <ButtonLoadingSpinner />
-                      ) : (
-                        link.label
-                      )}
-                    </button>
-                  ))}
+                  {marketingPageLinks.map((link) => {
+                    const isLinkLoading =
+                      (link.label === "For Brands" && brandsLoading) ||
+                      (link.label === "For Creators" && creatorsLoading);
+                    return (
+                      <button
+                        key={link.label}
+                        type="button"
+                        onClick={() => handleMarketingLinkClick(link)}
+                        disabled={isLinkLoading}
+                        className={cn(
+                          "inline-flex items-center gap-2 px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium text-zinc-400 transition-colors duration-200 hover:text-white whitespace-nowrap",
+                          isLinkLoading && "opacity-70 cursor-not-allowed"
+                        )}
+                      >
+                        {isLinkLoading ? <ButtonLoadingSpinner /> : null}
+                        <span>{link.label}</span>
+                      </button>
+                    );
+                  })}
                 </nav>
               ) : isHomePage ? (
                 <nav className="flex items-center gap-6 lg:gap-8 text-[15px] lg:text-[16px] text-white/50">
-                  {homeNavLinks.map((link) => (
-                    <button
-                      key={link.label}
-                      type="button"
-                      onClick={() => {
-                        if (link.label === "For Brands") {
-                          setBrandsLoading(true);
-                        } else if (link.label === "For Creators") {
-                          setCreatorsLoading(true);
-                        }
-                        window.location.href = link.href;
-                      }}
-                      disabled={
-                        (link.label === "For Brands" && brandsLoading) ||
-                        (link.label === "For Creators" && creatorsLoading)
-                      }
-                      className={cn(
-                        "transition-colors hover:text-white whitespace-nowrap",
-                        ((link.label === "For Brands" && brandsLoading) ||
-                          (link.label === "For Creators" && creatorsLoading)) &&
-                          "opacity-70 cursor-not-allowed"
-                      )}
-                    >
-                      {(link.label === "For Brands" && brandsLoading) ||
-                      (link.label === "For Creators" && creatorsLoading) ? (
-                        <ButtonLoadingSpinner />
-                      ) : (
-                        link.label
-                      )}
-                    </button>
-                  ))}
+                  {homeNavLinks.map((link) => {
+                    const isLinkLoading =
+                      (link.label === "For Brands" && brandsLoading) ||
+                      (link.label === "For Creators" && creatorsLoading);
+                    return (
+                      <button
+                        key={link.label}
+                        type="button"
+                        onClick={() => {
+                          if (link.label === "For Brands") {
+                            setBrandsLoading(true);
+                          } else if (link.label === "For Creators") {
+                            setCreatorsLoading(true);
+                          }
+                          window.location.href = link.href;
+                        }}
+                        disabled={isLinkLoading}
+                        className={cn(
+                          "inline-flex items-center gap-2 transition-colors hover:text-white whitespace-nowrap",
+                          isLinkLoading && "opacity-70 cursor-not-allowed"
+                        )}
+                      >
+                        {isLinkLoading ? <ButtonLoadingSpinner /> : null}
+                        <span>{link.label}</span>
+                      </button>
+                    );
+                  })}
                 </nav>
               ) : (
                 <nav className="flex items-center md:ml-20 space-x-1">
@@ -376,7 +368,7 @@ export function Nav({
                     ) : (
                       <Crown className="h-4 w-4 text-purple-400 shrink-0" />
                     )}
-                    For Brands
+                    <span>For Brands</span>
                   </button>
 
                   <button
@@ -398,7 +390,7 @@ export function Nav({
                     ) : (
                       <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
                     )}
-                    For Creators
+                    <span>For Creators</span>
                   </button>
                 </nav>
               )}
@@ -626,7 +618,7 @@ export function Nav({
                       )}
                     >
                       {isSigningIn ? <ButtonLoadingSpinner /> : null}
-                      Sign In
+                      <span>Sign In</span>
                     </Button>
                   </Link>
 
@@ -715,74 +707,66 @@ export function Nav({
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">
                           {marketingPageLinks ? (
-                            marketingPageLinks.map((link) => (
-                              <button
-                                key={link.label}
-                                type="button"
-                                onClick={() => {
-                                  handleMarketingLinkClick(link);
-                                  if (!link.href.includes("#")) setOpen(false);
-                                }}
-                                disabled={
-                                  (link.label === "For Brands" &&
-                                    brandsLoading) ||
-                                  (link.label === "For Creators" &&
-                                    creatorsLoading)
-                                }
-                                className={cn(
-                                  "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
-                                  ((link.label === "For Brands" &&
-                                    brandsLoading) ||
-                                    (link.label === "For Creators" &&
-                                      creatorsLoading)) &&
-                                    "opacity-70 cursor-not-allowed"
-                                )}
-                              >
-                                {(link.label === "For Brands" &&
-                                  brandsLoading) ||
+                            marketingPageLinks.map((link) => {
+                              const isLinkLoading =
+                                (link.label === "For Brands" && brandsLoading) ||
                                 (link.label === "For Creators" &&
-                                  creatorsLoading)
-                                  ? "Loading..."
-                                  : link.label}
-                              </button>
-                            ))
+                                  creatorsLoading);
+                              return (
+                                <button
+                                  key={link.label}
+                                  type="button"
+                                  onClick={() => {
+                                    handleMarketingLinkClick(link);
+                                    if (!link.href.includes("#")) setOpen(false);
+                                  }}
+                                  disabled={isLinkLoading}
+                                  className={cn(
+                                    "inline-flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
+                                    isLinkLoading &&
+                                      "opacity-70 cursor-not-allowed"
+                                  )}
+                                >
+                                  {isLinkLoading ? (
+                                    <ButtonLoadingSpinner />
+                                  ) : null}
+                                  <span>{link.label}</span>
+                                </button>
+                              );
+                            })
                           ) : isHomePage ? (
-                            homeNavLinks.map((link) => (
-                              <button
-                                key={link.label}
-                                type="button"
-                                onClick={() => {
-                                  if (link.label === "For Brands") {
-                                    setBrandsLoading(true);
-                                  } else if (link.label === "For Creators") {
-                                    setCreatorsLoading(true);
-                                  }
-                                  setOpen(false);
-                                  window.location.href = link.href;
-                                }}
-                                disabled={
-                                  (link.label === "For Brands" &&
-                                    brandsLoading) ||
-                                  (link.label === "For Creators" &&
-                                    creatorsLoading)
-                                }
-                                className={cn(
-                                  "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
-                                  ((link.label === "For Brands" &&
-                                    brandsLoading) ||
-                                    (link.label === "For Creators" &&
-                                      creatorsLoading)) &&
-                                    "opacity-70 cursor-not-allowed"
-                                )}
-                              >
-                                {(link.label === "For Brands" &&
-                                  brandsLoading) ||
+                            homeNavLinks.map((link) => {
+                              const isLinkLoading =
+                                (link.label === "For Brands" && brandsLoading) ||
                                 (link.label === "For Creators" &&
-                                  creatorsLoading)
-                                  ? "Loading..."
-                                  : link.label}
-                              </button>
-                            ))
+                                  creatorsLoading);
+                              return (
+                                <button
+                                  key={link.label}
+                                  type="button"
+                                  onClick={() => {
+                                    if (link.label === "For Brands") {
+                                      setBrandsLoading(true);
+                                    } else if (link.label === "For Creators") {
+                                      setCreatorsLoading(true);
+                                    }
+                                    setOpen(false);
+                                    window.location.href = link.href;
+                                  }}
+                                  disabled={isLinkLoading}
+                                  className={cn(
+                                    "inline-flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
+                                    isLinkLoading &&
+                                      "opacity-70 cursor-not-allowed"
+                                  )}
+                                >
+                                  {isLinkLoading ? (
+                                    <ButtonLoadingSpinner />
+                                  ) : null}
+                                  <span>{link.label}</span>
+                                </button>
+                              );
+                            })
                           ) : (
                             <>
                               <button
@@ -805,7 +789,7 @@ export function Nav({
                                 ) : (
                                   <Crown className="h-4 w-4 text-purple-400 shrink-0" />
                                 )}
-                                {brandsLoading ? "Loading..." : "For Brands"}
+                                <span>For Brands</span>
                               </button>
                               <button
                                 onClick={() => {
@@ -827,9 +811,7 @@ export function Nav({
                                 ) : (
                                   <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
                                 )}
-                                {creatorsLoading
-                                  ? "Loading..."
-                                  : "For Creators"}
+                                <span>For Creators</span>
                               </button>
                             </>
                           )}
@@ -912,7 +894,7 @@ export function Nav({
                                 )}
                               >
                                 {isNavigating ? <ButtonLoadingSpinner /> : null}
-                                Sign up →
+                                <span>Sign up →</span>
                               </Button>
                             </Link>
                           </div>
@@ -928,7 +910,7 @@ export function Nav({
                                 )}
                               >
                                 {isSigningIn ? <ButtonLoadingSpinner /> : null}
-                                Sign In
+                                <span>Sign In</span>
                               </Button>
                             </Link>
 
@@ -941,7 +923,7 @@ export function Nav({
                                 )}
                               >
                                 {isNavigating ? <ButtonLoadingSpinner /> : null}
-                                Get Started
+                                <span>Get Started</span>
                               </Button>
                             </Link>
                           </div>

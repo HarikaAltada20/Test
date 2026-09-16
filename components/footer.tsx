@@ -178,9 +178,18 @@ export function Footer() {
         </div>
       </div>
 
-      <p className="mt-6 text-center text-xs sm:text-sm text-zinc-500">
+      <p className="relative z-10 mt-6 text-center text-xs sm:text-sm text-zinc-500">
         © {new Date().getFullYear()} Game of Creators. All rights reserved.
       </p>
+
+      {/* Bottom white shade / ground glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-28 sm:h-36"
+      >
+        <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_35%,transparent_70%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white/[0.12] via-white/[0.04] to-transparent sm:h-20" />
+      </div>
     </footer>
   );
 }

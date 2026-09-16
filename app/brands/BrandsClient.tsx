@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -29,6 +30,16 @@ import FAQ from "@/components/FAQ";
 import SocialPair from "@/public/images/social_pair.avif";
 import WorldMapDots from "@/public/images/image 252.png";
 import BrandGetStartedButton from "@/components/BrandGetStartedButton";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { createClient } from "@/utils/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // const faqItemsBrands = [
 //   {
@@ -119,28 +130,28 @@ const submissions = [
   {
     name: "Victor Cardenas",
     subtitle: "view content",
-    image: "",
+    image: "/images/Ellipse 2355.avif",
     status: "Approved",
     approved: true,
   },
   {
     name: "Kevin Bai",
     subtitle: "Waiting...",
-    image: "",
+    image: "/images/Ellipse 2355 (1).avif",
     status: "Under Review",
     approved: false,
   },
   {
     name: "Shaan Patel",
     subtitle: "Waiting...",
-    image: "",
+    image: "/images/Ellipse 2355 (2).avif",
     status: "Under Review",
     approved: false,
   },
   {
     name: "Jimmy Deng",
     subtitle: "Waiting...",
-    image: "",
+    image: "/images/Ellipse 2355 (3).avif",
     status: "Under Review",
     approved: false,
   },
@@ -274,6 +285,8 @@ const profiles = [
     },
   ];
 export default function BrandsClient({ totalViews }: BrandsClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -289,6 +302,65 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
   const [servicesAnimated, setServicesAnimated] = useState(false);
   const howItWorksRef = useRef<HTMLDivElement>(null);
   const [howItWorksAnimated, setHowItWorksAnimated] = useState(false);
+  const [isLaunchingCampaign, setIsLaunchingCampaign] = useState(false);
+  const [showCreatorModal, setShowCreatorModal] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  useEffect(() => {
+    setIsLaunchingCampaign(false);
+    setIsSigningOut(false);
+  }, [pathname]);
+
+  const handleLaunchCampaign = async () => {
+    setIsLaunchingCampaign(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (!userError && user) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
+
+        if (userData?.user_type === "creator") {
+          setShowCreatorModal(true);
+          setIsLaunchingCampaign(false);
+          return;
+        }
+
+        router.push("/dashboard/contests");
+        return;
+      }
+
+      router.push("/get-started");
+    } catch {
+      router.push("/get-started");
+    }
+  };
+
+  const handleContinueAsCreator = () => {
+    setIsLaunchingCampaign(true);
+    setShowCreatorModal(false);
+    router.push("/dashboard/opportunities");
+  };
+
+  const handleSignOutAndContinueBrand = async () => {
+    setIsSigningOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut({ scope: "local" });
+      setShowCreatorModal(false);
+      router.push("/get-started");
+      router.refresh();
+    } catch {
+      setIsSigningOut(false);
+    }
+  };
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -417,8 +489,14 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               </p>
 
               <div className="mt-6 flex w-full flex-col justify-center gap-3 sm:mt-7 sm:flex-row sm:items-center">
-                <button className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/50 px-5 py-3 text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.03)] transition hover:bg-white/10 sm:w-auto">
-                  Launch a Campaign
+                <button
+                  type="button"
+                  onClick={handleLaunchCampaign}
+                  disabled={isLaunchingCampaign}
+                  className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/50 px-5 py-3 text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.03)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                >
+                  {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
+                  <span>Launch a Campaign</span>
                   <ArrowRight
                     size={15}
                     className="transition-transform group-hover:translate-x-1"
@@ -481,8 +559,14 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                     driving results.
                   </p>
 
-                  <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-white/90 sm:w-fit">
-                    Launch a Campaign
+                  <button
+                    type="button"
+                    onClick={handleLaunchCampaign}
+                    disabled={isLaunchingCampaign}
+                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit"
+                  >
+                    {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
+                    <span>Launch a Campaign</span>
                     <ArrowRight size={14} />
                   </button>
                 </div>
@@ -1254,15 +1338,15 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         </div>
       </div>
 
-      {/* Main glass container */}
-      <div className="relative z-10 mx-auto flex min-h-[420px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] border border-white/15 bg-[#121212] px-3 pb-6 pt-8 shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] sm:min-h-[475px] sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-[68px]">
+      {/* Main glass container — outer shell for half-merged card */}
+      <div className="relative z-10 mx-auto flex h-[340px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] border border-white/15 bg-[#121212] px-3 pt-6 shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] sm:h-[400px] sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12">
         {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/30" />
 
         {/* Top-left haze */}
         <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
 
-        {/* Submission card */}
+        {/* Submission card — sits inside outer shell and is clipped at the bottom */}
         <div className="relative z-10 w-full max-w-[485px] rounded-[16px] border border-[#353535] bg-[#171717] px-4 py-6 shadow-[8px_8px_50px_0px_#00000080] sm:rounded-[18px] sm:px-9 sm:py-9 sm:shadow-[4px_12px_4px_0px_#0000001A]">
           {/* Header */}
           <div className="mb-5 flex items-start justify-between gap-3 sm:mb-7">
@@ -1293,24 +1377,15 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  {submission.image ? (
-                    <img
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white/10 sm:h-11 sm:w-11">
+                    <Image
                       src={submission.image}
                       alt={submission.name}
-                      className="h-10 w-10 rounded-full object-cover sm:h-11 sm:w-11"
+                      width={44}
+                      height={44}
+                      className="h-full w-full object-cover"
                     />
-                  ) : (
-                    <div
-                      aria-hidden
-                      className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-sm font-medium text-[#dedee3] sm:h-11 sm:w-11"
-                    >
-                      {submission.name
-                        .split(" ")
-                        .map((part) => part[0])
-                        .join("")
-                        .slice(0, 2)}
-                    </div>
-                  )}
+                  </div>
 
                   <div className="min-w-0">
                     <h3 className="truncate text-[14px] font-medium text-[#dedee3] sm:text-[16px]">
@@ -1339,6 +1414,9 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             ))}
           </div>
         </div>
+
+        {/* Bottom fade so the clipped card reads as half-merged into the shell */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t from-[#121212] to-transparent sm:h-20" />
       </div>
 
     </section>
@@ -2099,8 +2177,14 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           or a piece of content is likely to do next time
         </p>
 
-        <button className="mt-6 inline-flex items-center gap-3 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-3 text-sm font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] transition hover:bg-white/10">
-          Launch a Campaign
+        <button
+          type="button"
+          onClick={handleLaunchCampaign}
+          disabled={isLaunchingCampaign}
+          className="mt-6 inline-flex items-center gap-3 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-3 text-sm font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
+          <span>Launch a Campaign</span>
           <span className="text-lg">→</span>
         </button>
       </div>
@@ -2329,6 +2413,50 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
         {/* Epic Final CTA */}
         <CtcBanner />
+
+        <Dialog open={showCreatorModal} onOpenChange={setShowCreatorModal}>
+          <DialogContent className="bg-[#050816] border border-violet-500/30 text-white rounded-2xl shadow-2xl shadow-violet-900/40 sm:max-w-xl p-8">
+            <DialogHeader>
+              <DialogTitle className="text-xl mb-4 lg:text-2xl leading-tight font-semibold">
+                You&apos;re logged in as{" "}
+                <span
+                  style={{
+                    background:
+                      "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}
+                >
+                  a creator
+                </span>
+              </DialogTitle>
+              <DialogDescription className="text-base text-slate-300 leading-relaxed">
+                To continue as a brand, please sign out from your creator
+                account first, then sign up or log in as a brand.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 flex-col gap-3 sm:flex-row sm:justify-center">
+              <Button
+                variant="outline"
+                className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
+                onClick={handleContinueAsCreator}
+                disabled={isSigningOut || isLaunchingCampaign}
+              >
+                {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
+                <span>Continue as Creator</span>
+              </Button>
+              <Button
+                className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white hover:from-[#5a2ba3] hover:to-[#8f45f5] px-6 py-5 sm:w-auto"
+                onClick={handleSignOutAndContinueBrand}
+                disabled={isSigningOut || isLaunchingCampaign}
+              >
+                {isSigningOut ? <ButtonLoadingSpinner /> : null}
+                <span>Sign out & Continue as Brand</span>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-violet-900/30 via-purple-900/30 to-indigo-900/30 backdrop-blur-sm"></div>
 

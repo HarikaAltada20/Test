@@ -1,6 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
-import { Users } from "lucide-react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { FaChevronDown } from "react-icons/fa";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
@@ -299,185 +298,82 @@ const brandFaqs = [
 
 export default function FAQ() {
   const pathname = usePathname();
-  const isCreators = pathname === "/creators";
-  const [openIndex, setOpenIndex] = useState<number | null>(isCreators ? 0 : null);
-  const [animate, setAnimate] = useState(false);
-  const faqTriggerRef = useRef<HTMLButtonElement>(null); // 👈 track the button
+  const isBrands = pathname.includes("brands");
+  const isHome = pathname === "/";
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
 
-  const faqs = pathname.includes("brands")
-    ? brandFaqs
-    : pathname === "/"
-      ? homeFaqs
-      : creatorFaqs;
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setAnimate(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.5 }, // trigger when at least 50% of button is visible
-    );
-
-    if (faqTriggerRef.current) {
-      observer.observe(faqTriggerRef.current);
-    }
-
-    return () => {
-      if (faqTriggerRef.current) {
-        observer.unobserve(faqTriggerRef.current);
-      }
-    };
-  }, []);
+  const faqs = isBrands ? brandFaqs : isHome ? homeFaqs : creatorFaqs;
 
   const toggleFAQ = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
   };
 
-  if (isCreators) {
-    return (
-      <section
-        id="faq"
-        className="bg-black py-16 md:py-24 px-4 text-white scroll-mt-24"
-      >
-        <div className="mx-auto w-full max-w-5xl text-center">
-          <h2
-            className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-white"
-            style={{ fontFamily: "Montserrat, sans-serif" }}
-          >
-            Get your answers now
-          </h2>
-
-          <div className="mt-10 md:mt-12 space-y-3 text-left">
-            {faqs.map((faq, index) => {
-              const isOpen = openIndex === index;
-              return (
-                <div
-                  key={faq.id}
-                  className="rounded-2xl border border-white/[0.08] bg-[#141414] overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleFAQ(index)}
-                    className="w-full flex items-center justify-between gap-4 px-5 sm:px-6 py-4 sm:py-5 text-left"
-                    aria-expanded={isOpen}
-                  >
-                    <span className="text-base sm:text-lg font-medium text-white">
-                      {faq.question}
-                    </span>
-                    <FaChevronDown
-                      className={`shrink-0 text-white/80 transition-transform duration-200 ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {isOpen ? (
-                    <div
-                      className="px-5 sm:px-6 pb-5 text-sm sm:text-base text-zinc-400 leading-relaxed"
-                      dangerouslySetInnerHTML={{ __html: faq.answer }}
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="mt-10 text-sm sm:text-base text-zinc-400">
-            Have questions?{" "}
-            <a
-              href={SOCIAL_LINKS.discord}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#FF6A1A] hover:text-[#ff7f3d] transition-colors"
-            >
-              Join our Free Creator Community
-            </a>
-          </p>
-        </div>
-      </section>
-    );
-  }
+  const supportHref = isBrands
+    ? "https://calendly.com/guptavishesh2/30min"
+    : SOCIAL_LINKS.discord;
+  const supportLabel = isBrands
+    ? "Talk to our team"
+    : "Join our Free Creator Community";
 
   return (
-    <section id="faq" className="bg-black py-16 px-4 text-white scroll-mt-24">
-      <div className="max-w-5xl mx-auto text-center">
-        {/* Top Tag */}
-        <button
-          ref={faqTriggerRef} // 👈 attach observer here
-          className="px-5 py-2 bg-[#2C3247] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2"
-        >
-          <Users className="text-white h-5 w-5" />
-          <span className="text-white">Have inquiries?</span>
-        </button>
-
-        {/* Gradient Title */}
+    <section
+      id="faq"
+      className="scroll-mt-24 bg-black px-4 py-16 text-white md:py-24"
+    >
+      <div className="mx-auto w-full max-w-5xl text-center">
         <h2
-          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
-            animate ? "slide-up" : "hide-before-animate"
-          }`}
-          style={{ animationDelay: "0.2s" }}
+          className="text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl"
+          style={{ fontFamily: "Montserrat, sans-serif" }}
         >
-          <span
-            className="bg-clip-text text-transparent leading-tight"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
-            }}
-          >
-            Frequently
-          </span>
-          <span className="text-white leading-tight">Asked</span>
-          <span
-            className="bg-clip-text text-transparent leading-tight"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-            }}
-          >
-            Questions
-          </span>
+          Get your answers now
         </h2>
 
-        <p
-          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
-            animate ? "slide-left" : "hide-before-animate"
-          }`}
-          style={{ animationDelay: "1s" }}
-        >
-          Here are some frequently asked questions
-        </p>
-
-        {/* FAQ List */}
-        <div className="mt-10 space-y-7">
-          {faqs.map((faq, index) => (
-            <div
-              key={index}
-              className="border border-gray-700 rounded-lg overflow-hidden"
-            >
-              <button
-                onClick={() => toggleFAQ(index)}
-                className={`w-full flex justify-between items-center px-6 py-6 bg-[#111] hover:bg-[#161616] transition-colors`}
+        <div className="mt-10 space-y-3 text-left md:mt-12">
+          {faqs.map((faq, index) => {
+            const isOpen = openIndex === index;
+            return (
+              <div
+                key={faq.id}
+                className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#141414]"
               >
-                <span className="text-left text-xl">{faq.question}</span>
-                <FaChevronDown
-                  className={`transition-transform ${
-                    openIndex === index ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => toggleFAQ(index)}
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left sm:px-6 sm:py-5"
+                  aria-expanded={isOpen}
+                >
+                  <span className="text-base font-medium text-white sm:text-lg">
+                    {faq.question}
+                  </span>
+                  <FaChevronDown
+                    className={`shrink-0 text-white/80 transition-transform duration-200 ${
+                      isOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-              {openIndex === index && (
-                <div
-                  className="text-left text-md md:text-lg pt-4 px-4 pb-4 text-gray-400 leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: faq.answer }}
-                />
-              )}
-            </div>
-          ))}
+                {isOpen ? (
+                  <div
+                    className="px-5 pb-5 text-sm leading-relaxed text-zinc-400 sm:px-6 sm:text-base"
+                    dangerouslySetInnerHTML={{ __html: faq.answer }}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
+
+        <p className="mt-10 text-sm text-zinc-400 sm:text-base">
+          Have questions?{" "}
+          <a
+            href={supportHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#FF6A1A] transition-colors hover:text-[#ff7f3d]"
+          >
+            {supportLabel}
+          </a>
+        </p>
       </div>
     </section>
   );

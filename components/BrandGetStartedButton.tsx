@@ -75,7 +75,7 @@ export default function BrandGetStartedButton() {
     return (
         <>
             <Button
-                className="rounded-3xl relative bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#5a2ba3] hover:to-[#8f45f5] transition-all duration-300 shadow-lg"
+                className="rounded-3xl relative inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#5a2ba3] hover:to-[#8f45f5] transition-all duration-300 shadow-lg"
                 onClick={handleGetStartedClick}
                 disabled={isCheckingAccount}
             >
@@ -104,19 +104,20 @@ export default function BrandGetStartedButton() {
                     <DialogFooter className="mt-4 flex-col gap-3 sm:flex-row sm:justify-center">
                         <Button
                             variant="outline"
-                            className="w-full sm:w-auto border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5"
+                            className="inline-flex w-full items-center justify-center gap-2 border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white px-6 py-5 sm:w-auto"
                             onClick={handleContinueAsCreator}
                             disabled={isSigningOut}
                         >
                             {isSigningOut ? <ButtonLoadingSpinner /> : null}
-                            Continue as Creator
+                            <span>Continue as Creator</span>
                         </Button>
                         <Button
-                            className="w-full sm:w-auto bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white hover:from-[#5a2ba3] hover:to-[#8f45f5] px-6 py-5"
+                            className="inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-[#4C238B] to-[#7F39EC] text-white hover:from-[#5a2ba3] hover:to-[#8f45f5] px-6 py-5 sm:w-auto"
                             onClick={handleSignOutAndContinueBrand}
                             disabled={isSigningOut}
                         >
-                            {isSigningOut ? <ButtonLoadingSpinner /> : 'Sign out & Continue as Brand'}
+                            {isSigningOut ? <ButtonLoadingSpinner /> : null}
+                            <span>Sign out & Continue as Brand</span>
                         </Button>
                     </DialogFooter>
                 </DialogContent>
