@@ -149,7 +149,7 @@ export default function CtcBanner() {
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             {/* <div className="absolute left-[8%] top-[8%] h-[420px] w-[420px] rounded-full border border-[#FF6A1A]/25" />
             <div className="absolute right-[6%] top-[18%] h-[520px] w-[520px] rounded-full border border-violet-500/25" /> */}
-            <div className="absolute left-1/2 top-1/2 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2 opacity-70">
+            <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 opacity-70">
               <Image
                 src="/images/attach-money.png"
                 alt=""
@@ -232,7 +232,7 @@ export default function CtcBanner() {
                 }}
               />
 
-              <div className="pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[260px] md:w-[260px] -translate-x-1/2 -translate-y-1/2 opacity-85">
+              <div className="pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[300px] md:w-[300px] -translate-x-1/2 -translate-y-1/2 opacity-85">
                 <Image
                   src="/images/attach-money.png"
                   alt=""

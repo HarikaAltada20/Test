@@ -932,7 +932,7 @@ export default function CreatorsClient({
                   </div>
 
                   {/* Last Month Earnings — behind girl (tucked under right shoulder) */}
-                  <div className="pointer-events-none absolute top-[26%] right-[4%] z-[5] rounded-2xl border border-white/10 bg-[#141414]/95 px-3 py-2 shadow-xl shadow-black/50 backdrop-blur-md sm:top-[29%] sm:right-[10%] sm:px-4 sm:py-3">
+                  <div className="pointer-events-none absolute top-[28%] right-[4%] z-[5] rounded-2xl border border-white/10  px-3 py-2 bg-[#1E1E1E] shadow-[inset_0_0_5.26px_0_#FFFFFF40] backdrop-blur-md sm:top-[38%] sm:right-[10%] sm:px-4 sm:py-3 rotate-[6deg]">
                     <div className="mb-0.5 flex items-center gap-2">
                       <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[18px] sm:w-[18px] sm:text-[10px]">
                         $
@@ -961,15 +961,20 @@ export default function CreatorsClient({
                   </div>
 
                   {/* $600 credited notification — in front of girl */}
-                  <div className="pointer-events-none absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl bg-[#f3f3f4] px-3 py-2.5 text-black shadow-[0_12px_40px_rgba(0,0,0,0.55)] sm:left-[12%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3">
+                  <div className="pointer-events-none   bg-[#FFFFFFCC]
+  border-[0.64px]
+  border-[#FFFFFF40]
+  backdrop-blur-[19.0909px]
+  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl px-3 py-2.5 text-black sm:left-[18%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3">
                     <div className="flex items-start gap-2.5">
-                      <div className="relative mt-0.5 h-8 w-8 shrink-0 overflow-hidden rounded-lg bg-zinc-900 sm:h-9 sm:w-9">
+                      <div className="relative mt-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-white">
                         <Image
-                          src="/images/goc_square.avif"
+                          src="/images/Group.png"
                           alt=""
-                          fill
-                          className="object-contain p-1"
-                          sizes="36px"
+                          width={18}
+                          height={18}
+                          className="h-[18px] w-[18px] scale-[1.55] object-contain"
+                          sizes="18px"
                         />
                       </div>
                       <div className="min-w-0 flex-1 pt-0.5">
@@ -1361,10 +1366,16 @@ export default function CreatorsClient({
               {/* Top row — 2 wide cards */}
               <div className="grid gap-4 md:grid-cols-2 md:gap-5">
                 {/* Get Paid Directly */}
-                <div className="relative w-full overflow-hidden rounded-[20px] border border-[#303030] bg-[#151515] px-4 pb-5 pt-8 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:px-6 sm:pb-[22px] sm:pt-[54px]">
+                <div className="relative w-full overflow-visible rounded-[20px] border border-[#303030] bg-[#151515] px-4 pb-5 pt-8 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:px-6 sm:pb-[22px] sm:pt-[54px]">
                   <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
                     {/* Account balance card */}
-                    <div className="relative h-auto w-full max-w-[204px] rounded-[17px] border border-[#2c2c2c] bg-[#151515] px-[15px] pb-4 pt-[17px] sm:h-[172px] sm:w-[204px] sm:pb-0">
+                    <div className="relative ml-3 w-full max-w-[204px] sm:ml-6 sm:h-[172px] sm:w-[204px]">
+                      {/* White glow behind card */}
+                      {/* <div
+                        aria-hidden
+                        className="pointer-events-none absolute -inset-3 rounded-[22px] bg-white/[0.14] blur-[18px]"
+                      /> */}
+                      <div className="relative h-auto w-full rounded-[17px] border border-[#2c2c2c] bg-[#151515] px-[15px] pb-4 pt-[17px]  sm:h-[172px] sm:pb-0">
                       <p className="text-[13px] font-normal uppercase tracking-[-0.1px] text-[#777]">
                         Account Balance
                       </p>
@@ -1391,6 +1402,7 @@ export default function CreatorsClient({
                         <span className="text-[17px] leading-none">↗</span>
                         Withdraw
                       </button>
+                      </div>
                     </div>
 
                     {/* Dashed connector — desktop only */}
@@ -1446,102 +1458,166 @@ export default function CreatorsClient({
                 </div>
 
                 {/* Create Together */}
-                <section className="w-full overflow-hidden rounded-[20px] border border-white/10 bg-[#151515] sm:rounded-[28px]">
-                  {/* Illustration */}
-                  <div className="relative h-[220px] overflow-hidden sm:h-[275px]">
-                    {/* Main creator */}
-                    <div className="absolute left-1/2 top-[28px] z-20 -translate-x-1/2 sm:top-[39px]">
-                      <div className="flex h-[56px] w-[56px] items-center justify-center rounded-full border-2 border-[#ff7438] bg-[#111] p-[3px] shadow-[0_0_0_2px_rgba(255,255,255,0.15)] sm:h-[70px] sm:w-[70px]">
-                        <Image
-                          src="/images/Ellipse 2355.avif"
-                          alt="Main creator"
-                          width={62}
-                          height={62}
-                          className="h-full w-full rounded-full object-cover"
-                        />
-                      </div>
-                    </div>
+                <div className="relative w-full max-w-[570px] overflow-hidden rounded-[20px] border border-white/10 bg-[#171717] px-8 pb-9 pt-12">
 
-                    {/* Connection lines */}
-                    <div className="pointer-events-none absolute left-1/2 top-[70px] h-[90px] w-[min(100%,420px)] -translate-x-1/2 sm:top-[91px] sm:h-[115px]">
-                      <svg
-                        viewBox="0 0 420 115"
-                        className="h-full w-full"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M210 0 C210 35 55 25 25 112"
-                          stroke="white"
-                          strokeOpacity="0.12"
-                          strokeWidth="1"
-                          strokeDasharray="16 14"
-                        />
+      {/* Dotted Curved Lines */}
+      <svg
+        className="pointer-events-none absolute left-0 top-8 h-[180px] w-full"
+        viewBox="0 0 570 180"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Top-left curved lines */}
+        <path
+          d="M 95 80 Q 150 35 215 45"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.55"
+        />
 
-                        <path
-                          d="M210 0 C190 45 105 35 105 112"
-                          stroke="white"
-                          strokeOpacity="0.12"
-                          strokeWidth="1"
-                          strokeDasharray="16 14"
-                        />
+        <path
+          d="M 165 65 Q 215 20 270 40"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.55"
+        />
 
-                        <path
-                          d="M210 0 C210 40 210 45 210 112"
-                          stroke="white"
-                          strokeOpacity="0.12"
-                          strokeWidth="1"
-                          strokeDasharray="16 14"
-                        />
+        {/* Top-right curved lines */}
+        <path
+          d="M 475 80 Q 420 35 355 45"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.55"
+        />
 
-                        <path
-                          d="M210 0 C230 45 315 35 315 112"
-                          stroke="white"
-                          strokeOpacity="0.12"
-                          strokeWidth="1"
-                          strokeDasharray="16 14"
-                        />
+        <path
+          d="M 405 65 Q 355 20 300 40"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.55"
+        />
 
-                        <path
-                          d="M210 0 C210 35 365 25 395 112"
-                          stroke="white"
-                          strokeOpacity="0.12"
-                          strokeWidth="1"
-                          strokeDasharray="16 14"
-                        />
-                      </svg>
-                    </div>
+        {/* Center-left curved connection */}
+        <path
+          d="M 270 42 Q 245 75 235 115"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.55"
+        />
 
-                    {/* Small creator avatars */}
-                    <div className="absolute left-1/2 top-[155px] flex -translate-x-1/2 items-center gap-3 sm:top-[204px] sm:gap-[34px]">
-                      {creators.map((creator) => (
-                        <div
-                          key={creator.alt}
-                          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/60 bg-[#222] p-[2px] sm:h-[43px] sm:w-[43px]"
-                        >
-                          <Image
-                            src={creator.src}
-                            alt={creator.alt}
-                            width={39}
-                            height={39}
-                            className="h-full w-full rounded-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+        {/* Center-right curved connection */}
+        <path
+          d="M 300 42 Q 325 75 335 115"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.55"
+        />
 
-                  {/* Text */}
-                  <div className="px-5 pb-4 sm:px-9 sm:pb-[17px]">
-                    <h2 className="text-[18px] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[22px]">
-                      Create Together
-                    </h2>
+        {/* Outer-left arc */}
+        <path
+          d="M 40 100 Q 110 40 180 35"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.25"
+        />
 
-                    <p className="mt-2 text-[14px] leading-snug text-[#9b9b9b] sm:text-[16px] sm:leading-none">
-                      Connect with creators and share opportunities.
-                    </p>
-                  </div>
-                </section>
+        {/* Outer-right arc */}
+        <path
+          d="M 530 100 Q 460 40 390 35"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeDasharray="20 16"
+          opacity="0.25"
+        />
+      </svg>
+
+      {/* Creator Images */}
+      <div className="relative z-10 flex h-[180px] items-start justify-center">
+
+        {/* Top Creator */}
+        <div className="absolute left-1/2 top-0 -translate-x-1/2">
+          <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-orange-400 bg-[#111] p-[2px]">
+            <Image
+              src="/images/Ellipse 2355.avif"
+              alt="Creator"
+              width={48}
+              height={48}
+              className="h-full w-full rounded-full object-cover"
+            />
+          </div>
+        </div>
+
+        {/* Left Creator */}
+        <div className="absolute left-[22%] top-[90px]">
+          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+            <Image
+              src="/images/Ellipse 2355 (1).avif"
+              alt="Creator"
+              width={40}
+              height={40}
+              className="h-full w-full rounded-full object-cover"
+            />
+          </div>
+        </div>
+
+        {/* Right Creator */}
+        <div className="absolute right-[22%] top-[90px]">
+          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+            <Image
+              src="/images/Ellipse 2355 (2).avif"
+              alt="Creator"
+              width={40}
+              height={40}
+              className="h-full w-full rounded-full object-cover"
+            />
+          </div>
+        </div>
+
+        {/* Bottom-left Creator */}
+        <div className="absolute left-[35%] top-[130px]">
+          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+            <Image
+              src="/images/Ellipse 2355 (3).avif"
+              alt="Creator"
+              width={40}
+              height={40}
+              className="h-full w-full rounded-full object-cover"
+            />
+          </div>
+        </div>
+
+        {/* Bottom-right Creator */}
+        <div className="absolute right-[35%] top-[130px]">
+          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+            <Image
+              src="/images/Ellipse 2355 (4).avif"
+              alt="Creator"
+              width={40}
+              height={40}
+              className="h-full w-full rounded-full object-cover"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Text */}
+      <div className="relative z-10 mt-2">
+        <h3 className="text-[22px] font-semibold text-white/80">
+          Create Together
+        </h3>
+
+        <p className="mt-2 text-[16px] text-white/50">
+          Connect with creators and share opportunities.
+        </p>
+      </div>
+    </div>
               </div>
 
               {/* Bottom row — 3 cards */}

@@ -16,6 +16,7 @@ import {
   Users,
   Gamepad2,
   Headset,
+  Upload ,
   Sparkles,
   Crown,
   Globe,
@@ -25,6 +26,7 @@ import {
   Heart,
   User,
   Users2,
+  Wallet,
 } from "lucide-react";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
@@ -772,8 +774,17 @@ export default function HeroContent() {
               BRANDS CARD
           ================================================= */}
             <div className="relative min-h-[480px] overflow-hidden rounded-[20px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-5 pt-7 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0">
+              {/* Bottom white shade */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-24 sm:h-28"
+              >
+                <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]" />
+                <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent sm:h-16" />
+              </div>
+
               {/* Badge */}
-              <div className="inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
+              <div className="relative z-[2] inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
                 For Brands
               </div>
 
@@ -796,7 +807,38 @@ export default function HeroContent() {
               {/* ================================================
                 FORM MOCKUP
             ================================================= */}
-              <div className="absolute left-4 right-4 top-[260px] h-[390px] overflow-hidden rounded-t-[18px] border border-white/[0.10] bg-[#121212] shadow-[0_-10px_40px_rgba(0,0,0,.15)] sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]">
+              <div className="absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border border-white/[0.10] bg-[#121212] shadow-[0_-10px_40px_rgba(0,0,0,.15)] sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]">
+                {/* Launch — pinned to the right edge of the form card */}
+                <div className="absolute right-0 top-3 z-20 sm:top-4">
+                  <div className="relative">
+                    {/* Soft purple glow just under the button */}
+                 
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-1 -bottom-0.5 h-2 rounded-full bg-black/70 blur-[4px]"
+                    />
+
+                    <div className="relative overflow-hidden rounded-[5px] bg-[#201E1E] px-3 py-1.5 text-[13px] font-medium text-white">
+                      {/* Small elliptical purple shade inside the button */}
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.6)_100%)] blur-[7px]"
+                      />
+
+                      <span className="relative z-10 flex items-center gap-1.5">
+                        <Image
+                          src="/images/Frame.png"
+                          alt=""
+                          width={16}
+                          height={16}
+                          className="h-4 w-4 object-contain mix-blend-screen"
+                        />
+                        Launch
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Form header */}
                 <div className="flex items-center justify-between px-4 pt-4">
                   <div className="flex items-center gap-2">
@@ -806,14 +848,10 @@ export default function HeroContent() {
 
                     <span className="text-[14px] font-medium">Details</span>
                   </div>
-
-                  <button className="rounded-md border border-[#8f4f9e]/30 bg-[#3b263e] px-3 py-1 text-[13px] text-white">
-                    🚀 Launch
-                  </button>
                 </div>
 
-                {/* Form */}
-                <div className="mt-5 px-4">
+                {/* Form — clipped so thumbnail area stays inside card */}
+                <div className="mt-5 h-[calc(100%-48px)] overflow-hidden px-4">
                   {/* Campaign title */}
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] text-white/75">
@@ -857,8 +895,8 @@ export default function HeroContent() {
 
                   {/* Upload */}
                   <div className="mt-4 flex h-[115px] items-center justify-center rounded-md border border-dashed border-white/[0.08] bg-[#242424]">
-                    <div className="text-center">
-                      <div className="text-[20px] text-white/30">⇧</div>
+                    <div className="flex flex-col items-center text-center">
+                      <Upload className="h-5 w-5 text-white/30" />
 
                       <div className="mt-1 text-[10px] text-white/45">
                         Drag, drop or <span className="underline">browse</span>{" "}
@@ -877,8 +915,8 @@ export default function HeroContent() {
                 FLOATING BUDGET
             ================================================= */}
               <div className="absolute bottom-[34px] left-[29px] z-10 w-[176px] rounded-[15px] border border-white/[0.12] bg-[#1b1b1b] p-3 shadow-[0_15px_35px_rgba(0,0,0,.45)]">
-                <div className="flex items-center gap-2 text-[13px] font-medium">
-                  <span className="text-[15px]">▣</span>
+                <div className="flex items-center gap-2 text-[13px] font-medium text-white">
+                  <Wallet className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.8} />
                   Budget
                 </div>
 
@@ -892,8 +930,17 @@ export default function HeroContent() {
               CREATORS CARD
           ================================================= */}
             <div className="relative min-h-[480px] overflow-hidden rounded-[20px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-5 pt-7 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0">
+              {/* Bottom white shade */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-24 sm:h-28"
+              >
+                <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]" />
+                <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent sm:h-16" />
+              </div>
+
               {/* Badge */}
-              <div className="inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
+              <div className="relative z-[2] inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
                 For Creators
               </div>
 
@@ -997,6 +1044,16 @@ export default function HeroContent() {
                     />
                   </div>
                 </div>
+
+                {/* Left / right edge shades */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)] sm:w-20"
+                />
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 scale-x-[-1] bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)] sm:w-20"
+                />
               </div>
             </div>
           </div>

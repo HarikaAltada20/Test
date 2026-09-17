@@ -11,7 +11,6 @@ import {
   UserRound,
   CalendarDays,
   Check,
-  Grid3X3,
   LineChart,
   Upload,
   UsersRound,
@@ -114,7 +113,7 @@ const comparisonItems = [
   },
   {
     text: "A piece of content",
-    icon: Grid3X3,
+    image: "/images/Frame (1).png",
     status: "success",
     rotate: "rotate-[-2.81deg]",
   },
@@ -724,10 +723,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 {/* Details */}
                 <div className="mt-7 grid grid-cols-2 gap-5">
                   <div className="flex items-start gap-3">
-                    <Grid3X3
-                      size={24}
-                      strokeWidth={1.5}
-                      className="mt-1 text-white/40"
+                    <Image
+                      src="/images/Frame (1).png"
+                      alt=""
+                      width={24}
+                      height={24}
+                      className="mt-1 h-6 w-6 shrink-0 object-contain opacity-40"
                     />
 
                     <div>
@@ -835,7 +836,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             "
               >
                 {comparisonItems.map((item, index) => {
-                  const Icon = item.icon;
+                  const Icon = "icon" in item ? item.icon : null;
 
                   return (
                     <div
@@ -873,11 +874,21 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                     >
                       {/* Left content */}
                       <div className="flex items-center gap-3 text-white/55">
-                        <Icon
-                          size={25}
-                          strokeWidth={1.5}
-                          className="shrink-0"
-                        />
+                        {"image" in item && item.image ? (
+                          <Image
+                            src={item.image}
+                            alt=""
+                            width={25}
+                            height={25}
+                            className="h-[25px] w-[25px] shrink-0 object-contain opacity-55"
+                          />
+                        ) : Icon ? (
+                          <Icon
+                            size={25}
+                            strokeWidth={1.5}
+                            className="shrink-0"
+                          />
+                        ) : null}
 
                         <span className="text-[16px]">{item.text}</span>
                       </div>
@@ -1230,16 +1241,19 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       name: "@glow.with.me",
                       category: "Fashion & Lifestyle",
                       amount: "$420",
+                      avatar: "/images/Ellipse 2355.avif",
                     },
                     {
                       name: "@editing.daily",
                       category: "Skincare",
                       amount: "$310",
+                      avatar: "/images/Ellipse 2355 (1).avif",
                     },
                     {
                       name: "@thatgirl.routines",
                       category: "Beauty",
                       amount: "$950",
+                      avatar: "/images/Ellipse 2355 (2).avif",
                     },
                   ].map((user) => (
                     <div
@@ -1247,7 +1261,15 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       className="flex items-center justify-between border-b border-white/5 py-3 last:border-0"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-yellow-500/40 to-gray-500/40" />
+                        <div className="relative h-8 w-8 overflow-hidden rounded-full">
+                          <Image
+                            src={user.avatar}
+                            alt={user.name}
+                            fill
+                            className="object-cover"
+                            sizes="32px"
+                          />
+                        </div>
 
                         <div>
                           <p className="text-xs text-gray-300">{user.name}</p>
