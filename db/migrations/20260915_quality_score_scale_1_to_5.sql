@@ -1,9 +1,83 @@
 -- Expand quality score scale from 1–3 to 1–5.
 -- Remap existing scores: 1→3, 2→4, 3→5 (new = old + 2).
 -- Contest min_avg / min_best gates also get +2 to preserve relative meaning.
--- Sum gate (min_quality_score) is intentionally left unchanged.
+-- Contest min_quality_score (total-quality gate) is intentionally unchanged.
 --
--- Deploy: run this migration BEFORE deploying the app that accepts scores 4–5.
+-- Deploy: run this migration as a standalone transaction during a maintenance
+-- window, BEFORE deploying the app that accepts scores 4–5. Do not rerun it.
+
+BEGIN;
+
+-- Serialize this irreversible conversion with any other deployment session.
+SELECT pg_advisory_xact_lock(91520260915::bigint);
+
+-- A durable marker prevents a successful conversion from being applied twice.
+CREATE TABLE IF NOT EXISTS public.quality_score_scale_1_to_5_migration_state (
+  migration_name text PRIMARY KEY
+    CHECK (migration_name = 'quality_score_scale_1_to_5'),
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
+
+REVOKE ALL ON TABLE public.quality_score_scale_1_to_5_migration_state FROM PUBLIC;
+
+DO $$
+DECLARE
+  v_has_preexisting_1_to_5_data boolean := false;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.quality_score_scale_1_to_5_migration_state
+    WHERE migration_name = 'quality_score_scale_1_to_5'
+  ) THEN
+    RAISE EXCEPTION
+      'quality_score_scale_1_to_5 has already been applied; refusing to remap scores twice';
+  END IF;
+
+  -- If a previous/manual conversion was run without this marker, fail closed
+  -- rather than risk adding two points to the same historical values again.
+  IF EXISTS (
+    SELECT 1 FROM public.submissions WHERE quality_score BETWEEN 4 AND 5
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM public.contests
+    WHERE min_best_quality_score BETWEEN 4 AND 5
+       OR min_avg_quality_score BETWEEN 4 AND 5
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM public.creator_profiles
+    WHERE quality_score_counts ? 'score4'
+       OR quality_score_counts ? 'score5'
+  ) THEN
+    v_has_preexisting_1_to_5_data := true;
+  END IF;
+
+  -- The bulk-job table is optional in older environments, so query it only
+  -- after confirming that it exists.
+  IF NOT v_has_preexisting_1_to_5_data
+    AND EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bulk_submission_moderation_jobs'
+        AND column_name = 'quality_score'
+    ) THEN
+    EXECUTE
+      'SELECT EXISTS (
+         SELECT 1
+         FROM public.bulk_submission_moderation_jobs
+         WHERE quality_score BETWEEN 4 AND 5
+       )'
+    INTO v_has_preexisting_1_to_5_data;
+  END IF;
+
+  IF v_has_preexisting_1_to_5_data THEN
+    RAISE EXCEPTION
+      'Detected 1–5 quality-score data without the migration marker; inspect and reconcile before running this migration';
+  END IF;
+
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- 1. Drop old 1–3 CHECK constraints
@@ -764,3 +838,140 @@ BEGIN
     END IF;
   END IF;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- 6. Keep server-side opportunity filtering in parity with the 1–5 app gate.
+--    This function is used by eligibleOnly campaign lists and was originally
+--    created with the old 1–3 ceiling.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.contest_matches_creator_eligibility(
+  p_contest_format text,
+  p_trust_score integer,
+  p_trust_number integer,
+  p_min_avg_quality numeric,
+  p_min_best_quality integer,
+  p_min_quality integer,
+  p_min_platform_earnings bigint,
+  p_min_platform_views bigint,
+  p_creator_trust_score_pct numeric,
+  p_creator_trust_number integer,
+  p_creator_avg_quality numeric,
+  p_creator_best_quality integer,
+  p_creator_quality_sum numeric,
+  p_creator_earnings_cents bigint,
+  p_creator_views bigint,
+  p_creator_verified_reels integer,
+  p_creator_has_explicit_quality boolean
+)
+RETURNS boolean
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  v_min_trust integer;
+  v_min_trust_number integer;
+  v_min_avg numeric;
+  v_min_best integer;
+  v_min_quality integer;
+  v_min_earnings bigint;
+  v_min_views bigint;
+  v_apply_quality boolean;
+  v_trust_pct numeric := COALESCE(p_creator_trust_score_pct, 0);
+  v_trust_number integer := COALESCE(p_creator_trust_number, 0);
+  v_earnings bigint := COALESCE(p_creator_earnings_cents, 0);
+  v_views bigint := COALESCE(p_creator_views, 0);
+BEGIN
+  IF COALESCE(p_contest_format, 'video') = 'text_image' THEN
+    RETURN true;
+  END IF;
+
+  v_min_trust := CASE
+    WHEN p_trust_score IS NOT NULL AND p_trust_score > 0 THEN p_trust_score
+    ELSE NULL
+  END;
+  v_min_trust_number := p_trust_number;
+  v_min_avg := CASE
+    WHEN p_min_avg_quality IS NOT NULL
+         AND p_min_avg_quality >= 1
+         AND p_min_avg_quality <= 5
+      THEN p_min_avg_quality
+    ELSE NULL
+  END;
+  v_min_best := CASE
+    WHEN p_min_best_quality IS NOT NULL
+         AND p_min_best_quality >= 1
+         AND p_min_best_quality <= 5
+      THEN p_min_best_quality
+    ELSE NULL
+  END;
+  v_min_quality := CASE
+    WHEN p_min_quality IS NOT NULL AND p_min_quality > 0 THEN p_min_quality
+    ELSE NULL
+  END;
+  v_min_earnings := CASE
+    WHEN p_min_platform_earnings IS NOT NULL AND p_min_platform_earnings > 0
+      THEN p_min_platform_earnings
+    ELSE NULL
+  END;
+  v_min_views := CASE
+    WHEN p_min_platform_views IS NOT NULL AND p_min_platform_views > 0
+      THEN p_min_platform_views
+    ELSE NULL
+  END;
+
+  IF v_min_trust IS NULL
+     AND v_min_trust_number IS NULL
+     AND v_min_avg IS NULL
+     AND v_min_best IS NULL
+     AND v_min_quality IS NULL
+     AND v_min_earnings IS NULL
+     AND v_min_views IS NULL THEN
+    RETURN true;
+  END IF;
+
+  v_apply_quality :=
+    COALESCE(p_creator_has_explicit_quality, false)
+    OR COALESCE(p_creator_verified_reels, 0) = 0;
+
+  IF v_min_trust IS NOT NULL AND v_trust_pct < v_min_trust THEN
+    RETURN false;
+  END IF;
+  IF v_min_trust_number IS NOT NULL AND v_trust_number < v_min_trust_number THEN
+    RETURN false;
+  END IF;
+  IF v_apply_quality AND v_min_best IS NOT NULL AND (
+    p_creator_best_quality IS NULL OR p_creator_best_quality < v_min_best
+  ) THEN
+    RETURN false;
+  END IF;
+  IF v_apply_quality AND v_min_avg IS NOT NULL AND (
+    p_creator_avg_quality IS NULL OR p_creator_avg_quality < v_min_avg
+  ) THEN
+    RETURN false;
+  END IF;
+  IF v_apply_quality AND v_min_quality IS NOT NULL AND (
+    p_creator_quality_sum IS NULL OR p_creator_quality_sum < v_min_quality
+  ) THEN
+    RETURN false;
+  END IF;
+  IF v_min_earnings IS NOT NULL AND v_earnings < v_min_earnings THEN
+    RETURN false;
+  END IF;
+  IF v_min_views IS NOT NULL AND v_views < v_min_views THEN
+    RETURN false;
+  END IF;
+
+  RETURN true;
+END;
+$$;
+
+COMMENT ON FUNCTION public.contest_matches_creator_eligibility(
+  text, integer, integer, numeric, integer, integer, bigint, bigint,
+  numeric, integer, numeric, integer, numeric, bigint, bigint, integer, boolean
+) IS
+  'True when creator snapshot meets 1–5 quality and other contest gates (parity with isCreatorEligibleForContest).';
+
+INSERT INTO public.quality_score_scale_1_to_5_migration_state (migration_name)
+VALUES ('quality_score_scale_1_to_5');
+
+COMMIT;

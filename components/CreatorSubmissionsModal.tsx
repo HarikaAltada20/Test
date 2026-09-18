@@ -93,8 +93,11 @@ import {
 } from "@/lib/bulk-payment-toast";
 import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
-import { parseQualityScore } from "@/lib/quality-score";
-import type { QualityScore } from "@/lib/quality-score";
+import {
+  parseQualityScore,
+  type QualityScore,
+  type QualityScoreCounts,
+} from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
 import {
   computeSubmissionModerationStatusCounts,
@@ -236,11 +239,7 @@ interface CreatorSubmissionsModalProps {
     avgQualityScore: number | null;
     bestQualityScore: number | null;
     qualityScoreSum: number | null;
-    qualityScoreCounts?: {
-      score1: number;
-      score2: number;
-      score3: number;
-    };
+    qualityScoreCounts?: QualityScoreCounts;
   }) => void;
 }
 
@@ -1514,11 +1513,7 @@ export function CreatorSubmissionsModal({
           avg_quality_score: number | null;
           best_quality_score: number | null;
           quality_score_sum: number | null;
-          quality_score_counts?: {
-            score1: number;
-            score2: number;
-            score3: number;
-          };
+          quality_score_counts?: QualityScoreCounts;
         }
       >;
 

@@ -37,7 +37,7 @@ function parseStoredQualityNumber(value: unknown): number | null {
 
 function isValidQualityScoreNumber(score: number): boolean {
   return (
-    Number.isFinite(score) &&
+    Number.isInteger(score) &&
     score >= MIN_QUALITY_SCORE &&
     score <= MAX_QUALITY_SCORE
   );
@@ -96,10 +96,10 @@ export function resolveCreatorQualityMetrics(input: {
 
 export function parseQualityScore(value: unknown): QualityScore | null {
   const n = Number(value);
-  if (!Number.isFinite(n) || n < MIN_QUALITY_SCORE || n > MAX_QUALITY_SCORE) {
+  if (!Number.isInteger(n) || n < MIN_QUALITY_SCORE || n > MAX_QUALITY_SCORE) {
     return null;
   }
-  return Math.round(n) as QualityScore;
+  return n as QualityScore;
 }
 
 export function countQualityScoresFromScores(
@@ -128,6 +128,18 @@ export function parseQualityScoreCounts(value: unknown): QualityScoreCounts {
     score4: Math.max(0, Number(parsed.score4) || 0),
     score5: Math.max(0, Number(parsed.score5) || 0),
   };
+}
+
+/** Returns the total number of scored submissions across all quality tiers. */
+export function sumQualityScoreCounts(value: unknown): number {
+  const counts = parseQualityScoreCounts(value);
+  return (
+    counts.score1 +
+    counts.score2 +
+    counts.score3 +
+    counts.score4 +
+    counts.score5
+  );
 }
 
 export function requireVerifyQualityScore(value: unknown): QualityScore | null {
