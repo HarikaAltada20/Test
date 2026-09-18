@@ -146,8 +146,8 @@ export default function CtcBanner() {
     <section
       className={cn(
         "relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center overflow-hidden py-16 md:py-20 transition-colors duration-300",
-        isHome && isLight
-          ? "bg-transparent text-black"
+        isLight
+          ? "bg-[#F1F1F1] text-black"
           : "bg-black text-white",
       )}
       ref={sectionRef}
@@ -244,16 +244,43 @@ export default function CtcBanner() {
       ) : (
         <>
           <div className="relative z-10 flex flex-col items-center px-4 w-full">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
-              <ShieldCheck className="h-4 w-4" />
+            <div
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                isLight
+                  ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
+                  : "border-white/10 bg-white/5 text-zinc-200",
+              )}
+            >
+              <ShieldCheck
+                className={cn(
+                  "h-4 w-4",
+                  isLight ? "text-black/45" : "text-zinc-200",
+                )}
+              />
               Pay for Performance
             </div>
 
             {/* Static circles around heading + buttons */}
             <div className="relative mt-10 flex flex-col items-center justify-center w-full max-w-[780px] py-16 sm:py-20 md:py-24">
-              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border border-white/[0.08]" />
-              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border border-white/[0.06]" />
-              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border border-white/[0.04]" />
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
+                  isLight ? "border-black/[0.08]" : "border-white/[0.08]",
+                )}
+              />
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border",
+                  isLight ? "border-black/[0.06]" : "border-white/[0.06]",
+                )}
+              />
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border",
+                  isLight ? "border-black/[0.04]" : "border-white/[0.04]",
+                )}
+              />
 
               {/* Static orange→purple arc highlight */}
               <div
@@ -268,7 +295,12 @@ export default function CtcBanner() {
                 }}
               />
 
-              <div className="pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[300px] md:w-[300px] -translate-x-1/2 -translate-y-1/2 opacity-85">
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[300px] md:w-[300px] -translate-x-1/2 -translate-y-1/2",
+                  isLight ? "opacity-40" : "opacity-85",
+                )}
+              >
                 <Image
                   src="/images/attach-money.png"
                   alt=""
@@ -280,9 +312,12 @@ export default function CtcBanner() {
               </div>
 
               <h2
-                className={`relative z-10 text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-center ${
-                  inView ? "slide-up" : "opacity-0 translate-y-10"
-                }`}
+                className={cn(
+                  `relative z-10 text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-center ${
+                    inView ? "slide-up" : "opacity-0 translate-y-10"
+                  }`,
+                  isLight ? "text-black" : "text-white",
+                )}
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 {isBrands ? (
@@ -302,7 +337,12 @@ export default function CtcBanner() {
                     type="button"
                     onClick={handleMainCtaClick}
                     disabled={isNavigating || isCheckingAccount}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      isLight
+                        ? "bg-black text-white hover:bg-black/90"
+                        : "border border-white/25 bg-black text-white hover:bg-white/10",
+                    )}
                   >
                     {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
@@ -317,7 +357,12 @@ export default function CtcBanner() {
                       router.push("/dashboard/opportunities");
                     }}
                     disabled={isNavigating || isCheckingAccount}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-transparent px-6 py-3 text-sm sm:text-base font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      isLight
+                        ? "bg-black text-white hover:bg-black/90"
+                        : "border border-white/25 bg-transparent text-white hover:bg-white/10",
+                    )}
                   >
                     {isNavigating || isCheckingAccount ? (
                       <ButtonLoadingSpinner />
@@ -329,7 +374,12 @@ export default function CtcBanner() {
                   href="https://calendly.com/guptavishesh2/30min"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm sm:text-base font-medium text-black hover:bg-zinc-100 transition-colors"
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors",
+                    isLight
+                      ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
+                      : "bg-white text-black hover:bg-zinc-100",
+                  )}
                 >
                   Talk to team →
                 </a>

@@ -303,7 +303,8 @@ export default function FAQ() {
   const { isLight } = useThemeMode();
   const isBrands = pathname.includes("brands");
   const isHome = pathname === "/";
-  const useLightFaq = isHome && isLight;
+  const isCreators = pathname.includes("creators");
+  const useLightFaq = isLight && (isHome || isBrands || isCreators);
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   const faqs = isBrands ? brandFaqs : isHome ? homeFaqs : creatorFaqs;

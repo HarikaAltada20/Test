@@ -14,10 +14,12 @@ import {
   LineChart,
   Upload,
   UsersRound,
-  Play, ShoppingCart,
+  Play,
+  ShoppingCart,
   X,
   WalletCards,
   ArrowUpRight,
+  Megaphone,
 } from "lucide-react";
 import { FaXTwitter } from "react-icons/fa6";
 import { SiInstagram, SiTiktok, SiYoutube } from "react-icons/si";
@@ -39,6 +41,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useThemeMode } from "@/hooks/use-theme-mode";
+import { cn } from "@/lib/utils";
 
 // const faqItemsBrands = [
 //   {
@@ -238,54 +242,54 @@ const profiles = [
   },
 ];
 
-
-  const creators = [
-    {
-      name: "@sarahcreates",
-      views: "125K",
-      image:
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop",
-    },
-    {
-      name: "@rohanvlogs",
-      views: "98K",
-      image:
-        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
-    },
-    {
-      name: "@themishadity",
-      views: "87K",
-      image:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-    },
-    {
-      name: "@karanfilms",
-      views: "74K",
-      image:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-    },
-    {
-      name: "@kairos",
-      views: "65K",
-      image:
-        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop",
-    },
-    {
-      name: "@lumina",
-      views: "58K",
-      image:
-        "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100&h=100&fit=crop",
-    },
-    {
-      name: "@northstar",
-      views: "51K",
-      image:
-        "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
-    },
-  ];
+const creators = [
+  {
+    name: "@sarahcreates",
+    views: "125K",
+    image:
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop",
+  },
+  {
+    name: "@rohanvlogs",
+    views: "98K",
+    image:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
+  },
+  {
+    name: "@themishadity",
+    views: "87K",
+    image:
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
+  },
+  {
+    name: "@karanfilms",
+    views: "74K",
+    image:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
+  },
+  {
+    name: "@kairos",
+    views: "65K",
+    image:
+      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop",
+  },
+  {
+    name: "@lumina",
+    views: "58K",
+    image:
+      "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100&h=100&fit=crop",
+  },
+  {
+    name: "@northstar",
+    views: "51K",
+    image:
+      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
+  },
+];
 export default function BrandsClient({ totalViews }: BrandsClientProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { isLight } = useThemeMode();
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -458,30 +462,40 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
   }, []);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-black text-white">
+    <div
+      className={cn(
+        "min-h-screen overflow-x-hidden transition-colors duration-300",
+        isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+      )}
+    >
       <div className="relative z-20">
         {/* Floating Gaming Elements */}
-        <main className="min-h-screen overflow-x-hidden bg-black text-white">
-
+        <main
+          className={cn(
+            "min-h-screen overflow-x-hidden transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+          )}
+        >
           {/* Hero */}
           <section className="relative mx-auto max-w-[1080px] px-4 pt-10 text-center sm:px-6 sm:pt-14 md:pt-16">
-            {/* Circular rings */}
-            {/* <div className="pointer-events-none absolute left-1/2 top-[-80px] h-[650px] w-[650px] -translate-x-1/2 rounded-full border border-white/[0.035]" /> */}
-
-            {/* <div className="pointer-events-none absolute left-1/2 top-[-40px] h-[570px] w-[570px] -translate-x-1/2 rounded-full border border-white/[0.035]">
-              <div className="absolute -left-[2px] top-[100px] h-[3px] w-[145px] -rotate-[61deg] rounded-full bg-gradient-to-r from-transparent via-[#ff8800] to-[#ff8800]" />
-
-              <div className="absolute -right-[2px] top-[110px] h-[3px] w-[130px] rotate-[62deg] rounded-full bg-gradient-to-r from-[#7f39ec] to-transparent" />
-            </div> */}
-
             <div className="relative z-10">
-              <h1 className="mx-auto max-w-[700px] text-[28px] font-bold leading-[1.1] tracking-[-1.2px] text-white/90 sm:text-[36px] sm:tracking-[-1.5px] md:text-[48px] md:tracking-[-1.8px]">
+              <h1
+                className={cn(
+                  "mx-auto max-w-[700px] text-[28px] font-bold leading-[1.1] tracking-[-1.2px] sm:text-[36px] sm:tracking-[-1.5px] md:text-[48px] md:tracking-[-1.8px]",
+                  isLight ? "text-black" : "text-white/90",
+                )}
+              >
                 Pay creators based on
                 <br />
                 how their content performs.
               </h1>
 
-              <p className="mx-auto mt-4 max-w-[640px] text-[14px] leading-6 text-white/50 sm:mt-5 sm:text-[15px] md:text-[16px]">
+              <p
+                className={cn(
+                  "mx-auto mt-4 max-w-[640px] text-[14px] leading-6 sm:mt-5 sm:text-[15px] md:text-[16px]",
+                  isLight ? "text-black/50" : "text-white/50",
+                )}
+              >
                 Set your campaign, your brief, and your budget. Game of Creators
                 puts it in front of a creator network, and pays out on verified
                 performance
@@ -492,7 +506,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   type="button"
                   onClick={handleLaunchCampaign}
                   disabled={isLaunchingCampaign}
-                  className="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-black/50 px-5 py-3 text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.03)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                  className={cn(
+                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
+                    isLight
+                      ? "bg-black text-white hover:bg-black/90"
+                      : "border border-white/20 bg-black/50 shadow-[0_0_20px_rgba(255,255,255,0.03)] hover:bg-white/10",
+                  )}
                 >
                   {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
                   <span>Launch a Campaign</span>
@@ -510,7 +529,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       block: "start",
                     })
                   }
-                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-white/90 sm:w-auto"
+                  className={cn(
+                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition sm:w-auto",
+                    isLight
+                      ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
+                      : "bg-white text-black hover:bg-white/90",
+                  )}
                 >
                   See How it works
                   <ArrowRight
@@ -524,22 +548,59 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
           {/* Dashboard / Analytics Card */}
           <section className="relative z-20 mx-auto mt-12 max-w-[1100px] px-4 sm:mt-16 sm:px-5 md:mt-[105px]">
-            <div className="rounded-[20px] bg-[#242424] p-1.5 shadow-[0_30px_100px_rgba(88,54,150,0.25)] sm:rounded-[30px] sm:p-2">
+            <div
+              className={cn(
+                "rounded-[20px] p-1.5 sm:rounded-[30px] sm:p-2",
+                isLight
+                  ? "bg-white"
+                  : "bg-[#242424] shadow-[0_30px_100px_rgba(88,54,150,0.25)]",
+              )}
+            >
               {/* Main dashboard card */}
-              <div className="relative min-h-[320px] overflow-hidden rounded-[18px] border border-white/[0.04] bg-[#151515] sm:min-h-[450px] sm:rounded-[22px]">
+              <div
+                className={cn(
+                  "relative min-h-[320px] overflow-hidden rounded-[18px] sm:min-h-[450px] sm:rounded-[22px]",
+                  isLight
+                    ? "border border-black/[0.06] bg-white"
+                    : "border border-white/[0.04] bg-[#151515]",
+                )}
+              >
                 {/* Dashboard image behind purple glow */}
                 <div className="pointer-events-none absolute inset-0">
                   <Image
-                    src="/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
+                    src={
+                      isLight
+                        ? "/images/5c1bc9327aecb9290b3284179d46d09ae2c7635c.png"
+                        : "/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
+                    }
                     alt=""
                     fill
-                    className="object-cover object-left-top opacity-40 sm:object-[20%_0%] sm:opacity-50"
+                    className={cn(
+                      "object-cover object-left-top sm:object-[20%_0%]",
+                      isLight
+                        ? "opacity-70 sm:opacity-85"
+                        : "opacity-40 sm:opacity-50",
+                    )}
                     sizes="(max-width: 1100px) 100vw, 1100px"
                     priority
                   />
                   {/* Soft fade so left copy stays readable */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#151515] via-[#151515]/85 to-transparent sm:via-[#151515]/70" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#151515] via-transparent to-[#151515]/40" />
+                  <div
+                    className={cn(
+                      "absolute inset-0 bg-gradient-to-r to-transparent",
+                      isLight
+                        ? "from-white via-white sm:via-white/90"
+                        : "from-[#151515] via-[#151515]/85 sm:via-[#151515]/70",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "absolute inset-0 bg-gradient-to-t via-transparent",
+                      isLight
+                        ? "from-white to-white/50"
+                        : "from-[#151515] to-[#151515]/40",
+                    )}
+                  />
                 </div>
 
                 {/* Purple glow */}
@@ -547,13 +608,23 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
                 {/* Content */}
                 <div className="relative z-10 flex min-h-[280px] flex-col justify-center px-5 py-10 sm:min-h-[390px] sm:px-8 sm:py-12 md:px-10">
-                  <h2 className="max-w-[510px] text-[22px] font-bold leading-[1.15] tracking-[-0.8px] sm:text-[28px] sm:tracking-[-1px] md:text-[31px]">
+                  <h2
+                    className={cn(
+                      "max-w-[510px] text-[22px] font-bold leading-[1.15] tracking-[-0.8px] sm:text-[28px] sm:tracking-[-1px] md:text-[31px]",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     Don’t just run campaigns.
                     <br />
                     Know which creators perform
                   </h2>
 
-                  <p className="mt-4 max-w-[390px] text-[13px] leading-6 text-white/45 sm:text-[14px]">
+                  <p
+                    className={cn(
+                      "mt-4 max-w-[390px] text-[13px] leading-6 sm:text-[14px]",
+                      isLight ? "text-black/50" : "text-white/45",
+                    )}
+                  >
                     Know which creators, content, and moments are actually
                     driving results.
                   </p>
@@ -562,7 +633,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                     type="button"
                     onClick={handleLaunchCampaign}
                     disabled={isLaunchingCampaign}
-                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit"
+                    className={cn(
+                      "mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit",
+                      isLight
+                        ? "bg-black text-white hover:bg-black/90"
+                        : "bg-white text-black hover:bg-white/90",
+                    )}
                   >
                     {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
                     <span>Launch a Campaign</span>
@@ -572,21 +648,43 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               </div>
 
               {/* Feature cards */}
-              <div className="mt-3 grid grid-cols-1 gap-6 rounded-[18px] bg-[#151515] p-5 sm:gap-3 sm:rounded-[22px] sm:p-7 md:grid-cols-3">
+              <div
+                className={cn(
+                  "mt-3 grid grid-cols-1 gap-6 rounded-[18px] p-5 sm:gap-3 sm:rounded-[22px] sm:p-7 md:grid-cols-3",
+                  isLight ? "bg-[#f7f7f7]" : "bg-[#151515]",
+                )}
+              >
                 {features.map((feature) => {
                   const Icon = feature.icon;
 
                   return (
                     <div key={feature.title}>
-                      <div className="mb-4 flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/80">
+                      <div
+                        className={cn(
+                          "mb-4 flex h-7 w-7 items-center justify-center rounded-full",
+                          isLight
+                            ? "bg-black/5 text-black/70"
+                            : "bg-white/10 text-white/80",
+                        )}
+                      >
                         <Icon size={15} strokeWidth={1.8} />
                       </div>
 
-                      <h3 className="text-[15px] font-semibold text-white/90">
+                      <h3
+                        className={cn(
+                          "text-[15px] font-semibold",
+                          isLight ? "text-black" : "text-white/90",
+                        )}
+                      >
                         {feature.title}
                       </h3>
 
-                      <p className="mt-2 max-w-[230px] text-[13px] leading-5 text-white/40">
+                      <p
+                        className={cn(
+                          "mt-2 max-w-[230px] text-[13px] leading-5",
+                          isLight ? "text-black/45" : "text-white/40",
+                        )}
+                      >
                         {feature.description}
                       </p>
                     </div>
@@ -598,7 +696,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         </main>
 
         {/* Infinite Scroll Images Section */}
-        <section className="pb-12 overflow-hidden bg-black">
+        <section
+          className={cn(
+            "pb-12 overflow-hidden transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
           <div className="overflow-hidden relative scroll-container-testimonials">
             <div className="flex justify-center items-center gap-6 animate-scroll-left">
               {[...brandImages, ...brandImages].map((image, index) => {
@@ -631,19 +734,32 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       alt={`Brand image ${index + 1}`}
                       width={isCatchPhrase ? 200 : isLarge ? 235 : 150}
                       height={isCatchPhrase ? 120 : isLarge ? 190 : 90}
-                      className="w-full h-full object-contain"
+                      className={cn(
+                        "w-full h-full object-contain",
+                        isLight && !isCatchPhrase && "brightness-0 opacity-80",
+                      )}
                     />
                   </div>
                 );
               })}
             </div>
           </div>
-          <div className="flex justify-center items-center text-base text-slate-300 ">
+          <div
+            className={cn(
+              "flex justify-center items-center text-base",
+              isLight ? "text-black/50" : "text-slate-300",
+            )}
+          >
             <span className="font-medium">Trusted by leading brands</span>
           </div>
         </section>
 
-        <section className="relative overflow-hidden bg-black px-4 py-14 text-white sm:px-5 sm:py-20 md:px-10 lg:px-20">
+        <section
+          className={cn(
+            "relative overflow-hidden px-4 py-14 sm:px-5 sm:py-20 md:px-10 lg:px-20 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+          )}
+        >
           <div className="mx-auto max-w-[1280px]">
             {/* ================= HEADING ================= */}
             <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px] lg:text-[56px]">
@@ -658,46 +774,33 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               CREATOR DEAL CARD
           ================================================= */}
               <div
-                className="
-              relative z-10 mx-auto
-              w-full max-w-[420px]
-              rotate-[-3deg] sm:rotate-[-7deg]
-              rounded-[25px]
-              border border-white/[0.13]
-              bg-[#171717]
-              p-5 sm:p-6
-
-              shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]
-
-              lg:absolute
-              lg:left-[2%]
-              lg:top-[25px]
-            "
+                className={cn(
+                  "relative z-10 mx-auto w-full max-w-[420px] rotate-[-3deg] rounded-[25px] p-5 sm:rotate-[-7deg] sm:p-6 lg:absolute lg:left-[2%] lg:top-[25px]",
+                  isLight
+                    ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000000D]"
+                    : "border border-white/[0.13] bg-[#171717] shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]",
+                )}
               >
                 {/* Top labels */}
                 <div className="flex items-center justify-between">
                   <span
-                    className="
-                  rounded-full
-                  border border-white/[0.20]
-                  bg-white/[0.01]
-                  px-3 py-1.5
-                  text-[12px]
-                  text-white/65
-                "
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-[12px]",
+                      isLight
+                        ? "border border-[#0000000D] bg-white text-black/70"
+                        : "border border-white/[0.20] bg-white/[0.01] text-white/65",
+                    )}
                   >
                     Typical Creator Deal
                   </span>
 
                   <span
-                    className="
-                  rounded-full
-                  border border-orange-500/[0.35]
-                  bg-orange-500/[0.18]
-                  px-3 py-1.5
-                  text-[12px]
-                  text-orange-400
-                "
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-[12px]",
+                      isLight
+                        ? "border border-orange-500/25 bg-orange-500/15 text-orange-500"
+                        : "border border-orange-500/[0.35] bg-orange-500/[0.18] text-orange-400",
+                    )}
                   >
                     Fixed Pay
                   </span>
@@ -705,16 +808,37 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
                 {/* Creator */}
                 <div className="mt-5 flex items-center gap-3">
-                 <img src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png" alt="Creator" className="h-[72px] w-[72px] rounded-md object-cover" />
+                  <img
+                    src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png"
+                    alt="Creator"
+                    className="h-[72px] w-[72px] rounded-md object-cover"
+                  />
 
                   <div>
-                    <p className="text-[15px] text-white/50">@sarahcreates</p>
+                    <p
+                      className={cn(
+                        "text-[15px]",
+                        isLight ? "text-black/45" : "text-white/50",
+                      )}
+                    >
+                      @sarahcreates
+                    </p>
 
-                    <p className="text-[18px] font-medium text-white/80">
+                    <p
+                      className={cn(
+                        "text-[18px] font-medium",
+                        isLight ? "text-black" : "text-white/80",
+                      )}
+                    >
                       500k followers
                     </p>
 
-                    <p className="mt-1 text-[14px] text-white/40">
+                    <p
+                      className={cn(
+                        "mt-1 text-[14px]",
+                        isLight ? "text-black/40" : "text-white/40",
+                      )}
+                    >
                       Life · Tech
                     </p>
                   </div>
@@ -728,13 +852,28 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       alt=""
                       width={24}
                       height={24}
-                      className="mt-1 h-6 w-6 shrink-0 object-contain opacity-40"
+                      className={cn(
+                        "mt-1 h-6 w-6 shrink-0 object-contain",
+                        isLight ? "opacity-60 brightness-0" : "opacity-40",
+                      )}
                     />
 
                     <div>
-                      <p className="text-[14px] text-white/40">Content</p>
+                      <p
+                        className={cn(
+                          "text-[14px]",
+                          isLight ? "text-black/40" : "text-white/40",
+                        )}
+                      >
+                        Content
+                      </p>
 
-                      <p className="mt-1 text-[15px] text-white/80">
+                      <p
+                        className={cn(
+                          "mt-1 text-[15px]",
+                          isLight ? "text-black" : "text-white/80",
+                        )}
+                      >
                         1 Instagram Reel
                       </p>
                     </div>
@@ -744,31 +883,56 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                     <CalendarDays
                       size={24}
                       strokeWidth={1.5}
-                      className="mt-1 text-white/40"
+                      className={cn(
+                        "mt-1",
+                        isLight ? "text-black/40" : "text-white/40",
+                      )}
                     />
 
                     <div>
-                      <p className="text-[14px] text-white/40">Timeline</p>
+                      <p
+                        className={cn(
+                          "text-[14px]",
+                          isLight ? "text-black/40" : "text-white/40",
+                        )}
+                      >
+                        Timeline
+                      </p>
 
-                      <p className="mt-1 text-[15px] text-white/80">1 week</p>
+                      <p
+                        className={cn(
+                          "mt-1 text-[15px]",
+                          isLight ? "text-black" : "text-white/80",
+                        )}
+                      >
+                        1 week
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 {/* Price */}
                 <div
-                  className="
-                mt-6 flex items-center justify-between
-                rounded-lg
-                bg-[#202020]
-                px-4 py-4
-              "
+                  className={cn(
+                    "mt-6 flex items-center justify-between rounded-lg px-4 py-4",
+                    isLight ? "bg-[#F1F1F1]" : "bg-[#202020]",
+                  )}
                 >
-                  <span className="text-[14px] text-white/40">
+                  <span
+                    className={cn(
+                      "text-[14px]",
+                      isLight ? "text-black/45" : "text-white/40",
+                    )}
+                  >
                     Creators Fee
                   </span>
 
-                  <span className="text-[17px] font-medium text-white">
+                  <span
+                    className={cn(
+                      "text-[17px] font-medium",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     $4,000
                   </span>
                 </div>
@@ -778,41 +942,20 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               DOTTED CONNECTOR
           ================================================= */}
               <div
-                className="
-              absolute
-              left-[44%]
-              top-[175px]
-              z-0
-              hidden
-              w-[205px]
-              border-t
-              border-dotted
-              border-white/30
-              lg:block
-            "
+                className={cn(
+                  "absolute left-[44%] top-[175px] z-0 hidden w-[205px] border-t border-dotted lg:block",
+                  isLight ? "border-black/25" : "border-white/30",
+                )}
               />
 
               {/* =================================================
               HANDWRITTEN TEXT
           ================================================= */}
               <p
-                className="
-              relative mx-auto mt-12 w-fit
-              -rotate-[2deg]
-              text-center
-              text-[18px]
-              font-medium
-              italic
-              text-white/75
-              sm:mt-20
-              sm:text-[22px]
-
-              lg:absolute
-              lg:right-[7%]
-              lg:top-[0px]
-              lg:mt-0
-              lg:text-left
-            "
+                className={cn(
+                  "relative mx-auto mt-12 w-fit -rotate-[2deg] text-center text-[18px] font-medium italic sm:mt-20 sm:text-[22px] lg:absolute lg:right-[7%] lg:top-[0px] lg:mt-0 lg:text-left",
+                  isLight ? "text-black/60" : "text-white/75",
+                )}
                 style={{
                   fontFamily: "cursive",
                 }}
@@ -841,46 +984,34 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   return (
                     <div
                       key={item.text}
-                      className={`
-                    relative
-                    flex
-                    h-[58px]
-                    items-center
-                    justify-between
-
-                    rounded-full
-                    border
-                    border-white/[0.14]
-                    bg-[#18181a]
-
-                    px-5
-
-                    ${item.rotate}
-
-                    /* IMAGE-LIKE SOFT WHITE SHADOW */
-                    shadow-[
-                      0_8px_22px_rgba(255,255,255,0.055),
-                      0_12px_25px_rgba(0,0,0,0.65),
-                      inset_0_1px_0_rgba(255,255,255,0.08)
-                    ]
-
-                    /* CROSS / OVERLAP */
-                    ${index !== 0 ? "mt-[15px]" : ""}
-
-                    transition-transform
-                    duration-300
-                    hover:translate-x-1
-                  `}
+                      className={cn(
+                        "relative flex h-[58px] items-center justify-between rounded-full px-5 transition-transform duration-300 hover:translate-x-1",
+                        item.rotate,
+                        index !== 0 && "mt-[15px]",
+                        isLight
+                          ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[0_13.12px_26.25px_0_#9A9A9A1A]"
+                          : "border border-white/[0.14] bg-[#18181a] shadow-[0_8px_22px_rgba(255,255,255,0.055),0_12px_25px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.08)]",
+                      )}
                     >
                       {/* Left content */}
-                      <div className="flex items-center gap-3 text-white/55">
+                      <div
+                        className={cn(
+                          "flex items-center gap-3",
+                          isLight ? "text-black/60" : "text-white/55",
+                        )}
+                      >
                         {"image" in item && item.image ? (
                           <Image
                             src={item.image}
                             alt=""
                             width={25}
                             height={25}
-                            className="h-[25px] w-[25px] shrink-0 object-contain opacity-55"
+                            className={cn(
+                              "h-[25px] w-[25px] shrink-0 object-contain",
+                              isLight
+                                ? "opacity-70 brightness-0"
+                                : "opacity-55",
+                            )}
                           />
                         ) : Icon ? (
                           <Icon
@@ -895,29 +1026,11 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
                       {/* Status */}
                       {item.status === "success" ? (
-                        <span
-                          className="
-                        flex h-[20px] w-[20px]
-                        shrink-0
-                        items-center justify-center
-                        rounded-full
-                        bg-[#4ade52]
-                        text-black
-                      "
-                        >
+                        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#4ade52] text-black">
                           <Check size={13} strokeWidth={3} />
                         </span>
                       ) : (
-                        <span
-                          className="
-                        flex h-[20px] w-[20px]
-                        shrink-0
-                        items-center justify-center
-                        rounded-full
-                        bg-[#ff4141]
-                        text-black
-                      "
-                        >
+                        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#ff4141] text-black">
                           <X size={13} strokeWidth={3} />
                         </span>
                       )}
@@ -986,11 +1099,27 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
         </section> */}
 
         {/* Campaign Process Cards */}
-        <section className="bg-[#030405] py-14 sm:py-20 md:py-28">
-          <div className="mx-auto max-w-[1200px] px-4 sm:px-5">
+        <section
+          className={cn(
+            "relative py-14 sm:py-20 md:py-28 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-[#030405]",
+          )}
+        >
+          {isLight ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-[55%] h-[420px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(186,155,255,0.18)_0%,rgba(196,181,253,0.08)_40%,transparent_72%)]"
+            />
+          ) : null}
+          <div className="relative mx-auto max-w-[1200px] px-4 sm:px-5">
             {/* Heading */}
             <div className="mb-10 text-center sm:mb-16">
-              <h2 className="text-[28px] font-bold leading-tight text-white sm:text-3xl md:text-5xl lg:text-6xl">
+              <h2
+                className={cn(
+                  "text-[28px] font-bold leading-tight sm:text-3xl md:text-5xl lg:text-6xl",
+                  isLight ? "text-black" : "text-white",
+                )}
+              >
                 The New way with
                 <br />
                 just three simple steps
@@ -1000,29 +1129,74 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
             {/* Cards */}
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               {/* Card 1 */}
-              <div className="relative min-h-[460px] overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717] sm:min-h-[515px]">
+              <div
+                className={cn(
+                  "relative min-h-[460px] overflow-hidden rounded-[20px] sm:min-h-[515px]",
+                  isLight
+                    ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                    : "border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]",
+                )}
+              >
                 {/* =========================
     BACKGROUND DETAILS FORM
 ========================== */}
-                <div className="absolute inset-0  opacity-[0.6] blur-[0.2px]">
-                  <div className="h-full bg-[#17181d]">
+                <div
+                  className={cn(
+                    "absolute inset-0",
+                    isLight
+                      ? ""
+                      : "opacity-[0.6] blur-[0.2px]",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "h-full",
+                      isLight ? "bg-[#ECECEC]" : "bg-[#17181d]",
+                    )}
+                  >
                     {/* Details */}
                     <div className="px-3 pt-16">
                       <div className="mb-5 flex items-center gap-2">
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-[8px] text-white">
+                        <div
+                          className={cn(
+                            "flex h-4 w-4 items-center justify-center rounded-full text-[8px]",
+                            isLight
+                              ? "bg-[#7C3AED]/15 text-[#7C3AED]"
+                              : "bg-white/10 text-white",
+                          )}
+                        >
                           1
                         </div>
 
-                        <span className="text-[10px] text-white">Details</span>
+                        <span
+                          className={cn(
+                            "text-[10px] font-medium",
+                            isLight ? "text-black/80" : "text-white",
+                          )}
+                        >
+                          Details
+                        </span>
                       </div>
 
                       {/* Campaign Title */}
                       <div className="mb-3">
-                        <label className="mb-1 block text-[7px] text-white">
+                        <label
+                          className={cn(
+                            "mb-1 block text-[7px]",
+                            isLight ? "text-black/70" : "text-white",
+                          )}
+                        >
                           Campaign title <span className="text-red-400">*</span>
                         </label>
 
-                        <div className="h-[22px] bg-white/[0.07] px-2 py-1 text-[7px] text-gray-400">
+                        <div
+                          className={cn(
+                            "h-[22px] px-2 py-1 text-[7px]",
+                            isLight
+                              ? "rounded-sm border border-[#0000000D] bg-white text-black/45"
+                              : "bg-white/[0.07] text-gray-400",
+                          )}
+                        >
                           e.g. Create a Viral shorts/video for our New App
                         </div>
                       </div>
@@ -1030,22 +1204,46 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                       {/* Platform + Content */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="mb-1 block text-[7px] text-white">
+                          <label
+                            className={cn(
+                              "mb-1 block text-[7px]",
+                              isLight ? "text-black/70" : "text-white",
+                            )}
+                          >
                             Platform <span className="text-red-400">*</span>
                           </label>
 
-                          <div className="flex h-[23px] items-center justify-between bg-white/[0.07] px-2 text-[7px] text-gray-300">
+                          <div
+                            className={cn(
+                              "flex h-[23px] items-center justify-between px-2 text-[7px]",
+                              isLight
+                                ? "rounded-sm border border-[#0000000D] bg-white text-black/60"
+                                : "bg-white/[0.07] text-gray-300",
+                            )}
+                          >
                             <span>◉ YouTube</span>
                             <span>⌄</span>
                           </div>
                         </div>
 
                         <div>
-                          <label className="mb-1 block text-[7px] text-white">
+                          <label
+                            className={cn(
+                              "mb-1 block text-[7px]",
+                              isLight ? "text-black/70" : "text-white",
+                            )}
+                          >
                             Content Type (optional)
                           </label>
 
-                          <div className="flex h-[23px] items-center bg-white/[0.07] px-2 text-[7px] text-gray-400">
+                          <div
+                            className={cn(
+                              "flex h-[23px] items-center px-2 text-[7px]",
+                              isLight
+                                ? "rounded-sm border border-[#0000000D] bg-white text-black/45"
+                                : "bg-white/[0.07] text-gray-400",
+                            )}
+                          >
                             Select content type
                           </div>
                         </div>
@@ -1053,19 +1251,54 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
                       {/* Thumbnail */}
                       <div className="mt-3">
-                        <label className="mb-1 block text-[7px] text-white">
+                        <label
+                          className={cn(
+                            "mb-1 block text-[7px]",
+                            isLight ? "text-black/70" : "text-white",
+                          )}
+                        >
                           Thumbnail
                         </label>
 
-                        <div className="flex h-[56px] flex-col items-center justify-center bg-white/[0.06]">
-                          <Upload size={10} className="mb-2 text-gray-400" />
+                        <div
+                          className={cn(
+                            "flex h-[56px] flex-col items-center justify-center",
+                            isLight
+                              ? "rounded-sm border border-dashed border-[#0000001A] bg-white"
+                              : "bg-white/[0.06]",
+                          )}
+                        >
+                          <Upload
+                            size={10}
+                            className={cn(
+                              "mb-2",
+                              isLight ? "text-black/45" : "text-gray-400",
+                            )}
+                          />
 
-                          <p className="text-[7px] text-gray-300">
+                          <p
+                            className={cn(
+                              "text-[7px]",
+                              isLight ? "text-black/60" : "text-gray-300",
+                            )}
+                          >
                             Drag, drop or{" "}
-                            <span className="underline">browse thumbnail</span>
+                            <span
+                              className={cn(
+                                "underline",
+                                isLight ? "text-[#7C3AED]" : "",
+                              )}
+                            >
+                              browse thumbnail
+                            </span>
                           </p>
 
-                          <p className="mt-1 text-[6px] text-gray-500">
+                          <p
+                            className={cn(
+                              "mt-1 text-[6px]",
+                              isLight ? "text-black/40" : "text-gray-500",
+                            )}
+                          >
                             Max file size: 5MB
                           </p>
                         </div>
@@ -1075,47 +1308,71 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 </div>
 
                 {/* =========================
-    DARK OVERLAY
+    SHADE / OVERLAY
 ========================== */}
 
-                <div className="absolute inset-0 bg-black/35" />
-
-                {/* Top fade */}
-                <div className="absolute inset-x-0 top-0 h-[220px] bg-gradient-to-b from-black/30 via-black/20 to-transparent" />
-
-                {/* Top-left haze */}
-                <div className="pointer-events-none absolute -left-16 -top-16 h-60 w-60 rounded-full bg-[#D9D9D9]/25 blur-[90px]" />
+                {isLight ? (
+                  <>
+                    {/* Soft frosted shade over details */}
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#ECECEC]/35 via-[#ECECEC]/55 to-[#ECECEC]" />
+                    {/* Soft white haze behind budget / top area */}
+                    <div className="pointer-events-none absolute -right-8 -top-8 h-48 w-48 rounded-full bg-white/60 blur-[50px]" />
+                    <div className="pointer-events-none absolute left-1/2 top-[40%] h-24 w-[90%] -translate-x-1/2 rounded-full bg-white/50 blur-[40px]" />
+                  </>
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-black/35" />
+                    <div className="absolute inset-x-0 top-0 h-[220px] bg-gradient-to-b from-black/30 via-black/20 to-transparent" />
+                    <div className="pointer-events-none absolute -left-16 -top-16 h-60 w-60 rounded-full bg-[#D9D9D9]/25 blur-[90px]" />
+                  </>
+                )}
 
                 {/* =========================
     BUDGET CARD
 ========================== */}
 
-                <div className="absolute right-7 top-6 z-10 opacity-[0.6] blur-[0.2px]">
+                <div
+                  className={cn(
+                    "absolute right-7 top-6 z-10",
+                    isLight ? "opacity-100" : "opacity-[0.85] blur-[0.2px]",
+                  )}
+                >
                   {/* Purple glow */}
-                  <div className="absolute -inset-[2px] rounded-[14px] blur-md" />
+                  <div
+                    className={cn(
+                      "absolute -inset-[2px] rounded-[14px] blur-md",
+                      isLight &&
+                        "bg-[radial-gradient(circle,rgba(124,58,237,0.18),transparent_70%)]",
+                    )}
+                  />
 
                   {/* Budget Card */}
                   <div
-                    className="
-      relative
-      w-[170px]
-      rounded-xl
-      border
-      border-purple-400/25
-      border-r-purple-400/60
-      border-t-purple-400/40
-      bg-[#16161b]/55
-      p-3
-      backdrop-blur-xl
-      shadow-[8px_0_18px_rgba(124,58,237,0.18)]
-    "
+                    className={cn(
+                      "relative w-[170px] rounded-xl border p-3 backdrop-blur-xl",
+                      isLight
+                        ? "border-[#0000000D] bg-[#ECECEC]"
+                        : "border-purple-400/25 border-r-purple-400/60 border-t-purple-400/40 bg-[#16161b]/55 shadow-[8px_0_18px_rgba(124,58,237,0.18)]",
+                    )}
                   >
-                    <div className="mb-2 flex items-center gap-2 text-xs font-medium text-gray-300">
+                    <div
+                      className={cn(
+                        "mb-2 flex items-center gap-2 text-xs font-medium",
+                        isLight ? "text-black/60" : "text-gray-300",
+                      )}
+                    >
                       <WalletCards size={14} />
                       Budget
                     </div>
 
-                    <div className="rounded-md bg-black/25 px-3 py-2 text-sm font-semibold text-gray-400 backdrop-blur-md">
+                    <div
+                      className={cn(
+                        "rounded-md px-3 py-2 text-sm font-semibold backdrop-blur-md",
+                        isLight
+                          ? "border border-[#0000000D] bg-white text-black/70"
+                          : "bg-black/25 text-gray-400",
+                      )}
+                    >
                       $ 24000
                     </div>
                   </div>
@@ -1125,27 +1382,56 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
     BOTTOM GRADIENT
 ========================== */}
 
-                <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#191919] via-[#191919]/95 to-transparent" />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t to-transparent",
+                    isLight
+                      ? "from-[#ECECEC] via-[#ECECEC]/95"
+                      : "from-[#191919] via-[#191919]/95",
+                  )}
+                />
 
                 {/* =========================
     TABS
 ========================== */}
 
                 <div className="absolute inset-x-0 top-[260px] z-20 px-4 sm:left-5 sm:right-5 sm:top-[300px] sm:px-0">
-                  <div className="flex items-center rounded-full border border-white/10 bg-[#2a2a2a]/90 p-1 backdrop-blur-lg">
-                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-2.5 py-1.5 text-xs text-white shadow-[0_0_15px_rgba(124,58,237,0.6)] sm:px-3 sm:text-sm">
+                  <div
+                    className={cn(
+                      "flex items-center rounded-full p-1 backdrop-blur-lg",
+                      isLight
+                        ? "border border-black/[0.06] bg-white shadow-[0_10px_30px_rgba(20,16,40,0.12)]"
+                        : "border border-white/10 bg-[#2a2a2a]/90",
+                    )}
+                  >
+                    <button className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-2.5 py-1.5 text-xs text-white shadow-[0_4px_18px_rgba(124,58,237,0.55)] sm:px-3 sm:text-sm">
                       CPM
                     </button>
 
-                    <button className="flex-1 text-xs text-gray-400 sm:text-sm">
+                    <button
+                      className={cn(
+                        "flex-1 text-xs sm:text-sm",
+                        isLight ? "text-black/55" : "text-gray-400",
+                      )}
+                    >
                       Leaderboard
                     </button>
 
-                    <button className="flex-1 text-xs text-gray-400 sm:text-sm">
+                    <button
+                      className={cn(
+                        "flex-1 text-xs sm:text-sm",
+                        isLight ? "text-black/55" : "text-gray-400",
+                      )}
+                    >
                       Milestone
                     </button>
 
-                    <button className="flex-1 text-xs text-gray-400 sm:text-sm">
+                    <button
+                      className={cn(
+                        "flex-1 text-xs sm:text-sm",
+                        isLight ? "text-black/55" : "text-gray-400",
+                      )}
+                    >
                       Dual Rewards
                     </button>
                   </div>
@@ -1156,19 +1442,37 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 ========================== */}
 
                 <div className="absolute bottom-10 left-7 right-7 z-20">
-                  <h2 className="mb-3 text-[18px] font-semibold text-[#d6d6d6]">
+                  <h2
+                    className={cn(
+                      "mb-3 text-[18px] font-semibold",
+                      isLight ? "text-black" : "text-[#d6d6d6]",
+                    )}
+                  >
                     Set up your campaign
                   </h2>
 
-                  <p className="text-[12px] leading-[1.45] text-[#a8a8a8]">
+                  <p
+                    className={cn(
+                      "text-[12px] leading-[1.45]",
+                      isLight ? "text-black/50" : "text-[#a8a8a8]",
+                    )}
+                  >
                     Define your brief, content requirements, rules, platforms
                     and budget to tailor your campaign strategy.
                   </p>
                 </div>
               </div>
+
               {/* Card 2 */}
-              <div className="relative min-h-[515px] overflow-hidden rounded-[20px] border border-white/10 bg-[#1b1b1b]">
-                {/* Campaign thumbnails sitting behind the reel */}
+              <div
+                className={cn(
+                  "relative min-h-[515px] overflow-hidden rounded-[20px]",
+                  isLight
+                    ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                    : "border border-white/10 bg-[#1b1b1b]",
+                )}
+              >
+                {/* Campaign thumbnails sitting behind the reel — keep in both modes */}
                 <div className="absolute inset-0 scale-110 blur-[2px]">
                   <div className="relative h-1/2 w-full">
                     <Image
@@ -1189,50 +1493,116 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   </div>
                 </div>
 
-                <div className="absolute inset-0 bg-[#1b1b1b]/80" />
+                <div
+                  className={cn(
+                    "absolute inset-0",
+                    isLight ? "bg-[#ECECEC]/70" : "bg-[#1b1b1b]/80",
+                  )}
+                />
 
-                {/* White haze bleeding out from behind the reel */}
-                <div className="pointer-events-none absolute inset-x-6 bottom-32 top-10 rounded-[48px] bg-white/[0.12] blur-[55px]" />
-                <div className="pointer-events-none absolute -left-6 top-20 h-52 w-32 rounded-full bg-white/20 blur-[55px]" />
+                {/* Soft haze behind center image */}
+                <div
+                  className={cn(
+                    "pointer-events-none absolute inset-x-6 bottom-32 top-10 rounded-[48px] blur-[55px]",
+                    isLight ? "bg-white/40" : "bg-white/[0.12]",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "pointer-events-none absolute -left-6 top-20 h-52 w-32 rounded-full blur-[55px]",
+                    isLight ? "bg-white/50" : "bg-white/20",
+                  )}
+                />
 
-                {/* Creator reel */}
+                {/* Center creator image */}
                 <div className="absolute inset-x-0 bottom-0 top-2">
                   <Image
-                    src="/images/Mask group (1).png"
+                    src={
+                      isLight
+                        ? "/images/5ea833a17e931da84955c160c3b7bcff595137d2.png"
+                        : "/images/Mask group (1).png"
+                    }
                     alt="Creator publishing a reel"
                     fill
                     className="object-contain object-top"
                   />
+                  {/* Bottom shade on image */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 h-[45%]",
+                      isLight
+                        ? "bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/85 to-transparent"
+                        : "bg-gradient-to-t from-[#1b1b1b] via-[#1b1b1b]/70 to-transparent",
+                    )}
+                  />
                 </div>
 
-                {/* Dark overlay */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-[#1b1b1b]" />
+                {/* Overlay */}
+                <div
+                  className={cn(
+                    "absolute inset-0 bg-gradient-to-b",
+                    isLight
+                      ? "from-transparent via-transparent to-[#ECECEC]"
+                      : "from-black/20 via-black/30 to-[#1b1b1b]",
+                  )}
+                />
 
                 {/* Publish badge */}
-                <div className="absolute right-9 top-7">
-                  <span className="rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-4 py-2 text-sm font-medium text-white shadow-lg">
+                <div className="absolute right-9 top-7 z-10">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-4 py-2 text-sm font-medium text-white shadow-lg">
+                    {isLight ? <Megaphone size={14} /> : null}
                     Publish
                   </span>
                 </div>
 
                 {/* Content */}
-                <div className="absolute bottom-8 left-7 right-7">
-                  <h3 className="mb-3 text-2xl font-semibold text-white">
+                <div className="absolute bottom-8 left-7 right-7 z-10">
+                  <h3
+                    className={cn(
+                      "mb-3 text-2xl font-semibold",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     Creators discover & publish
                   </h3>
 
-                  <p className="text-base leading-6 text-gray-400">
-                    Creators create content based on your brief, gets reviewed
-                    and goes live after your approval
+                  <p
+                    className={cn(
+                      "text-base leading-6",
+                      isLight ? "text-black/50" : "text-gray-400",
+                    )}
+                  >
+                    {isLight
+                      ? "Your campaign goes live to a network of creators. They create and publish content under your brief."
+                      : "Creators create content based on your brief, gets reviewed and goes live after your approval"}
                   </p>
                 </div>
               </div>
 
               {/* Card 3 */}
-              <div className="relative min-h-[515px] overflow-hidden rounded-[20px] border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]">
+              <div
+                className={cn(
+                  "relative min-h-[515px] overflow-hidden rounded-[20px]",
+                  isLight
+                    ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                    : "border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]",
+                )}
+              >
                 {/* Rewards panel */}
-                <div className="absolute left-5 right-5 top-16 rounded-2xl border border-white/5 bg-[#202020]/90 p-5">
-                  <h4 className="mb-5 text-base font-semibold text-white">
+                <div
+                  className={cn(
+                    "absolute left-5 right-5 top-16 rounded-2xl p-5",
+                    isLight
+                      ? "border border-black/[0.06] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                      : "border border-white/5 bg-[#202020]/90",
+                  )}
+                >
+                  <h4
+                    className={cn(
+                      "mb-5 text-base font-semibold",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     Rewards Paid
                   </h4>
 
@@ -1258,7 +1628,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   ].map((user) => (
                     <div
                       key={user.name}
-                      className="flex items-center justify-between border-b border-white/5 py-3 last:border-0"
+                      className={cn(
+                        "flex items-center justify-between py-3 last:border-0",
+                        isLight
+                          ? "border-b border-black/[0.06]"
+                          : "border-b border-white/5",
+                      )}
                     >
                       <div className="flex items-center gap-3">
                         <div className="relative h-8 w-8 overflow-hidden rounded-full">
@@ -1272,37 +1647,83 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                         </div>
 
                         <div>
-                          <p className="text-xs text-gray-300">{user.name}</p>
-                          <p className="text-[9px] text-gray-500">
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isLight ? "text-black/80" : "text-gray-300",
+                            )}
+                          >
+                            {user.name}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-[9px]",
+                              isLight ? "text-black/40" : "text-gray-500",
+                            )}
+                          >
                             {user.category}
                           </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-300">
+                        <span
+                          className={cn(
+                            "text-sm",
+                            isLight ? "text-black/80" : "text-gray-300",
+                          )}
+                        >
                           {user.amount}
                         </span>
 
-                        <span className="rounded-full bg-green-500/10 px-2 py-1 text-[9px] text-green-400">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-1 text-[9px]",
+                            isLight
+                              ? "bg-[#E8F8F1] text-[#1EAA7D]"
+                              : "bg-green-500/10 text-green-400",
+                          )}
+                        >
                           ✓ Paid
                         </span>
                       </div>
                     </div>
                   ))}
 
-                  <p className="mt-5 text-center text-[9px] text-gray-500">
+                  <p
+                    className={cn(
+                      "mt-5 text-center text-[9px]",
+                      isLight ? "text-black/40" : "text-gray-500",
+                    )}
+                  >
                     ▮▮ All payments are based on verified performance
                   </p>
                 </div>
 
+                {/* Bottom fade for light mode text area */}
+                {isLight ? (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[42%] bg-gradient-to-t from-[#ECECEC] via-[#ECECEC] to-transparent" />
+                ) : null}
+
                 {/* Content */}
-                <div className="absolute bottom-8 left-7 right-7">
-                  <h3 className="mb-3 text-2xl font-semibold text-white">
-                    Verified results. Rewards paid.
+                <div className="absolute bottom-8 left-7 right-7 z-10">
+                  <h3
+                    className={cn(
+                      "mb-3 text-2xl font-semibold",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
+                    {isLight
+                      ? "Performance is verified & rewards are paid"
+                      : "Verified results. Rewards paid."}
                   </h3>
 
-                  <p className="text-base leading-6 text-gray-400">
+                  <p
+                    className={cn(
+                      "text-base leading-6",
+                      isLight ? "text-black/50" : "text-gray-400",
+                    )}
+                  >
                     We track performance so creators get paid on results and you
                     see where your budget went.
                   </p>
@@ -1312,433 +1733,694 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
           </div>
         </section>
 
-        <section className="relative overflow-hidden bg-[#030307] px-4 py-16 sm:py-20 md:py-24">
-      {/* Purple background glow */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
-        <Image
-          src="/images/eda9d4af3a5188c592e888012bb7b9e177b3c04d.png"
-          alt=""
-          fill
-          className="scale-y-[-1] object-fill"
-        />
-      </div>
-
-      {/* Annotation */}
-      <div className="relative z-10 mx-auto mb-10 flex max-w-[900px] justify-center px-2 sm:mb-16 sm:justify-end sm:px-6 md:mb-24">
-        <div className="relative mr-0 text-center sm:mr-4 sm:text-left">
-          <p className="font-[cursive] text-lg italic text-white/75 sm:text-xl md:text-2xl">
-            Get full control to approve a reel before making live
-          </p>
-
-          {/* Curved arrow */}
-          <svg
-            className="absolute -bottom-16 left-1/2 hidden h-20 w-20 -translate-x-1/2 text-white/70 sm:-bottom-20 sm:left-24 sm:block sm:h-24 sm:w-24 sm:translate-x-0"
-            viewBox="0 0 100 100"
-            fill="none"
-          >
-            <path
-              d="M15 80 C30 45, 65 40, 55 15"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-            <path
-              d="M51 18 L55 12 L58 20"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle
-              cx="54"
-              cy="50"
-              r="5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            />
-          </svg>
-        </div>
-      </div>
-
-      {/* Main glass container — outer shell for half-merged card */}
-      <div className="relative z-10 mx-auto flex h-[340px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] border border-white/15 bg-[#121212] px-3 pt-6 shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40] sm:h-[400px] sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12">
-        {/* Dark overlay */}
-        <div className="absolute inset-0 bg-black/30" />
-
-        {/* Top-left haze */}
-        <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
-
-        {/* Submission card — sits inside outer shell and is clipped at the bottom */}
-        <div className="relative z-10 w-full max-w-[485px] rounded-[16px] border border-[#353535] bg-[#171717] px-4 py-6 shadow-[8px_8px_50px_0px_#00000080] sm:rounded-[18px] sm:px-9 sm:py-9 sm:shadow-[4px_12px_4px_0px_#0000001A]">
-          {/* Header */}
-          <div className="mb-5 flex items-start justify-between gap-3 sm:mb-7">
-            <div className="min-w-0">
-              <h2 className="text-lg font-medium text-[#d8d8df] sm:text-xl">
-                Creator Submissions
-              </h2>
-
-              <p className="mt-1 text-xs text-[#92929a] sm:text-sm">
-                Payment are done after brand approves
-              </p>
+        <section
+          className={cn(
+            "relative overflow-hidden px-4 py-16 sm:py-20 md:py-24 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-[#030307]",
+          )}
+        >
+          {/* Purple background glow — dark mode only */}
+          {!isLight ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 top-1/2 opacity-70 mix-blend-screen">
+              <Image
+                src="/images/eda9d4af3a5188c592e888012bb7b9e177b3c04d.png"
+                alt=""
+                fill
+                className="scale-y-[-1] object-fill"
+              />
             </div>
+          ) : null}
 
-            <p className="shrink-0 pt-1 text-lg font-medium text-[#d8d8df] sm:text-xl">
-              $2,000
-            </p>
-          </div>
-
-          {/* Submission list */}
-          <div>
-            {submissions.map((submission, index) => (
-              <div
-                key={submission.name}
-                className={`flex flex-wrap items-center justify-between gap-3 py-3 sm:py-4 ${
-                  index !== submissions.length - 1
-                    ? "border-b border-white/[0.04]"
-                    : ""
-                }`}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white/10 sm:h-11 sm:w-11">
-                    <Image
-                      src={submission.image}
-                      alt={submission.name}
-                      width={44}
-                      height={44}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-
-                  <div className="min-w-0">
-                    <h3 className="truncate text-[14px] font-medium text-[#dedee3] sm:text-[16px]">
-                      {submission.name}
-                    </h3>
-
-                    <p className="mt-0.5 text-xs text-[#92929a] sm:text-sm">
-                      {submission.subtitle}
-                    </p>
-                  </div>
-                </div>
-
-                {submission.approved ? (
-                  <span className="rounded-full bg-[#1eaa7d] px-3 py-1.5 text-xs font-medium text-white sm:px-4 sm:py-2 sm:text-sm">
-                    ✓ Approved
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.02] px-2.5 py-1.5 text-xs text-[#a3a3aa] sm:px-3 sm:py-2 sm:text-sm">
-                    <span className="flex h-3 w-3 items-center justify-center rounded-full border border-[#8b8b94] text-[8px]">
-                      ○
-                    </span>
-                    Under Review
-                  </span>
+          {/* Annotation */}
+          <div className="relative z-10 mx-auto mb-10 flex max-w-[900px] justify-center px-2 sm:mb-16 sm:justify-end sm:px-6 md:mb-24">
+            <div className="relative mr-0 text-center sm:mr-4 sm:text-left">
+              <p
+                className={cn(
+                  "font-[cursive] text-lg italic sm:text-xl md:text-2xl",
+                  isLight ? "text-black/50" : "text-white/75",
                 )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bottom fade so the clipped card reads as half-merged into the shell */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t from-[#121212] to-transparent sm:h-20" />
-      </div>
-
-    </section>
-
-
-    <section className="overflow-hidden bg-black px-4 py-12 text-white sm:px-6 sm:py-16 lg:px-10">
-      <div className="mx-auto max-w-[1110px]">
-
-        {/* Heading */}
-        <h2 className="mb-10 text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-4xl md:text-5xl">
-          Everything that you need
-        </h2>
-
-        {/* TOP TWO CARDS */}
-        <div className="grid gap-5 lg:grid-cols-2">
-
-          {/* REAL ENGAGEMENT */}
-          <div className="relative h-[380px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717] sm:h-[425px]">
-            {/* Background profiles */}
-            <div className="absolute left-1/2 top-10 z-[1] flex w-[230px] -translate-x-1/2 flex-col gap-2.5">
-              {profiles.map((profile, index) => (
-                <div
-                  key={index}
-                  className={`
-                    relative flex h-[42px] items-center gap-2 rounded-[12px]
-                    border border-white/[0.07] bg-[#151515]/90 px-2
-                    shadow-[0_5px_20px_rgba(0,0,0,0.3)]
-                    ${index === 1 ? "opacity-45" : ""}
-                  `}
-                >
-                  <div className="h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full bg-[#292929]">
-                    <img
-                      src={profile.image}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-
-                  <div className="min-w-0 flex-1 leading-none">
-                    <div className="truncate text-[11px] font-medium text-white/65">
-                      {profile.name}
-                    </div>
-                    <div
-                      className={`mt-1 truncate text-[9px] ${
-                        profile.type === "bad"
-                          ? "text-white/20"
-                          : "text-white/25"
-                      }`}
-                    >
-                      {profile.status}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full ${
-                      profile.type === "bad" ? "bg-[#d92d25]" : "bg-[#26a844]"
-                    }`}
-                  >
-                    {profile.type === "bad" ? (
-                      <svg viewBox="0 0 12 12" className="h-2 w-2" fill="none">
-                        <path
-                          d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
-                          stroke="white"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 12 12" className="h-2 w-2" fill="none">
-                        <path
-                          d="M2.5 6.2L4.8 8.3L9.5 3.7"
-                          stroke="white"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Fade over profiles */}
-            <div className="pointer-events-none absolute inset-x-0 top-[70px] z-[2] h-[220px] bg-gradient-to-b from-transparent via-[#171717]/35 to-[#171717]" />
-
-            {/* Pinched purple curve */}
-            <div className="pointer-events-none absolute inset-x-0 top-[92px] z-[4] h-[150px]">
-              <div className="absolute inset-0 blur-[18px] opacity-70">
-                <svg
-                  viewBox="0 0 1000 200"
-                  preserveAspectRatio="none"
-                  className="h-full w-full"
-                >
-                  <path
-                    d="M0 10 C220 95, 780 95, 1000 10 L1000 190 C780 105, 220 105, 0 190 Z"
-                    fill="#754FF6"
-                  />
-                </svg>
-              </div>
-
-              <svg
-                viewBox="0 0 1000 200"
-                preserveAspectRatio="none"
-                className="relative h-full w-full"
               >
-                <defs>
-                  <radialGradient
-                    id="engagementPurple"
-                    cx="50%"
-                    cy="51.5%"
-                    r="50%"
-                    fx="50%"
-                    fy="51.5%"
-                    gradientUnits="objectBoundingBox"
-                    gradientTransform="translate(0.5 0.515) scale(1 0.97) translate(-0.5 -0.515)"
-                  >
-                    <stop offset="0%" stopColor="#754FF6" />
-                    <stop offset="100%" stopColor="#442E90" />
-                  </radialGradient>
-                  <filter id="engagementNoise">
-                    <feTurbulence
-                      type="fractalNoise"
-                      baseFrequency="0.9"
-                      numOctaves="2"
-                      stitchTiles="stitch"
-                    />
-                    <feColorMatrix type="saturate" values="0" />
-                    <feBlend in="SourceGraphic" mode="overlay" />
-                  </filter>
-                </defs>
+                Get full control to approve a reel before making live
+              </p>
+
+              {/* Curved arrow */}
+              <svg
+                className={cn(
+                  "absolute -bottom-16 left-1/2 hidden h-20 w-20 -translate-x-1/2 sm:-bottom-20 sm:left-24 sm:block sm:h-24 sm:w-24 sm:translate-x-0",
+                  isLight ? "text-black/35" : "text-white/70",
+                )}
+                viewBox="0 0 100 100"
+                fill="none"
+              >
                 <path
-                  d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
-                  fill="url(#engagementPurple)"
+                  d="M15 80 C30 45, 65 40, 55 15"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
                 />
                 <path
-                  d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
-                  fill="white"
-                  opacity="0.05"
-                  filter="url(#engagementNoise)"
+                  d="M51 18 L55 12 L58 20"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle
+                  cx="54"
+                  cy="50"
+                  r="5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
                 />
               </svg>
-
-              <div className="absolute inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
-                <svg
-                  width="22"
-                  height="22"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="hidden shrink-0 sm:block"
-                >
-                  <path
-                    d="M4 11.5L13.5 9L15.5 15L6 17.5L4 11.5Z"
-                    stroke="white"
-                    strokeWidth="1.5"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M13.5 9L15.2 5.8L19.2 7.1L17.8 10.2"
-                    stroke="white"
-                    strokeWidth="1.5"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M9 16.5L10.5 21"
-                    stroke="white"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M7.5 21H13"
-                    stroke="white"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M18.5 2.5V5.5M17 4H20"
-                    stroke="white"
-                    strokeWidth="1.2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="text-center text-[12px] font-medium tracking-[-0.02em] text-white sm:text-[15px]">
-                  Authentic Data. Verified Performance
-                </span>
-              </div>
-            </div>
-
-            {/* Bottom text */}
-            <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
-              <h3 className="mb-2 text-lg font-semibold sm:text-xl">
-                Real Engagement Only
-              </h3>
-              <p className="max-w-[480px] text-[13px] leading-5 text-white/50 sm:text-[15px] sm:leading-6">
-                We scan every view for suspicious activity and filter out bots,
-                clicks farms and fake traffic - so you only pay for real people
-              </p>
             </div>
           </div>
 
-          {/* CONNECTED AT SOURCE */}
-          <div className="relative h-[380px] overflow-hidden rounded-[18px] border border-white/10 bg-[#171717] sm:h-[425px]">
-
-            {/* API status */}
-            <div className="absolute left-0 right-0 top-7 z-10 text-center text-sm text-green-400">
-              <span className="mr-2">●</span>
-              API Connected
-            </div>
-
-            {/* Semicircle orbit */}
-            <div className="absolute inset-x-0 top-10 bottom-[118px]">
-              <div className="absolute left-1/2 top-[58%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2">
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-[52%] overflow-hidden">
-                  <div className="absolute left-1/2 top-[150px] h-[292px] w-[292px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
-                  <div className="absolute left-1/2 top-[150px] h-[230px] w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
-                  <div className="absolute left-1/2 top-[150px] h-[168px] w-[168px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/15" />
-                </div>
-
-                <div className="absolute left-1/2 top-1/2 z-10 flex h-[80px] w-[80px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#1c1c1c] shadow-[0_22px_40px_rgba(109,70,255,0.55)]">
-                  <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_92%,rgba(124,58,237,0.95),transparent_56%)]" />
-                  <Image
-                    src="/images/Group@2x.png"
-                    alt="Game of Creators"
-                    width={48}
-                    height={48}
-                    className="relative z-10 h-12 w-12 object-contain"
-                  />
-                </div>
-
-                <div
-                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
-                  style={{ left: "calc(50% - 76px)", top: "calc(50% - 76px)" }}
-                >
-                  <SiTiktok className="h-6 w-6 text-white" />
-                </div>
-
-                <div
-                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
-                  style={{ left: "calc(50% + 76px)", top: "calc(50% - 76px)" }}
-                >
-                  <FaXTwitter className="h-5 w-5 text-white" />
-                </div>
-
-                <div
-                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_0_28px_rgba(124,58,237,0.7)]"
-                  style={{ left: "calc(50% - 118px)", top: "50%" }}
-                >
-                  <SiYoutube className="h-6 w-6 text-[#FF0000]" />
-                </div>
-
-                <div
-                  className="absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]"
-                  style={{ left: "calc(50% + 118px)", top: "50%" }}
-                >
-                  <SiInstagram className="h-6 w-6 text-[#E1306C]" />
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom text */}
-            <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
-              <h3 className="mb-2 text-lg font-semibold sm:text-xl">
-                Connected at the source
-              </h3>
-
-              <p className="max-w-[480px] text-[13px] leading-5 text-white/50 sm:text-[15px] sm:leading-6">
-                Campaign data is pulled directly from Instagram and
-                YouTube, giving you verified performance instead of
-                self-reported numbers.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* CAMPAIGN CARD */}
-        <div className="mt-6 w-full overflow-hidden rounded-[16px] border border-white/10 bg-[#151515] px-4 py-6 sm:rounded-[20px] sm:px-6 sm:py-8 lg:px-9 lg:py-9">
-      <div className="relative flex flex-col xl:min-h-[390px] xl:flex-row">
-
-        {/* LEFT CONTENT */}
-        <div className="relative z-30 w-full shrink-0 xl:w-[310px]">
-          <h2 className="text-[20px] font-semibold tracking-[-0.4px] text-white/80 sm:text-[22px]">
-            Run Campaigns, Your way.
-          </h2>
-
-          <p className="mt-2 max-w-[280px] text-[14px] leading-[22px] text-white/50 sm:max-w-[250px] sm:text-[16px] sm:leading-[24px]">
-            Chose the format that fit your goals -
-            <br className="hidden sm:block" />
-            from guaranteed reach to
-            <br className="hidden sm:block" />
-            performance-based rewards
-          </p>
-        </div>
-
-        {/* CARDS AREA — horizontal scroll on small screens, fan on xl */}
-        <div className="relative -mx-4 mt-6 overflow-x-auto pb-2 xl:absolute xl:left-[280px] xl:top-[-8px] xl:mx-0 xl:mt-0 xl:h-[460px] xl:w-[calc(100%-240px)] xl:overflow-visible xl:pb-0 2xl:left-[300px]">
-          <div className="relative h-[400px] w-[780px] sm:h-[430px] sm:w-[860px] xl:h-[460px] xl:w-full">
-
-          {/* ================= CPM CARD ================= */}
+          {/* Main glass container — outer shell for half-merged card */}
           <div
-            className="
+            className={cn(
+              "relative z-10 mx-auto flex h-[340px] w-full max-w-[730px] items-start justify-center overflow-hidden rounded-[16px] px-3 pt-6 sm:h-[400px] sm:w-[90%] sm:rounded-[18px] sm:px-4 sm:pt-10 md:h-[430px] md:pt-12",
+              isLight
+                ? "border border-[#0000001A] bg-white"
+                : "border border-white/15 bg-[#121212] shadow-[inset_0px_0px_4.08px_0px_#FFFFFF40]",
+            )}
+          >
+            {/* Dark overlay — dark mode only */}
+            {!isLight ? <div className="absolute inset-0 bg-black/30" /> : null}
+
+            {/* Top-left haze */}
+            {!isLight ? (
+              <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#D9D9D9]/25 blur-[120px]" />
+            ) : null}
+
+            {/* Submission card — sits inside outer shell and is clipped at the bottom */}
+            <div
+              className={cn(
+                "relative z-10 w-full max-w-[485px] rounded-[16px] px-4 py-6 sm:rounded-[18px] sm:px-9 sm:py-9",
+                isLight
+                  ? "bg-[#F8F8F8] shadow-[0_10.18px_20.36px_0_#6C6C6C1A] border border-[#0000000D]"
+                  : "border border-[#353535] bg-[#171717] shadow-[8px_8px_50px_0px_#00000080] sm:shadow-[4px_12px_4px_0px_#0000001A]",
+              )}
+            >
+              {/* Header */}
+              <div className="mb-5 flex items-start justify-between gap-3 sm:mb-7">
+                <div className="min-w-0">
+                  <h2
+                    className={cn(
+                      "text-lg font-medium sm:text-xl",
+                      isLight ? "text-black" : "text-[#d8d8df]",
+                    )}
+                  >
+                    Creator Submissions
+                  </h2>
+
+                  <p
+                    className={cn(
+                      "mt-1 text-xs sm:text-sm",
+                      isLight ? "text-black/45" : "text-[#92929a]",
+                    )}
+                  >
+                    Payment are done after brand approves
+                  </p>
+                </div>
+
+                <p
+                  className={cn(
+                    "shrink-0 pt-1 text-lg font-medium sm:text-xl",
+                    isLight ? "text-black" : "text-[#d8d8df]",
+                  )}
+                >
+                  $2,000
+                </p>
+              </div>
+
+              {/* Submission list */}
+              <div>
+                {submissions.map((submission, index) => (
+                  <div
+                    key={submission.name}
+                    className={cn(
+                      "flex flex-wrap items-center justify-between gap-3 py-3 sm:py-4",
+                      index !== submissions.length - 1 &&
+                        (isLight
+                          ? "border-b border-black/[0.06]"
+                          : "border-b border-white/[0.04]"),
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className={cn(
+                          "h-10 w-10 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11",
+                          isLight ? "bg-[#DEDEDE]" : "bg-white/10",
+                        )}
+                      >
+                        <Image
+                          src={submission.image}
+                          alt={submission.name}
+                          width={44}
+                          height={44}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3
+                          className={cn(
+                            "truncate text-[14px] font-medium sm:text-[16px]",
+                            isLight ? "text-black" : "text-[#dedee3]",
+                          )}
+                        >
+                          {submission.name}
+                        </h3>
+
+                        <p
+                          className={cn(
+                            "mt-0.5 text-xs sm:text-sm",
+                            isLight ? "text-black/45" : "text-[#92929a]",
+                          )}
+                        >
+                          {submission.subtitle}
+                        </p>
+                      </div>
+                    </div>
+
+                    {submission.approved ? (
+                      <span
+                        className={cn(
+                          "rounded-full px-3 py-1.5 text-xs font-medium sm:px-4 sm:py-2 sm:text-sm",
+                          isLight
+                            ? "bg-[#E8F8F1] text-[#1EAA7D]"
+                            : "bg-[#1eaa7d] text-white",
+                        )}
+                      >
+                        ✓ Approved
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs sm:px-3 sm:py-2 sm:text-sm",
+                          isLight
+                            ? "border border-[#0000000D] bg-[#DEDEDE] text-black/50"
+                            : "border border-white/10 bg-white/[0.02] text-[#a3a3aa]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-3 w-3 items-center justify-center rounded-full border text-[8px]",
+                            isLight ? "border-black/30" : "border-[#8b8b94]",
+                          )}
+                        >
+                          ○
+                        </span>
+                        Under Review
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom fade so the clipped card reads as half-merged into the shell */}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t to-transparent sm:h-20",
+                isLight ? "" : "from-[#121212]",
+              )}
+            />
+          </div>
+        </section>
+
+        <section
+          className={cn(
+            "relative overflow-hidden px-4 py-12 sm:px-6 sm:py-16 lg:px-10 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+          )}
+        >
+          <div className="relative mx-auto max-w-[1110px]">
+            {isLight ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-[48%] h-[520px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(186,155,255,0.16)_0%,rgba(196,181,253,0.06)_45%,transparent_72%)]"
+              />
+            ) : null}
+
+            {/* Heading */}
+            <h2
+              className={cn(
+                "relative mb-10 text-center text-3xl font-bold tracking-tight sm:mb-16 sm:text-4xl md:text-5xl",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              Everything that you need
+            </h2>
+
+            {/* TOP TWO CARDS */}
+            <div className="relative grid gap-5 lg:grid-cols-2">
+              {/* REAL ENGAGEMENT */}
+              <div
+                className={cn(
+                  "relative h-[380px] overflow-hidden rounded-[18px] sm:h-[425px]",
+                  isLight
+                    ? "bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                    : "border border-white/10 bg-[#171717]",
+                )}
+              >
+                {isLight ? (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-[-10%] top-[40px] z-0 h-[220px] bg-[radial-gradient(ellipse_at_center,rgba(117,79,246,0.35)_0%,rgba(186,155,255,0.18)_45%,transparent_75%)]"
+                  />
+                ) : null}
+
+                {/* Background profiles */}
+                <div className="absolute left-1/2 top-10 z-[1] flex w-[230px] -translate-x-1/2 flex-col gap-2.5">
+                  {profiles.map((profile, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        "relative flex h-[42px] items-center gap-2 rounded-[12px] px-2",
+                        isLight
+                          ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                          : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
+                        index === 1 && "opacity-45",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
+                          isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
+                        )}
+                      >
+                        <img
+                          src={profile.image}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+
+                      <div className="min-w-0 flex-1 leading-none">
+                        <div
+                          className={cn(
+                            "truncate text-[11px] font-medium",
+                            isLight ? "text-black/70" : "text-white/65",
+                          )}
+                        >
+                          {profile.name}
+                        </div>
+                        <div
+                          className={cn(
+                            "mt-1 truncate text-[9px]",
+                            isLight
+                              ? "text-black/40"
+                              : profile.type === "bad"
+                                ? "text-white/20"
+                                : "text-white/25",
+                          )}
+                        >
+                          {profile.status}
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full ${
+                          profile.type === "bad"
+                            ? "bg-[#d92d25]"
+                            : "bg-[#26a844]"
+                        }`}
+                      >
+                        {profile.type === "bad" ? (
+                          <svg
+                            viewBox="0 0 12 12"
+                            className="h-2 w-2"
+                            fill="none"
+                          >
+                            <path
+                              d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
+                              stroke="white"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        ) : (
+                          <svg
+                            viewBox="0 0 12 12"
+                            className="h-2 w-2"
+                            fill="none"
+                          >
+                            <path
+                              d="M2.5 6.2L4.8 8.3L9.5 3.7"
+                              stroke="white"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Fade over profiles */}
+                <div
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0 top-[70px] z-[2] h-[220px] bg-gradient-to-b from-transparent",
+                    isLight
+                      ? "via-[#ECECEC]/40 to-[#ECECEC]"
+                      : "via-[#171717]/35 to-[#171717]",
+                  )}
+                />
+
+                {/* Pinched purple curve */}
+                <div className="pointer-events-none absolute inset-x-0 top-[92px] z-[4] h-[150px]">
+                  <div
+                    className={cn(
+                      "absolute inset-0 blur-[18px]",
+                      isLight ? "opacity-90" : "opacity-70",
+                    )}
+                  >
+                    <svg
+                      viewBox="0 0 1000 200"
+                      preserveAspectRatio="none"
+                      className="h-full w-full"
+                    >
+                      <path
+                        d="M0 10 C220 95, 780 95, 1000 10 L1000 190 C780 105, 220 105, 0 190 Z"
+                        fill="#754FF6"
+                      />
+                    </svg>
+                  </div>
+
+                  <svg
+                    viewBox="0 0 1000 200"
+                    preserveAspectRatio="none"
+                    className="relative h-full w-full"
+                  >
+                    <defs>
+                      <radialGradient
+                        id="engagementPurple"
+                        cx="50%"
+                        cy="51.5%"
+                        r="50%"
+                        fx="50%"
+                        fy="51.5%"
+                        gradientUnits="objectBoundingBox"
+                        gradientTransform="translate(0.5 0.515) scale(1 0.97) translate(-0.5 -0.515)"
+                      >
+                        <stop offset="0%" stopColor="#754FF6" />
+                        <stop offset="100%" stopColor="#442E90" />
+                      </radialGradient>
+                      <filter id="engagementNoise">
+                        <feTurbulence
+                          type="fractalNoise"
+                          baseFrequency="0.9"
+                          numOctaves="2"
+                          stitchTiles="stitch"
+                        />
+                        <feColorMatrix type="saturate" values="0" />
+                        <feBlend in="SourceGraphic" mode="overlay" />
+                      </filter>
+                    </defs>
+                    <path
+                      d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
+                      fill="url(#engagementPurple)"
+                    />
+                    <path
+                      d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
+                      fill="white"
+                      opacity="0.05"
+                      filter="url(#engagementNoise)"
+                    />
+                  </svg>
+
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="hidden shrink-0 sm:block"
+                    >
+                      <path
+                        d="M4 11.5L13.5 9L15.5 15L6 17.5L4 11.5Z"
+                        stroke="white"
+                        strokeWidth="1.5"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M13.5 9L15.2 5.8L19.2 7.1L17.8 10.2"
+                        stroke="white"
+                        strokeWidth="1.5"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M9 16.5L10.5 21"
+                        stroke="white"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M7.5 21H13"
+                        stroke="white"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M18.5 2.5V5.5M17 4H20"
+                        stroke="white"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="text-center text-[12px] font-medium tracking-[-0.02em] text-white sm:text-[15px]">
+                      Authentic Data. Verified Performance
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bottom text */}
+                <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
+                  <h3
+                    className={cn(
+                      "mb-2 text-lg font-semibold sm:text-xl",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
+                    Real Engagement Only
+                  </h3>
+                  <p
+                    className={cn(
+                      "max-w-[480px] text-[13px] leading-5 sm:text-[15px] sm:leading-6",
+                      isLight ? "text-black/50" : "text-white/50",
+                    )}
+                  >
+                    We scan every view for suspicious activity and filter out
+                    bots, clicks farms and fake traffic - so you only pay for
+                    real people
+                  </p>
+                </div>
+              </div>
+
+              {/* CONNECTED AT SOURCE */}
+              <div
+                className={cn(
+                  "relative h-[380px] overflow-hidden rounded-[18px] sm:h-[425px]",
+                  isLight
+                    ? "bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                    : "border border-white/10 bg-[#171717]",
+                )}
+              >
+                {/* API status */}
+                <div
+                  className={cn(
+                    "absolute left-0 right-0 top-7 z-10 text-center text-sm",
+                    isLight ? "text-[#22C55E]" : "text-green-400",
+                  )}
+                >
+                  <span className="mr-2">●</span>
+                  API Connected
+                </div>
+
+                {/* Semicircle orbit */}
+                <div className="absolute inset-x-0 top-10 bottom-[118px]">
+                  <div className="absolute left-1/2 top-[58%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2">
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-[52%] overflow-hidden">
+                      <div
+                        className={cn(
+                          "absolute left-1/2 top-[150px] h-[292px] w-[292px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed",
+                          isLight ? "border-black/20" : "border-white/15",
+                        )}
+                      />
+                      <div
+                        className={cn(
+                          "absolute left-1/2 top-[150px] h-[230px] w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed",
+                          isLight ? "border-black/20" : "border-white/15",
+                        )}
+                      />
+                      <div
+                        className={cn(
+                          "absolute left-1/2 top-[150px] h-[168px] w-[168px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed",
+                          isLight ? "border-black/20" : "border-white/15",
+                        )}
+                      />
+                    </div>
+
+                    <div
+                      className={cn(
+                        "absolute left-1/2 top-1/2 z-10 flex h-[80px] w-[80px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                        isLight
+                          ? "bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
+                          : "bg-[#1c1c1c] shadow-[0_22px_40px_rgba(109,70,255,0.55)]",
+                      )}
+                    >
+                      {!isLight ? (
+                        <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_92%,rgba(124,58,237,0.95),transparent_56%)]" />
+                      ) : null}
+                      <Image
+                        src={
+                          isLight
+                            ? "/images/Group (1).png"
+                            : "/images/Group@2x.png"
+                        }
+                        alt="Game of Creators"
+                        width={48}
+                        height={48}
+                        className="relative z-10 h-12 w-12 object-contain"
+                      />
+                    </div>
+
+                    <div
+                      className={cn(
+                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                        isLight
+                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                          : "bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+                      )}
+                      style={{
+                        left: "calc(50% - 76px)",
+                        top: "calc(50% - 76px)",
+                      }}
+                    >
+                      <SiTiktok
+                        className={cn(
+                          "h-6 w-6",
+                          isLight ? "text-black" : "text-white",
+                        )}
+                      />
+                    </div>
+
+                    <div
+                      className={cn(
+                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                        isLight
+                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                          : "bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+                      )}
+                      style={{
+                        left: "calc(50% + 76px)",
+                        top: "calc(50% - 76px)",
+                      }}
+                    >
+                      <FaXTwitter
+                        className={cn(
+                          "h-5 w-5",
+                          isLight ? "text-black" : "text-white",
+                        )}
+                      />
+                    </div>
+
+                    <div
+                      className={cn(
+                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                        isLight
+                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                          : "bg-[#2b2b2b] shadow-[0_0_28px_rgba(124,58,237,0.7)]",
+                      )}
+                      style={{ left: "calc(50% - 118px)", top: "50%" }}
+                    >
+                      <SiYoutube className="h-6 w-6 text-[#FF0000]" />
+                    </div>
+
+                    <div
+                      className={cn(
+                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                        isLight
+                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                          : "bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
+                      )}
+                      style={{ left: "calc(50% + 118px)", top: "50%" }}
+                    >
+                      <SiInstagram className="h-6 w-6 text-[#E1306C]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom text */}
+                <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
+                  <h3
+                    className={cn(
+                      "mb-2 text-lg font-semibold sm:text-xl",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
+                    Connected at the source
+                  </h3>
+
+                  <p
+                    className={cn(
+                      "max-w-[480px] text-[13px] leading-5 sm:text-[15px] sm:leading-6",
+                      isLight ? "text-black/50" : "text-white/50",
+                    )}
+                  >
+                    Campaign data is pulled directly from Instagram and YouTube,
+                    giving you verified performance instead of self-reported
+                    numbers.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* CAMPAIGN CARD */}
+            <div
+              className={cn(
+                "relative mt-6 w-full overflow-hidden rounded-[16px] px-4 py-6 sm:rounded-[20px] sm:px-6 sm:py-8 lg:px-9 lg:py-9",
+                isLight
+                  ? "bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                  : "border border-white/10 bg-[#151515]",
+              )}
+            >
+              <div className="relative flex flex-col xl:min-h-[390px] xl:flex-row">
+                {/* LEFT CONTENT */}
+                <div className="relative z-30 w-full shrink-0 xl:w-[310px]">
+                  <h2
+                    className={cn(
+                      "text-[20px] font-semibold tracking-[-0.4px] sm:text-[22px]",
+                      isLight ? "text-black" : "text-white/80",
+                    )}
+                  >
+                    Run Campaigns, Your way.
+                  </h2>
+
+                  <p
+                    className={cn(
+                      "mt-2 max-w-[280px] text-[14px] leading-[22px] sm:max-w-[250px] sm:text-[16px] sm:leading-[24px]",
+                      isLight ? "text-black/50" : "text-white/50",
+                    )}
+                  >
+                    Chose the format that fit your goals -
+                    <br className="hidden sm:block" />
+                    from guaranteed reach to
+                    <br className="hidden sm:block" />
+                    performance-based rewards
+                  </p>
+                </div>
+
+                {/* CARDS AREA — horizontal scroll on small screens, fan on xl */}
+                <div className="relative -mx-4 mt-6 overflow-x-auto pb-2 xl:absolute xl:left-[280px] xl:top-[-8px] xl:mx-0 xl:mt-0 xl:h-[460px] xl:w-[calc(100%-240px)] xl:overflow-visible xl:pb-0 2xl:left-[300px]">
+                  <div className="relative h-[400px] w-[780px] sm:h-[430px] sm:w-[860px] xl:h-[460px] xl:w-full">
+                    {/* ================= CPM CARD ================= */}
+                    <div
+                      className="
               absolute left-0 top-[18px] z-[10]
               h-[380px] w-[240px]
               overflow-hidden rounded-[22px]
@@ -1746,79 +2428,76 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               shadow-2xl
               sm:h-[410px] sm:w-[270px]
             "
-          >
-            <div className="px-5 pt-6">
-              <h3 className="text-[21px] font-bold text-white">
-                CPM
-              </h3>
+                    >
+                      <div className="px-5 pt-6">
+                        <h3 className="text-[21px] font-bold text-white">
+                          CPM
+                        </h3>
 
-              <p className="mt-[-2px] text-[15px] text-white/90">
-                pay per 1k verified views
-              </p>
-            </div>
+                        <p className="mt-[-2px] text-[15px] text-white/90">
+                          pay per 1k verified views
+                        </p>
+                      </div>
 
-            {/* Video container */}
-            <div className="absolute left-[16px] right-[16px] top-[88px] bottom-0 overflow-hidden rounded-t-[14px] bg-white">
-              {/* top controls */}
-              <div className="absolute left-0 right-0 top-0 z-10 flex h-[45px] items-center justify-between bg-white px-3">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eee]">
-                  <svg
-                    width="11"
-                    height="13"
-                    viewBox="0 0 11 13"
-                    fill="none"
-                  >
-                    <path
-                      d="M10 6.5L1 1V12L10 6.5Z"
-                      fill="#7B4CF2"
-                    />
-                  </svg>
-                </div>
+                      {/* Video container */}
+                      <div className="absolute left-[16px] right-[16px] top-[88px] bottom-0 overflow-hidden rounded-t-[14px] bg-white">
+                        {/* top controls */}
+                        <div className="absolute left-0 right-0 top-0 z-10 flex h-[45px] items-center justify-between bg-white px-3">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eee]">
+                            <svg
+                              width="11"
+                              height="13"
+                              viewBox="0 0 11 13"
+                              fill="none"
+                            >
+                              <path d="M10 6.5L1 1V12L10 6.5Z" fill="#7B4CF2" />
+                            </svg>
+                          </div>
 
-                <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                  <svg width="13" height="13" viewBox="0 0 24 24">
-                    <path
-                      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      fill="none"
-                    />
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="3"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                  125K
-                </div>
-              </div>
+                          <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                            <svg width="13" height="13" viewBox="0 0 24 24">
+                              <path
+                                d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                fill="none"
+                              />
+                              <circle
+                                cx="12"
+                                cy="12"
+                                r="3"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              />
+                            </svg>
+                            125K
+                          </div>
+                        </div>
 
-              {/* Person/video image */}
-              <div className="absolute inset-x-0 top-[45px] bottom-0">
-                <Image
-                  src="/images/01d7112f99a9d9cf991c9fb42b1f697eeeafc875.png"
-                  alt="Creator"
-                  fill
-                  className="object-cover"
-                />
+                        {/* Person/video image */}
+                        <div className="absolute inset-x-0 top-[45px] bottom-0">
+                          <Image
+                            src="/images/01d7112f99a9d9cf991c9fb42b1f697eeeafc875.png"
+                            alt="Creator"
+                            fill
+                            className="object-cover"
+                          />
 
-                {/* video dark gradient */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                          {/* video dark gradient */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-                {/* <div className="absolute bottom-4 left-3 right-3 text-center text-[11px] text-white/50">
+                          {/* <div className="absolute bottom-4 left-3 right-3 text-center text-[11px] text-white/50">
                   since I started posting
                   <br />
                   on social media
                 </div> */}
-              </div>
-            </div>
-          </div>
+                        </div>
+                      </div>
+                    </div>
 
-          {/* ================= LEADERBOARD CARD ================= */}
-          <div
-            className="
+                    {/* ================= LEADERBOARD CARD ================= */}
+                    <div
+                      className="
               absolute left-[160px] top-[28px] z-[20]
               h-[380px] w-[240px]
               overflow-hidden rounded-[22px]
@@ -1826,78 +2505,78 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               shadow-2xl
               sm:left-[190px] sm:h-[410px] sm:w-[270px]
             "
-            style={{ transform: "rotate(2.5deg)" }}
-          >
-              <div className="px-5 pt-6">
-                <h3 className="text-[21px] font-bold text-white">
-                  Leaderboard
-                </h3>
-
-                <p className="max-w-[180px] text-[14px] leading-[18px] text-white">
-                  Compete for top ranks and
-                  <br />
-                  earn more
-                </p>
-              </div>
-
-              {/* Gold decorative circles */}
-              <div className="absolute right-[20px] top-[55px] h-[90px] w-[90px] rounded-full bg-[#d9941d]/50" />
-              <div className="absolute right-[-15px] top-[5px] h-[100px] w-[100px] rounded-full bg-[#ffe17c]/40" />
-
-              {/* Leaderboard white panel */}
-              <div className="absolute left-[16px] right-[16px] top-[108px] bottom-0 rounded-t-[13px] bg-white px-4 pt-4">
-                <h4 className="text-[15px] font-semibold text-[#272727]">
-                  Top Creators
-                </h4>
-
-                <p className="text-[10px] text-gray-500">
-                  See who's leading this campaign
-                </p>
-
-                <div className="mt-4 space-y-[13px]">
-                  {creators.map((creator, index) => (
-                    <div
-                      key={creator.name}
-                      className="flex items-center gap-2"
+                      style={{ transform: "rotate(2.5deg)" }}
                     >
-                      <span className="w-[13px] text-[8px] text-gray-500">
-                        {index + 1}
-                      </span>
+                      <div className="px-5 pt-6">
+                        <h3 className="text-[21px] font-bold text-white">
+                          Leaderboard
+                        </h3>
 
-                      <Image
-                        src={creator.image}
-                        alt={creator.name}
-                        width={21}
-                        height={21}
-                        className="h-[21px] w-[21px] rounded-full object-cover"
-                      />
+                        <p className="max-w-[180px] text-[14px] leading-[18px] text-white">
+                          Compete for top ranks and
+                          <br />
+                          earn more
+                        </p>
+                      </div>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[8px] font-medium text-gray-700">
-                          {creator.name}
-                        </div>
+                      {/* Gold decorative circles */}
+                      <div className="absolute right-[20px] top-[55px] h-[90px] w-[90px] rounded-full bg-[#d9941d]/50" />
+                      <div className="absolute right-[-15px] top-[5px] h-[100px] w-[100px] rounded-full bg-[#ffe17c]/40" />
 
-                        <div className="mt-[3px] h-[3px] w-full rounded-full bg-gray-200">
-                          <div
-                            className="h-full rounded-full bg-[#ff941d]"
-                            style={{
-                              width: `${Math.max(
-                                30,
-                                100 - index * 10
-                              )}%`,
-                            }}
-                          />
+                      {/* Leaderboard white panel */}
+                      <div className="absolute left-[16px] right-[16px] top-[108px] bottom-0 rounded-t-[13px] bg-white px-4 pt-4">
+                        <h4 className="text-[15px] font-semibold text-[#272727]">
+                          Top Creators
+                        </h4>
+
+                        <p className="text-[10px] text-gray-500">
+                          See who's leading this campaign
+                        </p>
+
+                        <div className="mt-4 space-y-[13px]">
+                          {creators.map((creator, index) => (
+                            <div
+                              key={creator.name}
+                              className="flex items-center gap-2"
+                            >
+                              <span className="w-[13px] text-[8px] text-gray-500">
+                                {index + 1}
+                              </span>
+
+                              <Image
+                                src={creator.image}
+                                alt={creator.name}
+                                width={21}
+                                height={21}
+                                className="h-[21px] w-[21px] rounded-full object-cover"
+                              />
+
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[8px] font-medium text-gray-700">
+                                  {creator.name}
+                                </div>
+
+                                <div className="mt-[3px] h-[3px] w-full rounded-full bg-gray-200">
+                                  <div
+                                    className="h-full rounded-full bg-[#ff941d]"
+                                    style={{
+                                      width: `${Math.max(
+                                        30,
+                                        100 - index * 10,
+                                      )}%`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-          </div>
 
-          {/* ================= MILESTONE CARD ================= */}
-          <div
-            className="
+                    {/* ================= MILESTONE CARD ================= */}
+                    <div
+                      className="
               absolute left-[310px] top-[42px] z-[30]
               h-[380px] w-[240px]
               overflow-hidden rounded-[22px]
@@ -1905,97 +2584,97 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               shadow-2xl
               sm:left-[360px] sm:h-[410px] sm:w-[270px]
             "
-            style={{ transform: "rotate(4deg)" }}
-          >
-              <div className="px-5 pt-6">
-                <h3 className="text-[21px] font-bold text-white">
-                  Milestone
-                </h3>
+                      style={{ transform: "rotate(4deg)" }}
+                    >
+                      <div className="px-5 pt-6">
+                        <h3 className="text-[21px] font-bold text-white">
+                          Milestone
+                        </h3>
 
-                <p className="max-w-[180px] text-[14px] leading-[18px] text-white">
-                  Hit view goals and
-                  <br />
-                  unlock rewards
-                </p>
-              </div>
+                        <p className="max-w-[180px] text-[14px] leading-[18px] text-white">
+                          Hit view goals and
+                          <br />
+                          unlock rewards
+                        </p>
+                      </div>
 
-              {/* White milestone panel */}
-              <div className="absolute left-[16px] right-[16px] top-[110px] bottom-0 rounded-t-[14px] bg-white px-5 pt-5">
-                <h4 className="text-[15px] font-semibold text-gray-800">
-                  Milestone
-                </h4>
+                      {/* White milestone panel */}
+                      <div className="absolute left-[16px] right-[16px] top-[110px] bottom-0 rounded-t-[14px] bg-white px-5 pt-5">
+                        <h4 className="text-[15px] font-semibold text-gray-800">
+                          Milestone
+                        </h4>
 
-                <p className="text-[10px] text-gray-500">
-                  Rewards at every step
-                </p>
+                        <p className="text-[10px] text-gray-500">
+                          Rewards at every step
+                        </p>
 
-                {/* Timeline */}
-                <div className="relative mt-5">
-                  <div className="absolute left-[11px] top-[9px] bottom-[24px] w-[2px] bg-[#ff4fc9]" />
+                        {/* Timeline */}
+                        <div className="relative mt-5">
+                          <div className="absolute left-[11px] top-[9px] bottom-[24px] w-[2px] bg-[#ff4fc9]" />
 
-                  {/* 100K */}
-                  <div className="relative flex gap-5">
-                    <div className="relative z-10 flex h-[20px] w-[20px] items-center justify-center rounded-full bg-[#ff28a8]">
-                      <svg
-                        width="10"
-                        height="10"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                      >
-                        <path
-                          d="M5 12l4 4L19 6"
-                          stroke="white"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                          {/* 100K */}
+                          <div className="relative flex gap-5">
+                            <div className="relative z-10 flex h-[20px] w-[20px] items-center justify-center rounded-full bg-[#ff28a8]">
+                              <svg
+                                width="10"
+                                height="10"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                              >
+                                <path
+                                  d="M5 12l4 4L19 6"
+                                  stroke="white"
+                                  strokeWidth="3"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </div>
+
+                            <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
+                              <p className="text-[13px] font-semibold text-gray-800">
+                                100K views
+                              </p>
+                              <p className="text-[10px] text-gray-500">
+                                ₹5,000 reward
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* 500K */}
+                          <div className="relative mt-3 flex gap-5">
+                            <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
+
+                            <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
+                              <p className="text-[13px] font-semibold text-gray-800">
+                                500K views
+                              </p>
+                              <p className="text-[10px] text-gray-500">
+                                ₹15,000 reward
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* 1M */}
+                          <div className="relative mt-3 flex gap-5">
+                            <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
+
+                            <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
+                              <p className="text-[13px] font-semibold text-gray-800">
+                                1M views
+                              </p>
+                              <p className="text-[10px] text-gray-500">
+                                ₹50,000 reward
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
-                      <p className="text-[13px] font-semibold text-gray-800">
-                        100K views
-                      </p>
-                      <p className="text-[10px] text-gray-500">
-                        ₹5,000 reward
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 500K */}
-                  <div className="relative mt-3 flex gap-5">
-                    <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
-
-                    <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
-                      <p className="text-[13px] font-semibold text-gray-800">
-                        500K views
-                      </p>
-                      <p className="text-[10px] text-gray-500">
-                        ₹15,000 reward
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* 1M */}
-                  <div className="relative mt-3 flex gap-5">
-                    <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
-
-                    <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
-                      <p className="text-[13px] font-semibold text-gray-800">
-                        1M views
-                      </p>
-                      <p className="text-[10px] text-gray-500">
-                        ₹50,000 reward
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-          </div>
-
-          {/* ================= DUAL REWARDS CARD ================= */}
-          <div
-            className="
+                    {/* ================= DUAL REWARDS CARD ================= */}
+                    <div
+                      className="
               absolute left-[460px] top-[58px] z-[40]
               h-[360px] w-[250px]
               overflow-hidden rounded-[22px]
@@ -2003,296 +2682,383 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               shadow-2xl
               sm:left-[540px] sm:top-[64px] sm:h-[380px] sm:w-[300px]
             "
-            style={{ transform: "rotate(5.5deg)" }}
-          >
-              <div className="px-5 pt-6">
-                <h3 className="text-[21px] font-bold text-white">
-                  Dual Rewards
-                </h3>
-
-                <p className="text-[15px] text-white">
-                  CPM + Milestones
-                </p>
-              </div>
-
-              {/* Main reward white panel */}
-              <div className="absolute left-[16px] right-[16px] top-[105px] bottom-0 rounded-t-[13px] bg-white/90 px-3 pt-4">
-
-                {/* CPM reward */}
-                <div className="relative rounded-[11px] bg-[#d9f2ff] px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-7 w-7 items-center justify-center">
-                      <svg
-                        width="18"
-                        height="21"
-                        viewBox="0 0 18 21"
-                        fill="none"
-                      >
-                        <path
-                          d="M16 10.5L1 2V19L16 10.5Z"
-                          fill="#069DE2"
-                        />
-                      </svg>
-                    </div>
-
-                    <div>
-                      <div className="text-[17px] font-semibold leading-[19px] text-[#079be0]">
-                        $1.00
-                      </div>
-
-                      <div className="text-[13px] leading-[16px] text-[#079be0]">
-                        per 1,000 view
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Plus */}
-                <div className="relative z-10 mx-auto my-[-3px] flex h-[40px] w-[40px] items-center justify-center">
-                  <div className="absolute h-[4px] w-[32px] rounded-full bg-[#55b8e9]" />
-                  <div className="absolute h-[32px] w-[4px] rounded-full bg-[#55b8e9]" />
-                </div>
-
-                {/* Milestone reward */}
-                <div className="rounded-[11px] bg-[#d9f2ff] px-4 py-4">
-                  <div className="flex items-start gap-3">
-                    {/* bars icon */}
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      className="mt-1 shrink-0"
+                      style={{ transform: "rotate(5.5deg)" }}
                     >
-                      <path
-                        d="M5 19V12M12 19V5M19 19V9"
-                        stroke="#079BE0"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                      />
-                    </svg>
+                      <div className="px-5 pt-6">
+                        <h3 className="text-[21px] font-bold text-white">
+                          Dual Rewards
+                        </h3>
 
-                    <div className="text-[#079be0]">
-                      <div className="text-[16px] font-semibold leading-[20px]">
-                        $25
-                        <span className="font-normal">
-                          {" "}
-                          at 25K views
-                        </span>
+                        <p className="text-[15px] text-white">
+                          CPM + Milestones
+                        </p>
                       </div>
 
-                      <div className="text-[16px] font-semibold leading-[20px]">
-                        $50
-                        <span className="font-normal">
-                          {" "}
-                          at 50K views
-                        </span>
+                      {/* Main reward white panel */}
+                      <div className="absolute left-[16px] right-[16px] top-[105px] bottom-0 rounded-t-[13px] bg-white/90 px-3 pt-4">
+                        {/* CPM reward */}
+                        <div className="relative rounded-[11px] bg-[#d9f2ff] px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-7 w-7 items-center justify-center">
+                              <svg
+                                width="18"
+                                height="21"
+                                viewBox="0 0 18 21"
+                                fill="none"
+                              >
+                                <path
+                                  d="M16 10.5L1 2V19L16 10.5Z"
+                                  fill="#069DE2"
+                                />
+                              </svg>
+                            </div>
+
+                            <div>
+                              <div className="text-[17px] font-semibold leading-[19px] text-[#079be0]">
+                                $1.00
+                              </div>
+
+                              <div className="text-[13px] leading-[16px] text-[#079be0]">
+                                per 1,000 view
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Plus */}
+                        <div className="relative z-10 mx-auto my-[-3px] flex h-[40px] w-[40px] items-center justify-center">
+                          <div className="absolute h-[4px] w-[32px] rounded-full bg-[#55b8e9]" />
+                          <div className="absolute h-[32px] w-[4px] rounded-full bg-[#55b8e9]" />
+                        </div>
+
+                        {/* Milestone reward */}
+                        <div className="rounded-[11px] bg-[#d9f2ff] px-4 py-4">
+                          <div className="flex items-start gap-3">
+                            {/* bars icon */}
+                            <svg
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              className="mt-1 shrink-0"
+                            >
+                              <path
+                                d="M5 19V12M12 19V5M19 19V9"
+                                stroke="#079BE0"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+
+                            <div className="text-[#079be0]">
+                              <div className="text-[16px] font-semibold leading-[20px]">
+                                $25
+                                <span className="font-normal">
+                                  {" "}
+                                  at 25K views
+                                </span>
+                              </div>
+
+                              <div className="text-[16px] font-semibold leading-[20px]">
+                                $50
+                                <span className="font-normal">
+                                  {" "}
+                                  at 50K views
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom fade */}
+                        <div className="absolute bottom-0 left-0 right-0 h-[90px] bg-gradient-to-t from-white via-white/80 to-transparent" />
                       </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Bottom fade */}
-                <div className="absolute bottom-0 left-0 right-0 h-[90px] bg-gradient-to-t from-white via-white/80 to-transparent" />
               </div>
+            </div>
           </div>
+        </section>
 
+        <section
+          className={cn(
+            "px-4 py-12 sm:px-6 sm:py-16 md:min-h-screen lg:px-20 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+          )}
+        >
+          <div className="mx-auto flex max-w-[1240px] items-center md:min-h-[700px]">
+            <div className="grid w-full grid-cols-1 items-center gap-10 lg:grid-cols-[1fr_436px] lg:gap-16">
+              {/* Left Content */}
+              <div className="max-w-[650px]">
+                <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-1.2px] sm:text-[42px] sm:tracking-[-1.8px] lg:text-[52px]">
+                  Real campaigns. Proven
+                  <br />
+                  performance.
+                </h2>
+
+                <p
+                  className={cn(
+                    "mt-5 max-w-[640px] text-[16px] font-medium italic leading-[1.7] tracking-[-0.3px] sm:mt-8 sm:text-[20px] sm:leading-[1.8] md:text-[22px]",
+                    isLight ? "text-black/55" : "text-[#c9c9c9]",
+                  )}
+                >
+                  “GOC helped us move from paying for reach to understanding the
+                  actual performance behind every piece of content. The
+                  visibility made campaign decisions much easier.”
+                </p>
+
+                <div className="mt-7">
+                  <p className="text-[15px] font-normal text-[#777]">
+                    Ranveer Allahbadia
+                  </p>
+                  <p className="mt-1 text-[15px] font-normal text-[#777]">
+                    Founder, BeerBiceps
+                  </p>
+                </div>
+
+                {/* Stats */}
+                <div
+                  className={cn(
+                    "mt-12 flex w-full max-w-[545px] overflow-hidden rounded-[16px] px-8 py-4",
+                    isLight
+                      ? "bg-white border border-black/[0.06] shadow-[0_12px_40px_rgba(20,16,40,0.06)]"
+                      : "bg-[#252525]",
+                  )}
+                >
+                  <div className="flex-1">
+                    <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                      3+
+                    </p>
+                    <p className="mt-2 text-[14px] text-[#858585]">
+                      Campaigns Launched
+                    </p>
+                  </div>
+
+                  <div className="flex-1">
+                    <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                      2.5M+
+                    </p>
+                    <p className="mt-2 text-[14px] text-[#858585]">
+                      Views generated
+                    </p>
+                  </div>
+
+                  <div className="flex-1">
+                    <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                      16%
+                    </p>
+                    <p className="mt-2 text-[14px] text-[#858585]">
+                      Engagement Rate
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Video / Image */}
+              <div className="relative mx-auto h-[420px] w-full max-w-[436px] overflow-hidden rounded-[28px] sm:h-[560px] sm:rounded-[40px] md:h-[660px] md:rounded-[48px]">
+                <Image
+                  src="/images/ee0bbe0b8188b7baabb964e4fc87a704b2fbcdf8.png"
+                  alt="Campaign testimonial"
+                  fill
+                  priority
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 436px"
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
-      </div>
-    </section>
+        </section>
 
-    <section className="bg-black px-4 py-12 text-white sm:px-6 sm:py-16 md:min-h-screen lg:px-20">
-      <div className="mx-auto flex max-w-[1240px] items-center md:min-h-[700px]">
-        <div className="grid w-full grid-cols-1 items-center gap-10 lg:grid-cols-[1fr_436px] lg:gap-16">
-          
-          {/* Left Content */}
-          <div className="max-w-[650px]">
-            <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-1.2px] sm:text-[42px] sm:tracking-[-1.8px] lg:text-[52px]">
-              Real campaigns. Proven
+        <section
+          className={cn(
+            "relative min-h-[640px] overflow-hidden px-4 py-14 sm:min-h-[780px] sm:px-5 sm:py-20 md:min-h-[900px] md:py-24 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+          )}
+        >
+          {/* Background glow */}
+          {isLight ? (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-[58%] h-[520px] w-[980px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(186,155,255,0.55)_0%,rgba(196,181,253,0.28)_38%,rgba(241,241,241,0)_72%)] blur-[2px] sm:h-[640px] sm:w-[1100px]"
+            />
+          ) : (
+            <div className="pointer-events-none absolute inset-x-0 top-[280px] h-[400px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.10),transparent_65%)] sm:top-[360px] sm:h-[600px]" />
+          )}
+
+          {/* Top content */}
+          <div className="relative z-20 mx-auto max-w-3xl text-center">
+            <h2
+              className={cn(
+                "text-[28px] font-semibold leading-[1.1] tracking-[-0.04em] sm:text-4xl md:text-5xl md:text-[52px]",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              The results gets sharper
               <br />
-              performance.
+              with every campaign.
             </h2>
 
-            <p className="mt-5 max-w-[640px] text-[16px] font-medium italic leading-[1.7] tracking-[-0.3px] text-[#c9c9c9] sm:mt-8 sm:text-[20px] sm:leading-[1.8] md:text-[22px]">
-              “GOC helped us move from paying for reach to
-              understanding the actual performance behind every piece of
-              content. The visibility made campaign decisions much
-              easier.”
+            <p
+              className={cn(
+                "mx-auto mt-4 max-w-[620px] text-sm leading-6 sm:mt-5 sm:text-base",
+                isLight ? "text-black/50" : "text-neutral-500",
+              )}
+            >
+              More campaigns mean more creators participating, more content, and
+              more performance data — which makes it easier to see what a
+              creator or a piece of content is likely to do next time
             </p>
 
-            <div className="mt-7">
-              <p className="text-[15px] font-normal text-[#777]">
-                Ranveer Allahbadia
-              </p>
-              <p className="mt-1 text-[15px] font-normal text-[#777]">
-                Founder, BeerBiceps
-              </p>
-            </div>
-
-            {/* Stats */}
-            <div className="mt-12 flex w-full max-w-[545px] overflow-hidden rounded-[16px] bg-[#252525] px-8 py-4">
-              
-              <div className="flex-1">
-                <p className="text-[32px] font-medium leading-none text-[#a98cff]">
-                  3+
-                </p>
-                <p className="mt-2 text-[14px] text-[#858585]">
-                  Campaigns Launched
-                </p>
-              </div>
-
-              <div className="flex-1">
-                <p className="text-[32px] font-medium leading-none text-[#a98cff]">
-                  2.5M+
-                </p>
-                <p className="mt-2 text-[14px] text-[#858585]">
-                  Views generated
-                </p>
-              </div>
-
-              <div className="flex-1">
-                <p className="text-[32px] font-medium leading-none text-[#a98cff]">
-                  16%
-                </p>
-                <p className="mt-2 text-[14px] text-[#858585]">
-                  Engagement Rate
-                </p>
-              </div>
-
-            </div>
+            <button
+              type="button"
+              onClick={handleLaunchCampaign}
+              disabled={isLaunchingCampaign}
+              className={cn(
+                "mt-6 inline-flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-70",
+                isLight
+                  ? "bg-black text-white hover:bg-black/90 shadow-[0_10px_30px_rgba(15,15,30,0.12)]"
+                  : "border border-white/20 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] hover:bg-white/10",
+              )}
+            >
+              {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
+              <span>Launch a Campaign</span>
+              <span className="text-lg">→</span>
+            </button>
           </div>
 
-          {/* Right Video / Image */}
-          <div className="relative mx-auto h-[420px] w-full max-w-[436px] overflow-hidden rounded-[28px] sm:h-[560px] sm:rounded-[40px] md:h-[660px] md:rounded-[48px]">
+          {/* Map */}
+          <div className="relative mx-auto mt-8 h-[320px] w-full max-w-[1250px] sm:mt-12 sm:h-[420px] md:h-[520px] lg:h-[580px]">
+            {isLight ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[70%] w-[75%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.35)_0%,transparent_68%)] blur-3xl"
+              />
+            ) : null}
             <Image
-              src="/images/ee0bbe0b8188b7baabb964e4fc87a704b2fbcdf8.png"
-              alt="Campaign testimonial"
+              src={
+                isLight
+                  ? "/images/6c7b71cf5612b7b0ce48a83d308567260c8756d0.png"
+                  : WorldMapDots
+              }
+              alt=""
               fill
               priority
-              className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 436px"
+              className={cn(
+                "object-cover object-center",
+                isLight && "mix-blend-screen",
+              )}
+              sizes="(max-width: 1280px) 100vw, 1250px"
             />
-          </div>
 
-        </div>
-      </div>
-    </section>
+            {/* Connection lines */}
+            <svg
+              aria-hidden
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-0 h-full w-full"
+            >
+              {people.map((person, index) => (
+                <path
+                  key={`connector-${person.name}-${index}`}
+                  d={connectionPath(person)}
+                  fill="none"
+                  stroke={isLight ? "#7c3aed" : "white"}
+                  strokeOpacity={isLight ? 0.35 : 0.35}
+                  strokeWidth={1}
+                  strokeDasharray="5 5"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
 
-    <section className="relative min-h-[640px] overflow-hidden bg-black px-4 py-14 text-white sm:min-h-[780px] sm:px-5 sm:py-20 md:min-h-[900px] md:py-24">
-      {/* Background glow */}
-      <div className="pointer-events-none absolute inset-x-0 top-[280px] h-[400px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.10),transparent_65%)] sm:top-[360px] sm:h-[600px]" />
+            {/* Center campaign marker */}
+            <div
+              className="absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 sm:h-14 sm:w-14"
+              style={{
+                left: `${campaignCenter.x}%`,
+                top: `${campaignCenter.y}%`,
+              }}
+            >
+              <div
+                className={cn(
+                  "flex h-full w-full items-center justify-center rounded-full shadow-[0_0_30px_rgba(124,58,237,0.25)]",
+                  isLight
+                    ? "border border-black/10 bg-black"
+                    : "border border-white/50 bg-black shadow-[0_0_30px_rgba(255,255,255,0.15)]",
+                )}
+              >
+                <div className="flex h-5 w-5 items-center justify-center sm:h-7 sm:w-7">
+                  <img
+                    src="/images/Group@2x.png"
+                    alt="Play"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              </div>
 
-      {/* Top content */}
-      <div className="relative z-20 mx-auto max-w-3xl text-center">
-        <h2 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.04em] sm:text-4xl md:text-5xl md:text-[52px]">
-          The results gets sharper
-          <br />
-          with every campaign.
-        </h2>
-
-        <p className="mx-auto mt-4 max-w-[620px] text-sm leading-6 text-neutral-500 sm:mt-5 sm:text-base">
-          More campaigns mean more creators participating, more content, and
-          more performance data — which makes it easier to see what a creator
-          or a piece of content is likely to do next time
-        </p>
-
-        <button
-          type="button"
-          onClick={handleLaunchCampaign}
-          disabled={isLaunchingCampaign}
-          className="mt-6 inline-flex items-center gap-3 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-3 text-sm font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
-          <span>Launch a Campaign</span>
-          <span className="text-lg">→</span>
-        </button>
-      </div>
-
-      {/* Map */}
-      <div className="relative mx-auto mt-8 h-[320px] w-full max-w-[1250px] sm:mt-12 sm:h-[420px] md:h-[520px] lg:h-[580px]">
-        <Image
-          src={WorldMapDots}
-          alt=""
-          fill
-          priority
-          className="object-cover object-center"
-          sizes="(max-width: 1280px) 100vw, 1250px"
-        />
-
-        {/* Connection lines */}
-        <svg
-          aria-hidden
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          className="pointer-events-none absolute inset-0 h-full w-full"
-        >
-          {people.map((person, index) => (
-            <path
-              key={`connector-${person.name}-${index}`}
-              d={connectionPath(person)}
-              fill="none"
-              stroke="white"
-              strokeOpacity={0.35}
-              strokeWidth={1}
-              strokeDasharray="5 5"
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-        </svg>
-
-        {/* Center campaign marker */}
-        <div
-          className="absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 sm:h-14 sm:w-14"
-          style={{
-            left: `${campaignCenter.x}%`,
-            top: `${campaignCenter.y}%`,
-          }}
-        >
-          <div className="flex h-full w-full items-center justify-center rounded-full border border-white/50 bg-black shadow-[0_0_30px_rgba(255,255,255,0.15)]">
-            <div className="flex h-5 w-5 items-center justify-center sm:h-7 sm:w-7">
-             <img src="/images/Group@2x.png" alt="Play" className="h-full w-full object-cover" />
-            </div>
-          </div>
-
-          <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full border border-black/30 bg-white/80 px-3 py-1 text-center text-[10px] font-medium text-black shadow-lg backdrop-blur sm:mt-2 sm:px-5 sm:py-2 sm:text-sm">
-            Campaign Launched
-          </div>
-        </div>
-
-        {/* People */}
-        {people.map((person, index) => (
-          <div
-            key={`${person.name}-${index}`}
-            className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
-            style={{
-              left: `${person.x}%`,
-              top: `${person.y}%`,
-            }}
-          >
-            <div className="mx-auto h-7 w-7 overflow-hidden rounded-full border-2 border-white/80 bg-neutral-800 shadow-[0_0_0_3px_rgba(0,0,0,0.7)] sm:h-11 sm:w-11">
-              <img
-                src={person.avatar}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+              <div
+                className={cn(
+                  "absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-center text-[10px] font-medium shadow-lg sm:mt-2 sm:px-5 sm:py-2 sm:text-sm",
+                  isLight
+                    ? "border border-black/10 bg-white text-black"
+                    : "border border-black/30 bg-white/80 text-black backdrop-blur",
+                )}
+              >
+                Campaign Launched
+              </div>
             </div>
 
-            {/* Location pin */}
-            <div className="mx-auto -mt-1 h-1.5 w-1.5 rotate-45 rounded-[1px] bg-white/80 sm:h-2 sm:w-2" />
+            {/* People */}
+            {people.map((person, index) => (
+              <div
+                key={`${person.name}-${index}`}
+                className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
+                style={{
+                  left: `${person.x}%`,
+                  top: `${person.y}%`,
+                }}
+              >
+                <div
+                  className={cn(
+                    "mx-auto h-7 w-7 overflow-hidden rounded-full bg-neutral-800 sm:h-11 sm:w-11",
+                    isLight
+                      ? "border-2 border-[#93c5fd] shadow-[0_0_0_3px_rgba(147,197,253,0.35)]"
+                      : "border-2 border-white/80 shadow-[0_0_0_3px_rgba(0,0,0,0.7)]",
+                  )}
+                >
+                  <img
+                    src={person.avatar}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                </div>
 
-            <p className="mt-0.5 hidden whitespace-nowrap text-sm font-medium text-white sm:mt-1 sm:block">
-              {person.name}
-            </p>
+                {/* Location pin */}
+                <div
+                  className={cn(
+                    "mx-auto -mt-1 h-1.5 w-1.5 rotate-45 rounded-[1px] sm:h-2 sm:w-2",
+                    isLight ? "bg-[#93c5fd]" : "bg-white/80",
+                  )}
+                />
+
+                <p
+                  className={cn(
+                    "mt-0.5 hidden whitespace-nowrap text-sm font-medium sm:mt-1 sm:block",
+                    isLight ? "text-black/70" : "text-white",
+                  )}
+                >
+                  {person.name}
+                </p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* Bottom fade */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black via-black/70 to-transparent" />
-    </section>
+          {/* Bottom fade */}
+          {!isLight ? (
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black via-black/70 to-transparent" />
+          ) : null}
+        </section>
         {/* Gaming Brand Testimonials Section */}
         <Testimonials />
         {/* <section className="py-20 md:py-32 relative">

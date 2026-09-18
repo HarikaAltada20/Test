@@ -44,6 +44,7 @@ import {
 
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { cn } from "@/lib/utils";
+import { useThemeMode } from "@/hooks/use-theme-mode";
 
 // const creatorTestimonials = [
 //   {
@@ -250,6 +251,7 @@ export default function CreatorsClient({
   const [navigatingContestId, setNavigatingContestId] = useState<string | null>(
     null,
   );
+  const { isLight } = useThemeMode();
   const [isNavigatingViewMore, setIsNavigatingViewMore] = useState(false);
   const [easyStep, setEasyStep] = useState(0);
   const [easyStepProgress, setEasyStepProgress] = useState(0);
@@ -837,7 +839,14 @@ export default function CreatorsClient({
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden border-b border-white/10 bg-black text-white">
+    <div
+      className={cn(
+        "min-h-screen overflow-x-hidden border-b transition-colors duration-300",
+        isLight
+          ? "border-black/5 bg-[#F1F1F1] text-black"
+          : "border-white/10 bg-black text-white",
+      )}
+    >
       <div className="relative z-20">
         <section
           id="home"
@@ -848,7 +857,12 @@ export default function CreatorsClient({
               {/* Left: copy + CTAs */}
               <div className="text-left">
                 <h1
-                  className="mb-4 bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-[2rem] font-semibold leading-[1.1] tracking-tight text-transparent slide-up sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]"
+                  className={cn(
+                    "mb-4 text-[2rem] font-semibold leading-[1.1] tracking-tight slide-up sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]",
+                    isLight
+                      ? "text-black"
+                      : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent",
+                  )}
                   style={{ animationDelay: "0.15s" }}
                 >
                   Big following?
@@ -859,7 +873,10 @@ export default function CreatorsClient({
                 </h1>
 
                 <p
-                  className="mb-6 max-w-xl text-base leading-relaxed text-zinc-400 slide-left sm:mb-8 sm:text-lg md:text-xl"
+                  className={cn(
+                    "mb-6 max-w-xl text-base leading-relaxed slide-left sm:mb-8 sm:text-lg md:text-xl",
+                    isLight ? "text-black/50" : "text-zinc-400",
+                  )}
                   style={{ animationDelay: "0.35s" }}
                 >
                   Anyone can join. What you earn depends on how your content
@@ -871,7 +888,12 @@ export default function CreatorsClient({
                     type="button"
                     onClick={handleStartEarningClick}
                     disabled={isCheckingStartEarning}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-[#1a1a1a] px-6 py-6 text-base font-medium text-white transition-all duration-300 hover:border-white/35 hover:bg-[#242424] disabled:cursor-not-allowed disabled:opacity-70"
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      isLight
+                        ? "bg-[#FF6A1A] text-white hover:bg-[#ff7a33] shadow-lg shadow-orange-500/25"
+                        : "border border-white/20 bg-[#1a1a1a] text-white hover:border-white/35 hover:bg-[#242424]",
+                    )}
                   >
                     {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
                     <span>Start Earning →</span>
@@ -881,7 +903,12 @@ export default function CreatorsClient({
                     type="button"
                     onClick={handleViewMoreClick}
                     disabled={isNavigatingViewMore}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#e8e8e8] px-6 py-6 text-base font-medium text-black transition-all duration-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+                    className={cn(
+                      "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
+                      isLight
+                        ? "border border-black/15 bg-white text-black hover:bg-[#f7f7f7]"
+                        : "bg-[#e8e8e8] text-black hover:bg-white",
+                    )}
                   >
                     {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
                     <span>Browse Campaigns →</span>
@@ -897,7 +924,10 @@ export default function CreatorsClient({
                     ].map((src, i) => (
                       <div
                         key={src}
-                        className="relative h-8 w-8 overflow-hidden rounded-full border-2 border-black bg-zinc-800"
+                        className={cn(
+                          "relative h-8 w-8 overflow-hidden rounded-full border-2 bg-zinc-800",
+                          isLight ? "border-white" : "border-black",
+                        )}
                         style={{ zIndex: 3 - i }}
                       >
                         <Image
@@ -910,7 +940,12 @@ export default function CreatorsClient({
                       </div>
                     ))}
                   </div>
-                  <p className="text-sm text-zinc-400">
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isLight ? "text-black/50" : "text-zinc-400",
+                    )}
+                  >
                     16k+ creators have already Joined
                   </p>
                 </div>
@@ -932,16 +967,33 @@ export default function CreatorsClient({
                   </div>
 
                   {/* Last Month Earnings — behind girl (tucked under right shoulder) */}
-                  <div className="pointer-events-none absolute top-[28%] right-[4%] z-[5] rounded-2xl border border-white/10  px-3 py-2 bg-[#1E1E1E] shadow-[inset_0_0_5.26px_0_#FFFFFF40] backdrop-blur-md sm:top-[38%] sm:right-[10%] sm:px-4 sm:py-3 rotate-[6deg]">
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute top-[28%] right-[4%] z-[5] rounded-2xl border px-3 py-2 backdrop-blur-md sm:top-[38%] sm:right-[10%] sm:px-4 sm:py-3 rotate-[6deg]",
+                      isLight
+                        ? "border-black/[0.06] bg-white shadow-[0_12px_28px_rgba(20,16,40,0.12)]"
+                        : "border-white/10 bg-[#1E1E1E] shadow-[inset_0_0_5.26px_0_#FFFFFF40]",
+                    )}
+                  >
                     <div className="mb-0.5 flex items-center gap-2">
                       <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 text-[9px] font-bold text-black shadow-sm sm:h-[18px] sm:w-[18px] sm:text-[10px]">
                         $
                       </span>
-                      <span className="whitespace-nowrap text-[11px] text-zinc-300 sm:text-xs">
+                      <span
+                        className={cn(
+                          "whitespace-nowrap text-[11px] sm:text-xs",
+                          isLight ? "text-black/50" : "text-zinc-300",
+                        )}
+                      >
                         Last Month Earnings
                       </span>
                     </div>
-                    <p className="pl-0.5 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                    <p
+                      className={cn(
+                        "pl-0.5 text-xl font-semibold tracking-tight sm:text-2xl",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
                       $4,500
                     </p>
                   </div>
@@ -1002,8 +1054,18 @@ export default function CreatorsClient({
         </section>
 
         {/* Brand logos strip — same logos & design as brands page */}
-        <section className="overflow-hidden bg-black pb-14 pt-2">
-          <p className="px-4 text-center text-sm text-zinc-500 sm:text-base">
+        <section
+          className={cn(
+            "overflow-hidden pb-14 pt-2 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
+          <p
+            className={cn(
+              "px-4 text-center text-sm sm:text-base",
+              isLight ? "text-black/45" : "text-zinc-500",
+            )}
+          >
             Work with Top Brands with the network of 16k+ Creators
           </p>
           <div className="relative overflow-hidden scroll-container-testimonials">
@@ -1038,7 +1100,10 @@ export default function CreatorsClient({
                       alt={`Brand logo ${index + 1}`}
                       width={isCatchPhrase ? 200 : isLarge ? 235 : 150}
                       height={isCatchPhrase ? 120 : isLarge ? 190 : 90}
-                      className="h-full w-full object-contain"
+                      className={cn(
+                        "h-full w-full object-contain",
+                        isLight && !isCatchPhrase && "brightness-0 opacity-80",
+                      )}
                     />
                   </div>
                 );
@@ -1048,13 +1113,23 @@ export default function CreatorsClient({
         </section>
 
         {/* Contests Section */}
-        <section className="overflow-visible px-3 py-10 text-white sm:px-4 sm:py-16">
+        <section
+          className={cn(
+            "overflow-visible px-3 py-10 sm:px-4 sm:py-16 transition-colors duration-300",
+            isLight ? "text-black" : "text-white",
+          )}
+        >
           <div className="mx-auto max-w-[1400px] space-y-10 overflow-visible sm:space-y-12">
             {/* Most Popular Contests */}
             {finalMostPopularContests.length > 0 && (
               <div className="overflow-visible">
                 <div className="mb-4 flex flex-col items-start justify-between gap-3 px-2 sm:mb-6 sm:flex-row sm:items-center sm:gap-0 sm:px-8 md:px-16">
-                  <h2 className="text-xl font-bold text-white sm:text-2xl md:text-3xl">
+                  <h2
+                    className={cn(
+                      "text-xl font-bold sm:text-2xl md:text-3xl",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     Most Popular Campaigns
                   </h2>
                 </div>
@@ -1136,14 +1211,19 @@ export default function CreatorsClient({
         {/* As easy as you think */}
         <section
           id="why-goc"
-          className="scroll-mt-24 py-12 text-white sm:py-16 md:py-20"
+          className={cn(
+            "scroll-mt-24 py-12 sm:py-16 md:py-20 transition-colors duration-300",
+            isLight ? "text-black" : "text-white",
+          )}
           ref={animationRef}
         >
           <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
-              className={`mb-8 text-center text-[28px] font-semibold tracking-tight text-white sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={cn(
+                "mb-8 text-center text-[28px] font-semibold tracking-tight sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl",
+                isAnimated ? "slide-up" : "hide-before-animate",
+                isLight ? "text-black" : "text-white",
+              )}
               style={{
                 fontFamily: "Montserrat, sans-serif",
                 animationDelay: "0.15s",
@@ -1155,9 +1235,13 @@ export default function CreatorsClient({
             <div className="grid items-center gap-8 lg:grid-cols-2 lg:gap-14">
               {/* Left: campaign collage + CTA */}
               <div
-                className={`relative rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a0a] ${
-                  isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+                className={cn(
+                  "relative rounded-2xl overflow-hidden",
+                  isAnimated ? "slide-left" : "hide-before-animate",
+                  isLight
+                    ? "border border-[#0000000D] bg-[#ECECEC]"
+                    : "border border-white/10 bg-[#0a0a0a]",
+                )}
                 style={{ animationDelay: "0.3s" }}
               >
                 <div className="relative h-[320px] sm:h-[400px] md:h-[460px]">
@@ -1214,8 +1298,12 @@ export default function CreatorsClient({
                             className={cn(
                               "text-xl sm:text-2xl md:text-[1.65rem] font-semibold transition-colors duration-300",
                               isActive
-                                ? "text-white"
-                                : "text-zinc-500 group-hover:text-zinc-300",
+                                ? isLight
+                                  ? "text-black"
+                                  : "text-white"
+                                : isLight
+                                  ? "text-black/40 group-hover:text-black/60"
+                                  : "text-zinc-500 group-hover:text-zinc-300",
                             )}
                           >
                             {step.title}
@@ -1229,10 +1317,20 @@ export default function CreatorsClient({
                             )}
                           >
                             <div className="overflow-hidden">
-                              <p className="text-sm sm:text-base text-zinc-400 leading-relaxed max-w-md pb-3">
+                              <p
+                                className={cn(
+                                  "text-sm sm:text-base leading-relaxed max-w-md pb-3",
+                                  isLight ? "text-black/50" : "text-zinc-400",
+                                )}
+                              >
                                 {step.description}
                               </p>
-                              <div className="h-px w-full bg-zinc-800 overflow-hidden rounded-full">
+                              <div
+                                className={cn(
+                                  "h-px w-full overflow-hidden rounded-full",
+                                  isLight ? "bg-black/10" : "bg-zinc-800",
+                                )}
+                              >
                                 <div
                                   className="h-full bg-[#FF6A1A] rounded-full transition-none"
                                   style={{
@@ -1346,14 +1444,19 @@ export default function CreatorsClient({
         {/* Why Creators Choose GoC */}
         <section
           id="how-it-works"
-          className="scroll-mt-24 px-4 py-12 text-white sm:py-16 md:py-20"
+          className={cn(
+            "scroll-mt-24 px-4 py-12 sm:py-16 md:py-20 transition-colors duration-300",
+            isLight ? "text-black" : "text-white",
+          )}
           ref={howItWorksRef}
         >
           <div className="container mx-auto max-w-[1150px]">
             <h2
-              className={`mb-8 text-center text-[28px] font-semibold tracking-tight text-white sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={cn(
+                "mb-8 text-center text-[28px] font-semibold tracking-tight sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl",
+                howItWorksAnimated ? "slide-up" : "hide-before-animate",
+                isLight ? "text-black" : "text-white",
+              )}
               style={{
                 fontFamily: "Montserrat, sans-serif",
                 animationDelay: "0.1s",
@@ -1366,21 +1469,40 @@ export default function CreatorsClient({
               {/* Top row — 2 wide cards */}
               <div className="grid gap-4 md:grid-cols-2 md:gap-5">
                 {/* Get Paid Directly */}
-                <div className="relative w-full overflow-visible rounded-[20px] border border-[#303030] bg-[#151515] px-4 pb-5 pt-8 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:px-6 sm:pb-[22px] sm:pt-[54px]">
+                <div
+                  className={cn(
+                    "relative w-full overflow-visible rounded-[20px] px-4 pb-5 pt-8 sm:px-6 sm:pb-[22px] sm:pt-[54px]",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A] text-black"
+                      : "border border-[#303030] bg-[#151515] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]",
+                  )}
+                >
                   <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
                     {/* Account balance card */}
                     <div className="relative ml-3 w-full max-w-[204px] sm:ml-6 sm:h-[172px] sm:w-[204px]">
-                      {/* White glow behind card */}
-                      {/* <div
-                        aria-hidden
-                        className="pointer-events-none absolute -inset-3 rounded-[22px] bg-white/[0.14] blur-[18px]"
-                      /> */}
-                      <div className="relative h-auto w-full rounded-[17px] border border-[#2c2c2c] bg-[#151515] px-[15px] pb-4 pt-[17px]  sm:h-[172px] sm:pb-0">
-                      <p className="text-[13px] font-normal uppercase tracking-[-0.1px] text-[#777]">
+                      <div
+                        className={cn(
+                          "relative h-auto w-full rounded-[17px] px-[15px] pb-4 pt-[17px] sm:h-[172px] sm:pb-0",
+                          isLight
+                            ? "border border-[#0000000D] bg-[#F1F1F1]"
+                            : "border border-[#2c2c2c] bg-[#151515]",
+                        )}
+                      >
+                      <p
+                        className={cn(
+                          "text-[13px] font-normal uppercase tracking-[-0.1px]",
+                          isLight ? "text-black/45" : "text-[#777]",
+                        )}
+                      >
                         Account Balance
                       </p>
 
-                      <p className="mt-[5px] text-[30px] font-normal leading-none tracking-[-1px] text-[#e5e5e5]">
+                      <p
+                        className={cn(
+                          "mt-[5px] text-[30px] font-normal leading-none tracking-[-1px]",
+                          isLight ? "text-black" : "text-[#e5e5e5]",
+                        )}
+                      >
                         $3,400
                       </p>
 
@@ -1406,7 +1528,12 @@ export default function CreatorsClient({
                     </div>
 
                     {/* Dashed connector — desktop only */}
-                    <div className="hidden h-px flex-1 border-t border-dashed border-[#454545] sm:block" />
+                    <div
+                      className={cn(
+                        "hidden h-px flex-1 border-t border-dashed sm:block",
+                        isLight ? "border-black/20" : "border-[#454545]",
+                      )}
+                    />
 
                     {/* Payment icons */}
                     <div className="flex items-center sm:shrink-0">
@@ -1447,19 +1574,35 @@ export default function CreatorsClient({
 
                   {/* Bottom content */}
                   <div className="mt-6 sm:mt-[40px]">
-                    <h2 className="text-[18px] font-semibold leading-[26px] tracking-[-0.5px] text-[#d0d0d0] sm:text-[22px] sm:leading-[28px]">
+                    <h2
+                      className={cn(
+                        "text-[18px] font-semibold leading-[26px] tracking-[-0.5px] sm:text-[22px] sm:leading-[28px]",
+                        isLight ? "text-black" : "text-[#d0d0d0]",
+                      )}
+                    >
                       Get Paid Directly
                     </h2>
 
-                    <p className="mt-[7px] text-[14px] font-normal leading-[22px] tracking-[-0.2px] text-[#858585] sm:text-[17px] sm:leading-[24px]">
+                    <p
+                      className={cn(
+                        "mt-[7px] text-[14px] font-normal leading-[22px] tracking-[-0.2px] sm:text-[17px] sm:leading-[24px]",
+                        isLight ? "text-black/50" : "text-[#858585]",
+                      )}
+                    >
                       Withdraw your earnings straight to UPI and Crypto
                     </p>
                   </div>
                 </div>
 
                 {/* Create Together */}
-                <div className="relative w-full max-w-[570px] overflow-hidden rounded-[20px] border border-white/10 bg-[#171717] px-8 pb-9 pt-12">
-
+                <div
+                  className={cn(
+                    "relative w-full max-w-[570px] overflow-hidden rounded-[20px] px-8 pb-9 pt-12",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                      : "border border-white/10 bg-[#171717]",
+                  )}
+                >
       {/* Dotted Curved Lines */}
       <svg
         className="pointer-events-none absolute left-0 top-8 h-[180px] w-full"
@@ -1470,7 +1613,7 @@ export default function CreatorsClient({
         {/* Top-left curved lines */}
         <path
           d="M 95 80 Q 150 35 215 45"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.55"
@@ -1478,7 +1621,7 @@ export default function CreatorsClient({
 
         <path
           d="M 165 65 Q 215 20 270 40"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.55"
@@ -1487,7 +1630,7 @@ export default function CreatorsClient({
         {/* Top-right curved lines */}
         <path
           d="M 475 80 Q 420 35 355 45"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.55"
@@ -1495,7 +1638,7 @@ export default function CreatorsClient({
 
         <path
           d="M 405 65 Q 355 20 300 40"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.55"
@@ -1504,7 +1647,7 @@ export default function CreatorsClient({
         {/* Center-left curved connection */}
         <path
           d="M 270 42 Q 245 75 235 115"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.55"
@@ -1513,7 +1656,7 @@ export default function CreatorsClient({
         {/* Center-right curved connection */}
         <path
           d="M 300 42 Q 325 75 335 115"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.55"
@@ -1522,7 +1665,7 @@ export default function CreatorsClient({
         {/* Outer-left arc */}
         <path
           d="M 40 100 Q 110 40 180 35"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.25"
@@ -1531,7 +1674,7 @@ export default function CreatorsClient({
         {/* Outer-right arc */}
         <path
           d="M 530 100 Q 460 40 390 35"
-          stroke="#737373"
+          stroke={isLight ? "#A3A3A3" : "#737373"}
           strokeWidth="1"
           strokeDasharray="20 16"
           opacity="0.25"
@@ -1609,11 +1752,21 @@ export default function CreatorsClient({
 
       {/* Text */}
       <div className="relative z-10 mt-2">
-        <h3 className="text-[22px] font-semibold text-white/80">
+        <h3
+          className={cn(
+            "text-[22px] font-semibold",
+            isLight ? "text-black" : "text-white/80",
+          )}
+        >
           Create Together
         </h3>
 
-        <p className="mt-2 text-[16px] text-white/50">
+        <p
+          className={cn(
+            "mt-2 text-[16px]",
+            isLight ? "text-black/50" : "text-white/50",
+          )}
+        >
           Connect with creators and share opportunities.
         </p>
       </div>
@@ -1623,14 +1776,26 @@ export default function CreatorsClient({
               {/* Bottom row — 3 cards */}
               <div className="grid gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3">
                 {/* Know Your Numbers */}
-                <div className="relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/10 bg-[#171717] shadow-[0_8px_30px_rgba(0,0,0,0.35)] sm:h-[365px]">
+                <div
+                  className={cn(
+                    "relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] sm:h-[365px]",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                      : "border border-white/10 bg-[#171717] shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
+                  )}
+                >
                   {/* Chart area */}
                   <div className="absolute left-4 right-4 top-4 h-[180px] sm:left-6 sm:right-6 sm:top-6 sm:h-[205px]">
                     {/* Grid */}
                     <div
                       className="absolute inset-0 opacity-30"
                       style={{
-                        backgroundImage: `
+                        backgroundImage: isLight
+                          ? `
+              linear-gradient(to right, rgba(0,0,0,0.08) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(0,0,0,0.08) 1px, transparent 1px)
+            `
+                          : `
               linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
               linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)
             `,
@@ -1659,11 +1824,23 @@ export default function CreatorsClient({
                       />
 
                       {/* Highlight point */}
-                      <circle cx="192" cy="59" r="4" fill="white" />
+                      <circle
+                        cx="192"
+                        cy="59"
+                        r="4"
+                        fill={isLight ? "#111" : "white"}
+                      />
                     </svg>
 
                     {/* Shares badge */}
-                    <div className="absolute left-[8px] top-[8px] flex items-center gap-2 rounded-full bg-[#171717]/95 px-2 py-1.5 shadow-lg sm:left-[18px]">
+                    <div
+                      className={cn(
+                        "absolute left-[8px] top-[8px] flex items-center gap-2 rounded-full px-2 py-1.5 shadow-lg sm:left-[18px]",
+                        isLight
+                          ? "bg-white shadow-[0_8px_20px_rgba(0,0,0,0.1)]"
+                          : "bg-[#171717]/95",
+                      )}
+                    >
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D8C2FF]">
                         <svg
                           width="22"
@@ -1679,8 +1856,22 @@ export default function CreatorsClient({
                       </div>
 
                       <div className="pr-1 leading-none">
-                        <p className="text-sm font-semibold text-white">423</p>
-                        <p className="mt-1 text-[9px] text-white/40">Shares</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold",
+                            isLight ? "text-black" : "text-white",
+                          )}
+                        >
+                          423
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-1 text-[9px]",
+                            isLight ? "text-black/40" : "text-white/40",
+                          )}
+                        >
+                          Shares
+                        </p>
                       </div>
                     </div>
 
@@ -1694,7 +1885,14 @@ export default function CreatorsClient({
                     </div>
 
                     {/* Views badge */}
-                    <div className="absolute bottom-[12px] right-[0px] flex items-center gap-2 rounded-full bg-[#171717] px-2.5 py-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.4)] sm:bottom-[18px] sm:right-[3px]">
+                    <div
+                      className={cn(
+                        "absolute bottom-[12px] right-[0px] flex items-center gap-2 rounded-full px-2.5 py-1.5 sm:bottom-[18px] sm:right-[3px]",
+                        isLight
+                          ? "bg-white shadow-[0_8px_20px_rgba(0,0,0,0.1)]"
+                          : "bg-[#171717] shadow-[0_8px_20px_rgba(0,0,0,0.4)]",
+                      )}
+                    >
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFE0C8]">
                         <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#FF8800]">
                           <div className="h-2.5 w-2.5 rounded-full bg-[#FF8800]" />
@@ -1702,19 +1900,43 @@ export default function CreatorsClient({
                       </div>
 
                       <div className="pr-1 leading-none">
-                        <p className="text-sm font-semibold text-white">1.2M</p>
-                        <p className="mt-1 text-[9px] text-white/40">Views</p>
+                        <p
+                          className={cn(
+                            "text-sm font-semibold",
+                            isLight ? "text-black" : "text-white",
+                          )}
+                        >
+                          1.2M
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-1 text-[9px]",
+                            isLight ? "text-black/40" : "text-white/40",
+                          )}
+                        >
+                          Views
+                        </p>
                       </div>
                     </div>
                   </div>
 
                   {/* Text */}
                   <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
-                    <h3 className="text-[18px] font-semibold leading-tight text-white/80 sm:text-[21px]">
+                    <h3
+                      className={cn(
+                        "text-[18px] font-semibold leading-tight sm:text-[21px]",
+                        isLight ? "text-black" : "text-white/80",
+                      )}
+                    >
                       Know Your Numbers
                     </h3>
 
-                    <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
+                    <p
+                      className={cn(
+                        "mt-2 text-[14px] leading-5 sm:text-[16px] sm:leading-6",
+                        isLight ? "text-black/50" : "text-white/45",
+                      )}
+                    >
                       Track views, performance, and
                       <br className="hidden sm:block" /> earnings easily.
                     </p>
@@ -1722,14 +1944,26 @@ export default function CreatorsClient({
                 </div>
 
                 {/* Pick What Fits */}
-                <div className="relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717] sm:h-[365px]">
+                <div
+                  className={cn(
+                    "relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] sm:h-[365px]",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                      : "border border-white/[0.08] bg-[#171717]",
+                  )}
+                >
                   {/* Filter chips */}
                   <div className="absolute inset-x-0 top-[72px] px-4 sm:top-[94px] sm:px-0">
                     <div className="mx-auto flex max-w-[540px] flex-wrap justify-center gap-2 sm:absolute sm:-left-[58px] sm:top-0 sm:w-[540px] sm:justify-start sm:gap-[10px]">
                       {filters.map((filter, index) => (
                         <div
                           key={`${filter}-${index}`}
-                          className="flex h-[32px] shrink-0 items-center rounded-full bg-[#555] px-3 text-[12px] font-medium leading-none text-[#e5e5e5] sm:h-[37px] sm:px-4 sm:text-[13px]"
+                          className={cn(
+                            "flex h-[32px] shrink-0 items-center rounded-full px-3 text-[12px] font-medium leading-none sm:h-[37px] sm:px-4 sm:text-[13px]",
+                            isLight
+                              ? "border border-[#0000000D] bg-[#DEDEDE] text-black/70 shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                              : "bg-[#555] text-[#e5e5e5]",
+                          )}
                         >
                           {filter}
                         </div>
@@ -1739,11 +1973,21 @@ export default function CreatorsClient({
 
                   {/* Text — aligned with Know Your Numbers */}
                   <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
-                    <h3 className="text-[18px] font-semibold leading-tight text-white/80 sm:text-[21px]">
+                    <h3
+                      className={cn(
+                        "text-[18px] font-semibold leading-tight sm:text-[21px]",
+                        isLight ? "text-black" : "text-white/80",
+                      )}
+                    >
                       Pick What Fits
                     </h3>
 
-                    <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
+                    <p
+                      className={cn(
+                        "mt-2 text-[14px] leading-5 sm:text-[16px] sm:leading-6",
+                        isLight ? "text-black/50" : "text-white/45",
+                      )}
+                    >
                       Choose campaigns that match your
                       <br className="hidden sm:block" /> content style.
                     </p>
@@ -1751,29 +1995,65 @@ export default function CreatorsClient({
                 </div>
 
                 {/* Grow With Every Campaign */}
-                <div className="relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] border border-white/[0.08] bg-[#171717] sm:col-span-2 sm:h-[365px] lg:col-span-1">
+                <div
+                  className={cn(
+                    "relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] sm:col-span-2 sm:h-[365px] lg:col-span-1",
+                    isLight
+                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
+                      : "border border-white/[0.08] bg-[#171717]",
+                  )}
+                >
                   {/* Dashboard image */}
-                  <div className="absolute left-4 right-4 top-4 h-[180px] overflow-hidden rounded-lg sm:left-6 sm:right-6 sm:top-6 sm:h-[205px]">
+                  <div className="absolute left-3 right-3 top-3 h-[190px] overflow-hidden sm:left-5 sm:right-5 sm:top-5 sm:h-[210px]">
                     <img
-                      src="/images/b8bc146b928ab4b457b74850bfdaf6ab72f59d8e.png"
+                      src={
+                        isLight
+                          ? "/images/a8cebf9956a898eff2d6dfe3fe37bced6fe30b81.png"
+                          : "/images/b8bc146b928ab4b457b74850bfdaf6ab72f59d8e.png"
+                      }
                       alt="Campaign dashboard"
                       className="h-full w-full object-cover object-top"
                     />
+                    {/* Soft edge shade — fades image into card */}
+                    {isLight ? (
+                      <>
+                        <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#ECECEC] via-[#ECECEC]/70 to-transparent" />
+                        <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#ECECEC] via-[#ECECEC]/70 to-transparent" />
+                        <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-[#ECECEC] via-[#ECECEC]/60 to-transparent" />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/85 to-transparent" />
+                      </>
+                    ) : (
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#171717] to-transparent" />
+                    )}
                   </div>
 
-                  {/* Dark fade over image */}
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#171717]/[0.35] via-[#171717]/[0.72] to-[#171717]" />
-
-                  {/* Additional image fade */}
-                  <div className="pointer-events-none absolute left-0 top-0 h-[220px] w-full bg-gradient-to-b from-[#171717]/20 via-transparent to-[#171717]/90" />
+                  {/* Card fade into text area */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t to-transparent",
+                      isLight
+                        ? "from-[#ECECEC] via-[#ECECEC]/95"
+                        : "from-[#171717] via-[#171717]/90",
+                    )}
+                  />
 
                   {/* Text — aligned with Know Your Numbers */}
-                  <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
-                    <h3 className="text-[18px] font-semibold leading-tight text-white/80 sm:text-[21px]">
+                  <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-6 sm:left-6 sm:right-6">
+                    <h3
+                      className={cn(
+                        "text-[18px] font-semibold leading-tight sm:text-[21px]",
+                        isLight ? "text-black" : "text-white/80",
+                      )}
+                    >
                       Grow With Every Campaign
                     </h3>
 
-                    <p className="mt-2 text-[14px] leading-5 text-white/45 sm:text-[16px] sm:leading-6">
+                    <p
+                      className={cn(
+                        "mt-2 text-[14px] leading-5 sm:text-[16px] sm:leading-6",
+                        isLight ? "text-black/50" : "text-white/45",
+                      )}
+                    >
                       Build experience, performance, and
                       <br className="hidden sm:block" /> earning potential.
                     </p>
@@ -1784,50 +2064,40 @@ export default function CreatorsClient({
           </div>
         </section>
 
-        <section className="relative flex min-h-[420px] w-full items-center justify-center overflow-hidden bg-black px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[700px]">
+        <Testimonials />
+
+        <section
+          className={cn(
+            "relative flex min-h-[420px] w-full items-center justify-center overflow-hidden px-4 py-16 sm:min-h-[560px] sm:py-20 md:min-h-[700px] transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
           {/* Orange glow */}
           <div
-            className="
-          pointer-events-none absolute left-1/2 top-1/2
-          h-[320px] w-[320px]
-          -translate-x-1/2 -translate-y-1/2
-          rounded-full
-          bg-orange-500/10
-          blur-[100px]
-          sm:h-[500px] sm:w-[500px]
-        "
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-1/2 h-[320px] w-[320px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[100px] sm:h-[500px] sm:w-[500px]",
+              isLight ? "bg-orange-500/20" : "bg-orange-500/10",
+            )}
           />
 
           {/* Content */}
           <div className="relative z-10 flex flex-col items-center px-2 text-center">
             {/* Number */}
             <h1
-              className="
-            text-[52px]
-            font-bold
-            leading-none
-            tracking-[-0.04em]
-            text-white
-            sm:text-[100px]
-            md:text-[120px]
-            lg:text-[124px]
-          "
+              className={cn(
+                "text-[52px] font-bold leading-none tracking-[-0.04em] sm:text-[100px] md:text-[120px] lg:text-[124px]",
+                isLight ? "text-black" : "text-white",
+              )}
             >
               16,700+
             </h1>
 
             {/* Subtitle */}
             <p
-              className="
-            mt-4
-            text-[16px]
-            font-semibold
-            tracking-[-0.02em]
-            text-white/70
-            sm:mt-5
-            sm:text-[21px]
-            md:text-[22px]
-          "
+              className={cn(
+                "mt-4 text-[16px] font-semibold tracking-[-0.02em] sm:mt-5 sm:text-[21px] md:text-[22px]",
+                isLight ? "text-black/55" : "text-white/70",
+              )}
             >
               creators have already Joined
             </p>
@@ -1835,25 +2105,12 @@ export default function CreatorsClient({
             {/* Button */}
             <button
               type="button"
-              className="
-            group
-            mt-6
-            flex items-center gap-3
-            rounded-[22px]
-            border border-orange-400
-            bg-white
-            px-5 py-3.5
-            text-[15px]
-            font-semibold
-            text-orange-500
-            shadow-[0_0_25px_rgba(255,120,0,0.45)]
-            transition-all duration-300
-            hover:scale-105
-            hover:shadow-[0_0_35px_rgba(255,120,0,0.65)]
-            sm:mt-8
-            sm:px-6 sm:py-4
-            sm:text-[17px]
-          "
+              className={cn(
+                "group mt-6 flex items-center gap-3 rounded-[22px] border border-orange-400 px-5 py-3.5 text-[15px] font-semibold shadow-[0_0_25px_rgba(255,120,0,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,120,0,0.65)] sm:mt-8 sm:px-6 sm:py-4 sm:text-[17px]",
+                isLight
+                  ? "bg-[#FF6A1A] text-white"
+                  : "bg-white text-orange-500",
+              )}
             >
               <span>Make you turn</span>
 
@@ -1914,8 +2171,6 @@ export default function CreatorsClient({
             </div>
           </div>
         </section> */}
-
-        {/* <Testimonials /> */}
 
         {/* Gaming Testimonials Section */}
         {/* <section className="py-20 md:py-32 relative">

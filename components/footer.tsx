@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Twitter, Instagram, Youtube, Mail, MapPin } from "lucide-react";
-import logo from "@/public/images/gold_logo_horizontal.svg";
+import logoLight from "@/public/images/Primary Logo white 1 (2).png";
 import logoWhite from "@/public/images/Primary_Logo_white.png";
 import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
@@ -35,7 +35,7 @@ export function Footer() {
           <div className="lg:col-span-3 space-y-5">
             <Link href={MARKETING_HOME_AS_GUEST} className="inline-block">
               <Image
-                src={isLight ? logo : logoWhite}
+                src={isLight ? logoLight : logoWhite}
                 alt="Game Of Creators Logo"
                 width={160}
                 height={40}
@@ -69,17 +69,20 @@ export function Footer() {
               >
                 <Instagram className="h-5 w-5" />
               </Link>
-              {!isLight ? (
+             
                 <Link
                   href="https://x.com/gameofcreators"
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="X"
-                  className="text-white hover:opacity-80 transition-opacity"
+                  className={cn(
+                    "text-white hover:opacity-80 transition-opacity",
+                    isLight ? "text-black" : "text-white",
+                  )}               
                 >
                   <Twitter className="h-5 w-5" />
                 </Link>
-              ) : null}
+             
             </div>
           </div>
 

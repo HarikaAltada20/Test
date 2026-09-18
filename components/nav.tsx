@@ -38,7 +38,7 @@ import {
   Home,
 } from "lucide-react";
 import logoDark from "@/public/images/Primary_Logo_white.png";
-import logoLight from "@/public/images/gold_logo_horizontal.svg";
+import logoLight from "@/public/images/Primary Logo white 1 (2).png";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
 import { useClientAuth } from "@/hooks/use-client-auth";

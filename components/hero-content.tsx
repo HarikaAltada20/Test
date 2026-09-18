@@ -953,41 +953,58 @@ export default function HeroContent() {
               </p>
 
               {/* ================================================
-                FORM MOCKUP (stays dark as product UI preview)
+                FORM MOCKUP
             ================================================= */}
               <div
                 className={cn(
-                  "absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border bg-[#121212] text-white sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]",
+                  "absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]",
                   isLight
-                    ? "border-black/10 shadow-[0_-10px_40px_rgba(20,16,40,.12)]"
-                    : "border-white/[0.10] shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
+                    ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
+                    : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
                 )}
               >
                 {/* Launch — pinned to the right edge of the form card */}
                 <div className="absolute right-0 top-3 z-20 sm:top-4">
                   <div className="relative">
-                    {/* Soft purple glow just under the button */}
-                 
-                    <div
-                      aria-hidden
-                      className="pointer-events-none absolute inset-x-1 -bottom-0.5 h-2 rounded-full bg-black/70 blur-[4px]"
-                    />
-
-                    <div className="relative overflow-hidden rounded-[5px] bg-[#201E1E] px-3 py-1.5 text-[13px] font-medium text-white">
-                      {/* Small elliptical purple shade inside the button */}
+                    {isLight ? (
                       <div
                         aria-hidden
-                        className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.6)_100%)] blur-[7px]"
+                        className="pointer-events-none absolute -inset-1 rounded-lg bg-[radial-gradient(circle,rgba(124,58,237,0.35),transparent_70%)] blur-[6px]"
                       />
+                    ) : (
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-1 -bottom-0.5 h-2 rounded-full bg-black/70 blur-[4px]"
+                      />
+                    )}
+
+                    <div
+                      className={cn(
+                        "relative overflow-hidden rounded-[5px] px-3 py-1.5 text-[13px] font-medium",
+                        isLight
+                          ? "border border-black/[0.06] bg-white text-[#7C3AED] shadow-[0_8px_20px_rgba(124,58,237,0.25)]"
+                          : "bg-[#201E1E] text-white",
+                      )}
+                    >
+                      {!isLight ? (
+                        <div
+                          aria-hidden
+                          className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.6)_100%)] blur-[7px]"
+                        />
+                      ) : null}
 
                       <span className="relative z-10 flex items-center gap-1.5">
-                        <Image
-                          src="/images/Frame.png"
-                          alt=""
-                          width={16}
-                          height={16}
-                          className="h-4 w-4 object-contain mix-blend-screen"
-                        />
+                        {isLight ? (
+                          <Rocket className="h-4 w-4 text-[#7C3AED]" strokeWidth={2} />
+                        ) : (
+                          <Image
+                            src="/images/Frame.png"
+                            alt=""
+                            width={16}
+                            height={16}
+                            className="h-4 w-4 object-contain mix-blend-screen"
+                          />
+                        )}
                         Launch
                       </span>
                     </div>
@@ -997,11 +1014,25 @@ export default function HeroContent() {
                 {/* Form header */}
                 <div className="flex items-center justify-between px-4 pt-4">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#292929] text-[10px]">
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                        isLight
+                          ? "bg-[#7C3AED]/15 text-[#7C3AED]"
+                          : "bg-[#292929] text-white",
+                      )}
+                    >
                       1
                     </span>
 
-                    <span className="text-[14px] font-medium">Details</span>
+                    <span
+                      className={cn(
+                        "text-[14px] font-medium",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      Details
+                    </span>
                   </div>
                 </div>
 
@@ -1009,39 +1040,89 @@ export default function HeroContent() {
                 <div className="mt-5 h-[calc(100%-48px)] overflow-hidden px-4">
                   {/* Campaign title */}
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-white/75">
+                    <label
+                      className={cn(
+                        "text-[10px]",
+                        isLight ? "text-black/70" : "text-white/75",
+                      )}
+                    >
                       Campaign title
                       <span className="text-red-400"> *</span>
                     </label>
 
-                    <span className="text-[9px] text-white/35">0/100</span>
+                    <span
+                      className={cn(
+                        "text-[9px]",
+                        isLight ? "text-black/35" : "text-white/35",
+                      )}
+                    >
+                      0/100
+                    </span>
                   </div>
 
-                  <div className="mt-1 h-[30px] rounded-md border border-white/[0.06] bg-[#292929] px-3 py-2 text-[9px] text-white/25">
+                  <div
+                    className={cn(
+                      "mt-1 h-[30px] rounded-md border px-3 py-2 text-[9px]",
+                      isLight
+                        ? "border-[#0000000D] bg-white text-black/40"
+                        : "border-white/[0.06] bg-[#292929] text-white/25",
+                    )}
+                  >
                     e.g., Create a Viral shorts/video for our New App
                   </div>
 
                   {/* Platform + Content type */}
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] text-white/75">
+                      <label
+                        className={cn(
+                          "text-[10px]",
+                          isLight ? "text-black/70" : "text-white/75",
+                        )}
+                      >
                         Platform
                         <span className="text-red-400"> *</span>
                       </label>
 
-                      <div className="mt-1 flex h-[30px] items-center justify-between rounded-md border border-white/[0.06] bg-[#292929] px-3 text-[10px] text-white/25">
+                      <div
+                        className={cn(
+                          "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px]",
+                          isLight
+                            ? "border-[#0000000D] bg-white text-black/40"
+                            : "border-white/[0.06] bg-[#292929] text-white/25",
+                        )}
+                      >
                         <span>Select platform</span>
                         <span>⌄</span>
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-white/75">
+                      <label
+                        className={cn(
+                          "text-[10px]",
+                          isLight ? "text-black/70" : "text-white/75",
+                        )}
+                      >
                         Content Type
-                        <span className="text-white/40"> (optional)</span>
+                        <span
+                          className={cn(
+                            isLight ? "text-black/40" : "text-white/40",
+                          )}
+                        >
+                          {" "}
+                          (optional)
+                        </span>
                       </label>
 
-                      <div className="mt-1 flex h-[30px] items-center justify-between rounded-md border border-white/[0.06] bg-[#292929] px-3 text-[10px] text-white/25">
+                      <div
+                        className={cn(
+                          "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px]",
+                          isLight
+                            ? "border-[#0000000D] bg-white text-black/40"
+                            : "border-white/[0.06] bg-[#292929] text-white/25",
+                        )}
+                      >
                         <span>Select content type</span>
                         <span>⌄</span>
                       </div>
@@ -1049,16 +1130,46 @@ export default function HeroContent() {
                   </div>
 
                   {/* Upload */}
-                  <div className="mt-4 flex h-[115px] items-center justify-center rounded-md border border-dashed border-white/[0.08] bg-[#242424]">
+                  <div
+                    className={cn(
+                      "mt-4 flex h-[115px] items-center justify-center rounded-md border border-dashed",
+                      isLight
+                        ? "border-[#0000001A] bg-white"
+                        : "border-white/[0.08] bg-[#242424]",
+                    )}
+                  >
                     <div className="flex flex-col items-center text-center">
-                      <Upload className="h-5 w-5 text-white/30" />
+                      <Upload
+                        className={cn(
+                          "h-5 w-5",
+                          isLight ? "text-black/35" : "text-white/30",
+                        )}
+                      />
 
-                      <div className="mt-1 text-[10px] text-white/45">
-                        Drag, drop or <span className="underline">browse</span>{" "}
+                      <div
+                        className={cn(
+                          "mt-1 text-[10px]",
+                          isLight ? "text-black/50" : "text-white/45",
+                        )}
+                      >
+                        Drag, drop or{" "}
+                        <span
+                          className={cn(
+                            "underline",
+                            isLight ? "text-[#7C3AED]" : "",
+                          )}
+                        >
+                          browse
+                        </span>{" "}
                         thumbnail
                       </div>
 
-                      <div className="mt-1 text-[8px] text-white/25">
+                      <div
+                        className={cn(
+                          "mt-1 text-[8px]",
+                          isLight ? "text-black/35" : "text-white/25",
+                        )}
+                      >
                         Max file size: 5MB
                       </div>
                     </div>
@@ -1069,13 +1180,38 @@ export default function HeroContent() {
               {/* ================================================
                 FLOATING BUDGET
             ================================================= */}
-              <div className="absolute bottom-[34px] left-[29px] z-10 w-[176px] rounded-[15px] border border-white/[0.12] bg-[#1b1b1b] p-3 shadow-[0_15px_35px_rgba(0,0,0,.45)]">
-                <div className="flex items-center gap-2 text-[13px] font-medium text-white">
-                  <Wallet className="h-4 w-4 shrink-0 text-white/90" strokeWidth={1.8} />
+              <div
+                className={cn(
+                  "absolute bottom-[34px] left-[29px] z-10 w-[176px] rounded-[15px] border p-3",
+                  isLight
+                    ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
+                    : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex items-center gap-2 text-[13px] font-medium",
+                    isLight ? "text-black" : "text-white",
+                  )}
+                >
+                  <Wallet
+                    className={cn(
+                      "h-4 w-4 shrink-0",
+                      isLight ? "text-black/70" : "text-white/90",
+                    )}
+                    strokeWidth={1.8}
+                  />
                   Budget
                 </div>
 
-                <div className="mt-3 h-[27px] rounded-md border border-white/[0.07] bg-[#292929] px-3 py-1.5 text-[12px] text-white/30">
+                <div
+                  className={cn(
+                    "mt-3 h-[27px] rounded-md border px-3 py-1.5 text-[12px]",
+                    isLight
+                      ? "border-[#0000000D] bg-white text-black/50"
+                      : "border-white/[0.07] bg-[#292929] text-white/30",
+                  )}
+                >
                   $ 24000
                 </div>
               </div>
