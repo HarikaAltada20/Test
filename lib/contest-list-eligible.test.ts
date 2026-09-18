@@ -8,7 +8,7 @@ import {
 
 /**
  * Parity checks for SQL contest_matches_creator_eligibility
- * (db/migrations/20260731_campaign_list_page_ids.sql).
+ * (redefined for the 1–5 scale in db/migrations/20260915_quality_score_scale_1_to_5.sql).
  * Keep these cases aligned when changing gate semantics.
  */
 
@@ -67,6 +67,28 @@ describe("eligibleOnly SQL parity (contest_matches_creator_eligibility)", () => 
         { ...baseSnapshot, bestQualityScore: 2 },
       ),
       false,
+    );
+    assert.equal(
+      eligible(
+        {
+          contest_format: "video",
+          min_best_quality_score: 4,
+          min_avg_quality_score: 4.5,
+        },
+        { ...baseSnapshot, bestQualityScore: 4, avgQualityScore: 4.25 },
+      ),
+      false,
+    );
+    assert.equal(
+      eligible(
+        {
+          contest_format: "video",
+          min_best_quality_score: 4,
+          min_avg_quality_score: 4.5,
+        },
+        { ...baseSnapshot, bestQualityScore: 5, avgQualityScore: 4.5 },
+      ),
+      true,
     );
     assert.equal(
       eligible(

@@ -94,7 +94,7 @@ export function parseContestCreatorRequirements(
 
   const minBestRaw = parseOptionalPositiveInt(contest.min_best_quality_score);
   const minBestQuality =
-    minBestRaw !== null && minBestRaw >= 1 && minBestRaw <= 3
+    minBestRaw !== null && minBestRaw >= 1 && minBestRaw <= 5
       ? minBestRaw
       : null;
 
@@ -104,7 +104,7 @@ export function parseContestCreatorRequirements(
 
   const minAvgRaw = parseOptionalNumber(contest.min_avg_quality_score);
   const minAvgQuality =
-    minAvgRaw !== null && minAvgRaw >= 1 && minAvgRaw <= 3 ? minAvgRaw : null;
+    minAvgRaw !== null && minAvgRaw >= 1 && minAvgRaw <= 5 ? minAvgRaw : null;
 
   const minEarnings = parseOptionalPositiveInt(contest.min_platform_earnings);
   const minViews = parseOptionalPositiveInt(contest.min_platform_views);
