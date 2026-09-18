@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AvatarImage, AvatarFallback, Avatar } from "@/components/ui/avatar";
-// import { ModeToggle } from "@/components/mode-toggle"
 import {
   Sheet,
   SheetContent,
@@ -38,7 +37,8 @@ import {
   Star,
   Home,
 } from "lucide-react";
-import logo from "@/public/images/Primary_Logo_white.png";
+import logoDark from "@/public/images/Primary_Logo_white.png";
+import logoLight from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
 import { useClientAuth } from "@/hooks/use-client-auth";
@@ -46,6 +46,8 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { subscriptionPlans, PRODUCT_IDS } from "@/constants/subscriptionPlans";
 import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
+import { MarketingThemeToggle } from "@/components/marketing-theme-toggle";
+import { useThemeMode } from "@/hooks/use-theme-mode";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
@@ -65,6 +67,7 @@ export function Nav({
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useClientAuth();
+  const { isLight } = useThemeMode();
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [creatorsLoading, setCreatorsLoading] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -166,6 +169,8 @@ export function Nav({
   const isBrandsPage = pathname === "/brands";
   const isHomePage = pathname === "/";
   const isDarkMarketingNav = isCreatorsPage || isBrandsPage || isHomePage;
+  const isLightMarketingNav = isDarkMarketingNav && isLight;
+  const marketingLogo = isLightMarketingNav ? logoLight : logoDark;
 
   const creatorsNavLinks = [
     { label: "Home", href: marketingHomeHref },
@@ -234,7 +239,14 @@ export function Nav({
   return (
     <header className="sticky top-0 z-50 w-full">
       {isDarkMarketingNav ? (
-        <div className="absolute inset-0 bg-black backdrop-blur-md" />
+        <div
+          className={cn(
+            "absolute inset-0 backdrop-blur-md transition-colors duration-300",
+            isLightMarketingNav
+              ? "bg-[#F1F1F1]"
+              : "bg-black",
+          )}
+        />
       ) : (
         <>
           {/* Premium Background with Strategic Gradients */}
@@ -276,7 +288,7 @@ export function Nav({
 
                   <div className="relative ">
                     <Image
-                      src={logo}
+                      src={isDarkMarketingNav ? marketingLogo : logoDark}
                       alt="Game Of Creators Logo"
                       width={200}
                       height={48}
@@ -307,7 +319,10 @@ export function Nav({
                         onClick={() => handleMarketingLinkClick(link)}
                         disabled={isLinkLoading}
                         className={cn(
-                          "inline-flex items-center gap-2 px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium text-zinc-400 transition-colors duration-200 hover:text-white whitespace-nowrap",
+                          "inline-flex items-center gap-2 px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium transition-colors duration-200 whitespace-nowrap",
+                          isLightMarketingNav
+                            ? "text-black/55 hover:text-black"
+                            : "text-zinc-400 hover:text-white",
                           isLinkLoading && "opacity-70 cursor-not-allowed"
                         )}
                       >
@@ -318,7 +333,12 @@ export function Nav({
                   })}
                 </nav>
               ) : isHomePage ? (
-                <nav className="flex items-center gap-6 lg:gap-8 text-[15px] lg:text-[16px] text-white/50">
+                <nav
+                  className={cn(
+                    "flex items-center gap-6 lg:gap-8 text-[15px] lg:text-[16px]",
+                    isLightMarketingNav ? "text-black/50" : "text-white/50",
+                  )}
+                >
                   {homeNavLinks.map((link) => {
                     const isLinkLoading =
                       (link.label === "For Brands" && brandsLoading) ||
@@ -337,7 +357,10 @@ export function Nav({
                         }}
                         disabled={isLinkLoading}
                         className={cn(
-                          "inline-flex items-center gap-2 transition-colors hover:text-white whitespace-nowrap",
+                          "inline-flex items-center gap-2 transition-colors whitespace-nowrap",
+                          isLightMarketingNav
+                            ? "hover:text-black"
+                            : "hover:text-white",
                           isLinkLoading && "opacity-70 cursor-not-allowed"
                         )}
                       >
@@ -397,7 +420,13 @@ export function Nav({
             </div>
 
             {/* Right Side Actions */}
-            <div className="flex items-center space-x-5">
+            <div className="flex items-center space-x-3 sm:space-x-5">
+              {isDarkMarketingNav ? (
+                <MarketingThemeToggle
+                  className="hidden sm:inline-flex"
+                  lightChrome={isLightMarketingNav}
+                />
+              ) : null}
               {user ? (
                 <>
                   {/* Enhanced User Dropdown */}
@@ -589,7 +618,10 @@ export function Nav({
                   <Button
                     disabled={isNavigating || isSigningIn}
                     className={cn(
-                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2 text-[12px] font-medium rounded-xl bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/25 text-white hover:bg-white/10 hover:border-white/40 transition-all duration-300 min-h-[40px]",
+                      "hidden md:inline-flex items-center gap-1.5 px-5 py-2 text-[12px] font-medium rounded-xl transition-all duration-300 min-h-[40px]",
+                      isLightMarketingNav
+                        ? "bg-gradient-to-b from-[#8A68FF] to-[#754FF6] border border-[#7c3aed] text-white hover:bg-[#6d28d9] hover:border-[#6d28d9]"
+                        : "bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] border border-white/25 text-white hover:bg-white/10 hover:border-white/40",
                       (isNavigating || isSigningIn) &&
                         "opacity-70 cursor-not-allowed"
                     )}
@@ -649,11 +681,18 @@ export function Nav({
                       className={cn(
                         "backdrop-blur-sm transition-all duration-300 p-2",
                         isDarkMarketingNav
-                          ? "bg-white/5 border border-white/15 hover:bg-white/10 hover:border-white/25"
+                          ? isLightMarketingNav
+                            ? "bg-black/[0.04] border border-black/10 hover:bg-black/[0.07] hover:border-black/15"
+                            : "bg-white/5 border border-white/15 hover:bg-white/10 hover:border-white/25"
                           : "bg-slate-900/50 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10"
                       )}
                     >
-                      <Menu className="h-5 w-5 text-slate-300" />
+                      <Menu
+                        className={cn(
+                          "h-5 w-5",
+                          isLightMarketingNav ? "text-black/70" : "text-slate-300",
+                        )}
+                      />
                       <span className="sr-only">Toggle menu</span>
                     </Button>
                   </SheetTrigger>
@@ -662,7 +701,9 @@ export function Nav({
                     className={cn(
                       "w-[320px] border-l backdrop-blur-md flex flex-col h-full",
                       isDarkMarketingNav
-                        ? "bg-black border-white/10"
+                        ? isLightMarketingNav
+                          ? "bg-[#F1F1F1]"
+                          : "bg-black"
                         : "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-violet-400/20"
                     )}
                   >
@@ -670,7 +711,9 @@ export function Nav({
                       className={cn(
                         "pb-6 flex-shrink-0",
                         isDarkMarketingNav
-                          ? "border-b border-white/10"
+                          ? isLightMarketingNav
+                            ? "border-b border-black/10"
+                            : "border-b border-white/10"
                           : "border-b border-violet-400/20"
                       )}
                     >
@@ -678,7 +721,9 @@ export function Nav({
                         className={cn(
                           "text-xl font-bold text-left",
                           isDarkMarketingNav
-                            ? "text-white"
+                            ? isLightMarketingNav
+                              ? "text-black"
+                              : "text-white"
                             : "text-xl font-bold text-white bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent"
                         )}
                       >
@@ -693,16 +738,29 @@ export function Nav({
                         {/* Mobile Logo */}
                         <Link
                           href={marketingHomeHref}
-                          className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15"
+                          className={cn(
+                            "flex items-center gap-3 mb-8 p-3 rounded-xl border",
+                            isLightMarketingNav
+                              ? "bg-black/[0.03] border-black/10"
+                              : "bg-gradient-to-r from-slate-900/50 to-slate-800/50 border-violet-400/15",
+                          )}
                         >
                           <Image
-                            src={logo}
+                            src={isDarkMarketingNav ? marketingLogo : logoDark}
                             alt="Game Of Creators Logo"
                             width={140}
                             height={38}
                             className="h-9 w-auto"
                           />
                         </Link>
+
+                        {isDarkMarketingNav ? (
+                          <div className="mb-6">
+                            <MarketingThemeToggle
+                              lightChrome={isLightMarketingNav}
+                            />
+                          </div>
+                        ) : null}
 
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">
@@ -722,7 +780,10 @@ export function Nav({
                                   }}
                                   disabled={isLinkLoading}
                                   className={cn(
-                                    "inline-flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
+                                    "inline-flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left",
+                                    isLightMarketingNav
+                                      ? "text-black/70 hover:text-black hover:bg-black/[0.04]"
+                                      : "text-slate-200 hover:text-white hover:bg-white/5",
                                     isLinkLoading &&
                                       "opacity-70 cursor-not-allowed"
                                   )}
@@ -755,7 +816,10 @@ export function Nav({
                                   }}
                                   disabled={isLinkLoading}
                                   className={cn(
-                                    "inline-flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left text-slate-200 hover:text-white hover:bg-white/5",
+                                    "inline-flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full text-left",
+                                    isLightMarketingNav
+                                      ? "text-black/70 hover:text-black hover:bg-black/[0.04]"
+                                      : "text-slate-200 hover:text-white hover:bg-white/5",
                                     isLinkLoading &&
                                       "opacity-70 cursor-not-allowed"
                                   )}
@@ -883,12 +947,22 @@ export function Nav({
                             </button>
                           </div>
                         ) : isDarkMarketingNav ? (
-                          <div className="space-y-4 border-t border-white/10 pt-6">
+                          <div
+                            className={cn(
+                              "space-y-4 border-t pt-6",
+                              isLightMarketingNav
+                                ? "border-black/10"
+                                : "border-white/10",
+                            )}
+                          >
                             <Link href="/auth/signup" onClick={handleDarkMarketingSignUp}>
                               <Button
                                 disabled={isNavigating || isSigningIn}
                                 className={cn(
-                                  "w-full flex items-center justify-center gap-2 rounded-full bg-transparent border border-white/25 text-white hover:bg-white/10",
+                                  "w-full flex items-center justify-center gap-2 rounded-full",
+                                  isLightMarketingNav
+                                    ? "bg-gradient-to-b from-[#8A68FF] to-[#754FF6] border border-[#7c3aed] text-white hover:bg-[#6d28d9]"
+                                    : "bg-transparent border border-white/25 text-white hover:bg-white/10",
                                   (isNavigating || isSigningIn) &&
                                     "opacity-70 cursor-not-allowed"
                                 )}

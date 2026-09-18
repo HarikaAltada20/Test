@@ -14,6 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useThemeMode } from "@/hooks/use-theme-mode";
+import { cn } from "@/lib/utils";
 
 export default function CtcBanner() {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -21,6 +23,7 @@ export default function CtcBanner() {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const { isLight } = useThemeMode();
   const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
   const [showCreatorModal, setShowCreatorModal] = useState(false);
   const [isCheckingAccount, setIsCheckingAccount] = useState(false);
@@ -141,15 +144,23 @@ export default function CtcBanner() {
 
   return (
     <section
-      className="relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center text-white overflow-hidden bg-black py-16 md:py-20"
+      className={cn(
+        "relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center overflow-hidden py-16 md:py-20 transition-colors duration-300",
+        isHome && isLight
+          ? "bg-transparent text-black"
+          : "bg-black text-white",
+      )}
       ref={sectionRef}
     >
       {isHome ? (
         <>
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            {/* <div className="absolute left-[8%] top-[8%] h-[420px] w-[420px] rounded-full border border-[#FF6A1A]/25" />
-            <div className="absolute right-[6%] top-[18%] h-[520px] w-[520px] rounded-full border border-violet-500/25" /> */}
-            <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 opacity-70">
+            <div
+              className={cn(
+                "absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2",
+                isLight ? "opacity-40" : "opacity-70",
+              )}
+            >
               <Image
                 src="/images/attach-money.png"
                 alt=""
@@ -161,15 +172,30 @@ export default function CtcBanner() {
           </div>
 
           <div className="relative z-10 flex flex-col items-center px-4 w-full max-w-4xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-200">
-              <ShieldCheck className="h-4 w-4" />
+            <div
+              className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-sm",
+                isLight
+                  ? "border-black/[0.06] bg-white text-black/55"
+                  : "border-white/10 bg-white/5 text-zinc-200",
+              )}
+            >
+              <ShieldCheck
+                className={cn(
+                  "h-4 w-4",
+                  isLight ? "text-black/45" : "text-zinc-200",
+                )}
+              />
               Pay for Performance
             </div>
 
             <h2
-              className={`mt-8 text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-semibold tracking-tight text-center leading-tight ${
-                inView ? "slide-up" : "opacity-0 translate-y-10"
-              }`}
+              className={cn(
+                `mt-8 text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-semibold tracking-tight text-center leading-tight ${
+                  inView ? "slide-up" : "opacity-0 translate-y-10"
+                }`,
+                isLight ? "text-black" : "text-white",
+              )}
               style={{ fontFamily: "Montserrat, sans-serif" }}
             >
               Brands Get Results.
@@ -185,7 +211,12 @@ export default function CtcBanner() {
                   router.push("/brands");
                 }}
                 disabled={isNavigating}
-                className="inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl border border-white/20 bg-gradient-to-b from-white/[0.08] to-transparent px-6 text-sm sm:text-base font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-70"
+                className={cn(
+                  "inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl px-6 text-sm sm:text-base font-semibold transition-colors disabled:opacity-70",
+                  isLight
+                    ? "bg-[#7c3aed] text-white hover:bg-[#6d28d9] shadow-[0_12px_30px_rgba(124,58,237,0.28)]"
+                    : "border border-white/20 bg-gradient-to-b from-white/[0.08] to-transparent text-white hover:bg-white/10",
+                )}
               >
                 {isNavigating ? <ButtonLoadingSpinner /> : null}
                 For Brands →
@@ -197,7 +228,12 @@ export default function CtcBanner() {
                   router.push("/creators");
                 }}
                 disabled={isNavigating}
-                className="inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl bg-[#EDE4F5] px-6 text-sm sm:text-base font-semibold text-[#1a1224] hover:bg-white transition-colors disabled:opacity-70"
+                className={cn(
+                  "inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl px-6 text-sm sm:text-base font-semibold transition-colors disabled:opacity-70",
+                  isLight
+                    ? "border border-black/[0.08] bg-white text-black hover:bg-white shadow-[0_10px_28px_rgba(15,15,30,0.08)]"
+                    : "bg-[#EDE4F5] text-[#1a1224] hover:bg-white",
+                )}
               >
                 {isNavigating ? <ButtonLoadingSpinner /> : null}
                 For Creators →

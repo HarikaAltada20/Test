@@ -3,6 +3,8 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { FaChevronDown } from "react-icons/fa";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
+import { useThemeMode } from "@/hooks/use-theme-mode";
+import { cn } from "@/lib/utils";
 
 const homeFaqs = [
   {
@@ -298,8 +300,10 @@ const brandFaqs = [
 
 export default function FAQ() {
   const pathname = usePathname();
+  const { isLight } = useThemeMode();
   const isBrands = pathname.includes("brands");
   const isHome = pathname === "/";
+  const useLightFaq = isHome && isLight;
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   const faqs = isBrands ? brandFaqs : isHome ? homeFaqs : creatorFaqs;
@@ -318,11 +322,17 @@ export default function FAQ() {
   return (
     <section
       id="faq"
-      className="scroll-mt-24 bg-black px-4 py-16 text-white md:py-24"
+      className={cn(
+        "scroll-mt-24 px-4 py-16 md:py-24 transition-colors duration-300",
+        useLightFaq ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+      )}
     >
       <div className="mx-auto w-full max-w-5xl text-center">
         <h2
-          className="text-3xl font-semibold tracking-tight text-white sm:text-4xl md:text-5xl"
+          className={cn(
+            "text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl",
+            useLightFaq ? "text-black" : "text-white",
+          )}
           style={{ fontFamily: "Montserrat, sans-serif" }}
         >
           Get your answers now
@@ -334,7 +344,12 @@ export default function FAQ() {
             return (
               <div
                 key={faq.id}
-                className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#141414]"
+                className={cn(
+                  "overflow-hidden rounded-2xl border",
+                  useLightFaq
+                    ? "bg-[#ECECEC] border border-[#0000000D] text-black"
+                    : "border-white/[0.08] bg-[#141414]",
+                )}
               >
                 <button
                   type="button"
@@ -342,19 +357,29 @@ export default function FAQ() {
                   className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left sm:px-6 sm:py-5"
                   aria-expanded={isOpen}
                 >
-                  <span className="text-base font-medium text-white sm:text-lg">
+                  <span
+                    className={cn(
+                      "text-base font-medium sm:text-lg",
+                      useLightFaq ? "text-black" : "text-white",
+                    )}
+                  >
                     {faq.question}
                   </span>
                   <FaChevronDown
-                    className={`shrink-0 text-white/80 transition-transform duration-200 ${
-                      isOpen ? "rotate-180" : ""
-                    }`}
+                    className={cn(
+                      "shrink-0 transition-transform duration-200",
+                      useLightFaq ? "text-black/60" : "text-white/80",
+                      isOpen ? "rotate-180" : "",
+                    )}
                   />
                 </button>
 
                 {isOpen ? (
                   <div
-                    className="px-5 pb-5 text-sm leading-relaxed text-zinc-400 sm:px-6 sm:text-base"
+                    className={cn(
+                      "px-5 pb-5 text-sm leading-relaxed sm:px-6 sm:text-base",
+                      useLightFaq ? "text-black/55" : "text-zinc-400",
+                    )}
                     dangerouslySetInnerHTML={{ __html: faq.answer }}
                   />
                 ) : null}
@@ -363,7 +388,12 @@ export default function FAQ() {
           })}
         </div>
 
-        <p className="mt-10 text-sm text-zinc-400 sm:text-base">
+        <p
+          className={cn(
+            "mt-10 text-sm sm:text-base",
+            useLightFaq ? "text-black/50" : "text-zinc-400",
+          )}
+        >
           Have questions?{" "}
           <a
             href={supportHref}

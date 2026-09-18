@@ -173,7 +173,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               html{background:${
-                initialMode === "dark" ? "#07031E" : "#ffffff"
+                initialMode === "dark" ? "#07031E" : "#F1F1F1"
               };color:${
                 initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
               }}
@@ -201,8 +201,13 @@ export default async function RootLayout({
                   }
                   d.setAttribute('data-theme', mode);
                   if (mode === 'dark') {
+                    d.classList.add('dark');
                     d.style.backgroundColor = '#07031E';
                     d.style.color = 'rgb(248, 250, 252)';
+                  } else {
+                    d.classList.remove('dark');
+                    d.style.backgroundColor = '#F1F1F1';
+                    d.style.color = '#111827';
                   }
                 } catch(e) {}
               })();

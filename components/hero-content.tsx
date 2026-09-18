@@ -32,6 +32,7 @@ import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
 import NumbersSection from "./NumberSection";
+import { useThemeMode } from "@/hooks/use-theme-mode";
 const steps = [
   {
     step: 1,
@@ -106,6 +107,7 @@ const steps = [
 export default function HeroContent() {
   const router = useRouter();
   const pathname = usePathname();
+  const { isLight } = useThemeMode();
   const [heroNavPending, setHeroNavPending] = useState<
     "brand" | "creator" | null
   >(null);
@@ -216,27 +218,43 @@ export default function HeroContent() {
   return (
     <div>
       {/* Hero */}
-      <main className="relative min-h-screen overflow-hidden bg-[#000000] text-white">
+      <main
+        className={cn(
+          "relative min-h-screen overflow-hidden transition-colors duration-300",
+          isLight ? "bg-transparent text-black" : "bg-[#000000] text-white",
+        )}
+      >
         {/* =========================================================
           BACKGROUND
       ========================================================= */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-[15%] h-[750px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_68%)]" />
+          {isLight ? (
+            <>
+              {/* <div className="absolute left-[-10%] top-[-20%] h-[70%] w-[55%] rounded-full bg-[radial-gradient(circle,rgba(186,160,255,0.35)_0%,transparent_68%)] blur-2xl" />
+              <div className="absolute right-[-5%] top-[5%] h-[55%] w-[50%] rounded-full bg-[radial-gradient(circle,rgba(140,190,255,0.28)_0%,transparent_70%)] blur-2xl" />
+              <div className="absolute bottom-[-10%] left-[20%] h-[45%] w-[60%] rounded-full bg-[radial-gradient(circle,rgba(255,200,160,0.18)_0%,transparent_70%)] blur-2xl" /> */}
+            </>
+          ) : (
+            <div className="absolute left-1/2 top-[15%] h-[750px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_68%)]" />
+          )}
         </div>
 
         {/* =========================================================
           HERO
       ========================================================= */}
-       {/* =========================================================
-          HERO CONTENT
-      ========================================================== */}
+
 
 <div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
         {/* Trusted */}
         <div className="flex justify-center pt-10 sm:pt-14">
           <div className="flex items-center gap-2.5">
             {/* Avatar 1 */}
-            <div className="relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 border-[#030303] bg-white">
+            <div
+              className={cn(
+                "relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 bg-white",
+                isLight ? "border-white" : "border-[#030303]",
+              )}
+            >
               <Image
                 src="/images/39da146881792a5ee763fad443e4c9b4c3e835a5.png"
                 alt=""
@@ -247,7 +265,12 @@ export default function HeroContent() {
             </div>
 
             {/* Avatar 2 */}
-            <div className="relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 border-[#030303] bg-yellow-300">
+            <div
+              className={cn(
+                "relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 bg-yellow-300",
+                isLight ? "border-white" : "border-[#030303]",
+              )}
+            >
               <Image
                 src="/images/7a17402e3a42cf5d6cf5d8f830d884ce8a940dcc.png"
                 alt=""
@@ -257,7 +280,12 @@ export default function HeroContent() {
               />
             </div>
 
-            <span className="ml-1 text-sm text-white/65">
+            <span
+              className={cn(
+                "ml-1 text-sm",
+                isLight ? "text-black/55" : "text-white/65",
+              )}
+            >
               Trusted by Top Brands &amp; Creators
             </span>
           </div>
@@ -266,19 +294,18 @@ export default function HeroContent() {
         {/* Heading */}
         <div className="mx-auto mt-7 max-w-[1000px] text-center">
           <h1
-            className="
-              text-[42px]
-              font-semibold
-              leading-[1.05]
-              tracking-[-0.05em]
-              text-white/70
-              sm:text-[50px]
-              md:text-[58px]
-              lg:text-[64px]
-          "
+            className={cn(
+              "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[58px] lg:text-[64px]",
+              isLight ? "text-black/75" : "text-white/70",
+            )}
           >
             Creators earn on{" "}
-            <span className="inline-flex items-center gap-2 text-white">
+            <span
+              className={cn(
+                "inline-flex items-center gap-2",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
               {/* Performance icon */}
               <span
                 className="
@@ -312,15 +339,10 @@ export default function HeroContent() {
 
           {/* Description */}
           <p
-            className="
-              mx-auto
-              mt-7
-              max-w-[650px]
-              text-[15px]
-              leading-6
-              text-white/45
-              sm:text-base
-            "
+            className={cn(
+              "mx-auto mt-7 max-w-[650px] text-[15px] leading-6 sm:text-base",
+              isLight ? "text-black/50" : "text-white/45",
+            )}
           >
             Launch performance-driven campaigns that turn creator content into
             measurable results.
@@ -333,27 +355,12 @@ export default function HeroContent() {
           <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/brands"
-              className="
-                group
-                flex
-                h-[51px]
-                min-w-[238px]
-                items-center
-                justify-center
-                rounded-xl
-                border
-                border-white/20
-                bg-gradient-to-b
-                from-white/[0.10]
-                to-white/[0.02]
-                text-md
-                font-semibold
-                text-white
-                shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]
-                transition
-                hover:border-white/30
-                hover:bg-white/[0.08]
-              "
+              className={cn(
+                "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                isLight
+                  ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
+                  : "border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.02] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
+              )}
             >
               For Brands
 
@@ -370,22 +377,12 @@ export default function HeroContent() {
 
             <Link
               href="/creators"
-              className="
-                group
-                flex
-                h-[51px]
-                min-w-[238px]
-                items-center
-                justify-center
-                rounded-xl
-                bg-[#eee6f8]
-                text-md
-                font-semibold
-                text-[#26133d]
-                shadow-[0_10px_35px_rgba(200,170,230,0.10)]
-                transition
-                hover:bg-white
-              "
+              className={cn(
+                "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                isLight
+                  ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
+                  : "bg-[#eee6f8] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",
+              )}
             >
               For Creators
 
@@ -536,34 +533,65 @@ export default function HeroContent() {
           {/* =====================================================
             LEFT CAMPAIGN CARD
         ===================================================== */}
-          <div className="absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] border border-white/[0.08] bg-[#1E1E1E] p-[15px] shadow-[inset_0_0_6.02px_0_#FFFFFF40] xl:left-[4%] xl:w-[220px] lg:block">
+          <div
+            className={cn(
+              "absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px] lg:block",
+              isLight
+                ? "border border-black/[0.06] bg-white shadow-[0_18px_50px_rgba(20,16,40,0.10)]"
+                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+            )}
+          >
             {/* Card header */}
             <div className="flex items-center gap-2">
-              <div className="flex h-[29px] w-[29px] items-center justify-center rounded-[8px] bg-[#40344c]">
-                <Users className="h-[15px] w-[15px] text-white/80" />
+              <div
+                className={cn(
+                  "flex h-[29px] w-[29px] items-center justify-center rounded-[8px]",
+                  isLight ? "bg-[#efe8f8]" : "bg-[#40344c]",
+                )}
+              >
+                <Users
+                  className={cn(
+                    "h-[15px] w-[15px]",
+                    isLight ? "text-[#7c3aed]" : "text-white/80",
+                  )}
+                />
               </div>
 
-              <span className="text-[13px] text-white/75">Brand</span>
+              <span
+                className={cn(
+                  "text-[13px]",
+                  isLight ? "text-black/55" : "text-white/75",
+                )}
+              >
+                Brand
+              </span>
             </div>
 
             {/* Title */}
-            <div className="mt-3 text-[15px] font-medium">
+            <div
+              className={cn(
+                "mt-3 text-[15px] font-medium",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
               Podcasts Clip Challenge
             </div>
 
             {/* Tags */}
             <div className="mt-3 flex flex-wrap gap-[7px]">
-              <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
-                Clipping
-              </span>
-
-              <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
-                UGC
-              </span>
-
-              <span className="rounded-full bg-[#2B1F3B] px-[9px] py-[5px] text-[12px] text-[#BB00FF]">
-                Beauty
-              </span>
+              {["Clipping", "UGC", "Beauty"].map((tag) => (
+                <span
+                  key={tag}
+                  className={cn(
+                    "rounded-full px-[9px] py-[5px] text-[12px]",
+                    isLight
+                      ? "bg-[#f3eaff] text-[#7c3aed]"
+                      : "bg-[#2B1F3B] text-[#BB00FF]",
+                  )}
+                >
+                  {tag}
+                </span>
+              ))}
             </div>
 
             {/* Bottom */}
@@ -574,7 +602,14 @@ export default function HeroContent() {
                 className="h-[72px] w-[72px] rounded-md object-cover"
               />
 
-              <div className="flex h-[35px] w-[35px] items-center justify-center rounded-full bg-[#351149] text-[18px] text-[#c239f5]">
+              <div
+                className={cn(
+                  "flex h-[35px] w-[35px] items-center justify-center rounded-full text-[18px]",
+                  isLight
+                    ? "bg-[#f3eaff] text-[#7c3aed]"
+                    : "bg-[#351149] text-[#c239f5]",
+                )}
+              >
                 →
               </div>
             </div>
@@ -583,7 +618,12 @@ export default function HeroContent() {
           {/* =====================================================
             LEFT TEXT
         ===================================================== */}
-          <div className="absolute left-[6%] top-[340px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic text-white/85 xl:left-[9%] lg:block">
+          <div
+            className={cn(
+              "absolute left-[6%] top-[340px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic xl:left-[9%] lg:block",
+              isLight ? "text-black/70" : "text-white/85",
+            )}
+          >
             <div>Brands launch campaigns</div>
 
             <div className="ml-[75px] mt-1 text-[27px]">↘</div>
@@ -592,7 +632,12 @@ export default function HeroContent() {
           {/* =====================================================
             CENTER TEXT
         ===================================================== */}
-          <div className="relative z-20 mx-auto mb-4 text-center font-['Comic_Sans_MS'] text-[14px] italic leading-[20px] text-white/85 sm:text-[16px] sm:leading-[22px] lg:absolute lg:left-1/2 lg:top-[5px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[17px] lg:leading-[24px]">
+          <div
+            className={cn(
+              "relative z-20 mx-auto mb-4 text-center font-['Comic_Sans_MS'] text-[14px] italic leading-[20px] sm:text-[16px] sm:leading-[22px] lg:absolute lg:left-1/2 lg:top-[5px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[17px] lg:leading-[24px]",
+              isLight ? "text-black/70" : "text-white/85",
+            )}
+          >
             Creator create content
             <br />
             that performs
@@ -601,7 +646,14 @@ export default function HeroContent() {
           {/* =====================================================
             CENTRAL CREATOR CARD
         ===================================================== */}
-          <div className="relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[105px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2">
+          <div
+            className={cn(
+              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[105px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
+              isLight
+                ? "border border-black/[0.06] bg-white shadow-[0_30px_80px_rgba(20,16,40,0.12)]"
+                : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
+            )}
+          >
             {/* Video 1 */}
             <div className="relative h-1/3 overflow-hidden">
               <video
@@ -645,10 +697,29 @@ export default function HeroContent() {
           {/* =====================================================
             RIGHT ANALYTICS CARD
         ===================================================== */}
-          <div className="absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] border border-white/[0.08] bg-[#1E1E1E] p-4 shadow-[inset_0_0_6.02px_0_#FFFFFF40] xl:right-[4%] xl:w-[280px] lg:block">
+          <div
+            className={cn(
+              "absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px] lg:block",
+              isLight
+                ? "border border-black/[0.06] bg-white shadow-[0_18px_50px_rgba(20,16,40,0.10)]"
+                : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
+            )}
+          >
             {/* Tabs */}
-            <div className="flex flex-wrap items-center gap-1 text-[11px] text-white/35">
-              <span className="rounded-[9px] bg-white/[0.08] px-3 py-[9px] text-white/80">
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-1 text-[11px]",
+                isLight ? "text-black/35" : "text-white/35",
+              )}
+            >
+              <span
+                className={cn(
+                  "rounded-[9px] px-3 py-[9px]",
+                  isLight
+                    ? "bg-black/[0.06] text-black/80"
+                    : "bg-white/[0.08] text-white/80",
+                )}
+              >
                 Overview
               </span>
 
@@ -661,13 +732,30 @@ export default function HeroContent() {
             <div className="mt-7 flex items-end justify-between gap-3">
               <div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-[25px] font-medium tracking-[-1px] text-white">
+                  <span
+                    className={cn(
+                      "text-[25px] font-medium tracking-[-1px]",
+                      isLight ? "text-black" : "text-white",
+                    )}
+                  >
                     46.2M
                   </span>
-                  <span className="text-[10px] text-white/50">Views</span>
+                  <span
+                    className={cn(
+                      "text-[10px]",
+                      isLight ? "text-black/45" : "text-white/50",
+                    )}
+                  >
+                    Views
+                  </span>
                 </div>
 
-                <div className="mt-3 max-w-[120px] text-[12px] leading-[15px] text-white/35">
+                <div
+                  className={cn(
+                    "mt-3 max-w-[120px] text-[12px] leading-[15px]",
+                    isLight ? "text-black/40" : "text-white/35",
+                  )}
+                >
                   Your top 10% creators are getting the most views
                 </div>
               </div>
@@ -688,10 +776,17 @@ export default function HeroContent() {
                       className={`w-[14px] rounded-t-[4px] ${bar.height} ${
                         bar.active
                           ? "bg-[#3B82F6]"
-                          : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
+                          : isLight
+                            ? "bg-gradient-to-b from-[#d4d4d4] to-[#b8b8b8]"
+                            : "bg-gradient-to-b from-[#5a5a5a] to-[#2e2e2e]"
                       }`}
                     />
-                    <span className="origin-top text-[10px] text-white/35">
+                    <span
+                      className={cn(
+                        "origin-top text-[10px]",
+                        isLight ? "text-black/40" : "text-white/35",
+                      )}
+                    >
                       {bar.label}
                     </span>
                   </div>
@@ -703,7 +798,12 @@ export default function HeroContent() {
           {/* =====================================================
             RIGHT TEXT
         ===================================================== */}
-          <div className="absolute right-[6%] top-[25px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] text-white/85 xl:right-[10%] lg:block">
+          <div
+            className={cn(
+              "absolute right-[6%] top-[25px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] xl:right-[10%] lg:block",
+              isLight ? "text-black/70" : "text-white/85",
+            )}
+          >
             Performance drives
             <br />
             real results
@@ -755,12 +855,22 @@ export default function HeroContent() {
         />
       </main>
 
-      <main className="min-h-screen bg-black px-4 py-16 text-white sm:px-5 sm:py-20 md:py-24">
+      <main
+        className={cn(
+          "min-h-screen px-4 py-16 sm:px-5 sm:py-20 md:py-24 transition-colors duration-300",
+          isLight ? "bg-transparent text-black" : "bg-black text-white",
+        )}
+      >
         <section className="mx-auto max-w-[1200px]">
           {/* =====================================================
             HEADING
         ===================================================== */}
-          <h1 className="mx-auto max-w-[650px] text-center text-[32px] font-semibold leading-[1.08] tracking-[-1.5px] text-white sm:text-[40px] sm:tracking-[-2px] md:text-[52px] md:tracking-[-2.5px]">
+          <h1
+            className={cn(
+              "mx-auto max-w-[650px] text-center text-[32px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[40px] sm:tracking-[-2px] md:text-[52px] md:tracking-[-2.5px]",
+              isLight ? "text-black" : "text-white",
+            )}
+          >
             Both sides work together
             <br />
             as one System
@@ -773,30 +883,68 @@ export default function HeroContent() {
             {/* =================================================
               BRANDS CARD
           ================================================= */}
-            <div className="relative min-h-[480px] overflow-hidden rounded-[20px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-5 pt-7 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0">
+            <div
+              className={cn(
+                "relative min-h-[480px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0",
+                isLight
+                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[0_20px_60px_rgba(20,16,40,0.06)]"
+                  : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
+              )}
+            >
               {/* Bottom white shade */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-24 sm:h-28"
               >
-                <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]" />
-                <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent sm:h-16" />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-full",
+                    isLight
+                      ? "bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.06)_0%,transparent_70%)]"
+                      : "bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-14 sm:h-16",
+                    isLight
+                      ? "bg-gradient-to-t from-white/70 via-transparent to-transparent"
+                      : "bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent",
+                  )}
+                />
               </div>
 
               {/* Badge */}
-              <div className="relative z-[2] inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
+              <div
+                className={cn(
+                  "relative z-[2] inline-flex rounded-full border px-3 py-[6px] text-[13px]",
+                  isLight
+                    ? "border-black/[0.08] bg-white text-black/60"
+                    : "border-white/[0.08] bg-[#353535] text-white/65",
+                )}
+              >
                 For Brands
               </div>
 
               {/* Title */}
-              <h2 className="mt-5 max-w-[440px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]">
+              <h2
+                className={cn(
+                  "mt-5 max-w-[440px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  isLight ? "text-black" : "text-white",
+                )}
+              >
                 Pay for actual performance, not
                 <br className="hidden sm:block" />
                 {" "}followers
               </h2>
 
               {/* Description */}
-              <p className="mt-3 max-w-[500px] text-[14px] leading-[21px] text-white/45 sm:text-[16px] sm:leading-[23px]">
+              <p
+                className={cn(
+                  "mt-3 max-w-[500px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  isLight ? "text-black/50" : "text-white/45",
+                )}
+              >
                 Set your budget and brief. Your campaign runs across a network
                 <br className="hidden xl:block" />
                 of 15,700+ creators, and you pay for verified content and
@@ -805,9 +953,16 @@ export default function HeroContent() {
               </p>
 
               {/* ================================================
-                FORM MOCKUP
+                FORM MOCKUP (stays dark as product UI preview)
             ================================================= */}
-              <div className="absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border border-white/[0.10] bg-[#121212] shadow-[0_-10px_40px_rgba(0,0,0,.15)] sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]">
+              <div
+                className={cn(
+                  "absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border bg-[#121212] text-white sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]",
+                  isLight
+                    ? "border-black/10 shadow-[0_-10px_40px_rgba(20,16,40,.12)]"
+                    : "border-white/[0.10] shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
+                )}
+              >
                 {/* Launch — pinned to the right edge of the form card */}
                 <div className="absolute right-0 top-3 z-20 sm:top-4">
                   <div className="relative">
@@ -929,30 +1084,68 @@ export default function HeroContent() {
             {/* =================================================
               CREATORS CARD
           ================================================= */}
-            <div className="relative min-h-[480px] overflow-hidden rounded-[20px] border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] px-5 pt-7 shadow-[inset_0_1px_0_rgba(255,255,255,.025)] sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0">
+            <div
+              className={cn(
+                "relative min-h-[480px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0",
+                isLight
+                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[0_20px_60px_rgba(20,16,40,0.06)]"
+                  : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
+              )}
+            >
               {/* Bottom white shade */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-24 sm:h-28"
               >
-                <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]" />
-                <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent sm:h-16" />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-full",
+                    isLight
+                      ? "bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.06)_0%,transparent_70%)]"
+                      : "bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "absolute inset-x-0 bottom-0 h-14 sm:h-16",
+                    isLight
+                      ? "bg-gradient-to-t from-white/70 via-transparent to-transparent"
+                      : "bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent",
+                  )}
+                />
               </div>
 
               {/* Badge */}
-              <div className="relative z-[2] inline-flex rounded-full border border-white/[0.08] bg-[#353535] px-3 py-[6px] text-[13px] text-white/65">
+              <div
+                className={cn(
+                  "relative z-[2] inline-flex rounded-full border px-3 py-[6px] text-[13px]",
+                  isLight
+                    ? "border-black/[0.08] bg-white text-black/60"
+                    : "border-white/[0.08] bg-[#353535] text-white/65",
+                )}
+              >
                 For Creators
               </div>
 
               {/* Title */}
-              <h2 className="mt-5 max-w-[450px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]">
+              <h2
+                className={cn(
+                  "mt-5 max-w-[450px] text-[20px] font-medium leading-[1.25] tracking-[-0.6px] sm:text-[25px] sm:tracking-[-0.8px]",
+                  isLight ? "text-black" : "text-white",
+                )}
+              >
                 Get paid for performance, not
                 <br className="hidden sm:block" />
                 {" "}followers.
               </h2>
 
               {/* Description */}
-              <p className="mt-3 max-w-[510px] text-[14px] leading-[21px] text-white/45 sm:text-[16px] sm:leading-[23px]">
+              <p
+                className={cn(
+                  "mt-3 max-w-[510px] text-[14px] leading-[21px] sm:text-[16px] sm:leading-[23px]",
+                  isLight ? "text-black/50" : "text-white/45",
+                )}
+              >
                 Pick brand campaigns you want. You get paid based on how well
                 <br className="hidden xl:block" />
                 your posts do even if you have 0 followers
@@ -961,7 +1154,14 @@ export default function HeroContent() {
               {/* =================================================
                 PAYMENT POPUP - LEFT
             ================================================= */}
-              <div className="absolute left-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-2 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)] sm:left-[25px] sm:top-[258px] sm:w-[225px] sm:px-3">
+              <div
+                className={cn(
+                  "absolute left-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[258px] sm:w-[225px] sm:px-3",
+                  isLight
+                    ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
+                    : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
+                )}
+              >
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
                     <Image
@@ -974,9 +1174,21 @@ export default function HeroContent() {
                   </div>
 
                   <div className="min-w-0">
-                    <div className="truncate text-[10px] font-medium">Hey Ashok</div>
+                    <div
+                      className={cn(
+                        "truncate text-[10px] font-medium",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      Hey Ashok
+                    </div>
 
-                    <div className="text-[8px] leading-[10px] text-white/35">
+                    <div
+                      className={cn(
+                        "text-[8px] leading-[10px]",
+                        isLight ? "text-black/40" : "text-white/35",
+                      )}
+                    >
                       You can withdraw your
                       <br />
                       money now
@@ -992,7 +1204,14 @@ export default function HeroContent() {
               {/* =================================================
                 PAYMENT POPUP - RIGHT
             ================================================= */}
-              <div className="absolute right-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border border-white/[0.08] bg-[#191919] px-2 py-2 shadow-[0_12px_35px_rgba(0,0,0,.45)] sm:right-[25px] sm:top-[258px] sm:w-[220px] sm:px-3">
+              <div
+                className={cn(
+                  "absolute right-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[258px] sm:w-[220px] sm:px-3",
+                  isLight
+                    ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
+                    : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
+                )}
+              >
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="relative h-[31px] w-[31px] shrink-0 overflow-hidden rounded-full">
                     <Image
@@ -1005,9 +1224,21 @@ export default function HeroContent() {
                   </div>
 
                   <div className="min-w-0">
-                    <div className="truncate text-[10px] font-medium">Hey Riya!</div>
+                    <div
+                      className={cn(
+                        "truncate text-[10px] font-medium",
+                        isLight ? "text-black" : "text-white",
+                      )}
+                    >
+                      Hey Riya!
+                    </div>
 
-                    <div className="text-[8px] leading-[10px] text-white/35">
+                    <div
+                      className={cn(
+                        "text-[8px] leading-[10px]",
+                        isLight ? "text-black/40" : "text-white/35",
+                      )}
+                    >
                       Your rank 1st in Leader board
                       <br />
                       Campaign
@@ -1048,11 +1279,21 @@ export default function HeroContent() {
                 {/* Left / right edge shades */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)] sm:w-20"
+                  className={cn(
+                    "pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-20",
+                    isLight
+                      ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0)_100%)]"
+                      : "bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)]",
+                  )}
                 />
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 scale-x-[-1] bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)] sm:w-20"
+                  className={cn(
+                    "pointer-events-none absolute inset-y-0 right-0 z-10 w-16 scale-x-[-1] sm:w-20",
+                    isLight
+                      ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0)_100%)]"
+                      : "bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)]",
+                  )}
                 />
               </div>
             </div>
@@ -1062,40 +1303,31 @@ export default function HeroContent() {
 
       {/* Reasons to Select Us */}
 
-       <section className="flex min-h-[50vh] items-center justify-center bg-black px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen">
+       <section
+         className={cn(
+           "flex min-h-[50vh] items-center justify-center px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300",
+           isLight ? "bg-transparent" : "bg-black",
+         )}
+       >
       <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
         {/* Creators Network */}
         <div className="text-center">
           <h2
-            className="
-              text-[64px]
-              sm:text-[76px]
-              md:text-[92px]
-              lg:text-[112px]
-              leading-none
-              font-extrabold
-              tracking-[-0.055em]
-              bg-gradient-to-b
-              from-white
-              via-[#d8d8d8]
-              to-[#777777]
-              bg-clip-text
-              text-transparent
-            "
+            className={cn(
+              "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
+              isLight
+                ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+                : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
+            )}
           >
             16,700+
           </h2>
 
           <p
-            className="
-              mt-5
-              text-[22px]
-              sm:text-[25px]
-              md:text-[29px]
-              font-semibold
-              tracking-[-0.02em]
-              text-[#969696]
-            "
+            className={cn(
+              "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
+              isLight ? "text-black/45" : "text-[#969696]",
+            )}
           >
             Creators Network
           </p>
@@ -1104,35 +1336,21 @@ export default function HeroContent() {
         {/* Views Generated */}
         <div className="text-center">
           <h2
-            className="
-              text-[64px]
-              sm:text-[76px]
-              md:text-[92px]
-              lg:text-[112px]
-              leading-none
-              font-extrabold
-              tracking-[-0.055em]
-              bg-gradient-to-b
-              from-white
-              via-[#d8d8d8]
-              to-[#777777]
-              bg-clip-text
-              text-transparent
-            "
+            className={cn(
+              "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
+              isLight
+                ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+                : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
+            )}
           >
             160M+
           </h2>
 
           <p
-            className="
-              mt-5
-              text-[22px]
-              sm:text-[25px]
-              md:text-[29px]
-              font-semibold
-              tracking-[-0.02em]
-              text-[#969696]
-            "
+            className={cn(
+              "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
+              isLight ? "text-black/45" : "text-[#969696]",
+            )}
           >
             Views Generated
           </p>

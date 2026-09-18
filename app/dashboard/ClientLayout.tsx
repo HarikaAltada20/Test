@@ -775,6 +775,13 @@ function DashboardContent({
     localStorage.removeItem("dashboard-preset"); // Clear preset when manually changing
     try {
       document.cookie = `dashboard-mode=${modeKey}; path=/; max-age=31536000`;
+      document.cookie = "dashboard-preset=; path=/; max-age=0";
+      document.documentElement.setAttribute("data-theme", modeKey);
+      if (modeKey === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
     } catch {}
 
     // Dispatch custom event for immediate theme change notification
