@@ -82,7 +82,7 @@ export function BulkVideoDownloadStatusDialog({
   namingPattern,
   zipParts,
   source,
-  deliveryMode,
+  deliveryMode: _deliveryMode,
   jobs,
   showJobList = false,
   onBackToList,
@@ -221,7 +221,9 @@ export function BulkVideoDownloadStatusDialog({
                 {showJobList
                   ? "Filter by status, then click a card or View for the full summary."
                   : finished
-                    ? "You are viewing the Download summary."
+                    ? isDesktopJob
+                      ? "Your .gocdownload file was saved. Open it in the desktop app to download videos."
+                      : "You are viewing the Download summary."
                     : batches > 1
                       ? `Working on ZIP batch ${currentBatch} of ${batches}. Close anytime and reopen with View progress.`
                       : "Close anytime and keep working. Reopen with View progress."}
@@ -378,18 +380,35 @@ export function BulkVideoDownloadStatusDialog({
                               {job.qualityLabel}
                             </span>
                           </span>
-                          <span
-                            className={
-                              isDark ? "text-emerald-300" : "text-emerald-700"
-                            }
-                          >
-                            Succeeded {job.successCount}
-                          </span>
-                          <span
-                            className={isDark ? "text-red-300" : "text-red-700"}
-                          >
-                            Failed {job.failedCount}
-                          </span>
+                          {job.source === "desktop" ? (
+                            <span
+                              className={
+                                isDark ? "text-sky-300" : "text-sky-700"
+                              }
+                            >
+                              {job.totalCount} YouTube link
+                              {job.totalCount === 1 ? "" : "s"} in this file
+                            </span>
+                          ) : (
+                            <>
+                              <span
+                                className={
+                                  isDark
+                                    ? "text-emerald-300"
+                                    : "text-emerald-700"
+                                }
+                              >
+                                Succeeded {job.successCount}
+                              </span>
+                              <span
+                                className={
+                                  isDark ? "text-red-300" : "text-red-700"
+                                }
+                              >
+                                Failed {job.failedCount}
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
                       <Button
@@ -474,16 +493,106 @@ export function BulkVideoDownloadStatusDialog({
             </p>
           ) : (
             <>
-          <BulkVideoDownloadProgress
-            successCount={successCount}
-            failedCount={failedCount}
-            total={total}
-            chunkIndex={progress?.chunkIndex}
-            totalChunks={progress?.totalChunks}
-            chunkSize={progress?.chunkSize}
-            finished={finished}
-            isDark={isDark}
-          />
+          {isDesktopJob ? (
+            <div
+              className={cn(
+                "space-y-3 rounded-lg border p-3",
+                isDark
+                  ? "border-sky-500/30 bg-sky-950/20"
+                  : "border-sky-200 bg-sky-50",
+              )}
+            >
+              <div className="flex items-start gap-2.5">
+                <Monitor
+                  className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    isDark ? "text-sky-300" : "text-sky-700",
+                  )}
+                />
+                <div className="min-w-0 space-y-1">
+                  <p
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-slate-100" : "text-slate-900",
+                    )}
+                  >
+                    {finished ? "Download file saved" : "Desktop download"}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-slate-300" : "text-slate-600",
+                    )}
+                  >
+                    {finished
+                      ? `${total} YouTube link${total === 1 ? "" : "s"} are in this .gocdownload file. Open it with Game of Creators Downloader to save videos on your computer.`
+                      : "Videos download in the Game of Creators desktop app. Re-open your .gocdownload file if needed, or use the links below."}
+                  </p>
+                  {currentZipParts.length > 0 ? (
+                    <p
+                      className={cn(
+                        "text-xs",
+                        isDark ? "text-slate-400" : "text-slate-500",
+                      )}
+                    >
+                      {currentZipParts.length} local archive
+                      {currentZipParts.length === 1 ? "" : "s"} in this manifest
+                      (saved on your computer, not as a cloud ZIP).
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {installUrl ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    asChild
+                    className={cn(
+                      "h-8 gap-1.5 text-xs font-medium",
+                      isDark
+                        ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
+                        : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
+                    )}
+                  >
+                    <a href={installUrl} target="_blank" rel="noopener noreferrer">
+                      <Download className="h-3 w-3 opacity-80" />
+                      Get the desktop app
+                    </a>
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  asChild
+                  className={cn(
+                    "h-8 gap-1.5 text-xs font-medium",
+                    isDark
+                      ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
+                      : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
+                  )}
+                >
+                  <a href={deepLinkUrl}>
+                    <ExternalLink className="h-3 w-3 opacity-80" />
+                    Open desktop app
+                  </a>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <BulkVideoDownloadProgress
+              successCount={successCount}
+              failedCount={failedCount}
+              total={total}
+              chunkIndex={progress?.chunkIndex}
+              totalChunks={progress?.totalChunks}
+              chunkSize={progress?.chunkSize}
+              finished={finished}
+              isDark={isDark}
+            />
+          )}
 
           {patternMeta && (
             <div
@@ -638,98 +747,9 @@ export function BulkVideoDownloadStatusDialog({
             </div>
           )}
 
-          {isDesktopJob && (
-            <div
-              className={cn(
-                "space-y-3 rounded-lg border p-3",
-                isDark
-                  ? "border-sky-500/30 bg-sky-950/20"
-                  : "border-sky-200 bg-sky-50",
-              )}
-            >
-              <div className="flex items-start gap-2.5">
-                <Monitor
-                  className={cn(
-                    "mt-0.5 h-4 w-4 shrink-0",
-                    isDark ? "text-sky-300" : "text-sky-700",
-                  )}
-                />
-                <div className="min-w-0 space-y-1">
-                  <p
-                    className={cn(
-                      "text-sm font-medium",
-                      isDark ? "text-slate-100" : "text-slate-900",
-                    )}
-                  >
-                    Desktop download
-                    {deliveryMode ? ` (${deliveryMode})` : ""}
-                  </p>
-                  <p
-                    className={cn(
-                      "text-xs",
-                      isDark ? "text-slate-300" : "text-slate-600",
-                    )}
-                  >
-                    Videos download in the Game of Creators desktop app. Re-open
-                    your .gocdownload file if the job is still running, or use
-                    the links below.
-                  </p>
-                  {currentZipParts.length > 0 ? (
-                    <p
-                      className={cn(
-                        "text-xs",
-                        isDark ? "text-slate-400" : "text-slate-500",
-                      )}
-                    >
-                      {currentZipParts.length} local archive
-                      {currentZipParts.length === 1 ? "" : "s"} in this manifest
-                      (saved on your computer, not as a cloud ZIP).
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {installUrl ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    asChild
-                    className={cn(
-                      "h-8 gap-1.5 text-xs font-medium",
-                      isDark
-                        ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
-                        : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
-                    )}
-                  >
-                    <a href={installUrl} target="_blank" rel="noopener noreferrer">
-                      <Download className="h-3 w-3 opacity-80" />
-                      Get the desktop app
-                    </a>
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  asChild
-                  className={cn(
-                    "h-8 gap-1.5 text-xs font-medium",
-                    isDark
-                      ? "border-white/20 bg-white/10 text-sky-300 hover:bg-white/15"
-                      : "border-sky-200 bg-white text-sky-800 hover:bg-sky-100",
-                  )}
-                >
-                  <a href={deepLinkUrl} rel="noopener">
-                    <ExternalLink className="h-3 w-3 opacity-80" />
-                    Open desktop app
-                  </a>
-                </Button>
-              </div>
-            </div>
           )}
 
-          {hasResults ? (
+          {isCloudJob && hasResults ? (
             <div className="space-y-2 pt-1 border-t border-dashed border-slate-300/60 dark:border-white/10 -mx-1 sm:mx-0">
               <p
                 className={cn(
@@ -745,7 +765,7 @@ export function BulkVideoDownloadStatusDialog({
                 isDark={isDark}
               />
             </div>
-          ) : allRows.length > 0 || finished ? (
+          ) : isCloudJob && (allRows.length > 0 || finished) ? (
             <p
               className={cn(
                 "pt-2 text-center text-sm",
