@@ -8,10 +8,11 @@ const DEFAULT_STATUS_TOKEN_TTL_SECONDS = 7 * 24 * 3600;
 
 /**
  * Public Windows x64 installer (Game.of.Creators.Downloader_0.1.0_x64-setup.exe).
- * Hosted on Drive so "Get the desktop app" downloads without opening GitHub.
+ * Drive share page so "Get the desktop app" opens a Download button (large EXEs
+ * often fail on uc?export=download because of Google's virus-scan interstitial).
  */
 export const GOC_DOWNLOADER_INSTALL_URL =
-  "https://drive.google.com/uc?export=download&id=1Jua2DZaZav2CZsUGxIIfFLNICxG3zPmm";
+  "https://drive.google.com/file/d/1Jua2DZaZav2CZsUGxIIfFLNICxG3zPmm/view?usp=sharing";
 
 export function isDesktopDownloadEnabled(): boolean {
   return process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_ENABLED === "true";
