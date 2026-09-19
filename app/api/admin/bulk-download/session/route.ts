@@ -13,6 +13,7 @@ import {
   type BulkVideoDownloadJobStatus,
   type BulkVideoDownloadItemStatus,
 } from "@/lib/bulk-video-download-jobs";
+import { isStuckDesktopManifestJob } from "@/lib/bulk-video-download-summary";
 import {
   assertSessionSubmissionsOnContest,
   collectSessionSubmissionIds,
@@ -57,7 +58,17 @@ async function sessionResponse(jobId: string, viewer: { id: string; user_type: "
   if (!data || !viewerCanAccessBulkVideoDownloadJob({ viewer, job: data })) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
-  const session = await enrichBulkVideoDownloadJob(data);
+  let job = data;
+  if (isStuckDesktopManifestJob(job)) {
+    const closed = await updateBulkVideoDownloadJob({
+      id: job.id,
+      userId: job.user_id,
+      status: "completed",
+      errorMessage: null,
+    });
+    if (closed.data) job = closed.data;
+  }
+  const session = await enrichBulkVideoDownloadJob(job);
   return NextResponse.json({ session });
 }
 
