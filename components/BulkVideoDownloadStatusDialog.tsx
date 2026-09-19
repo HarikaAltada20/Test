@@ -747,8 +747,6 @@ export function BulkVideoDownloadStatusDialog({
             </div>
           )}
 
-          )}
-
           {isCloudJob && hasResults ? (
             <div className="space-y-2 pt-1 border-t border-dashed border-slate-300/60 dark:border-white/10 -mx-1 sm:mx-0">
               <p
