@@ -16,7 +16,7 @@ import {
   Users,
   Gamepad2,
   Headset,
-  Upload ,
+  Upload,
   Sparkles,
   Crown,
   Globe,
@@ -243,162 +243,157 @@ export default function HeroContent() {
           HERO
       ========================================================= */}
 
-
-<div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
-        {/* Trusted */}
-        <div className="flex justify-center pt-10 sm:pt-14">
-          <div className="flex items-center gap-2.5">
-            {/* Avatar 1 */}
-            <div
-              className={cn(
-                "relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 bg-white",
-                isLight ? "border-white" : "border-[#030303]",
-              )}
-            >
-              <Image
-                src="/images/39da146881792a5ee763fad443e4c9b4c3e835a5.png"
-                alt=""
-                fill
-                className="object-cover"
-                sizes="32px"
-              />
-            </div>
-
-            {/* Avatar 2 */}
-            <div
-              className={cn(
-                "relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 bg-yellow-300",
-                isLight ? "border-white" : "border-[#030303]",
-              )}
-            >
-              <Image
-                src="/images/7a17402e3a42cf5d6cf5d8f830d884ce8a940dcc.png"
-                alt=""
-                fill
-                className="object-cover"
-                sizes="32px"
-              />
-            </div>
-
-            <span
-              className={cn(
-                "ml-1 text-sm",
-                isLight ? "text-black/55" : "text-white/65",
-              )}
-            >
-              Trusted by Top Brands &amp; Creators
-            </span>
-          </div>
-        </div>
-
-        {/* Heading */}
-        <div className="mx-auto mt-7 max-w-[1000px] text-center">
-          <h1
-            className={cn(
-              "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[58px] lg:text-[64px]",
-              isLight ? "text-black/75" : "text-white/70",
-            )}
-          >
-            Creators earn on{" "}
-            <span
-              className={cn(
-                "inline-flex items-center gap-2",
-                isLight ? "text-black" : "text-white",
-              )}
-            >
-              {/* Performance icon */}
-              <span
-                className="
-                  inline-flex
-                  h-[50px]
-                  w-[60px]
-                  rotate-[7deg]
-                  items-center
-                  justify-center
-                  rounded-[15px]
-                bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
-    shadow-[4.95px_4.95px_4.95px_0px_#FFFFFF1A_inset,-1px_2px_4px_0px_#000000]
-                  sm:h-[48px]
-                  sm:w-[60px]
-                "
+        <div className="relative z-20 mx-auto max-w-[1200px] px-6 lg:px-8">
+          {/* Trusted */}
+          <div className="flex justify-center pt-10 sm:pt-14">
+            <div className="flex items-center gap-2.5">
+              {/* Avatar 1 */}
+              <div
+                className={cn(
+                  "relative z-10 h-10 w-10 overflow-hidden rounded-full border-2 bg-white",
+                  isLight ? "border-white" : "border-[#030303]",
+                )}
               >
                 <Image
-                  src="/images/Vector1234.png"
+                  src="/images/39da146881792a5ee763fad443e4c9b4c3e835a5.png"
                   alt=""
-                  width={32}
-                  height={32}
-                  className="h-8 w-8 object-contain sm:h-8 sm:w-8"
+                  fill
+                  className="object-cover"
+                  sizes="32px"
                 />
+              </div>
+
+              {/* Avatar 2 */}
+              <div
+                className={cn(
+                  "relative -ml-4 h-10 w-10 overflow-hidden rounded-full border-2 bg-yellow-300",
+                  isLight ? "border-white" : "border-[#030303]",
+                )}
+              >
+                <Image
+                  src="/images/7a17402e3a42cf5d6cf5d8f830d884ce8a940dcc.png"
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="32px"
+                />
+              </div>
+
+              <span
+                className={cn(
+                  "ml-1 text-[17px]",
+                  isLight ? "text-black/55" : "text-[#C4C4C4]",
+                )}
+              >
+                Trusted by Top Brands &amp; Creators
               </span>
+            </div>
+          </div>
 
-              performance
-            </span>
-            <br />
-            Brands grow on results.
-          </h1>
+          {/* Heading */}
+          <div className="mx-auto mt-7 max-w-[1000px] text-center">
+            <h1
+              className={cn(
+                "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[52px] font-['Inter'] font-bold leading-[110%] tracking-[-4%] text-center",
+                isLight
+                  ? "text-black/75"
+                  : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
+              )}
+            >
+              Creators earn on{" "}
+              <span className="inline-flex items-center gap-2">
+                {/* Performance icon — opt out of text fill so the badge stays visible */}
+                <span
+                  className="
+                    inline-flex
+                    h-[60.64px]
+                    w-[63.11px]
+                    shrink-0
+                    rotate-[8.81deg]
+                    items-center
+                    justify-center
+                    rounded-[16.09px]
+                    bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
+                    shadow-[4.95px_4.95px_4.95px_0px_#FFFFFF1A_inset,-1px_2px_4px_0px_#00000040]
+                    [background-clip:padding-box]
+                    [-webkit-text-fill-color:initial]
+                    shadow-[inset_0px_3.71px_4.95px_0px_#FFFFFF40,inset_3.71px_-8.66px_4.95px_0px_#FFD2D20D,inset_6.19px_-11.14px_13.36px_0px_#FFF4F440,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
+                  "
+                >
+                  <Image
+                    src="/images/Vector1234.png"
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="h-[32px] w-[32px] object-contain"
+                  />
+                </span>
+                performance
+              </span>
+              <br />
+              Brands grow on results.
+            </h1>
 
-          {/* Description */}
-          <p
-            className={cn(
-              "mx-auto mt-7 max-w-[650px] text-[15px] leading-6 sm:text-base",
-              isLight ? "text-black/50" : "text-white/45",
-            )}
-          >
-            Launch performance-driven campaigns that turn creator content into
-            measurable results.
-          </p>
+            {/* Description */}
+            <p
+              className={cn(
+                "mx-auto mt-7 max-w-[600px] font-['Inter'] text-[17px] font-medium leading-[150%] tracking-[-0.51px] text-center",
+                isLight ? "text-black/50" : "text-[#8E8E8E]",
+              )}
+            >
+              Launch performance-driven campaigns that turn creator content into
+              measurable results.
+            </p>
 
-          {/* =====================================================
+            {/* =====================================================
               CTA BUTTONS
           ====================================================== */}
 
-          <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link
-              href="/brands"
-              className={cn(
-                "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
-                isLight
-                  ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
-                  : "border border-white/20 bg-gradient-to-b from-white/[0.10] to-white/[0.02] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
-              )}
-            >
-              For Brands
-
-              <ArrowRight
-                className="
+            <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link
+                href="/brands"
+                className={cn(
+                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  isLight
+                    ? "bg-[#7c3aed] text-white shadow-[0_12px_30px_rgba(124,58,237,0.28)] hover:bg-[#6d28d9]"
+                    : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/30 hover:bg-white/[0.08]",
+                )}
+              >
+                For Brands
+                <ArrowRight
+                  className="
                   ml-2
                   h-4
                   w-4
                   transition-transform
                   group-hover:translate-x-1
                 "
-              />
-            </Link>
+                />
+              </Link>
 
-            <Link
-              href="/creators"
-              className={cn(
-                "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
-                isLight
-                  ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
-                  : "bg-[#eee6f8] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",
-              )}
-            >
-              For Creators
-
-              <ArrowRight
-                className="
+              <Link
+                href="/creators"
+                className={cn(
+                  "group flex h-[51px] min-w-[238px] items-center justify-center rounded-xl text-md font-semibold transition",
+                  isLight
+                    ? "border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(15,15,30,0.06)] hover:bg-white hover:border-black/20"
+                    : "bg-[#DEDEDE] text-[#26133d] shadow-[0_10px_35px_rgba(200,170,230,0.10)] hover:bg-white",
+                )}
+              >
+                For Creators
+                <ArrowRight
+                  className="
                   ml-2
                   h-4
                   w-4
                   transition-transform
                   group-hover:translate-x-1
                 "
-              />
-            </Link>
+                />
+              </Link>
+            </div>
           </div>
         </div>
-      </div>
         {/* =========================================================
           VISUAL / ORBIT AREA
       ========================================================= */}
@@ -654,44 +649,17 @@ export default function HeroContent() {
                 : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
             )}
           >
-            {/* Video 1 */}
-            <div className="relative h-1/3 overflow-hidden">
-              <video
-                src="/videos/SnapInsta.to_AQN_SiDJU.mp4"
-                className="h-full w-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-              />
-              <span className="absolute bottom-3 left-3 text-[11px] text-white/70">
-                creator
-              </span>
-            </div>
-
-            {/* Video 2 */}
-            <div className="relative h-1/3 overflow-hidden">
-              <video
-                src="/videos/SnapInsta.to_AQNTex61ndS.mp4"
-                className="h-full w-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-              />
-            </div>
-
-            {/* Video 3 */}
-            <div className="relative h-1/3 overflow-hidden">
-              <video
-                src="/videos/SnapInsta.to_AQNxeCNjx2k.mp4"
-                className="h-full w-full object-cover"
-                autoPlay
-                muted
-                loop
-                playsInline
-              />
-            </div>
+            <Image
+              src="/images/39e512460e9052a19bf4ea8b3ca0c6cdd8086315.png"
+              alt="Creators"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 300px, 335px"
+              priority
+            />
+            <span className="absolute bottom-3 left-3 z-10 text-[11px] text-white/70">
+              creator
+            </span>
           </div>
 
           {/* =====================================================
@@ -934,8 +902,7 @@ export default function HeroContent() {
                 )}
               >
                 Pay for actual performance, not
-                <br className="hidden sm:block" />
-                {" "}followers
+                <br className="hidden sm:block" /> followers
               </h2>
 
               {/* Description */}
@@ -995,7 +962,10 @@ export default function HeroContent() {
 
                       <span className="relative z-10 flex items-center gap-1.5">
                         {isLight ? (
-                          <Rocket className="h-4 w-4 text-[#7C3AED]" strokeWidth={2} />
+                          <Rocket
+                            className="h-4 w-4 text-[#7C3AED]"
+                            strokeWidth={2}
+                          />
                         ) : (
                           <Image
                             src="/images/Frame.png"
@@ -1271,8 +1241,7 @@ export default function HeroContent() {
                 )}
               >
                 Get paid for performance, not
-                <br className="hidden sm:block" />
-                {" "}followers.
+                <br className="hidden sm:block" /> followers.
               </h2>
 
               {/* Description */}
@@ -1439,60 +1408,60 @@ export default function HeroContent() {
 
       {/* Reasons to Select Us */}
 
-       <section
-         className={cn(
-           "flex min-h-[50vh] items-center justify-center px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300",
-           isLight ? "bg-transparent" : "bg-black",
-         )}
-       >
-      <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
-        {/* Creators Network */}
-        <div className="text-center">
-          <h2
-            className={cn(
-              "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
-              isLight
-                ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
-                : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
-            )}
-          >
-            16,700+
-          </h2>
+      <section
+        className={cn(
+          "flex min-h-[50vh] items-center justify-center px-4 py-16 sm:min-h-[60vh] sm:px-6 sm:py-20 md:min-h-screen transition-colors duration-300",
+          isLight ? "bg-transparent" : "bg-black",
+        )}
+      >
+        <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
+          {/* Creators Network */}
+          <div className="text-center">
+            <h2
+              className={cn(
+                "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
+                isLight
+                  ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+                  : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
+              )}
+            >
+              16,700+
+            </h2>
 
-          <p
-            className={cn(
-              "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
-              isLight ? "text-black/45" : "text-[#969696]",
-            )}
-          >
-            Creators Network
-          </p>
+            <p
+              className={cn(
+                "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
+                isLight ? "text-black/45" : "text-[#969696]",
+              )}
+            >
+              Creators Network
+            </p>
+          </div>
+
+          {/* Views Generated */}
+          <div className="text-center">
+            <h2
+              className={cn(
+                "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
+                isLight
+                  ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+                  : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
+              )}
+            >
+              160M+
+            </h2>
+
+            <p
+              className={cn(
+                "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
+                isLight ? "text-black/45" : "text-[#969696]",
+              )}
+            >
+              Views Generated
+            </p>
+          </div>
         </div>
-
-        {/* Views Generated */}
-        <div className="text-center">
-          <h2
-            className={cn(
-              "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
-              isLight
-                ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
-                : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
-            )}
-          >
-            160M+
-          </h2>
-
-          <p
-            className={cn(
-              "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
-              isLight ? "text-black/45" : "text-[#969696]",
-            )}
-          >
-            Views Generated
-          </p>
-        </div>
-      </div>
-    </section>
+      </section>
 
       <FAQ />
       {/* <NumbersSection
