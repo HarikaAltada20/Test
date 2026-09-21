@@ -434,6 +434,10 @@ export default function OpportunitiesPage({
               data.bestQualityScore ??
               data.quality_metrics?.best_quality_score ??
               null,
+            qualityScoreSum:
+              data.qualityScoreSum ??
+              data.quality_metrics?.quality_score_sum ??
+              null,
             totalPlatformEarningsCents: Number(
               data.totalPlatformEarningsCents ?? 0,
             ),

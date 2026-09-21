@@ -139,10 +139,7 @@ async function fetchCreatorMoneyTxnsScopedToContest(params: {
     includeLegacyFallback = true,
   } = params;
 
-  const queries: PromiseLike<{
-    data: MoneyTxnWithId[] | null;
-    error: { message: string } | null;
-  }>[] = [
+  const queries = [
     supabase
       .from("money_transactions")
       .select(select)

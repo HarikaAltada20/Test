@@ -16,7 +16,7 @@ export type DualPoolSpendSubmissionRow = {
   bonus_paid?: boolean | null;
   dual_rewards_payout?: unknown;
   milestone_bonus_paid?: unknown;
-  metadata?: { milestone_bonus_paid?: unknown } | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 const MOST_VERIFIED_BONUS_TYPES = new Set([

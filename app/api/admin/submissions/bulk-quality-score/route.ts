@@ -82,11 +82,12 @@ async function assertCanManageSubmissions(
     };
   }
 
-  const unauthorized = (rows || []).some(
-    (row) =>
-      (row as { contests: { advertiser_id: string } }).contests.advertiser_id !==
-      authUser.id,
-  );
+  const unauthorized = (rows || []).some((row) => {
+    const contest = Array.isArray(row.contests)
+      ? row.contests[0]
+      : row.contests;
+    return !contest || contest.advertiser_id !== authUser.id;
+  });
   if (unauthorized) {
     return {
       ok: false,

@@ -14,6 +14,7 @@ import {
   type BulkVideoDownloadItemStatus,
 } from "@/lib/bulk-video-download-jobs";
 import { isStuckDesktopManifestJob } from "@/lib/bulk-video-download-summary";
+import type { DownloadAccessUser } from "@/lib/video-download-auth";
 import {
   assertSessionSubmissionsOnContest,
   collectSessionSubmissionIds,
@@ -48,7 +49,7 @@ function leanItemStatusesFromResults(
   );
 }
 
-async function sessionResponse(jobId: string, viewer: { id: string; user_type: "admin" | "advertiser" }) {
+async function sessionResponse(jobId: string, viewer: DownloadAccessUser) {
   const { data, error } = await getBulkVideoDownloadJobById({
     id: jobId,
   });
