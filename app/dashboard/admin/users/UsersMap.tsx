@@ -664,6 +664,7 @@ export type UsersMapProps = {
   onGroupByChange: (groupBy: MapGroupBy) => void;
   tabCounts: Record<MapTab, number>;
   isLoading: boolean;
+  isBackgroundLoading: boolean;
   loadError: boolean;
   onRetry: () => void;
   className?: string;
@@ -700,6 +701,7 @@ export function UsersMap({
   onGroupByChange,
   tabCounts,
   isLoading,
+  isBackgroundLoading,
   loadError,
   onRetry,
   className,
@@ -2608,7 +2610,7 @@ export function UsersMap({
         {mapMode === "demographic" ? (
           <div
             className={cn(
-              "flex flex-col overflow-hidden rounded-xl border",
+              "relative flex flex-col overflow-hidden rounded-xl border",
               !isMapFullscreen &&
                 "mt-2 h-[clamp(24rem,58dvh,42rem)] min-h-[24rem]",
               isMapFullscreen && "min-h-0 flex-1",
@@ -2644,7 +2646,19 @@ export function UsersMap({
                   {sortedDemographicRows.length.toLocaleString()} {demographicGroupPlural}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                {(isLoading || isBackgroundLoading) && (
+                  <span
+                    role="status"
+                    aria-live="polite"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-slate-950/80 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm"
+                  >
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {isLoading
+                      ? "Loading demographics"
+                      : "Loading more users"}
+                  </span>
+                )}
                 {demographicSort.column && demographicSort.order && (
                   <span
                     className={cn(
@@ -2905,7 +2919,16 @@ export function UsersMap({
                         isDark ? "text-slate-400" : "text-gray-500",
                       )}
                     >
-                      No demographic data available.
+                      {isLoading || isBackgroundLoading ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {isLoading
+                            ? "Loading demographic data"
+                            : "Loading more users"}
+                        </span>
+                      ) : (
+                        "No demographic data available."
+                      )}
                     </td>
                   </tr>
                 ) : (
@@ -3025,12 +3048,17 @@ export function UsersMap({
                   : "border border-gray-200/80 bg-slate-50/50",
               )}
             />
-            {(isLoading || isMapRendering) && !hasMapError && (
+            {(isLoading || isBackgroundLoading || isMapRendering) &&
+              !hasMapError && (
               <div className="pointer-events-none absolute left-3 top-3 z-[1100] inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur-md">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Updating map
+                {isLoading
+                  ? "Loading map"
+                  : isBackgroundLoading
+                    ? "Loading more users"
+                    : "Updating map"}
               </div>
-            )}
+              )}
             {mapRenderWarning && !hasMapError && !isMapRendering && (
               <div className="absolute left-3 top-3 z-[1100] flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-950/90 px-3 py-2 text-xs font-medium text-amber-100 shadow-lg backdrop-blur-md">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -3081,6 +3109,7 @@ export function UsersMap({
             )}
             {!hasMapError &&
               !isLoading &&
+              !isBackgroundLoading &&
               !isMapRendering &&
               visibleMarkers.length === 0 && (
                 <div className="absolute inset-0 z-[1100] flex items-center justify-center p-4">

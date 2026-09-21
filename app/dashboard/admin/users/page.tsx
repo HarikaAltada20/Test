@@ -5854,7 +5854,8 @@ export default function AdminUsersPage() {
                 advertisers: advertisersCount,
                 creators: creatorsCount,
               }}
-              isLoading={loading || backgroundLoading}
+              isLoading={loading}
+              isBackgroundLoading={backgroundLoading}
               loadError={usersLoadError}
               onRetry={() => void load()}
             />
