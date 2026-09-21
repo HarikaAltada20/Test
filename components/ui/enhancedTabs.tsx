@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "@/lib/utils";
 
 export interface Tab {
   id: string;
@@ -13,6 +14,8 @@ interface EnhancedTabsProps {
   className?: string;
   isDark?: boolean;
   light?: boolean;
+  /** Compact card-style segmentation for high-level workspace tabs. */
+  variant?: "default" | "cards";
   /** When false, tabs use natural width — wrap in overflow-x-auto for long lists */
   fillWidth?: boolean;
 }
@@ -24,6 +27,7 @@ export function EnhancedTabs({
   className = "",
   isDark = false,
   light = false,
+  variant = "default",
   fillWidth = true,
 }: EnhancedTabsProps) {
   const getTabClasses = (tab: Tab, index: number) => {
@@ -72,6 +76,60 @@ export function EnhancedTabs({
     : light
     ? "bg-[#E4E4E4]"
     : "bg-[#E4E4E4]";
+
+  if (variant === "cards") {
+    return (
+      <div
+        className={cn(
+          "grid w-full grid-cols-3 gap-1 rounded-xl border p-1.5",
+          isDark
+            ? "border-white/10 bg-slate-950/45"
+            : "border-slate-200/80 bg-slate-100/80",
+          className,
+        )}
+        role="tablist"
+        aria-label="User type"
+      >
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onTabChange(tab.id)}
+              className={cn(
+                "flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors duration-200 sm:px-3 sm:text-sm",
+                isActive
+                  ? "bg-[#662EBD] text-white shadow-sm"
+                  : isDark
+                    ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-white hover:text-slate-950",
+              )}
+            >
+              <span className="truncate">{tab.label}</span>
+              {typeof tab.count === "number" && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums sm:text-[11px]",
+                    isActive
+                      ? "bg-white/15 text-white"
+                      : isDark
+                        ? "bg-white/10 text-slate-300"
+                        : "bg-slate-200/80 text-slate-600",
+                  )}
+                >
+                  {tab.count.toLocaleString()}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div

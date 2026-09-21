@@ -467,6 +467,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const [usersLoadError, setUsersLoadError] = useState(false);
   const [userCounts, setUserCounts] = useState({
     all: 0,
     advertisers: 0,
@@ -2852,6 +2853,7 @@ export default function AdminUsersPage() {
     setLoading(true);
     setBackgroundLoading(false);
     setInitialLoadDone(false);
+    setUsersLoadError(false);
     setRows([]);
 
     const mergeUsers = (incoming: User[]) => {
@@ -2918,6 +2920,7 @@ export default function AdminUsersPage() {
     } catch (e) {
       if (abort.signal.aborted || isStale()) return;
       console.error("Error loading users:", e);
+      setUsersLoadError(true);
       setInitialLoadDone(true);
     } finally {
       if (abort.signal.aborted || isStale()) return;
@@ -2965,20 +2968,30 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <Card
         className={cn(
-          "rounded-xl shadow pb-3",
-          isDark ? "bg-[#020817]" : "bg-white",
+          "rounded-2xl border shadow-sm",
+          isDark ? "border-white/10 bg-[#020817]" : "border-slate-200/80 bg-white",
         )}
       >
-        <CardHeader className="py-3 px-3 sm:px-6 space-y-3">
+        <CardHeader className="space-y-4 px-3 py-4 sm:px-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle
-              className={cn(
-                "text-xl sm:text-2xl shrink-0",
-                isDark ? "text-white" : "text-black",
-              )}
-            >
-              Users Management
-            </CardTitle>
+            <div>
+              <CardTitle
+                className={cn(
+                  "shrink-0 text-xl font-semibold tracking-tight sm:text-2xl",
+                  isDark ? "text-white" : "text-black",
+                )}
+              >
+                Users Management
+              </CardTitle>
+              <p
+                className={cn(
+                  "mt-1 text-sm",
+                  isDark ? "text-slate-400" : "text-slate-500",
+                )}
+              >
+                Manage audiences, outreach, and geographic insights.
+              </p>
+            </div>
             {/* {backgroundLoading && (
               <Badge
                 variant="outline"
@@ -3048,8 +3061,22 @@ export default function AdminUsersPage() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input px-2 sm:px-3">
+          <div
+            className={cn(
+              "flex items-center gap-1.5 overflow-x-auto rounded-xl border p-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              isDark
+                ? "border-white/10 bg-slate-900/60"
+                : "border-slate-200/80 bg-slate-50/80",
+            )}
+          >
+            <div
+              className={cn(
+                "flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2 sm:px-3",
+                isDark
+                  ? "border-white/10 bg-slate-950/40"
+                  : "border-slate-200 bg-white",
+              )}
+            >
               <Checkbox
                 id="sticky-header"
                 checked={stickyHeader}
@@ -3072,11 +3099,25 @@ export default function AdminUsersPage() {
                 Sticky Header
               </label>
             </div>
-            <div className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-input">
+            <div
+              className={cn(
+                "flex h-9 shrink-0 items-center gap-0.5 rounded-lg border p-0.5",
+                isDark
+                  ? "border-white/10 bg-slate-950/40"
+                  : "border-slate-200 bg-white",
+              )}
+            >
               <Button
                 variant={viewMode === "table" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                className={cn(
+                  "h-8 gap-1.5 rounded-md px-2 sm:px-3",
+                  viewMode === "table"
+                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    : isDark
+                      ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                )}
                 onClick={() => setViewModePersisted("table")}
               >
                 <List className="h-4 w-4" />
@@ -3085,7 +3126,14 @@ export default function AdminUsersPage() {
               <Button
                 variant={viewMode === "map" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                className={cn(
+                  "h-8 gap-1.5 rounded-md px-2 sm:px-3",
+                  viewMode === "map"
+                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    : isDark
+                      ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                )}
                 onClick={() => setViewModePersisted("map")}
               >
                 <MapIcon className="h-4 w-4" />
@@ -3094,7 +3142,14 @@ export default function AdminUsersPage() {
               <Button
                 variant={viewMode === "notifications" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                className={cn(
+                  "h-8 gap-1.5 rounded-md px-2 sm:px-3",
+                  viewMode === "notifications"
+                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    : isDark
+                      ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                )}
                 onClick={() => setViewModePersisted("notifications")}
               >
                 <Bell className="h-4 w-4" />
@@ -3103,7 +3158,14 @@ export default function AdminUsersPage() {
               <Button
                 variant={viewMode === "email" ? "secondary" : "ghost"}
                 size="sm"
-                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                className={cn(
+                  "h-8 gap-1.5 rounded-md px-2 sm:px-3",
+                  viewMode === "email"
+                    ? "bg-[#662EBD] text-white hover:bg-[#662EBD] hover:text-white"
+                    : isDark
+                      ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                )}
                 onClick={() => setViewModePersisted("email")}
               >
                 <Mail className="h-4 w-4" />
@@ -3128,7 +3190,12 @@ export default function AdminUsersPage() {
                 }
                 setShowFilterModal(true);
               }}
-              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              className={cn(
+                "h-9 shrink-0 gap-1.5 rounded-lg border-transparent bg-transparent px-2 shadow-none sm:px-3",
+                isDark
+                  ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                  : "text-slate-700 hover:bg-white hover:text-slate-950",
+              )}
               size="sm"
             >
               <Filter className="h-4 w-4" />
@@ -3145,7 +3212,12 @@ export default function AdminUsersPage() {
             <Button
               variant="outline"
               onClick={() => setShowColumnSettings(true)}
-              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              className={cn(
+                "h-9 shrink-0 gap-1.5 rounded-lg border-transparent bg-transparent px-2 shadow-none sm:px-3",
+                isDark
+                  ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                  : "text-slate-700 hover:bg-white hover:text-slate-950",
+              )}
               size="sm"
             >
               <Settings className="h-4 w-4" />
@@ -3158,7 +3230,12 @@ export default function AdminUsersPage() {
                 setTimezone(newTimezone);
                 localStorage.setItem("users-management-timezone", newTimezone);
               }}
-              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              className={cn(
+                "h-9 shrink-0 gap-1.5 rounded-lg border-transparent bg-transparent px-2 shadow-none sm:px-3",
+                isDark
+                  ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                  : "text-slate-700 hover:bg-white hover:text-slate-950",
+              )}
               size="sm"
               title={`Current timezone: ${
                 timezone === "UTC" ? "UTC" : "Local"
@@ -3172,20 +3249,22 @@ export default function AdminUsersPage() {
           </div>
         </CardHeader>
         {viewMode !== "notifications" && viewMode !== "email" && (
-          <CardContent className="py-2 px-6">
+          <CardContent className="px-3 pb-4 pt-0 sm:px-5">
             <EnhancedTabs
               tabs={[
-                { id: "all", label: `Users (${allUsersCount})` },
+                { id: "all", label: "Users", count: allUsersCount },
                 {
                   id: "advertisers",
-                  label: `Advertisers (${advertisersCount})`,
+                  label: "Advertisers",
+                  count: advertisersCount,
                 },
-                { id: "creators", label: `Creators (${creatorsCount})` },
+                { id: "creators", label: "Creators", count: creatorsCount },
               ]}
               activeTab={activeTab}
               onTabChange={setActiveTab}
               className="w-full"
               isDark={isDark}
+              variant="cards"
             />
           </CardContent>
         )}
@@ -4702,6 +4781,7 @@ export default function AdminUsersPage() {
                           ? r.creator_profiles[0]
                           : null
                         : r.creator_profiles || null;
+                      const creatorLanguages = creatorProfile?.languages;
                       const trustMetrics = (() => {
                         if (!creatorProfile?.trust_score_metrics) return null;
                         try {
@@ -5428,9 +5508,9 @@ export default function AdminUsersPage() {
                               {isColumnVisible("language") && (
                                 <TableCell className="border-r min-w-[150px] max-w-sm">
                                   <div className="break-words">
-                                    {Array.isArray(creatorProfile?.languages)
-                                      ? creatorProfile.languages.join(", ")
-                                      : creatorProfile?.languages || "-"}
+                                    {Array.isArray(creatorLanguages)
+                                      ? creatorLanguages.join(", ")
+                                      : creatorLanguages || "-"}
                                   </div>
                                 </TableCell>
                               )}
@@ -5706,86 +5786,24 @@ export default function AdminUsersPage() {
       )}
 
       {viewMode === "map" && (
-        <Card
-          className={cn(
-            "rounded-xl shadow",
-            isDark ? "bg-[#170337]" : "bg-white",
-          )}
-        >
-          <CardContent className="px-6">
-            {/* Map view tabs: All Regions | All States | All Countries | All Cities */}
-            <div className="mb-3 flex flex-wrap gap-1 rounded-lg p-1">
-              <Button
-                variant={mapGroupBy === "region" ? "secondary" : "ghost"}
-                size="sm"
-                className={cn(
-                  "flex-1 min-w-0 rounded-md",
-                  mapGroupBy !== "region" &&
-                    isDark &&
-                    "text-slate-300 hover:bg-white/10 hover:text-white",
-                  mapGroupBy !== "region" &&
-                    !isDark &&
-                    "text-gray-600 hover:bg-gray-100",
-                )}
-                onClick={() => setMapGroupBy("region")}
-              >
-                All Regions
-              </Button>
-              <Button
-                variant={mapGroupBy === "state" ? "secondary" : "ghost"}
-                size="sm"
-                className={cn(
-                  "flex-1 min-w-0 rounded-md",
-                  mapGroupBy !== "state" &&
-                    isDark &&
-                    "text-slate-300 hover:bg-white/10 hover:text-white",
-                  mapGroupBy !== "state" &&
-                    !isDark &&
-                    "text-gray-600 hover:bg-gray-100",
-                )}
-                onClick={() => setMapGroupBy("state")}
-              >
-                All States
-              </Button>
-              <Button
-                variant={mapGroupBy === "country" ? "secondary" : "ghost"}
-                size="sm"
-                className={cn(
-                  "flex-1 min-w-0 rounded-md",
-                  mapGroupBy !== "country" &&
-                    isDark &&
-                    "text-slate-300 hover:bg-white/10 hover:text-white",
-                  mapGroupBy !== "country" &&
-                    !isDark &&
-                    "text-gray-600 hover:bg-gray-100",
-                )}
-                onClick={() => setMapGroupBy("country")}
-              >
-                All Countries
-              </Button>
-              <Button
-                variant={mapGroupBy === "city" ? "secondary" : "ghost"}
-                size="sm"
-                className={cn(
-                  "flex-1 min-w-0 rounded-md",
-                  mapGroupBy !== "city" &&
-                    isDark &&
-                    "text-slate-300 hover:bg-white/10 hover:text-white",
-                  mapGroupBy !== "city" &&
-                    !isDark &&
-                    "text-gray-600 hover:bg-gray-100",
-                )}
-                onClick={() => setMapGroupBy("city")}
-              >
-                All Cities
-              </Button>
-            </div>
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardContent className="p-0">
             <UsersMap
               markers={mapMarkers}
               activeTab={activeTab}
               totalInTab={tabFiltered.length}
               isDark={isDark}
               groupBy={mapGroupBy}
+              onActiveTabChange={setActiveTab}
+              onGroupByChange={setMapGroupBy}
+              tabCounts={{
+                all: allUsersCount,
+                advertisers: advertisersCount,
+                creators: creatorsCount,
+              }}
+              isLoading={loading && !initialLoadDone}
+              loadError={usersLoadError}
+              onRetry={() => void load()}
             />
           </CardContent>
         </Card>
