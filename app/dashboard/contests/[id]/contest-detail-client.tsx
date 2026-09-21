@@ -201,7 +201,14 @@ import {
   formatQualitySumDisplay,
 } from "@/lib/creator-profile-stats";
 import { computeTrustScore } from "@/lib/trust-score";
-import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
+import {
+  EMPTY_QUALITY_SCORE_COUNTS,
+  parseQualityScore,
+  parseQualityScoreCounts,
+  sumQualityScoreCounts,
+  type QualityScore,
+  type QualityScoreCounts,
+} from "@/lib/quality-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -508,18 +515,26 @@ function CreatorQualityScoreBreakdownTooltip({
   requirementValue,
   creatorValue,
 }: {
-  breakdown: { score1: number; score2: number; score3: number };
+  breakdown: QualityScoreCounts;
   requirementLabel: string;
   belowThreshold: boolean;
   requirementValue: number;
   creatorValue: number | null;
 }) {
-  const total = breakdown.score1 + breakdown.score2 + breakdown.score3;
+  const total = sumQualityScoreCounts(breakdown);
   const creatorDisplay = creatorValue !== null ? String(creatorValue) : "—";
 
   return (
     <div className="space-y-1 text-xs">
       <p className="font-medium">Quality Score</p>
+      <p>
+        Score 5: {breakdown.score5} submission
+        {breakdown.score5 === 1 ? "" : "s"}
+      </p>
+      <p>
+        Score 4: {breakdown.score4} submission
+        {breakdown.score4 === 1 ? "" : "s"}
+      </p>
       <p>
         Score 3: {breakdown.score3} submission
         {breakdown.score3 === 1 ? "" : "s"}
@@ -3506,11 +3521,7 @@ export default function ContestDetailClient({
       {
         avg_quality_score: number | null;
         best_quality_score: number | null;
-        quality_score_counts?: {
-          score1: number;
-          score2: number;
-          score3: number;
-        };
+        quality_score_counts?: QualityScoreCounts;
       }
     >;
 
@@ -3537,9 +3548,7 @@ export default function ContestDetailClient({
                     null,
                   quality_score_counts: creatorQuality.quality_score_counts ??
                     existingCreator.quality_score_counts ?? {
-                      score1: 0,
-                      score2: 0,
-                      score3: 0,
+                      ...EMPTY_QUALITY_SCORE_COUNTS,
                     },
                 }
               : existingCreator,
@@ -3561,9 +3570,7 @@ export default function ContestDetailClient({
                 null,
               quality_score_counts: creatorQuality.quality_score_counts ??
                 existingCreator.quality_score_counts ?? {
-                  score1: 0,
-                  score2: 0,
-                  score3: 0,
+                  ...EMPTY_QUALITY_SCORE_COUNTS,
                 },
             },
           };
@@ -4563,9 +4570,7 @@ export default function ContestDetailClient({
             avg_quality_score: submission.creator?.avg_quality_score ?? null,
             best_quality_score: submission.creator?.best_quality_score ?? null,
             quality_score_counts: submission.creator?.quality_score_counts ?? {
-              score1: 0,
-              score2: 0,
-              score3: 0,
+              ...EMPTY_QUALITY_SCORE_COUNTS,
             },
             total_money_won: submission.creator?.total_money_won ?? 0,
             total_views: submission.creator?.total_views ?? 0,
@@ -4678,15 +4683,9 @@ export default function ContestDetailClient({
         group.creator.quality_score_sum = submission.creator.quality_score_sum;
       }
       const existingCounts = group.creator?.quality_score_counts;
-      const existingCountsTotal =
-        (existingCounts?.score1 ?? 0) +
-        (existingCounts?.score2 ?? 0) +
-        (existingCounts?.score3 ?? 0);
+      const existingCountsTotal = sumQualityScoreCounts(existingCounts);
       const submissionCounts = submission.creator?.quality_score_counts;
-      const submissionCountsTotal =
-        (submissionCounts?.score1 ?? 0) +
-        (submissionCounts?.score2 ?? 0) +
-        (submissionCounts?.score3 ?? 0);
+      const submissionCountsTotal = sumQualityScoreCounts(submissionCounts);
       if (
         submissionCounts &&
         submissionCountsTotal > 0 &&
@@ -25967,12 +25966,10 @@ export default function ContestDetailClient({
                                         contestMinPlatformViews !== null &&
                                         creatorPlatformViews <
                                           contestMinPlatformViews;
-                                      const creatorQualityScoreBreakdown = group
-                                        .creator?.quality_score_counts ?? {
-                                        score1: 0,
-                                        score2: 0,
-                                        score3: 0,
-                                      };
+                                      const creatorQualityScoreBreakdown =
+                                        parseQualityScoreCounts(
+                                          group.creator?.quality_score_counts,
+                                        );
                                       return (
                                         <TableRow
                                           key={group.creator.id}
@@ -26143,7 +26140,7 @@ export default function ContestDetailClient({
                                               <CreatorWiseEligibilityText
                                                 value={
                                                   creatorBestQuality !== null
-                                                    ? `${creatorBestQuality} / 3`
+                                                    ? `${creatorBestQuality} / 5`
                                                     : "—"
                                                 }
                                                 belowThreshold={
@@ -26185,39 +26182,18 @@ export default function ContestDetailClient({
                                                     <p className="font-medium">
                                                       Total Quality Score
                                                     </p>
-                                                    <p>
-                                                      Score 3:{" "}
-                                                      {
-                                                        creatorQualityScoreBreakdown.score3
-                                                      }{" "}
-                                                      submission
-                                                      {creatorQualityScoreBreakdown.score3 ===
-                                                      1
-                                                        ? ""
-                                                        : "s"}
-                                                    </p>
-                                                    <p>
-                                                      Score 2:{" "}
-                                                      {
-                                                        creatorQualityScoreBreakdown.score2
-                                                      }{" "}
-                                                      submission
-                                                      {creatorQualityScoreBreakdown.score2 ===
-                                                      1
-                                                        ? ""
-                                                        : "s"}
-                                                    </p>
-                                                    <p>
-                                                      Score 1:{" "}
-                                                      {
-                                                        creatorQualityScoreBreakdown.score1
-                                                      }{" "}
-                                                      submission
-                                                      {creatorQualityScoreBreakdown.score1 ===
-                                                      1
-                                                        ? ""
-                                                        : "s"}
-                                                    </p>
+                                                    {[5, 4, 3, 2, 1].map((score) => {
+                                                      const count =
+                                                        creatorQualityScoreBreakdown[
+                                                          `score${score}` as keyof QualityScoreCounts
+                                                        ];
+                                                      return (
+                                                        <p key={score}>
+                                                          Score {score}: {count} submission
+                                                          {count === 1 ? "" : "s"}
+                                                        </p>
+                                                      );
+                                                    })}
                                                     <p className="pt-1 border-t border-border/50">
                                                       {minQualityBelowThreshold
                                                         ? "Below"
@@ -26240,7 +26216,7 @@ export default function ContestDetailClient({
                                               <CreatorWiseEligibilityText
                                                 value={
                                                   creatorAvgQuality !== null
-                                                    ? `${formatDecimalMetric(creatorAvgQuality)} / 3`
+                                                    ? `${formatDecimalMetric(creatorAvgQuality)} / 5`
                                                     : "—"
                                                 }
                                                 belowThreshold={
@@ -32592,9 +32568,7 @@ export default function ContestDetailClient({
                         null,
                       quality_score_counts: qualityScoreCounts ??
                         existingCreator.quality_score_counts ?? {
-                          score1: 0,
-                          score2: 0,
-                          score3: 0,
+                          ...EMPTY_QUALITY_SCORE_COUNTS,
                         },
                     },
                   };

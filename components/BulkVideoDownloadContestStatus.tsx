@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
+  isBulkDownloadJobInProgress,
   sortBulkDownloadJobsNewestFirst,
   type BulkDownloadSummaryUserType,
   type BulkVideoDownloadJobSummary,
@@ -237,7 +238,7 @@ export function BulkVideoDownloadContestStatus({
     return {
       id: job.id,
       completedLabel: jobCompletedLabel(job),
-      inProgress: job.status === "queued" || job.status === "running",
+      inProgress: isBulkDownloadJobInProgress(job),
       totalCount: job.totalCount,
       successCount: job.successCount,
       failedCount: job.failedCount,

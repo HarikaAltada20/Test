@@ -43,7 +43,9 @@ Run in filename order (do not skip or reorder):
 
 Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Plan a short maintenance window on large databases for migrations 5–7 if needed.
 
-Migration 11 remaps existing submission scores `1→3`, `2→4`, `3→5`, bumps contest `min_avg` / `min_best` by +2, and rebuilds creator quality caches. Contest **sum** gate (`min_quality_score`) is left unchanged.
+Migration 11 is an **irreversible, standalone transaction**. It takes an advisory lock and records a durable completion marker; a second run fails before changing data. Run it in a maintenance window, not concurrently with application writes.
+
+Migration 11 remaps existing submission scores `1→3`, `2→4`, `3→5`, bumps contest `min_avg` / `min_best` by +2, and rebuilds creator quality caches. Contest **sum** gate (`min_quality_score`) is intentionally unchanged.
 
 ## Payout moderation lock (migration 10)
 
@@ -105,7 +107,9 @@ Trust/quality profile updates after verify are handled by DB triggers (`submissi
    - PATCH quality score on verified submission → response `creatorQuality` matches live submissions
    - Legacy creator with unscored verified submissions → quality gates skipped until first verify score
    - Creator with explicit scores → avg/best excludes backfilled rows only
-   - After migration 11: sample remapped scores (old 3 → 5) and avg/best on creator profiles
+   - After migration 11: sample remapped scores (old 3 → 5), score-4/5 tier counts, and avg/best on creator profiles
+   - `eligibleOnly` campaign list: creator below a 4/5 avg or best gate is excluded; creator meeting it is included
+   - Confirm `quality_score_scale_1_to_5_migration_state` has one row; rerunning migration 11 must fail before it changes any data
    - Re-check eligibility after another admin verify/reject (submit error mentions refresh if DB gate fires)
 3. **Production:** run migrations 1→11, then deploy app immediately after.
 4. **Post-deploy:** sample creators for trust % changes; monitor submission insert errors.

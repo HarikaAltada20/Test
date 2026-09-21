@@ -2,7 +2,7 @@
 
 Server-side support for the Windows desktop downloader. Brands and admins can download **YouTube** submissions on their machine via a signed `.gocdownload` manifest. Instagram and mixed selections continue to use the existing **cloud** Redis/Vercel ZIP path.
 
-The desktop app source is **not** kept in this monorepo (keeps `main` lean). Distribute the prebuilt Windows installer via `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL`. Rebuild the app from a separate repo or historical `goc-downloader` branch when you need a new installer.
+The desktop app source is **not** kept in this monorepo (keeps `main` lean). Distribute the prebuilt Windows installer via `GOC_DOWNLOADER_INSTALL_URL` in `lib/goc-download/config.ts`. Rebuild the app from a separate repo or historical `goc-downloader` branch when you need a new installer.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ Fixed cross-language vector: `lib/goc-download/test-vector.ts`.
 | Variable | Required | Purpose |
 |---|---|---|
 | `NEXT_PUBLIC_DESKTOP_DOWNLOAD_ENABLED` | no | Set `true` to show “Download on this computer” in the UI |
-| `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL` | no | Installer / download page link in the dialog |
+| `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL` | no | *(Unused)* Installer URL is hardcoded in `lib/goc-download/config.ts` (`GOC_DOWNLOADER_INSTALL_URL`) |
 | `NEXT_PUBLIC_CLOUD_DOWNLOAD_FALLBACK_ENABLED` | no | Default on; set `false` to hide cloud option when desktop is enabled |
 | `GOC_DOWNLOAD_SIGNING_PRIVATE_KEY` | yes (desktop) | Ed25519 PKCS8 PEM private key (escape newlines as `\n` in env) |
 | `GOC_DOWNLOAD_SIGNING_KEY_ID` | yes (desktop) | Key id embedded in manifests; must match a public key shipped in the desktop app |
@@ -44,7 +44,7 @@ Desktop v1 limits: at most **100** videos per `.gocdownload` manifest. HTTPS You
 
 1. Generate a production Ed25519 keypair; store the private key in Vercel as `GOC_DOWNLOAD_SIGNING_PRIVATE_KEY` and set `GOC_DOWNLOAD_SIGNING_KEY_ID`.
 2. Ship the matching public key inside the Windows installer build (key id must match `GOC_DOWNLOAD_SIGNING_KEY_ID`, e.g. `prod-1`).
-3. Host the NSIS setup `.exe` and set `NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL` to that public URL.
+3. The Windows NSIS setup `.exe` is linked from `GOC_DOWNLOADER_INSTALL_URL` in `lib/goc-download/config.ts` (currently a public Drive download). Update that constant when you ship a new installer.
 
 ### Generating a signing key (OpenSSL)
 

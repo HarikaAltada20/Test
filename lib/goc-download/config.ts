@@ -6,6 +6,14 @@ const DEFAULT_MANIFEST_TTL_SECONDS = 3600;
 /** Status callback tokens must outlive long desktop jobs (default 7 days). */
 const DEFAULT_STATUS_TOKEN_TTL_SECONDS = 7 * 24 * 3600;
 
+/**
+ * Public Windows x64 installer (Game.of.Creators.Downloader_0.1.0_x64-setup.exe).
+ * Drive share page so "Get the desktop app" opens a Download button (large EXEs
+ * often fail on uc?export=download because of Google's virus-scan interstitial).
+ */
+export const GOC_DOWNLOADER_INSTALL_URL =
+  "https://drive.google.com/file/d/1Jua2DZaZav2CZsUGxIIfFLNICxG3zPmm/view?usp=sharing";
+
 export function isDesktopDownloadEnabled(): boolean {
   return process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_ENABLED === "true";
 }
@@ -26,9 +34,8 @@ export function isCloudDownloadFallbackEnabled(): boolean {
   return process.env.NEXT_PUBLIC_CLOUD_DOWNLOAD_FALLBACK_ENABLED !== "false";
 }
 
-export function getDesktopDownloaderInstallUrl(): string | null {
-  const url = (process.env.NEXT_PUBLIC_GOC_DOWNLOADER_INSTALL_URL || "").trim();
-  return url || null;
+export function getDesktopDownloaderInstallUrl(): string {
+  return GOC_DOWNLOADER_INSTALL_URL;
 }
 
 export function getManifestTtlSeconds(): number {

@@ -1532,11 +1532,6 @@ export default function SubmissionsClient({
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
 
-    // Log keys for the first submission to help diagnose field mismatches if any
-    if (submission === filteredSubmissions[0]) {
-      console.log("DEBUG: First submission fields:", Object.keys(submission));
-    }
-
     // Capture the primary DB column and every possible variation from metadata (IG/TikTok/YT)
     const bestThumbnail = submission.video_thumbnail_url ||
       (submission as any).thumbnail_url ||
