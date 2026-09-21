@@ -140,7 +140,7 @@ function TestimonialCard({
       className={cn(
         "relative w-full max-w-[340px] rounded-[16px] border px-5 pb-6 pt-5 sm:w-[340px] sm:max-w-none sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
         isLight
-          ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_30px_rgba(20,16,40,0.06)]"
+          ? "border-[#0000000D] bg-[#ECECEC]"
           : "border-white/[0.08] bg-[#1A1A1A]",
         className,
       )}
@@ -259,35 +259,35 @@ export default function Testimonials() {
           <TestimonialCard
             testimonial={testimonials[0]}
             isLight={isLight}
-            className="absolute left-0 top-[72px] z-[1] lg:top-[60px]"
+            className="absolute left-[-8%] top-[72px] z-[1] lg:top-[170px]"
           />
 
           {/* Aarav — center, lower */}
           <TestimonialCard
             testimonial={testimonials[1]}
             isLight={isLight}
-            className="absolute left-[40%] top-[200px] z-[2] lg:top-[200px]"
+            className="absolute left-[65%] top-[200px] z-[2] lg:top-[200px]"
           />
 
           {/* Riya — highest, top right */}
           <TestimonialCard
             testimonial={testimonials[2]}
             isLight={isLight}
-            className="absolute right-0 top-0 z-[1]"
+            className="absolute right-[35%] top-0 z-[1]"
           />
 
           {/* Ananya — bottom left */}
           <TestimonialCard
             testimonial={testimonials[3]}
             isLight={isLight}
-            className="absolute bottom-0 left-[6%] z-[1] lg:left-[8%] lg:bottom-[50px]"
+            className="absolute bottom-0 left-[6%] z-[1] lg:left-[10%] lg:bottom-[70px]"
           />
 
           {/* Dev — bottom right */}
           <TestimonialCard
             testimonial={testimonials[4]}
             isLight={isLight}
-            className="absolute bottom-[28px] right-[2%] z-[1] lg:bottom-[50px] lg:right-[4%]"
+            className="absolute bottom-[28px] right-[2%] z-[1] lg:bottom-[90px] lg:right-[4%]"
           />
         </div>
       </div>

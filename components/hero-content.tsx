@@ -537,7 +537,7 @@ export default function HeroContent() {
             className={cn(
               "absolute left-[2%] top-[35px] z-20 hidden w-[200px] rotate-[7deg] rounded-[23px] p-[15px] xl:left-[4%] xl:w-[220px] lg:block",
               isLight
-                ? "border border-black/[0.06] bg-white shadow-[0_18px_50px_rgba(20,16,40,0.10)]"
+                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                 : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
             )}
           >
@@ -650,7 +650,7 @@ export default function HeroContent() {
             className={cn(
               "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[105px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
               isLight
-                ? "border border-black/[0.06] bg-white shadow-[0_30px_80px_rgba(20,16,40,0.12)]"
+                ? "border border-black/[0.06] bg-white shadow-[inset_0px_5px_4px_2px_#575757CC]"
                 : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
             )}
           >
@@ -701,7 +701,7 @@ export default function HeroContent() {
             className={cn(
               "absolute right-[2%] top-[130px] z-20 hidden w-[240px] rotate-[-15deg] rounded-[22px] p-4 xl:right-[4%] xl:w-[280px] lg:block",
               isLight
-                ? "border border-black/[0.06] bg-white shadow-[0_18px_50px_rgba(20,16,40,0.10)]"
+                ? "border border-black/[0.06] bg-white shadow-[inset_0px_0px_6.02px_0px_#FFFFFF40]"
                 : "border border-white/[0.08] bg-[#1E1E1E] shadow-[inset_0_0_6.02px_0_#FFFFFF40]",
             )}
           >
@@ -887,7 +887,7 @@ export default function HeroContent() {
               className={cn(
                 "relative min-h-[480px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0",
                 isLight
-                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[0_20px_60px_rgba(20,16,40,0.06)]"
+                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
               )}
             >
@@ -1224,7 +1224,7 @@ export default function HeroContent() {
               className={cn(
                 "relative min-h-[480px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0",
                 isLight
-                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[0_20px_60px_rgba(20,16,40,0.06)]"
+                  ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
               )}
             >

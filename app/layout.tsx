@@ -144,7 +144,8 @@ export default async function RootLayout({
     }
   }
 
-  // Determine initial theme mode on the server from cookies to avoid white flash
+  // Determine initial theme mode on the server from cookies to avoid white flash.
+  // Explicit mode wins over legacy preset so marketing light/dark toggles stick.
   const presetCookie = cookieStore.get("dashboard-preset")?.value as
     | "game-of-creators"
     | "clean-professional"
@@ -159,11 +160,12 @@ export default async function RootLayout({
     "clean-professional": "light",
     "dark-professional": "dark",
   };
-  const initialMode: "light" | "dark" = presetCookie
-    ? presetToMode[presetCookie] || "light"
-    : modeCookie === "dark" || modeCookie === "light"
+  const initialMode: "light" | "dark" =
+    modeCookie === "dark" || modeCookie === "light"
       ? modeCookie
-      : "light";
+      : presetCookie
+        ? presetToMode[presetCookie] || "light"
+        : "light";
 
   return (
     <html lang="en" data-theme={initialMode} suppressHydrationWarning>
@@ -191,13 +193,13 @@ export default async function RootLayout({
                     try { return window.localStorage.getItem(k); } catch(e) { return null; }
                   };
                   var mode = 'light';
+                  var savedMode = get('dashboard-mode');
                   var preset = get('dashboard-preset');
                   var presetToMode = { 'game-of-creators': 'dark', 'clean-professional': 'light', 'dark-professional': 'dark' };
-                  if (preset && presetToMode[preset]) {
+                  if (savedMode === 'dark' || savedMode === 'light') {
+                    mode = savedMode;
+                  } else if (preset && presetToMode[preset]) {
                     mode = presetToMode[preset];
-                  } else {
-                    var savedMode = get('dashboard-mode');
-                    if (savedMode === 'dark' || savedMode === 'light') mode = savedMode;
                   }
                   d.setAttribute('data-theme', mode);
                   if (mode === 'dark') {

@@ -155,6 +155,12 @@ export function Nav({
     setOpen(false);
     setIsNavigating(false);
     setIsSigningIn(false);
+    setBrandsLoading(false);
+    setCreatorsLoading(false);
+    setDashboardLoading(false);
+    setSettingsLoading(false);
+    setQuickLinkLoading(false);
+    setHomeLoading(false);
   }, [pathname]);
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
@@ -200,9 +206,16 @@ export function Nav({
       ? brandsNavLinks
       : null;
 
+  const goToMarketingPage = (href: "/brands" | "/creators") => {
+    if (href === "/brands") setBrandsLoading(true);
+    if (href === "/creators") setCreatorsLoading(true);
+    // Client navigation keeps the selected theme (full reloads were resetting it).
+    router.push(href);
+  };
+
   const scrollToHashSection = (href: string) => {
     if (!href.includes("#")) {
-      window.location.href = href;
+      router.push(href);
       return;
     }
     const id = href.split("#")[1];
@@ -212,7 +225,7 @@ export function Nav({
       setOpen(false);
       return;
     }
-    window.location.href = href;
+    router.push(href);
   };
 
   const handleMarketingLinkClick = (link: {
@@ -220,20 +233,18 @@ export function Nav({
     href: string;
   }) => {
     if (link.label === "For Brands") {
-      setBrandsLoading(true);
-      window.location.href = "/brands";
+      goToMarketingPage("/brands");
       return;
     }
     if (link.label === "For Creators") {
-      setCreatorsLoading(true);
-      window.location.href = "/creators";
+      goToMarketingPage("/creators");
       return;
     }
     if (link.href.includes("#")) {
       scrollToHashSection(link.href);
       return;
     }
-    window.location.href = link.href;
+    router.push(link.href);
   };
 
   return (
@@ -347,14 +358,7 @@ export function Nav({
                       <button
                         key={link.label}
                         type="button"
-                        onClick={() => {
-                          if (link.label === "For Brands") {
-                            setBrandsLoading(true);
-                          } else if (link.label === "For Creators") {
-                            setCreatorsLoading(true);
-                          }
-                          window.location.href = link.href;
-                        }}
+                        onClick={() => handleMarketingLinkClick(link)}
                         disabled={isLinkLoading}
                         className={cn(
                           "inline-flex items-center gap-2 transition-colors whitespace-nowrap",
@@ -373,10 +377,7 @@ export function Nav({
               ) : (
                 <nav className="flex items-center md:ml-20 space-x-1">
                   <button
-                    onClick={() => {
-                      setBrandsLoading(true);
-                      window.location.href = "/brands";
-                    }}
+                    onClick={() => goToMarketingPage("/brands")}
                     disabled={brandsLoading}
                     className={cn(
                       "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
@@ -395,10 +396,7 @@ export function Nav({
                   </button>
 
                   <button
-                    onClick={() => {
-                      setCreatorsLoading(true);
-                      window.location.href = "/creators";
-                    }}
+                    onClick={() => goToMarketingPage("/creators")}
                     disabled={creatorsLoading}
                     className={cn(
                       "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
@@ -806,13 +804,8 @@ export function Nav({
                                   key={link.label}
                                   type="button"
                                   onClick={() => {
-                                    if (link.label === "For Brands") {
-                                      setBrandsLoading(true);
-                                    } else if (link.label === "For Creators") {
-                                      setCreatorsLoading(true);
-                                    }
                                     setOpen(false);
-                                    window.location.href = link.href;
+                                    handleMarketingLinkClick(link);
                                   }}
                                   disabled={isLinkLoading}
                                   className={cn(
@@ -834,10 +827,7 @@ export function Nav({
                           ) : (
                             <>
                               <button
-                                onClick={() => {
-                                  setBrandsLoading(true);
-                                  window.location.href = "/brands";
-                                }}
+                                onClick={() => goToMarketingPage("/brands")}
                                 disabled={brandsLoading}
                                 className={cn(
                                   "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
@@ -856,10 +846,7 @@ export function Nav({
                                 <span>For Brands</span>
                               </button>
                               <button
-                                onClick={() => {
-                                  setCreatorsLoading(true);
-                                  window.location.href = "/creators";
-                                }}
+                                onClick={() => goToMarketingPage("/creators")}
                                 disabled={creatorsLoading}
                                 className={cn(
                                   "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",

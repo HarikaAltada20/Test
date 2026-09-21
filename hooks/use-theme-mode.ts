@@ -10,23 +10,28 @@ const PRESET_TO_MODE: Record<string, ThemeMode> = {
   "dark-professional": "dark",
 };
 
-function readThemeMode(): ThemeMode {
+/**
+ * Resolve the active marketing/dashboard theme.
+ * Priority: live DOM → explicit dashboard-mode → legacy preset → light.
+ * Explicit mode must beat preset so marketing toggles survive navigation.
+ */
+export function readThemeMode(): ThemeMode {
   if (typeof window === "undefined") return "light";
 
+  const attr = document.documentElement.getAttribute("data-theme");
+  if (attr === "dark" || attr === "light") return attr;
+
   try {
+    const saved = window.localStorage.getItem("dashboard-mode");
+    if (saved === "dark" || saved === "light") return saved;
+
     const preset = window.localStorage.getItem("dashboard-preset");
     if (preset && PRESET_TO_MODE[preset]) {
       return PRESET_TO_MODE[preset];
     }
-
-    const saved = window.localStorage.getItem("dashboard-mode");
-    if (saved === "dark" || saved === "light") return saved;
   } catch {
     // ignore storage errors
   }
-
-  const attr = document.documentElement.getAttribute("data-theme");
-  if (attr === "dark" || attr === "light") return attr;
 
   return "light";
 }
@@ -48,8 +53,9 @@ function applyThemeMode(mode: ThemeMode) {
   try {
     window.localStorage.setItem("dashboard-mode", mode);
     window.localStorage.removeItem("dashboard-preset");
-    document.cookie = `dashboard-mode=${mode}; path=/; max-age=31536000`;
-    document.cookie = "dashboard-preset=; path=/; max-age=0";
+    document.cookie = `dashboard-mode=${mode}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie =
+      "dashboard-preset=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
   } catch {
     // ignore storage errors
   }
@@ -59,8 +65,11 @@ function applyThemeMode(mode: ThemeMode) {
   );
 }
 
-export function useThemeMode() {
-  const [mode, setModeState] = useState<ThemeMode>(() => readThemeMode());
+export function useThemeMode(serverMode?: ThemeMode) {
+  const [mode, setModeState] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return serverMode ?? "light";
+    return readThemeMode();
+  });
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -89,6 +98,10 @@ export function useThemeMode() {
       }
     };
 
+    const onPageShow = () => {
+      setModeState(readThemeMode());
+    };
+
     const observer = new MutationObserver(syncFromDom);
     observer.observe(document.documentElement, {
       attributes: true,
@@ -97,11 +110,13 @@ export function useThemeMode() {
 
     window.addEventListener("theme-change", onThemeChange);
     window.addEventListener("storage", onStorage);
+    window.addEventListener("pageshow", onPageShow);
 
     return () => {
       observer.disconnect();
       window.removeEventListener("theme-change", onThemeChange);
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, []);
 

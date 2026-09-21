@@ -4,6 +4,7 @@ import BrandsClient from "./BrandsClient";
 import {
   getCachedBrandsLandingData,
 } from "@/lib/landing-data-cache";
+import { getServerThemeMode } from "@/lib/server-theme-mode";
 
 /**
  * Do not set `revalidate` here — with `force-dynamic`, the page must not participate in static prerender
@@ -37,7 +38,10 @@ export const metadata: Metadata = {
 };
 
 export default async function BrandsPage() {
-  const { totalViews } = await getCachedBrandsLandingData();
+  const [{ totalViews }, initialTheme] = await Promise.all([
+    getCachedBrandsLandingData(),
+    getServerThemeMode(),
+  ]);
 
-  return <BrandsClient totalViews={totalViews} />;
+  return <BrandsClient totalViews={totalViews} initialTheme={initialTheme} />;
 }

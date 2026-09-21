@@ -219,12 +219,14 @@ interface CreatorsClientProps {
   totalViews: number;
   totalMoneyCreditedCents: number;
   initialContests?: any[];
+  initialTheme?: "light" | "dark";
 }
 
 export default function CreatorsClient({
   totalViews: _totalViews,
   totalMoneyCreditedCents,
   initialContests = [],
+  initialTheme,
 }: CreatorsClientProps) {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
@@ -251,7 +253,7 @@ export default function CreatorsClient({
   const [navigatingContestId, setNavigatingContestId] = useState<string | null>(
     null,
   );
-  const { isLight } = useThemeMode();
+  const { isLight } = useThemeMode(initialTheme);
   const [isNavigatingViewMore, setIsNavigatingViewMore] = useState(false);
   const [easyStep, setEasyStep] = useState(0);
   const [easyStepProgress, setEasyStepProgress] = useState(0);
@@ -971,7 +973,7 @@ export default function CreatorsClient({
                     className={cn(
                       "pointer-events-none absolute top-[28%] right-[4%] z-[5] rounded-2xl border px-3 py-2 backdrop-blur-md sm:top-[38%] sm:right-[10%] sm:px-4 sm:py-3 rotate-[6deg]",
                       isLight
-                        ? "border-black/[0.06] bg-white shadow-[0_12px_28px_rgba(20,16,40,0.12)]"
+                        ? "border-black/[0.06] bg-[#ECECEC] shadow-[inset_0px_0px_5.26px_0px_#CDCDCD40]"
                         : "border-white/10 bg-[#1E1E1E] shadow-[inset_0_0_5.26px_0_#FFFFFF40]",
                     )}
                   >
@@ -982,7 +984,7 @@ export default function CreatorsClient({
                       <span
                         className={cn(
                           "whitespace-nowrap text-[11px] sm:text-xs",
-                          isLight ? "text-black/50" : "text-zinc-300",
+                          isLight ? "text-[#353535]" : "text-zinc-300",
                         )}
                       >
                         Last Month Earnings

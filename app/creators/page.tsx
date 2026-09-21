@@ -4,6 +4,7 @@ import CreatorsClient from "./CreatorsClient";
 import {
   getCachedCreatorsLandingData,
 } from "@/lib/landing-data-cache";
+import { getServerThemeMode } from "@/lib/server-theme-mode";
 
 /**
  * Do not set `revalidate` here — with `force-dynamic`, the page must not participate in static prerender
@@ -36,14 +37,15 @@ export const metadata: Metadata = {
 };
 
 export default async function CreatorsPage() {
-  const { totalViews, totalMoneyCreditedCents, contests } =
-    await getCachedCreatorsLandingData();
+  const [{ totalViews, totalMoneyCreditedCents, contests }, initialTheme] =
+    await Promise.all([getCachedCreatorsLandingData(), getServerThemeMode()]);
 
   return (
     <CreatorsClient
       totalViews={totalViews}
       totalMoneyCreditedCents={totalMoneyCreditedCents}
       initialContests={contests}
+      initialTheme={initialTheme}
     />
   );
 }

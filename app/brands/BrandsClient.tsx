@@ -86,6 +86,7 @@ const brandImages: string[] = [
 ];
 interface BrandsClientProps {
   totalViews: number;
+  initialTheme?: "light" | "dark";
 }
 
 const features = [
@@ -286,10 +287,13 @@ const creators = [
       "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
   },
 ];
-export default function BrandsClient({ totalViews }: BrandsClientProps) {
+export default function BrandsClient({
+  totalViews,
+  initialTheme,
+}: BrandsClientProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isLight } = useThemeMode();
+  const { isLight } = useThemeMode(initialTheme);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
   const [windowWidth, setWindowWidth] = useState<number>(0);
@@ -1143,9 +1147,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 <div
                   className={cn(
                     "absolute inset-0",
-                    isLight
-                      ? ""
-                      : "opacity-[0.6] blur-[0.2px]",
+                    isLight ? "" : "opacity-[0.6] blur-[0.2px]",
                   )}
                 >
                   <div
@@ -1444,7 +1446,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 <div className="absolute bottom-10 left-7 right-7 z-20">
                   <h2
                     className={cn(
-                      "mb-3 text-[18px] font-semibold",
+                      "mb-3 text-xl font-semibold",
                       isLight ? "text-black" : "text-[#d6d6d6]",
                     )}
                   >
@@ -1453,7 +1455,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
 
                   <p
                     className={cn(
-                      "text-[12px] leading-[1.45]",
+                      "text-md leading-[1.45]",
                       isLight ? "text-black/50" : "text-[#a8a8a8]",
                     )}
                   >
@@ -1757,7 +1759,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               <p
                 className={cn(
                   "font-[cursive] text-lg italic sm:text-xl md:text-2xl",
-                  isLight ? "text-black/50" : "text-white/75",
+                  isLight ? "text-[#535353]" : "text-white/75",
                 )}
               >
                 Get full control to approve a reel before making live
@@ -2800,7 +2802,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 <p
                   className={cn(
                     "mt-5 max-w-[640px] text-[16px] font-medium italic leading-[1.7] tracking-[-0.3px] sm:mt-8 sm:text-[20px] sm:leading-[1.8] md:text-[22px]",
-                    isLight ? "text-black/55" : "text-[#c9c9c9]",
+                    isLight ? "text-[#757575]" : "text-[#c9c9c9]",
                   )}
                 >
                   “GOC helped us move from paying for reach to understanding the
@@ -2809,10 +2811,10 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 </p>
 
                 <div className="mt-7">
-                  <p className="text-[15px] font-normal text-[#777]">
+                  <p className="text-[15px] font-normal text-[#757575]">
                     Ranveer Allahbadia
                   </p>
-                  <p className="mt-1 text-[15px] font-normal text-[#777]">
+                  <p className="mt-1 text-[15px] font-normal text-[#757575]">
                     Founder, BeerBiceps
                   </p>
                 </div>
@@ -2822,12 +2824,12 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   className={cn(
                     "mt-12 flex w-full max-w-[545px] overflow-hidden rounded-[16px] px-8 py-4",
                     isLight
-                      ? "bg-white border border-black/[0.06] shadow-[0_12px_40px_rgba(20,16,40,0.06)]"
+                      ? "bg-[#ECECEC] shadow-[0px_1px_0px_0px_#FFFFFF54] border border-black/[0.06]"
                       : "bg-[#252525]",
                   )}
                 >
                   <div className="flex-1">
-                    <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                    <p className="text-[32px] font-medium leading-none text-[#7F39EC]">
                       3+
                     </p>
                     <p className="mt-2 text-[14px] text-[#858585]">
@@ -2836,7 +2838,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   </div>
 
                   <div className="flex-1">
-                    <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                    <p className="text-[32px] font-medium leading-none text-[#7F39EC]">
                       2.5M+
                     </p>
                     <p className="mt-2 text-[14px] text-[#858585]">
@@ -2845,7 +2847,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   </div>
 
                   <div className="flex-1">
-                    <p className="text-[32px] font-medium leading-none text-[#a98cff]">
+                    <p className="text-[32px] font-medium leading-none text-[#7F39EC]">
                       16%
                     </p>
                     <p className="mt-2 text-[14px] text-[#858585]">
