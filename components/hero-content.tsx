@@ -314,10 +314,9 @@ export default function HeroContent() {
                     justify-center
                     rounded-[16.09px]
                     bg-[linear-gradient(180deg,#FF8800_0%,#FFA53E_50%,#FFC27C_100%)]
-                    shadow-[4.95px_4.95px_4.95px_0px_#FFFFFF1A_inset,-1px_2px_4px_0px_#00000040]
+                    shadow-[0px_3.71px_4.95px_0px_#FFFFFF40_inset,3.71px_-8.66px_4.95px_0px_#FFD2D20D_inset,6.19px_-11.14px_13.36px_0px_#FFF4F440_inset,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
                     [background-clip:padding-box]
                     [-webkit-text-fill-color:initial]
-                    shadow-[inset_0px_3.71px_4.95px_0px_#FFFFFF40,inset_3.71px_-8.66px_4.95px_0px_#FFD2D20D,inset_6.19px_-11.14px_13.36px_0px_#FFF4F440,13.61px_13.61px_49.5px_0px_#FFAD0038,3.71px_4.95px_29.7px_0px_#FFAD0026,1.24px_3.71px_8.17px_0px_#FFAD001A]
                   "
                 >
                   <Image
