@@ -42,7 +42,9 @@ function summarizeByStatus(contests: ContestRow[]) {
 }
 
 async function countSubmissions(
-  supabase: ReturnType<typeof createClient>,
+  // Diagnostic-only script; generated Supabase database types are not loaded here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   contestIds: string[],
 ) {
   if (!contestIds.length) return 0;

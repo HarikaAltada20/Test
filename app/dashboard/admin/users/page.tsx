@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertTriangle,
   Settings,
   X,
   Check,
@@ -38,6 +39,7 @@ import {
   Send,
   Loader2,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { scheduleClientDelivery } from "@/hooks/useAdminScheduledNotificationDelivery";
@@ -187,6 +189,8 @@ function getGeoCoords(user: User): { lat: number; lon: number } | null {
   const lat = g.lat ?? g.geo_data?.lat;
   const lon = g.lon ?? g.geo_data?.lon;
   if (typeof lat !== "number" || typeof lon !== "number") return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
   if (lat === 0 && lon === 0) return null;
   return { lat, lon };
 }
@@ -468,6 +472,8 @@ export default function AdminUsersPage() {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [usersLoadError, setUsersLoadError] = useState(false);
+  const [usersBackgroundLoadError, setUsersBackgroundLoadError] =
+    useState(false);
   const [userCounts, setUserCounts] = useState({
     all: 0,
     advertisers: 0,
@@ -2849,11 +2855,13 @@ export default function AdminUsersPage() {
     usersLoadAbortRef.current = abort;
 
     const isStale = () => generation !== usersLoadGenerationRef.current;
+    let initialBatchLoaded = false;
 
     setLoading(true);
     setBackgroundLoading(false);
     setInitialLoadDone(false);
     setUsersLoadError(false);
+    setUsersBackgroundLoadError(false);
     setRows([]);
 
     const mergeUsers = (incoming: User[]) => {
@@ -2883,6 +2891,7 @@ export default function AdminUsersPage() {
       }
 
       setRows(firstJson.items ?? []);
+      initialBatchLoaded = true;
       if (firstJson.counts) {
         setUserCounts(firstJson.counts);
       }
@@ -2920,7 +2929,11 @@ export default function AdminUsersPage() {
     } catch (e) {
       if (abort.signal.aborted || isStale()) return;
       console.error("Error loading users:", e);
-      setUsersLoadError(true);
+      if (initialBatchLoaded) {
+        setUsersBackgroundLoadError(true);
+      } else {
+        setUsersLoadError(true);
+      }
       setInitialLoadDone(true);
     } finally {
       if (abort.signal.aborted || isStale()) return;
@@ -3269,6 +3282,46 @@ export default function AdminUsersPage() {
           </CardContent>
         )}
       </Card>
+
+      {usersBackgroundLoadError && (
+        <div
+          className={cn(
+            "flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+            isDark
+              ? "border-amber-400/20 bg-amber-500/10 text-amber-100"
+              : "border-amber-200 bg-amber-50 text-amber-950",
+          )}
+          role="status"
+        >
+          <div className="flex min-w-0 items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold">
+                Some users could not be loaded
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-xs",
+                  isDark ? "text-amber-200/80" : "text-amber-800",
+                )}
+              >
+                The current results are partial. Retry before exporting or
+                making bulk changes.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 shrink-0 gap-1.5"
+            onClick={() => void load()}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry loading
+          </Button>
+        </div>
+      )}
 
       {/* Warm-up selection mode banner */}
       {viewMode === "table" && warmupSelectMode && (
@@ -5801,7 +5854,7 @@ export default function AdminUsersPage() {
                 advertisers: advertisersCount,
                 creators: creatorsCount,
               }}
-              isLoading={loading && !initialLoadDone}
+              isLoading={loading || backgroundLoading}
               loadError={usersLoadError}
               onRetry={() => void load()}
             />

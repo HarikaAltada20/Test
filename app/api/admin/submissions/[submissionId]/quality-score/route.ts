@@ -66,10 +66,10 @@ async function assertCanManageSubmission(
       };
     }
 
-    if (
-      (submission as { contests: { advertiser_id: string } }).contests
-        .advertiser_id !== authUser.id
-    ) {
+    const contest = Array.isArray(submission.contests)
+      ? submission.contests[0]
+      : submission.contests;
+    if (!contest || contest.advertiser_id !== authUser.id) {
       return {
         ok: false,
         response: NextResponse.json(

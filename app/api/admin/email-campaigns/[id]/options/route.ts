@@ -47,6 +47,7 @@ export async function GET(_req: Request, context: RouteContext) {
     data.from_sender_ids,
     data.from_sender_id,
   );
+  const project = Array.isArray(data.project) ? data.project[0] : data.project;
 
   return NextResponse.json({
     fromEmail: data.from_email,
@@ -55,7 +56,7 @@ export async function GET(_req: Request, context: RouteContext) {
     stopOnReply: data.stop_on_reply,
     senders: senders ?? [],
     summary: {
-      projectName: (data.project as { name: string } | null)?.name ?? "",
+      projectName: project?.name ?? "",
       createdBy: createdByName,
       recipientMode: data.recipient_mode,
       filterSnapshot: data.filter_snapshot,

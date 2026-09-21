@@ -87,7 +87,7 @@ export function EnhancedTabs({
             : "border-slate-200/80 bg-slate-100/80",
           className,
         )}
-        role="tablist"
+        role="group"
         aria-label="User type"
       >
         {tabs.map((tab) => {
@@ -97,8 +97,7 @@ export function EnhancedTabs({
             <button
               key={tab.id}
               type="button"
-              role="tab"
-              aria-selected={isActive}
+              aria-pressed={isActive}
               onClick={() => onTabChange(tab.id)}
               className={cn(
                 "flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors duration-200 sm:px-3 sm:text-sm",

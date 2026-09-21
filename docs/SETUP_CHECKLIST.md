@@ -2,6 +2,10 @@
 
 This checklist verifies that both systems are properly configured and working.
 
+> Security: keep real credentials in the deployment secret store only. If a
+> credential was ever committed, rotate it immediately and purge it from Git
+> history; replacing it in the latest commit is not sufficient.
+
 ## ✅ 1. Payout Processor (`/api/jobs/process-payouts`)
 
 ### Current Status
@@ -21,7 +25,7 @@ This checklist verifies that both systems are properly configured and working.
    - **Schedule**: `* * * * *` (every minute)
    - **Headers**: 
      ```
-     Authorization: Bearer T4zLg6xWvR7nY9sKbQfA8hC1eU3jM5dP0iB2oG6kVZ7xYJqD
+     Authorization: Bearer <CRON_SECRET>
      ```
    - **Status**: Must be **ACTIVE** (currently paused)
 
@@ -69,7 +73,7 @@ Verify these are set in Vercel (Production):
 3. **Test Manually**:
    ```bash
    curl -X GET https://www.gameofcreators.com/api/jobs/process-payouts \
-     -H "Authorization: Bearer T4zLg6xWvR7nY9sKbQfA8hC1eU3jM5dP0iB2oG6kVZ7xYJqD"
+     -H "Authorization: Bearer <CRON_SECRET>"
    ```
    Should return `{"message":"No queued jobs"}` or `{"processed":N,"results":[...]}`
 
@@ -95,17 +99,28 @@ Verify these are set in Vercel (Production):
 - ✅ `QSTASH_NEXT_SIGNING_KEY` - QStash next signing key (for key rotation)
 - ✅ `CRON_SECRET` - Fallback auth (optional but recommended)
 - ✅ `NEXT_PUBLIC_APP_URL` or `VERCEL_URL` - Base URL for QStash signature verification
+- ✅ `NEXT_PUBLIC_CARTO_API_KEY` - CARTO raster basemap key, restricted to production domains
+- Optional: `YT_ANALYTICS_RATE_LIMIT_NAMESPACE` - Custom Redis namespace override; Vercel deployments are automatically isolated by project and environment
+- Optional: `YT_ANALYTICS_RATE_LIMIT_QPM` - Lower the conservative default of `710` (values above `710` are capped)
 
 **From your `.env`**:
 ```
-UPSTASH_REDIS_REST_URL="https://famous-grouse-47996.upstash.io"
-UPSTASH_REDIS_REST_TOKEN="Abt8AAIncDIyODJiMWY0MDNhYmM0MTRjYTRjZWI5YzhiNTM2MTlmN3AyNDc5OTY"
-QSTASH_TOKEN="eyJVc2VySUQiOiJlMTEzYjg2MS1jOTNhLTRjYTYtOTlmNi01ZDNmOTkzMGE1OGQiLCJQYXNzd29yZCI6IjBkODk1NDZmYmRiZjQzN2I5ZWYwZmE2OTRmMjA1Zjg2In0="
-QSTASH_CURRENT_SIGNING_KEY="sig_81dXBFcgny5vtVak9Wtm1unzsaVS"
-QSTASH_NEXT_SIGNING_KEY="sig_4hs8sPjkDiqGTtVKXWNHFZL7KDnz"
-CRON_SECRET=T4zLg6xWvR7nY9sKbQfA8hC1eU3jM5dP0iB2oG6kVZ7xYJqD
+UPSTASH_REDIS_REST_URL="https://your-database.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="your_upstash_redis_rest_token"
+QSTASH_TOKEN="your_qstash_token"
+QSTASH_CURRENT_SIGNING_KEY="your_qstash_current_signing_key"
+QSTASH_NEXT_SIGNING_KEY="your_qstash_next_signing_key"
+CRON_SECRET="your_long_random_cron_secret"
 NEXT_PUBLIC_APP_URL="https://www.gameofcreators.com"
+NEXT_PUBLIC_CARTO_API_KEY="your_domain_restricted_carto_key"
+# YT_ANALYTICS_RATE_LIMIT_NAMESPACE="production-goc"
+# YT_ANALYTICS_RATE_LIMIT_QPM="710"
 ```
+
+Production YouTube Analytics calls fail closed when Redis is unavailable. Verify
+the Upstash credentials and run an Analytics refresh smoke test before deployment.
+Vercel deployments automatically use a project-and-environment Redis namespace.
+Set `YT_ANALYTICS_RATE_LIMIT_NAMESPACE` only when you need a custom namespace.
 
 #### B. QStash Configuration
 **No schedule needed** - This uses **event-driven** QStash (not scheduled):

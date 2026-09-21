@@ -16,7 +16,10 @@ import { Redis } from "@upstash/redis";
 export const YT_ANALYTICS_DEFAULT_RATE_LIMIT = 710;
 export const YT_ANALYTICS_RATE_WINDOW_MS = 60_000;
 
-const YT_ANALYTICS_RATE_REDIS_KEY = "youtube_analytics_rate_limit:v2";
+const YT_ANALYTICS_RATE_REDIS_KEY_PREFIX = "youtube_analytics_rate_limit:v3";
+
+type AnalyticsRedisClient = Pick<Redis, "eval">;
+type RateLimitFailureReason = "quota_exceeded" | "redis_unavailable";
 
 /**
  * Atomic sliding-window acquire via ZSET.
@@ -47,37 +50,82 @@ return {1, 0}
 `;
 
 const analyticsCallTimestamps: number[] = [];
-let analyticsRedisClient: Redis | null | undefined;
+let analyticsRedisClient: AnalyticsRedisClient | null | undefined;
 let rateLimitForTests: number | null = null;
 let forceLocalForTests = false;
+let redisClientForTests: AnalyticsRedisClient | null | undefined;
+let hasRedisClientOverrideForTests = false;
 
 export class YoutubeAnalyticsRateLimitError extends Error {
-  readonly status = 429;
+  readonly status: 429 | 503;
   readonly retryAfterMs: number;
+  readonly reason: RateLimitFailureReason;
 
-  constructor(retryAfterMs: number) {
+  constructor(
+    retryAfterMs: number,
+    reason: RateLimitFailureReason = "quota_exceeded",
+  ) {
     super(
-      `YouTube Analytics rate limit reached; retry after ${Math.max(0, retryAfterMs)}ms`,
+      reason === "quota_exceeded"
+        ? `YouTube Analytics rate limit reached; retry after ${Math.max(0, retryAfterMs)}ms`
+        : `YouTube Analytics rate-limit service unavailable; retry after ${Math.max(0, retryAfterMs)}ms`,
     );
     this.name = "YoutubeAnalyticsRateLimitError";
+    this.status = reason === "quota_exceeded" ? 429 : 503;
     this.retryAfterMs = retryAfterMs;
+    this.reason = reason;
   }
 }
 
 function getLimit(): number {
-  return rateLimitForTests ?? YT_ANALYTICS_DEFAULT_RATE_LIMIT;
+  if (rateLimitForTests !== null) return rateLimitForTests;
+  const configured = Number.parseInt(
+    process.env.YT_ANALYTICS_RATE_LIMIT_QPM ?? "",
+    10,
+  );
+  return Number.isFinite(configured) && configured > 0
+    ? Math.min(configured, YT_ANALYTICS_DEFAULT_RATE_LIMIT)
+    : YT_ANALYTICS_DEFAULT_RATE_LIMIT;
 }
 
 function isProductionRuntime(): boolean {
+  const vercelEnvironment = process.env.VERCEL_ENV?.trim().toLowerCase();
+  if (vercelEnvironment) return vercelEnvironment === "production";
+  return process.env.NODE_ENV === "production";
+}
+
+function normalizeRedisKeyPart(value: string): string {
   return (
-    process.env.VERCEL_ENV === "production" ||
-    process.env.NODE_ENV === "production"
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64) || "default"
   );
 }
 
-function getAnalyticsRedis(): Redis | null {
+function getRedisKey(): string {
+  const explicitNamespace =
+    process.env.YT_ANALYTICS_RATE_LIMIT_NAMESPACE?.trim();
+  const environment =
+    process.env.VERCEL_ENV?.trim() ||
+    process.env.NODE_ENV?.trim() ||
+    "development";
+  const project =
+    process.env.VERCEL_PROJECT_ID?.trim() ||
+    process.env.VERCEL_GIT_REPO_SLUG?.trim() ||
+    "app";
+  const namespace = explicitNamespace || `${environment}-${project}`;
+  return `${YT_ANALYTICS_RATE_REDIS_KEY_PREFIX}:${normalizeRedisKeyPart(namespace)}`;
+}
+
+function getAnalyticsRedis(): AnalyticsRedisClient | null {
   if (forceLocalForTests) {
     return null;
+  }
+  if (hasRedisClientOverrideForTests) {
+    return redisClientForTests ?? null;
   }
   if (analyticsRedisClient !== undefined) {
     return analyticsRedisClient;
@@ -122,23 +170,35 @@ function acquireLocalAnalyticsRateLimit(): void {
   throw new YoutubeAnalyticsRateLimitError(Math.max(50, retryAfterMs));
 }
 
-function parseEvalResult(result: unknown): { ok: boolean; retryAfterMs: number } {
+function parseEvalResult(
+  result: unknown,
+): { ok: boolean; retryAfterMs: number } | null {
   if (Array.isArray(result) && result.length >= 2) {
+    const accepted = Number(result[0]);
+    const retryAfterMs = Number(result[1]);
+    if ((accepted !== 0 && accepted !== 1) || !Number.isFinite(retryAfterMs)) {
+      return null;
+    }
     return {
-      ok: Number(result[0]) === 1,
-      retryAfterMs: Math.max(50, Number(result[1]) || YT_ANALYTICS_RATE_WINDOW_MS),
+      ok: accepted === 1,
+      retryAfterMs: Math.max(
+        50,
+        retryAfterMs || YT_ANALYTICS_RATE_WINDOW_MS,
+      ),
     };
   }
-  // Unexpected shape — treat as limited to stay under Google's quota.
-  return { ok: false, retryAfterMs: 1_000 };
+  // Unexpected shapes are infrastructure failures, not quota exhaustion.
+  return null;
 }
 
-async function acquireRedisSlidingWindow(redis: Redis): Promise<void> {
+async function acquireRedisSlidingWindow(
+  redis: AnalyticsRedisClient,
+): Promise<void> {
   const now = Date.now();
   const member = `${now}:${Math.random().toString(36).slice(2, 10)}`;
   const result = await redis.eval(
     SLIDING_WINDOW_LUA,
-    [YT_ANALYTICS_RATE_REDIS_KEY],
+    [getRedisKey()],
     [
       String(now),
       String(YT_ANALYTICS_RATE_WINDOW_MS),
@@ -147,6 +207,9 @@ async function acquireRedisSlidingWindow(redis: Redis): Promise<void> {
     ],
   );
   const parsed = parseEvalResult(result);
+  if (!parsed) {
+    throw new Error("Unexpected Redis rate-limit response");
+  }
   if (parsed.ok) {
     return;
   }
@@ -164,7 +227,7 @@ export async function acquireAnalyticsRateLimit(): Promise<void> {
       console.error(
         "[youtube-analytics] Redis unavailable in production; refusing Analytics calls",
       );
-      throw new YoutubeAnalyticsRateLimitError(5_000);
+      throw new YoutubeAnalyticsRateLimitError(5_000, "redis_unavailable");
     }
     acquireLocalAnalyticsRateLimit();
     return;
@@ -178,7 +241,7 @@ export async function acquireAnalyticsRateLimit(): Promise<void> {
     }
     console.error("[youtube-analytics] Redis rate-limit acquire failed:", error);
     if (isProductionRuntime()) {
-      throw new YoutubeAnalyticsRateLimitError(5_000);
+      throw new YoutubeAnalyticsRateLimitError(5_000, "redis_unavailable");
     }
     acquireLocalAnalyticsRateLimit();
   }
@@ -196,9 +259,25 @@ export function setYoutubeAnalyticsRateLimitForceLocalForTests(
   forceLocalForTests = force;
 }
 
+/** Test helper: inject a Redis-compatible client without network access. */
+export function setYoutubeAnalyticsRedisForTests(
+  redis: AnalyticsRedisClient | null,
+): void {
+  hasRedisClientOverrideForTests = true;
+  redisClientForTests = redis;
+}
+
+/** Test helper: expose the namespaced key used by the Lua script. */
+export function getYoutubeAnalyticsRedisKeyForTests(): string {
+  return getRedisKey();
+}
+
 /** Test helper: clear in-memory window state. */
 export function resetYoutubeAnalyticsRateLimitForTests(): void {
   analyticsCallTimestamps.length = 0;
   rateLimitForTests = null;
   forceLocalForTests = false;
+  redisClientForTests = undefined;
+  hasRedisClientOverrideForTests = false;
+  analyticsRedisClient = undefined;
 }

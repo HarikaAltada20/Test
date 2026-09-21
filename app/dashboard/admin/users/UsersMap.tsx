@@ -38,12 +38,12 @@ import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 
 type SocialLink = { label: string; url: string | null };
 
-const STATE_GEOJSON_URL =
-  "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson";
-const WORLD_GEOJSON_URL =
-  "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson";
+const STATE_GEOJSON_URL = "/api/admin/users/map-boundaries?level=state";
+const WORLD_GEOJSON_URL = "/api/admin/users/map-boundaries?level=country";
 const GEOJSON_CACHE = new Map<string, any>();
 const GEOJSON_INFLIGHT = new Map<string, Promise<any>>();
+const DETAIL_PAGE_SIZE = 50;
+const DEMOGRAPHIC_PAGE_SIZE = 100;
 
 function FullscreenViewportPortal({
   active,
@@ -62,19 +62,23 @@ async function loadGeoJsonCached(url: string): Promise<any> {
   if (GEOJSON_CACHE.has(url)) return GEOJSON_CACHE.get(url);
   const inflight = GEOJSON_INFLIGHT.get(url);
   if (inflight) return inflight;
-  const p = fetch(url)
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15_000);
+  const p = fetch(url, {
+    cache: "force-cache",
+    signal: controller.signal,
+  })
     .then((res) => {
       if (!res.ok) throw new Error(`Failed to load geojson: ${url}`);
       return res.json();
     })
     .then((json) => {
       GEOJSON_CACHE.set(url, json);
-      GEOJSON_INFLIGHT.delete(url);
       return json;
     })
-    .catch((err) => {
+    .finally(() => {
+      window.clearTimeout(timeout);
       GEOJSON_INFLIGHT.delete(url);
-      throw err;
     });
   GEOJSON_INFLIGHT.set(url, p);
   return p;
@@ -98,7 +102,14 @@ type UserMarker = {
 };
 
 function getLocationKey(m: UserMarker): string {
-  const parts = [m.city, m.state, m.country].filter(Boolean) as string[];
+  const city = (m.city || "").trim();
+  const state = getCanonicalState(m.state, m.country);
+  const country = getCanonicalCountry(m.country);
+  const parts = [
+    city || null,
+    state === "Unknown" ? null : state,
+    country === "Unknown" ? null : country,
+  ].filter(Boolean) as string[];
   return parts.length ? parts.join(", ") : "unknown location";
 }
 
@@ -252,15 +263,38 @@ function getCanonicalCountry(country: string | null | undefined): string {
   return trimmed;
 }
 
+/**
+ * Canonical display names for state aliases found in stored user geo data.
+ * The normalized key intentionally turns both "Delhi" and
+ * "National Capital Territory of Delhi" into "delhi".
+ */
+const STATE_ALIASES: Record<string, string> = {
+  "India|delhi": "Delhi",
+};
+
+function getCanonicalState(
+  state: string | null | undefined,
+  country: string | null | undefined,
+): string {
+  if (!state || !state.trim()) return "Unknown";
+  const trimmed = state.trim();
+  const canonicalCountry = getCanonicalCountry(country);
+  const alias =
+    STATE_ALIASES[
+      `${canonicalCountry}|${normalizeGeographyName(trimmed)}`
+    ];
+  return alias || trimmed;
+}
+
 function getRegion(m: UserMarker): string {
   const canonical = getCanonicalCountry(m.country);
   return countryToRegionMap[canonical] || canonical;
 }
 
 function getStateKey(m: UserMarker): string {
-  const state = (m.state || "Unknown").trim();
-  const country = (m.country || "").trim();
-  return country ? `${state}, ${country}` : state || "Unknown";
+  const state = getCanonicalState(m.state, m.country);
+  const country = getCanonicalCountry(m.country);
+  return country !== "Unknown" ? `${state}, ${country}` : state;
 }
 
 /** Aggregate by region -> LocationCounts (centroid + counts) */
@@ -384,7 +418,7 @@ function aggregateByCountryToLocationCounts(
     }
   >();
   for (const m of markers) {
-    const key = (m.country || "Unknown").trim();
+    const key = getCanonicalCountry(m.country);
     const label = key;
     const ut = (m.user_type || "").toLowerCase();
     const isAdmin = ut === "admin";
@@ -462,7 +496,7 @@ function renderMapMetricRows(rows: Array<[string, number]>): string {
 function aggregateByCountry(markers: UserMarker[]): Map<string, Counts> {
   const byCountry = new Map<string, Counts>();
   for (const m of markers) {
-    const country = (m.country || "Unknown").trim();
+    const country = getCanonicalCountry(m.country);
     const ut = (m.user_type || "").toLowerCase();
     const isAdmin = ut === "admin";
     const isBrand = ut === "advertiser";
@@ -539,8 +573,23 @@ function aggregateByRegionCounts(markers: UserMarker[]): Map<string, Counts> {
   return byKey;
 }
 
-function normalizeKey(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, " ");
+function normalizeGeographyName(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\bnational capital territory(?: of)?\b/g, "")
+    .replace(/\b(?:state|province|territory|region|governorate|prefecture) of\b/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function getStateLookupKey(state: string, country: string): string {
+  return `${normalizeGeographyName(state)}|${normalizeGeographyName(
+    getCanonicalCountry(country),
+  )}`;
 }
 
 /** Aggregate markers by city/state/country with counts by type (users, admins, brands, creators) */
@@ -626,7 +675,7 @@ function getGroupByKey(
 ): string {
   if (groupBy === "region") return getRegion(m);
   if (groupBy === "state") return getStateKey(m);
-  if (groupBy === "country") return (m.country || "Unknown").trim();
+  if (groupBy === "country") return getCanonicalCountry(m.country);
   return getLocationKey(m);
 }
 
@@ -675,7 +724,10 @@ export function UsersMap({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMapRendering, setIsMapRendering] = useState(false);
   const [mapRenderError, setMapRenderError] = useState(false);
+  const [mapRenderWarning, setMapRenderWarning] = useState<string | null>(null);
   const [mapRenderNonce, setMapRenderNonce] = useState(0);
+  const [detailPage, setDetailPage] = useState(1);
+  const [demographicPage, setDemographicPage] = useState(1);
   const [mapMode, setMapMode] = useState<"pins" | "choropleth" | "demographic">(
     "pins",
   );
@@ -722,12 +774,6 @@ export function UsersMap({
     if (groupBy === "city" && mapMode === "choropleth") setMapMode("pins");
   }, [groupBy, mapMode]);
 
-  // Warm heavy geojson files so choropleth opens faster.
-  useEffect(() => {
-    void loadGeoJsonCached(STATE_GEOJSON_URL);
-    void loadGeoJsonCached(WORLD_GEOJSON_URL);
-  }, []);
-
   useEffect(() => {
     if (mapMode === "demographic") setDetailLocation(null);
   }, [mapMode]);
@@ -757,12 +803,41 @@ export function UsersMap({
   useEffect(() => {
     if (!isMapFullscreen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (isDrawerOpen) {
-        setIsDrawerOpen(false);
+      if (event.key === "Escape") {
+        if (isDrawerOpen) {
+          setIsDrawerOpen(false);
+          return;
+        }
+        exitMapFullscreen();
         return;
       }
-      exitMapFullscreen();
+
+      if (event.key !== "Tab" || !workspaceRef.current) return;
+      const focusable = Array.from(
+        workspaceRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(
+        (element) =>
+          element.getAttribute("aria-hidden") !== "true" &&
+          element.offsetParent !== null,
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        workspaceRef.current.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !workspaceRef.current.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -832,8 +907,8 @@ export function UsersMap({
                 geographyFilters.region === "all" ||
                 getRegion(marker) === geographyFilters.region,
             )
-            .map((marker) => (marker.country || "").trim())
-            .filter(Boolean),
+            .map((marker) => getCanonicalCountry(marker.country))
+            .filter((country) => country !== "Unknown"),
         ),
       ).sort((a, b) => a.localeCompare(b)),
     [geographyFilters.region, markers],
@@ -847,10 +922,11 @@ export function UsersMap({
             .filter(
               (marker) =>
                 geographyFilters.country === "all" ||
-                (marker.country || "").trim() === geographyFilters.country,
+                getCanonicalCountry(marker.country) ===
+                geographyFilters.country,
             )
-            .map((marker) => (marker.state || "").trim())
-            .filter(Boolean),
+            .map((marker) => getCanonicalState(marker.state, marker.country))
+            .filter((state) => state !== "Unknown"),
         ),
       ).sort((a, b) => a.localeCompare(b)),
     [geographyFilters.country, markers],
@@ -864,12 +940,14 @@ export function UsersMap({
             .filter((marker) => {
               if (
                 geographyFilters.country !== "all" &&
-                (marker.country || "").trim() !== geographyFilters.country
+                getCanonicalCountry(marker.country) !==
+                  geographyFilters.country
               )
                 return false;
               if (
                 geographyFilters.state !== "all" &&
-                (marker.state || "").trim() !== geographyFilters.state
+                getCanonicalState(marker.state, marker.country) !==
+                  geographyFilters.state
               )
                 return false;
               return true;
@@ -942,12 +1020,13 @@ export function UsersMap({
           return false;
         if (
           geographyFilters.country !== "all" &&
-          (marker.country || "").trim() !== geographyFilters.country
+          getCanonicalCountry(marker.country) !== geographyFilters.country
         )
           return false;
         if (
           geographyFilters.state !== "all" &&
-          (marker.state || "").trim() !== geographyFilters.state
+          getCanonicalState(marker.state, marker.country) !==
+            geographyFilters.state
         )
           return false;
         if (
@@ -988,11 +1067,15 @@ export function UsersMap({
         : `${groupBy}s`;
 
   const withLocationCount = visibleMarkers.length;
-  const detailUsers = detailLocation
-    ? visibleMarkers.filter(
-        (marker) => getGroupByKey(marker, groupBy) === detailLocation,
-      )
-    : [];
+  const detailUsers = useMemo(
+    () =>
+      detailLocation
+        ? visibleMarkers.filter(
+            (marker) => getGroupByKey(marker, groupBy) === detailLocation,
+          )
+        : [],
+    [detailLocation, groupBy, visibleMarkers],
+  );
 
   const locationAggregates = useMemo(() => {
     if (groupBy === "region") return aggregateByRegion(visibleMarkers);
@@ -1040,6 +1123,55 @@ export function UsersMap({
     return rows;
   }, [demographicRows, demographicSort]);
 
+  const detailTotalPages = Math.max(
+    1,
+    Math.ceil(detailUsers.length / DETAIL_PAGE_SIZE),
+  );
+  const detailRangeStart =
+    detailUsers.length === 0 ? 0 : (detailPage - 1) * DETAIL_PAGE_SIZE + 1;
+  const detailRangeEnd = Math.min(
+    detailPage * DETAIL_PAGE_SIZE,
+    detailUsers.length,
+  );
+  const visibleDetailUsers = useMemo(
+    () =>
+      detailUsers.slice(
+        (detailPage - 1) * DETAIL_PAGE_SIZE,
+        detailPage * DETAIL_PAGE_SIZE,
+      ),
+    [detailPage, detailUsers],
+  );
+  const demographicTotalPages = Math.max(
+    1,
+    Math.ceil(sortedDemographicRows.length / DEMOGRAPHIC_PAGE_SIZE),
+  );
+  const visibleDemographicRows = useMemo(
+    () =>
+      sortedDemographicRows.slice(
+        (demographicPage - 1) * DEMOGRAPHIC_PAGE_SIZE,
+        demographicPage * DEMOGRAPHIC_PAGE_SIZE,
+      ),
+    [demographicPage, sortedDemographicRows],
+  );
+
+  useEffect(() => {
+    setDetailPage(1);
+  }, [detailLocation, groupBy, geographyFilters]);
+
+  useEffect(() => {
+    setDemographicPage(1);
+  }, [demographicSort, geographyFilters, groupBy]);
+
+  useEffect(() => {
+    setDetailPage((current) => Math.min(current, detailTotalPages));
+  }, [detailTotalPages]);
+
+  useEffect(() => {
+    setDemographicPage((current) =>
+      Math.min(current, demographicTotalPages),
+    );
+  }, [demographicTotalPages]);
+
   useEffect(() => {
     let cancelled = false;
     const generation = ++mapInitGenerationRef.current;
@@ -1068,6 +1200,14 @@ export function UsersMap({
     };
 
     if (mapMode === "demographic") {
+      removeCurrentMap();
+      setIsMapRendering(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (isLoading) {
       removeCurrentMap();
       setIsMapRendering(false);
       return () => {
@@ -1186,10 +1326,13 @@ export function UsersMap({
 
       // Theme-aware CARTO tiles (NEXT_PUBLIC_CARTO_API_KEY from env)
       const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY ?? "";
+      if (!cartoKey.trim()) {
+        throw new Error("NEXT_PUBLIC_CARTO_API_KEY is not configured");
+      }
       const tileUrl = dark
         ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
         : `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${cartoKey}`;
-      L.tileLayer(tileUrl, {
+      const tileLayer = L.tileLayer(tileUrl, {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: "abcd",
@@ -1197,6 +1340,15 @@ export function UsersMap({
         bounds: worldBounds,
         noWrap: true,
       }).addTo(leafletMap);
+      let tileErrorCount = 0;
+      tileLayer.on("tileerror", () => {
+        tileErrorCount += 1;
+        if (tileErrorCount === 3) {
+          setMapRenderWarning(
+            "Some basemap tiles could not be loaded. Check the CARTO key and network connection.",
+          );
+        }
+      });
 
       L.control.zoom({ position: "bottomright" }).addTo(leafletMap);
 
@@ -1292,26 +1444,29 @@ export function UsersMap({
               return;
             const stateCountsNorm = new Map<string, Counts>();
             for (const [k, v] of stateCounts) {
-              stateCountsNorm.set(normalizeKey(k), v);
+              const separator = k.lastIndexOf(", ");
+              const state = separator >= 0 ? k.slice(0, separator) : k;
+              const country = separator >= 0 ? k.slice(separator + 2) : "";
+              const lookupKey = getStateLookupKey(state, country);
+              const existing = stateCountsNorm.get(lookupKey);
+              stateCountsNorm.set(
+                lookupKey,
+                existing
+                  ? {
+                      total: existing.total + v.total,
+                      admins: existing.admins + v.admins,
+                      brands: existing.brands + v.brands,
+                      creators: existing.creators + v.creators,
+                    }
+                  : v,
+              );
             }
             const getStateCount = (stateName: string, countryName: string) => {
-              const key = `${String(stateName).trim()}, ${String(countryName).trim()}`;
-              const exact = stateCounts.get(key);
-              if (exact) return exact;
-              const keyNorm = normalizeKey(key);
-              for (const [k, data] of stateCountsNorm) {
-                if (k === keyNorm || k.includes(keyNorm) || keyNorm.includes(k))
-                  return data;
-              }
-              for (const [k, data] of stateCounts) {
-                const kNorm = normalizeKey(k);
-                if (
-                  kNorm === keyNorm ||
-                  (k.includes(countryName) && k.includes(stateName))
-                )
-                  return data;
-              }
-              return null;
+              return (
+                stateCountsNorm.get(
+                  getStateLookupKey(String(stateName), String(countryName)),
+                ) ?? null
+              );
             };
             const geoLayer = L.geoJSON(geojson, {
               style: (feature) => {
@@ -1385,8 +1540,12 @@ export function UsersMap({
             );
             finalizeMap();
             return;
-          } catch {
-            // Fallback to pins
+          } catch (error) {
+            console.error("Unable to load state boundaries:", error);
+            setMapRenderWarning(
+              "State boundaries are temporarily unavailable. Showing pins instead.",
+            );
+            setMapMode("pins");
           }
         }
 
@@ -1402,18 +1561,7 @@ export function UsersMap({
               return;
             const getCount = (geoName: string) => {
               if (!geoName) return null;
-              const n = String(geoName).trim();
-              const exact = countryCounts.get(n);
-              if (exact) return exact;
-              for (const [ourCountry, data] of countryCounts) {
-                if (
-                  ourCountry === n ||
-                  n.includes(ourCountry) ||
-                  ourCountry.includes(n)
-                )
-                  return data;
-              }
-              return null;
+              return countryCounts.get(getCanonicalCountry(geoName)) ?? null;
             };
             const geoLayer = L.geoJSON(geojson, {
               style: (feature) => {
@@ -1483,8 +1631,12 @@ export function UsersMap({
             );
             finalizeMap();
             return;
-          } catch {
-            // Fallback to pins
+          } catch (error) {
+            console.error("Unable to load country boundaries:", error);
+            setMapRenderWarning(
+              "Country boundaries are temporarily unavailable. Showing pins instead.",
+            );
+            setMapMode("pins");
           }
         }
 
@@ -1674,8 +1826,12 @@ export function UsersMap({
             );
             finalizeMap();
             return;
-          } catch {
-            // Fallback to pins
+          } catch (error) {
+            console.error("Unable to load region boundaries:", error);
+            setMapRenderWarning(
+              "Region boundaries are temporarily unavailable. Showing pins instead.",
+            );
+            setMapMode("pins");
           }
         }
       }
@@ -1792,6 +1948,7 @@ export function UsersMap({
     activeTab,
     groupBy,
     isDark,
+    isLoading,
     isMapFullscreen,
     locationAggregates,
     mapMode,
@@ -1841,9 +1998,12 @@ export function UsersMap({
 
   const retryMap = useCallback(() => {
     setMapRenderError(false);
+    if (loadError) {
+      onRetry();
+      return;
+    }
     setMapRenderNonce((current) => current + 1);
-    onRetry();
-  }, [onRetry]);
+  }, [loadError, onRetry]);
 
   const selectClassName = cn(
     "h-9 w-full rounded-lg border px-2.5 text-sm outline-none transition focus:ring-2 focus:ring-purple-500/40 disabled:cursor-not-allowed disabled:opacity-100",
@@ -2010,9 +2170,12 @@ export function UsersMap({
                 !isDrawer && !isSelected && !isDark &&
                   "text-slate-600 hover:bg-white hover:text-slate-950",
               )}
-              onClick={() =>
-                setMapMode(value as "pins" | "choropleth" | "demographic")
-              }
+              onClick={() => {
+                setMapRenderWarning(null);
+                setMapMode(
+                  value as "pins" | "choropleth" | "demographic",
+                );
+              }}
               aria-pressed={isSelected}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -2198,8 +2361,10 @@ export function UsersMap({
                 ? "fixed inset-0 z-[200] h-[100dvh] w-screen overflow-hidden bg-slate-950 p-2 sm:p-3 lg:p-4"
                 : "fixed inset-0 z-[200] h-[100dvh] w-screen overflow-hidden bg-slate-50 p-2 sm:p-3 lg:p-4"),
           )}
-          role={isMapFullscreen ? "region" : undefined}
+          role={isMapFullscreen ? "dialog" : undefined}
+          aria-modal={isMapFullscreen ? true : undefined}
           aria-label={isMapFullscreen ? "Fullscreen users map" : undefined}
+          tabIndex={isMapFullscreen ? -1 : undefined}
         >
         {!isMapFullscreen && (
           <div
@@ -2309,52 +2474,56 @@ export function UsersMap({
         )}
         {isMapFullscreen && (
           <>
-            <div className="absolute left-3 top-3 z-[1200] flex max-w-[calc(100%-9rem)] items-center gap-2 rounded-xl border border-white/10 bg-slate-950/75 px-3 py-2 text-slate-100 shadow-lg backdrop-blur-md sm:left-4 sm:top-4">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: pinLegendColor }}
-              />
-              <span className="hidden text-sm font-semibold sm:inline">
-                Geographic explorer
-              </span>
-              <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs font-medium">
-                {tabLabel}
-              </span>
-              <span className="truncate text-xs text-slate-300">
-                {withLocationCount.toLocaleString()} mapped
-              </span>
-            </div>
+            <div className="relative z-[1200] flex shrink-0 flex-col gap-2">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-slate-950/75 px-3 py-2 text-slate-100 shadow-lg backdrop-blur-md">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: pinLegendColor }}
+                  />
+                  <span className="hidden text-sm font-semibold sm:inline">
+                    Geographic explorer
+                  </span>
+                  <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs font-medium">
+                    {tabLabel}
+                  </span>
+                  <span className="truncate text-xs text-slate-300">
+                    {withLocationCount.toLocaleString()} mapped
+                  </span>
+                </div>
 
-            <Button
-              ref={fullscreenExitRef}
-              variant="outline"
-              size="sm"
-              className="absolute right-3 top-3 z-[1201] h-9 gap-1.5 border-white/15 bg-slate-950/80 px-3 text-slate-100 shadow-lg backdrop-blur-md hover:bg-slate-800 hover:text-white sm:right-4 sm:top-4"
-              onClick={exitMapFullscreen}
-              aria-label="Exit fullscreen map"
-              title="Exit fullscreen (Esc)"
-            >
-              <Minimize2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Exit fullscreen</span>
-            </Button>
-
-            {activeFilterChips.length > 0 && (
-              <div className="absolute left-3 top-14 z-[1200] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-1.5 sm:left-4 sm:top-[4.5rem]">
-                {activeFilterChips.map(([filter, value]) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-slate-950/75 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-sm backdrop-blur-md transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                    onClick={() => updateGeographyFilter(filter, "all")}
-                    aria-label={`Clear ${filter} filter: ${value}`}
-                    title={`Clear ${filter} filter`}
-                  >
-                    <span className="max-w-40 truncate">{value}</span>
-                    <X className="h-3 w-3" />
-                  </button>
-                ))}
+                <Button
+                  ref={fullscreenExitRef}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 gap-1.5 border-white/15 bg-slate-950/80 px-3 text-slate-100 shadow-lg backdrop-blur-md hover:bg-slate-800 hover:text-white"
+                  onClick={exitMapFullscreen}
+                  aria-label="Exit fullscreen map"
+                  title="Exit fullscreen (Esc)"
+                >
+                  <Minimize2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Exit fullscreen</span>
+                </Button>
               </div>
-            )}
+
+              {activeFilterChips.length > 0 && (
+                <div className="flex min-w-0 flex-wrap gap-1.5">
+                  {activeFilterChips.map(([filter, value]) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/10 bg-slate-950/75 px-2.5 py-1 text-xs font-medium text-slate-100 shadow-sm backdrop-blur-md transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                      onClick={() => updateGeographyFilter(filter, "all")}
+                      aria-label={`Clear ${filter} filter: ${value}`}
+                      title={`Clear ${filter} filter`}
+                    >
+                      <span className="max-w-40 truncate">{value}</span>
+                      <X className="h-3 w-3 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {!isDrawerOpen && (
               <>
@@ -2381,14 +2550,11 @@ export function UsersMap({
               </>
             )}
 
+            {isDrawerOpen && (
+              <>
             <aside
               aria-label="Map controls"
-              className={cn(
-                "absolute bottom-4 right-4 top-16 z-[1200] hidden w-[clamp(20rem,24vw,23rem)] max-w-[calc(100vw-2rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950/95 text-slate-100 shadow-2xl backdrop-blur-xl transition-[transform,opacity] duration-200 motion-reduce:transition-none lg:flex",
-                isDrawerOpen
-                  ? "translate-x-0 opacity-100"
-                  : "pointer-events-none translate-x-[calc(100%+1.5rem)] opacity-0",
-              )}
+              className="absolute bottom-4 right-4 top-16 z-[1200] hidden w-[clamp(20rem,24vw,23rem)] max-w-[calc(100vw-2rem)] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950/95 text-slate-100 shadow-2xl backdrop-blur-xl lg:flex"
             >
               <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                 <div className="min-w-0">
@@ -2413,12 +2579,7 @@ export function UsersMap({
 
             <aside
               aria-label="Map controls"
-              className={cn(
-                "absolute bottom-2 left-1/2 z-[1200] flex max-h-[calc(100dvh-4.5rem)] w-[calc(100vw-1rem)] max-w-[42rem] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950/95 text-slate-100 shadow-2xl backdrop-blur-xl transition-[transform,opacity] duration-200 motion-reduce:transition-none sm:bottom-3 sm:w-[calc(100vw-1.5rem)] lg:hidden",
-                isDrawerOpen
-                  ? "translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-[calc(100%+1rem)] opacity-0",
-              )}
+              className="absolute bottom-2 left-1/2 z-[1200] flex max-h-[calc(100dvh-4.5rem)] w-[calc(100vw-1rem)] max-w-[42rem] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-950/95 text-slate-100 shadow-2xl backdrop-blur-xl sm:bottom-3 sm:w-[calc(100vw-1.5rem)] lg:hidden"
             >
               <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
                 <div className="min-w-0">
@@ -2439,6 +2600,8 @@ export function UsersMap({
               </div>
               {renderFullscreenDrawerContent()}
             </aside>
+              </>
+            )}
           </>
         )}
 
@@ -2448,12 +2611,7 @@ export function UsersMap({
               "flex flex-col overflow-hidden rounded-xl border",
               !isMapFullscreen &&
                 "mt-2 h-[clamp(24rem,58dvh,42rem)] min-h-[24rem]",
-              isMapFullscreen &&
-                (activeFilterChips.length > 2
-                  ? "mt-40 min-h-0 flex-1"
-                  : activeFilterChips.length > 0
-                    ? "mt-32 min-h-0 flex-1"
-                    : "mt-14 min-h-0 flex-1"),
+              isMapFullscreen && "min-h-0 flex-1",
               isDark
                 ? "border-white/10 bg-slate-950/70"
                 : "border-slate-200/80 bg-white",
@@ -2751,9 +2909,9 @@ export function UsersMap({
                     </td>
                   </tr>
                 ) : (
-                  sortedDemographicRows.map((r, idx) => (
+                  visibleDemographicRows.map((r, idx) => (
                     <tr
-                      key={`${r.label}-${idx}`}
+                      key={`${r.label}-${(demographicPage - 1) * DEMOGRAPHIC_PAGE_SIZE + idx}`}
                       className={cn(
                         "border-t transition-colors duration-150",
                         isDark
@@ -2765,7 +2923,7 @@ export function UsersMap({
                         <span
                           className={cn(
                             "inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold tabular-nums",
-                            idx < 3
+                            (demographicPage - 1) * DEMOGRAPHIC_PAGE_SIZE + idx < 3
                               ? isDark
                                 ? "bg-purple-500/20 text-purple-300"
                                 : "bg-purple-100 text-purple-700"
@@ -2774,7 +2932,7 @@ export function UsersMap({
                                 : "bg-slate-100 text-slate-500",
                           )}
                         >
-                          {idx + 1}
+                          {(demographicPage - 1) * DEMOGRAPHIC_PAGE_SIZE + idx + 1}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-medium">{r.label}</td>
@@ -2804,6 +2962,49 @@ export function UsersMap({
               </tbody>
             </table>
             </div>
+            {demographicTotalPages > 1 && (
+              <div
+                className={cn(
+                  "flex shrink-0 items-center justify-between gap-3 border-t px-4 py-2",
+                  isDark
+                    ? "border-white/10 bg-slate-900/90 text-slate-300"
+                    : "border-slate-200 bg-slate-50 text-slate-600",
+                )}
+              >
+                <span className="text-xs tabular-nums">
+                  Page {demographicPage.toLocaleString()} of{" "}
+                  {demographicTotalPages.toLocaleString()}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    disabled={demographicPage <= 1}
+                    onClick={() =>
+                      setDemographicPage((current) => Math.max(1, current - 1))
+                    }
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    disabled={demographicPage >= demographicTotalPages}
+                    onClick={() =>
+                      setDemographicPage((current) =>
+                        Math.min(demographicTotalPages, current + 1),
+                      )
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div
@@ -2828,6 +3029,20 @@ export function UsersMap({
               <div className="pointer-events-none absolute left-3 top-3 z-[1100] inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-white shadow-lg backdrop-blur-md">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Updating map
+              </div>
+            )}
+            {mapRenderWarning && !hasMapError && !isMapRendering && (
+              <div className="absolute left-3 top-3 z-[1100] flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-950/90 px-3 py-2 text-xs font-medium text-amber-100 shadow-lg backdrop-blur-md">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{mapRenderWarning}</span>
+                <button
+                  type="button"
+                  className="ml-auto rounded p-0.5 text-amber-200 hover:bg-white/10 hover:text-white"
+                  onClick={() => setMapRenderWarning(null)}
+                  aria-label="Dismiss map warning"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
             {hasMapError && (
@@ -2924,6 +3139,7 @@ export function UsersMap({
                   : "text-gray-600 hover:bg-gray-200 hover:text-gray-900",
               )}
               onClick={() => setDetailLocation(null)}
+              aria-label="Close location details"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to map
@@ -2946,13 +3162,18 @@ export function UsersMap({
                   : "text-gray-500 hover:bg-gray-200 hover:text-gray-900",
               )}
               onClick={() => setDetailLocation(null)}
+              aria-label="Close location details"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <ul className="flex-1 space-y-3 overflow-y-auto p-3">
-            {detailUsers.map((u) => {
+          <ol
+            className="flex-1 space-y-3 overflow-y-auto p-3"
+            start={detailRangeStart || 1}
+          >
+            {visibleDetailUsers.map((u, index) => {
               const hasSocial = u.youtube || u.instagram || u.twitter;
+              const rank = detailRangeStart + index;
               return (
                 <li
                   key={u.id}
@@ -2965,6 +3186,21 @@ export function UsersMap({
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span
+                        className={cn(
+                          "inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md px-1.5 text-xs font-semibold tabular-nums",
+                          rank <= 3
+                            ? isDark
+                              ? "bg-purple-500/20 text-purple-300"
+                              : "bg-purple-100 text-purple-700"
+                            : isDark
+                              ? "bg-slate-700 text-slate-300"
+                              : "bg-slate-100 text-slate-600",
+                        )}
+                        aria-label={`User number ${rank}`}
+                      >
+                        {rank}
+                      </span>
                       <Avatar
                         className={cn(
                           "h-12 w-12 flex-shrink-0 border-2 shadow-sm",
@@ -3101,7 +3337,54 @@ export function UsersMap({
                 </li>
               );
             })}
-          </ul>
+          </ol>
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-between gap-3 border-t px-4 py-2.5",
+              isDark
+                ? "border-white/10 bg-slate-900 text-slate-300"
+                : "border-slate-200 bg-slate-50 text-slate-600",
+            )}
+          >
+            <span className="text-xs tabular-nums">
+              Showing {detailRangeStart.toLocaleString()}–
+              {detailRangeEnd.toLocaleString()} of {detailUsers.length.toLocaleString()} user
+              {detailUsers.length === 1 ? "" : "s"}
+              {detailTotalPages > 1
+                ? ` · Page ${detailPage.toLocaleString()} of ${detailTotalPages.toLocaleString()}`
+                : ""}
+            </span>
+            {detailTotalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={detailPage <= 1}
+                  onClick={() =>
+                    setDetailPage((current) => Math.max(1, current - 1))
+                  }
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={detailPage >= detailTotalPages}
+                  onClick={() =>
+                    setDetailPage((current) =>
+                      Math.min(detailTotalPages, current + 1),
+                    )
+                  }
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
     </div>
