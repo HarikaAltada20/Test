@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseBulkZipFilenamePrefix } from "@/lib/video-download-filename";
 import {
+  isBulkDownloadJobInProgress,
   sortBulkDownloadJobsNewestFirst,
   type BulkDownloadSummaryUserType,
   type BulkVideoDownloadJobSummary,
@@ -41,6 +42,8 @@ function liveJobSummary(
     fileNamePrefix: session.fileNamePrefix || null,
     createdAt: new Date(session.startedAt).toISOString(),
     finishedAt: session.progress.finished ? new Date().toISOString() : null,
+    source: session.source === "desktop" ? "desktop" : "cloud",
+    deliveryMode: session.delivery_mode ?? null,
   };
 }
 
@@ -145,8 +148,10 @@ export function BulkVideoDownloadContestStatus({
   }, [contestId, hydrateForContest, hydrateContestJobs]);
 
   const matchesContest = !!session && session.contestId === String(contestId);
+  const isCloudLiveSession =
+    matchesContest && (session.source ?? "cloud") !== "desktop";
   const liveRunning =
-    matchesContest && (downloading || session.status === "running");
+    isCloudLiveSession && (downloading || session.status === "running");
   const summaries = useMemo(() => {
     const list = contestJobSummaries.filter(
       (job) => job.contestId === String(contestId),
@@ -233,7 +238,7 @@ export function BulkVideoDownloadContestStatus({
     return {
       id: job.id,
       completedLabel: jobCompletedLabel(job),
-      inProgress: job.status === "queued" || job.status === "running",
+      inProgress: isBulkDownloadJobInProgress(job),
       totalCount: job.totalCount,
       successCount: job.successCount,
       failedCount: job.failedCount,
@@ -241,6 +246,8 @@ export function BulkVideoDownloadContestStatus({
       qualityLabel: parsed.qualityLabel,
       statusLabel: parsed.statusLabel,
       statusSlug: parsed.statusSlug,
+      source: job.source === "desktop" ? ("desktop" as const) : ("cloud" as const),
+      deliveryMode: job.deliveryMode ?? null,
     };
   });
 
@@ -256,6 +263,8 @@ export function BulkVideoDownloadContestStatus({
       progress={displayProgress}
       namingPattern={displaySession?.namingPattern}
       zipParts={displaySession?.zipParts}
+      source={displaySession?.source}
+      deliveryMode={displaySession?.delivery_mode}
       jobs={jobCards}
       showJobList={showJobList}
       onBackToList={() => setSelectedJobId(null)}

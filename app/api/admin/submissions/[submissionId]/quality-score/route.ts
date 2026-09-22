@@ -66,10 +66,10 @@ async function assertCanManageSubmission(
       };
     }
 
-    if (
-      (submission as { contests: { advertiser_id: string } }).contests
-        .advertiser_id !== authUser.id
-    ) {
+    const contest = Array.isArray(submission.contests)
+      ? submission.contests[0]
+      : submission.contests;
+    if (!contest || contest.advertiser_id !== authUser.id) {
       return {
         ok: false,
         response: NextResponse.json(
@@ -127,7 +127,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const qualityScore = parseQualityScoreBody(body?.qualityScore);
     if (qualityScore === null) {
       return NextResponse.json(
-        { error: "qualityScore must be 1, 2, or 3" },
+        { error: "qualityScore must be 1, 2, 3, 4, or 5" },
         { status: 400 },
       );
     }

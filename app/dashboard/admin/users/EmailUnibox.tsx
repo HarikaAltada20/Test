@@ -943,7 +943,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
         </div>
       </div>
 
-      <style jsx global>{`
+      <style>{`
         .unibox-scrollbar::-webkit-scrollbar {
           width: 6px;
         }

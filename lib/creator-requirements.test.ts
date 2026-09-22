@@ -56,6 +56,16 @@ describe("parseContestCreatorRequirements", () => {
     assert.equal(req.minPlatformEarningsCents, 5000);
     assert.equal(req.minPlatformViews, 1000);
   });
+
+  it("preserves 4–5 average and best-quality gates", () => {
+    const req = parseContestCreatorRequirements({
+      contest_format: "video",
+      min_best_quality_score: 5,
+      min_avg_quality_score: 4.5,
+    });
+    assert.equal(req.minBestQuality, 5);
+    assert.equal(req.minAvgQuality, 4.5);
+  });
 });
 
 describe("evaluateCreatorRequirements", () => {
@@ -99,6 +109,24 @@ describe("evaluateCreatorRequirements", () => {
     });
     assert.equal(failures.length, 1);
     assert.equal(failures[0].code, "best_quality_too_low");
+  });
+
+  it("enforces remapped 4–5 quality gates", () => {
+    const requirements = parseContestCreatorRequirements({
+      contest_format: "video",
+      min_best_quality_score: 4,
+      min_avg_quality_score: 4.5,
+    });
+    const failures = evaluateCreatorRequirements({
+      requirements,
+      snapshot: {
+        ...baseSnapshot,
+        bestQualityScore: 4,
+        avgQualityScore: 4.25,
+      },
+    });
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].code, "avg_quality_too_low");
   });
 
   it("fails when new creator default quality is below a higher minimum", () => {

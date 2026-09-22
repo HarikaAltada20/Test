@@ -131,6 +131,14 @@ type SubmissionQualityFields = SubmissionWithContest & {
   quality_score_backfilled?: boolean | null;
 };
 
+function asContestDetails(
+  value: unknown,
+): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 function submissionCampaignType(
   submission: SubmissionWithContest,
   contest: {
@@ -580,7 +588,7 @@ export default function SubmissionsClient({
       if (subStatus === "rejected") return 0;
       const rawAmount = computeCpmRawCentsForRow(
         submission,
-        contest?.contest_based_details,
+        asContestDetails(contest?.contest_based_details),
         contest?.platform,
       );
       return applyContestRewardAdjustment(rawAmount, contest, campaignType);
@@ -642,7 +650,7 @@ export default function SubmissionsClient({
 
       const rawAmount = computeCpmRawCentsForRow(
         submission,
-        contest?.contest_based_details,
+        asContestDetails(contest?.contest_based_details),
         contest?.platform,
       );
       return applyContestRewardAdjustment(rawAmount, contest, campaignType);
@@ -964,9 +972,11 @@ export default function SubmissionsClient({
   const qualityScoreFilterButtonLabel = useMemo(() => {
     if (qualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
-      { value: 3, label: "Score 3/3" },
-      { value: 2, label: "Score 2/3" },
-      { value: 1, label: "Score 1/3" },
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
@@ -1538,11 +1548,6 @@ export default function SubmissionsClient({
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
-
-    // Log keys for the first submission to help diagnose field mismatches if any
-    if (submission === filteredSubmissions[0]) {
-      console.log("DEBUG: First submission fields:", Object.keys(submission));
-    }
 
     // Capture the primary DB column and every possible variation from metadata (IG/TikTok/YT)
     const bestThumbnail = submission.video_thumbnail_url ||
@@ -2664,9 +2669,11 @@ export default function SubmissionsClient({
 
               {(
                 [
-                  { value: 3, label: "Score 3/3" },
-                  { value: 2, label: "Score 2/3" },
-                  { value: 1, label: "Score 1/3" },
+                  { value: 5, label: "Score 5/5" },
+                  { value: 4, label: "Score 4/5" },
+                  { value: 3, label: "Score 3/5" },
+                  { value: 2, label: "Score 2/5" },
+                  { value: 1, label: "Score 1/5" },
                   { value: "unscored", label: "No Quality Score" },
                 ] as Array<{ value: QualityScore | "unscored"; label: string }>
               ).map((opt) => {

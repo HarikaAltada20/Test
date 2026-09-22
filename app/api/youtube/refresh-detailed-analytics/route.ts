@@ -3,7 +3,10 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import { isYouTubeRefreshTarget } from "@/lib/youtube-url";
-import { youtubeDetailedCooldownTimestamp } from "@/lib/youtube-detailed-cooldown";
+import {
+  youtubeDetailedCooldownTimestamp,
+  type YoutubeDetailedRefreshType,
+} from "@/lib/youtube-detailed-cooldown";
 import {
   applyPostCampaignOverlayRow,
   postCampaignOverlayInsertFromSubmission,
@@ -15,7 +18,6 @@ import {
   isYouTubeAllLikeScope,
   mergePostCampaignYouTubeTimestamps,
 } from "@/lib/youtube-submission-refresh-by-scope";
-import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
 
 /**
@@ -38,23 +40,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json();
+  const body = (await request.json()) as Record<string, unknown>;
   const {
     type,
     submissionId,
     creatorId,
     contestId,
     postCampaign,
-  }: {
-    type: YouTubeRefreshScope;
-    submissionId?: string;
-    creatorId?: string;
-    contestId?: string;
-    postCampaign?: boolean;
   } = body;
   const isPostCampaign = postCampaign === true;
 
-  const ANALYTICS_TYPES: YouTubeRefreshScope[] = [
+  const ANALYTICS_TYPES: readonly YoutubeDetailedRefreshType[] = [
     "core",
     "traffic",
     "demographics",
@@ -62,7 +58,13 @@ export async function POST(request: Request) {
     "all_standard",
   ];
 
-  if (!type || !ANALYTICS_TYPES.includes(type)) {
+  const isDetailedRefreshType = (
+    value: unknown,
+  ): value is YoutubeDetailedRefreshType =>
+    typeof value === "string" &&
+    ANALYTICS_TYPES.includes(value as YoutubeDetailedRefreshType);
+
+  if (!isDetailedRefreshType(type)) {
     return NextResponse.json(
       {
         error:
@@ -72,7 +74,12 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!submissionId && !contestId) {
+  const submissionIdValue =
+    typeof submissionId === "string" ? submissionId : undefined;
+  const creatorIdValue = typeof creatorId === "string" ? creatorId : undefined;
+  const contestIdValue = typeof contestId === "string" ? contestId : undefined;
+
+  if (!submissionIdValue && !contestIdValue) {
     return NextResponse.json(
       { error: "Provide submissionId, contestId, or creatorId + contestId" },
       { status: 400 },
@@ -94,16 +101,16 @@ export async function POST(request: Request) {
     )
     .not("content_link", "is", null);
 
-  if (submissionId) {
-    submissionsQuery = submissionsQuery.eq("id", submissionId);
+  if (submissionIdValue) {
+    submissionsQuery = submissionsQuery.eq("id", submissionIdValue);
   } else {
     submissionsQuery = submissionsQuery.neq("status", "rejected");
-    if (creatorId && contestId) {
+    if (creatorIdValue && contestIdValue) {
       submissionsQuery = submissionsQuery
-        .eq("creator_id", creatorId)
-        .eq("contest_id", contestId);
-    } else if (contestId) {
-      submissionsQuery = submissionsQuery.eq("contest_id", contestId);
+        .eq("creator_id", creatorIdValue)
+        .eq("contest_id", contestIdValue);
+    } else if (contestIdValue) {
+      submissionsQuery = submissionsQuery.eq("contest_id", contestIdValue);
     }
   }
 
@@ -194,7 +201,7 @@ export async function POST(request: Request) {
   }
 
   if (refreshRows.length === 0) {
-    if (submissionId) {
+    if (submissionIdValue) {
       return NextResponse.json(
         { error: "YouTube submission not found" },
         { status: 404 },
@@ -208,8 +215,8 @@ export async function POST(request: Request) {
 
   const targetContestIds = [
     ...new Set(
-      (contestId
-        ? [contestId]
+      (contestIdValue
+        ? [contestIdValue]
         : refreshRows.map((submission) => submission.contest_id)
       ).filter(Boolean),
     ),

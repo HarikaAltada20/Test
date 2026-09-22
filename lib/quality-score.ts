@@ -1,4 +1,7 @@
-export type QualityScore = 1 | 2 | 3;
+export type QualityScore = 1 | 2 | 3 | 4 | 5;
+
+export const MAX_QUALITY_SCORE = 5 as const;
+export const MIN_QUALITY_SCORE = 1 as const;
 
 export const CREATOR_DEFAULT_QUALITY_SCORE: QualityScore = 1;
 
@@ -6,6 +9,16 @@ export type QualityScoreCounts = {
   score1: number;
   score2: number;
   score3: number;
+  score4: number;
+  score5: number;
+};
+
+export const EMPTY_QUALITY_SCORE_COUNTS: QualityScoreCounts = {
+  score1: 0,
+  score2: 0,
+  score3: 0,
+  score4: 0,
+  score5: 0,
 };
 
 export type CreatorQualityMetrics = {
@@ -22,9 +35,17 @@ function parseStoredQualityNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function isValidQualityScoreNumber(score: number): boolean {
+  return (
+    Number.isInteger(score) &&
+    score >= MIN_QUALITY_SCORE &&
+    score <= MAX_QUALITY_SCORE
+  );
+}
+
 /**
  * Quality display / gate rules:
- * - 0 verified, 0 rejected → default 1/3 (new creator or only pending)
+ * - 0 verified, 0 rejected → default 1/5 (new creator or only pending)
  * - 0 verified, rejected > 0 → null (cannot calculate)
  * - verified > 0 → stored scores from verified reels
  */
@@ -50,7 +71,7 @@ export function resolveCreatorQualityMetrics(input: {
         storedAvg !== null || storedBest !== null || storedSum !== null
           ? verifiedReels
           : 0,
-      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+      quality_score_counts: { ...EMPTY_QUALITY_SCORE_COUNTS },
     };
   }
 
@@ -60,7 +81,7 @@ export function resolveCreatorQualityMetrics(input: {
       best_quality_score: null,
       quality_score_sum: null,
       scored_verified_reels: 0,
-      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+      quality_score_counts: { ...EMPTY_QUALITY_SCORE_COUNTS },
     };
   }
 
@@ -69,38 +90,56 @@ export function resolveCreatorQualityMetrics(input: {
     best_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
     quality_score_sum: CREATOR_DEFAULT_QUALITY_SCORE,
     scored_verified_reels: 0,
-    quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+    quality_score_counts: { ...EMPTY_QUALITY_SCORE_COUNTS },
   };
 }
 
 export function parseQualityScore(value: unknown): QualityScore | null {
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 1 || n > 3) return null;
-  return Math.round(n) as QualityScore;
+  if (!Number.isInteger(n) || n < MIN_QUALITY_SCORE || n > MAX_QUALITY_SCORE) {
+    return null;
+  }
+  return n as QualityScore;
 }
 
 export function countQualityScoresFromScores(
   scores: number[],
 ): QualityScoreCounts {
-  const counts: QualityScoreCounts = { score1: 0, score2: 0, score3: 0 };
+  const counts: QualityScoreCounts = { ...EMPTY_QUALITY_SCORE_COUNTS };
   for (const raw of scores) {
     const score = parseQualityScore(raw);
     if (score === 1) counts.score1 += 1;
     else if (score === 2) counts.score2 += 1;
     else if (score === 3) counts.score3 += 1;
+    else if (score === 4) counts.score4 += 1;
+    else if (score === 5) counts.score5 += 1;
   }
   return counts;
 }
 
 export function parseQualityScoreCounts(value: unknown): QualityScoreCounts {
-  const empty: QualityScoreCounts = { score1: 0, score2: 0, score3: 0 };
+  const empty: QualityScoreCounts = { ...EMPTY_QUALITY_SCORE_COUNTS };
   if (!value || typeof value !== "object") return empty;
   const parsed = value as Record<string, unknown>;
   return {
     score1: Math.max(0, Number(parsed.score1) || 0),
     score2: Math.max(0, Number(parsed.score2) || 0),
     score3: Math.max(0, Number(parsed.score3) || 0),
+    score4: Math.max(0, Number(parsed.score4) || 0),
+    score5: Math.max(0, Number(parsed.score5) || 0),
   };
+}
+
+/** Returns the total number of scored submissions across all quality tiers. */
+export function sumQualityScoreCounts(value: unknown): number {
+  const counts = parseQualityScoreCounts(value);
+  return (
+    counts.score1 +
+    counts.score2 +
+    counts.score3 +
+    counts.score4 +
+    counts.score5
+  );
 }
 
 export function requireVerifyQualityScore(value: unknown): QualityScore | null {
@@ -111,12 +150,12 @@ export function isVerifyQualityScoreOmitted(value: unknown): boolean {
   return value === undefined || value === null || value === "";
 }
 
-/** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–3 score. */
+/** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–5 score. */
 export function resolveVerifyQualityScore(value: unknown): QualityScore | null {
   return requireVerifyQualityScore(value);
 }
 
-/** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–3 score. */
+/** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–5 score. */
 export function normalizeVerifyQualityScore(
   value: unknown,
 ): QualityScore | null {
@@ -136,9 +175,7 @@ export function computePersistableQualityProfileValues(input: {
 }): PersistableQualityProfileValues {
   const verifiedReels = Math.max(0, Number(input.verifiedReels) || 0);
   const rejectedReels = Math.max(0, Number(input.rejectedReels) || 0);
-  const scores = input.scoredQualityScores.filter(
-    (s) => Number.isFinite(s) && s >= 1 && s <= 3,
-  );
+  const scores = input.scoredQualityScores.filter(isValidQualityScoreNumber);
 
   if (verifiedReels > 0) {
     if (scores.length === 0) {
@@ -167,14 +204,14 @@ export function computePersistableQualityProfileValues(input: {
 export function computeQualityMetricsFromScores(
   scores: number[],
 ): CreatorQualityMetrics {
-  const valid = scores.filter((s) => Number.isFinite(s) && s >= 1 && s <= 3);
+  const valid = scores.filter(isValidQualityScoreNumber);
   if (valid.length === 0) {
     return {
       avg_quality_score: null,
       best_quality_score: null,
       quality_score_sum: null,
       scored_verified_reels: 0,
-      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
+      quality_score_counts: { ...EMPTY_QUALITY_SCORE_COUNTS },
     };
   }
   const sum = valid.reduce((acc, s) => acc + s, 0);
@@ -196,7 +233,7 @@ type SubmissionQualityRow = {
 function isExplicitQualitySubmission(row: SubmissionQualityRow): boolean {
   if (row.quality_score_backfilled === true) return false;
   const score = Number(row.quality_score);
-  return Number.isFinite(score) && score >= 1 && score <= 3;
+  return isValidQualityScoreNumber(score);
 }
 
 /** Aggregate submission rows into verified/rejected counts and scored quality values. */
@@ -217,7 +254,7 @@ export function aggregateSubmissionQualityRows(rows: SubmissionQualityRow[]): {
         continue;
       }
       const score = Number(row.quality_score);
-      if (Number.isFinite(score) && score >= 1 && score <= 3) {
+      if (isValidQualityScoreNumber(score)) {
         scoredQualityScores.push(score);
       }
     } else if (status === "rejected") {
@@ -330,7 +367,7 @@ export async function recomputeCreatorQualityMetrics(
     const tierCounts =
       verifiedReels > 0 && scoredQualityScores.length > 0
         ? countQualityScoresFromScores(scoredQualityScores)
-        : { score1: 0, score2: 0, score3: 0 };
+        : { ...EMPTY_QUALITY_SCORE_COUNTS };
     const qualitySum =
       verifiedReels > 0 && scoredQualityScores.length > 0
         ? scoredQualityScores.reduce((acc, score) => acc + score, 0)

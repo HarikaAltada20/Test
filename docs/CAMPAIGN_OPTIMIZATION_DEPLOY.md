@@ -10,7 +10,7 @@ Treat migrations + app as **one release**. Do not leave production in a mixed st
 
 | Step | Action | If skipped |
 | ---- | ------ | ---------- |
-| 1 | Run migrations 1→10 to completion on the target environment | App crashes or verify/gate/payout logic is inconsistent |
+| 1 | Run migrations 1→11 to completion on the target environment | App crashes or verify/gate/payout logic is inconsistent |
 | 2 | Deploy app **immediately** after migrations succeed | Verify API may 400; triggers/columns missing |
 | 3 | Run smoke tests below before routing traffic | Gate drift or broken verify flows go unnoticed |
 
@@ -39,8 +39,13 @@ Run in filename order (do not skip or reorder):
 | 8   | `20260706_quality_gates_new_creators.sql`                    | Quality gates for new creators (default 1/1); skip backfill-only legacy    |
 | 9   | `20260707_gate_checks_profile_cache_only.sql`                | Submit gates use cached profile metrics; clears any old placeholder scores |
 | 10  | `20260708_payouts_processed_submission_moderation_lock.sql`  | DB triggers block moderation/payout field edits after `payouts_processed` |
+| 11  | `20260915_quality_score_scale_1_to_5.sql`                     | Expand quality scale to 1–5; remap old scores (+2) and rebuild caches     |
 
 Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Plan a short maintenance window on large databases for migrations 5–7 if needed.
+
+Migration 11 is an **irreversible, standalone transaction**. It takes an advisory lock and records a durable completion marker; a second run fails before changing data. Run it in a maintenance window, not concurrently with application writes.
+
+Migration 11 remaps existing submission scores `1→3`, `2→4`, `3→5`, bumps contest `min_avg` / `min_best` by +2, and rebuilds creator quality caches. Contest **sum** gate (`min_quality_score`) is intentionally unchanged.
 
 ## Payout moderation lock (migration 10)
 
@@ -70,7 +75,9 @@ They block status/moderation and payout-field changes when `contests.post_contes
 
 ## Legacy quality scores
 
-Historical verified/paid submissions **keep `quality_score = NULL`** (the feature did not exist). Only **new verifies** assign 1/2/3 via the admin UI/API. Profile sum/avg/best count **only scored submissions**. Quality gates are skipped until a creator has at least one admin-assigned score.
+Historical verified/paid submissions **keep `quality_score = NULL`** (the feature did not exist). Only **new verifies** assign 1–5 via the admin UI/API. Profile sum/avg/best count **only scored submissions**. Quality gates are skipped until a creator has at least one admin-assigned score.
+
+After migration 11, any previously assigned scores on the old 1–3 scale are remapped (`1→3`, `2→4`, `3→5`) so averages and best scores stay consistent with the new scale.
 
 ## Verify API: `qualityScore`
 
@@ -81,9 +88,9 @@ For `action: "verified"` on:
 
 | `qualityScore` in body | Behavior |
 | ---------------------- | -------- |
-| `1`, `2`, or `3`       | Used as-is |
+| `1`, `2`, `3`, `4`, or `5` | Used as-is |
 | Omitted / `null` / `""` | **400** — explicit score required |
-| Any other value        | **400** — must be 1, 2, or 3 |
+| Any other value        | **400** — must be 1, 2, 3, 4, or 5 |
 
 The admin UI prompts via `VerifyQualityDialog` before verify. Scripts and integrations **must** send `qualityScore`; there is no server-side default.
 
@@ -91,17 +98,20 @@ Trust/quality profile updates after verify are handled by DB triggers (`submissi
 
 ## Deploy steps
 
-1. **Staging:** run migrations 1→10, then deploy app in the same window.
+1. **Staging:** run migrations 1→11, then deploy app in the same window.
 2. **Smoke test:**
    - Verify/reject a submission → creator trust + quality update on profile
    - Verify without `qualityScore` in API body → **400**
    - Submit to a gated campaign → UI gate, `POST /api/creators/stats`, and DB trigger agree
-   - Bulk verify with explicit `qualityScore` (1–3)
+   - Bulk verify with explicit `qualityScore` (1–5)
    - PATCH quality score on verified submission → response `creatorQuality` matches live submissions
    - Legacy creator with unscored verified submissions → quality gates skipped until first verify score
    - Creator with explicit scores → avg/best excludes backfilled rows only
+   - After migration 11: sample remapped scores (old 3 → 5), score-4/5 tier counts, and avg/best on creator profiles
+   - `eligibleOnly` campaign list: creator below a 4/5 avg or best gate is excluded; creator meeting it is included
+   - Confirm `quality_score_scale_1_to_5_migration_state` has one row; rerunning migration 11 must fail before it changes any data
    - Re-check eligibility after another admin verify/reject (submit error mentions refresh if DB gate fires)
-3. **Production:** run migrations 1→10, then deploy app immediately after.
+3. **Production:** run migrations 1→11, then deploy app immediately after.
 4. **Post-deploy:** sample creators for trust % changes; monitor submission insert errors.
 
 ## Ops: metrics reconciliation

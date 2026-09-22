@@ -478,15 +478,14 @@ export type MilestoneBonusPaidTrackCents = {
 
 /** Paid most-verified views/reels bonus cents stored on `milestone_bonus_paid`. */
 export function getMostVerifiedBonusPaidCentsFromSubmission(sub: {
-  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
-  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  milestone_bonus_paid?: unknown;
+  metadata?: Record<string, unknown> | null;
 }): { viewsCents: number; reelsCents: number; totalCents: number } {
-  const mbp =
-    sub?.milestone_bonus_paid ??
-    sub?.metadata?.milestone_bonus_paid;
-  if (!mbp || typeof mbp !== "object") {
+  const raw = sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid;
+  if (!raw || typeof raw !== "object") {
     return { viewsCents: 0, reelsCents: 0, totalCents: 0 };
   }
+  const mbp = raw as MilestoneBonusPaidTrackCents;
   const viewsCents = Math.max(0, Math.round(Number(mbp.views) || 0));
   const reelsCents = Math.max(0, Math.round(Number(mbp.reels) || 0));
   return { viewsCents, reelsCents, totalCents: viewsCents + reelsCents };
@@ -499,8 +498,8 @@ export function getMostVerifiedBonusPaidCentsFromSubmission(sub: {
 export function getMilestoneLadderGrantedCentsFromSubmission(sub: {
   bonus_paid?: boolean | null;
   bonus_amount?: number | null;
-  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
-  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  milestone_bonus_paid?: unknown;
+  metadata?: Record<string, unknown> | null;
   dual_rewards_payout?: unknown;
 }): number {
   const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
@@ -554,8 +553,8 @@ export function tryDualRewardGrantedBreakdownFromStoredPayout(sub: {
   earnings?: number | null;
   bonus_paid?: boolean | null;
   dual_rewards_payout?: unknown;
-  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
-  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  milestone_bonus_paid?: unknown;
+  metadata?: Record<string, unknown> | null;
 }): DualRewardGrantedDisplayBreakdown | null {
   const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
   if (!dual) return null;
@@ -584,8 +583,8 @@ export function tryDualRewardGrantedBreakdownFromStoredPayout(sub: {
 export function excludeMostVerifiedBonusFromPaidTotalCents(
   paidTotalCents: number,
   sub: {
-    milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
-    metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+    milestone_bonus_paid?: unknown;
+    metadata?: Record<string, unknown> | null;
   },
 ): number {
   const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
@@ -599,8 +598,8 @@ export type SubmissionPaidReversalInput = {
   bonus_paid?: boolean | null;
   bonus_paid_at?: string | null;
   bonus_amount?: number | null;
-  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
-  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  milestone_bonus_paid?: unknown;
+  metadata?: Record<string, unknown> | null;
   dual_rewards_payout?: unknown;
 };
 

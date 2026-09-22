@@ -45,11 +45,13 @@ type ContestWithDetails = {
 };
 
 /** In-memory view: project primary platform payout onto root for legacy readers. */
-const normalizeContestDetails = (contest: ContestWithDetails) =>
+const normalizeContestDetails = (
+  contest: ContestWithDetails,
+): Record<string, any> =>
   withProjectedTopLevelPayout(
     contest.contest_based_details || {},
     contest.platform,
-  );
+  ) as Record<string, any>;
 
 function resolveCpmConfigForBudgetSub(
   details: Record<string, unknown> | null,
@@ -390,11 +392,10 @@ export async function enrichContestWithCalculatedBudgets(
       }
     });
 
-    const resolvedMaxEarnings = resolveMaxEarningsPerCreatorCents({
-      platform: contest.platform,
-      max_earnings_per_creator: contest.max_earnings_per_creator,
-      contest_based_details: contestDetails,
-    });
+    const resolvedMaxEarnings = resolveMaxEarningsPerCreatorCents(
+      contest,
+      contest.platform,
+    );
     const tileInput = {
       contest_type: contest.contest_type,
       post_contest_status: contest.post_contest_status,
@@ -612,8 +613,25 @@ export async function enrichContestWithCalculatedBudgets(
   }
 
   if (isDualRewardsContestType(contest.contest_type)) {
+    type DualBudgetSubmissionRow = {
+      id: string;
+      creator_id: string;
+      created_at: string;
+      status?: string | null;
+      paid?: boolean | null;
+      paid_at?: string | null;
+      earnings?: number | null;
+      views?: number | null;
+      platform?: string | null;
+      other_stats?: unknown;
+      bonus_paid?: boolean | null;
+      bonus_amount?: number | null;
+      dual_rewards_payout?: unknown;
+      metadata?: unknown;
+      milestone_bonus_paid?: unknown;
+    };
     const { data: dualSubmissions, error: dualSubErr } =
-      await fetchContestSubmissionsAllPages(
+      await fetchContestSubmissionsAllPages<DualBudgetSubmissionRow>(
         supabase,
         contest.id,
         "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, dual_rewards_payout, metadata, milestone_bonus_paid",
@@ -625,30 +643,14 @@ export async function enrichContestWithCalculatedBudgets(
 
     if (!dualSubErr) {
       const budgetSubs: BudgetTileSubmission[] = (dualSubmissions || []).map(
-        (s: {
-          id: string;
-          creator_id: string;
-          created_at: string;
-          status?: string | null;
-          paid?: boolean | null;
-          paid_at?: string | null;
-          earnings?: number | null;
-          views?: number | null;
-          platform?: string | null;
-          other_stats?: unknown;
-          bonus_paid?: boolean | null;
-          bonus_amount?: number | null;
-          dual_rewards_payout?: unknown;
-          metadata?: unknown;
-          milestone_bonus_paid?: unknown;
-        }) => ({
+        (s) => ({
           id: s.id,
           creator_id: s.creator_id,
           created_at: s.created_at,
           status: s.status || undefined,
           paid: s.paid ?? false,
-          paid_at: s.paid_at,
-          earnings: s.earnings,
+          paid_at: s.paid_at ?? null,
+          earnings: s.earnings ?? null,
           views: s.views ?? 0,
           platform: s.platform || undefined,
           other_stats: s.other_stats,

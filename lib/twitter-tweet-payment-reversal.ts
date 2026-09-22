@@ -17,7 +17,7 @@ export type TwitterTweetReversalRefund = {
 };
 
 export type MoneyTxn = {
-  id?: string;
+  id?: string | null;
   amount?: number | null;
   metadata?: Record<string, unknown> | null;
   remarks?: string | null;
@@ -139,7 +139,6 @@ export function resolveTwitterTweetShareIds(options: {
     const earnings = Math.round(Number(row.earnings) || 0);
     if (
       status !== "rejected" ||
-      status === "paid" ||
       earnings > 0 ||
       siblingSet.has(id)
     ) {

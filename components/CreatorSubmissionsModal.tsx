@@ -60,10 +60,13 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   buildBulkDownloadMetaMap,
+  splitDownloadSubmissionIdsByPlatform,
+  classifyDownloadVideoPlatform,
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
+import { isDesktopDownloadEnabled } from "@/lib/goc-download/config";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -89,9 +92,15 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId, getFlatFeeBonusCentsFromContest } from "@/lib/twitter-cpm-bonus-expected";
-import { parseQualityScore } from "@/lib/quality-score";
-import type { QualityScore } from "@/lib/quality-score";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+} from "@/lib/twitter-cpm-bonus-expected";
+import {
+  parseQualityScore,
+  type QualityScore,
+  type QualityScoreCounts,
+} from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
 import {
   computeSubmissionModerationStatusCounts,
@@ -258,11 +267,7 @@ interface CreatorSubmissionsModalProps {
     avgQualityScore: number | null;
     bestQualityScore: number | null;
     qualityScoreSum: number | null;
-    qualityScoreCounts?: {
-      score1: number;
-      score2: number;
-      score3: number;
-    };
+    qualityScoreCounts?: QualityScoreCounts;
   }) => void;
 }
 
@@ -403,6 +408,20 @@ export function CreatorSubmissionsModal({
   };
 
   const handleDownloadReel = async (submissionId: string) => {
+    const submission = submissions.find((entry) => entry.id === submissionId);
+    const kind = classifyDownloadVideoPlatform({
+      platform: submission?.platform,
+      contestPlatform: contest.platform,
+      contentLink: submission?.content_link,
+    });
+
+    // YouTube always goes through the dialog → signed .gocdownload (desktop).
+    if (kind === "youtube" && isDesktopDownloadEnabled()) {
+      setSelectedSubmissions(new Set([submissionId]));
+      setBulkDownloadDialogOpen(true);
+      return;
+    }
+
     // Set loading state
     setDownloadingSubmissionId(submissionId);
 
@@ -481,14 +500,7 @@ export function CreatorSubmissionsModal({
   const handleBulkDownloadReels = async () => {
     if (selectedSubmissions.size === 0) return;
 
-    const downloadableIds = Array.from(selectedSubmissions).filter((id) => {
-      const sub = submissions.find((entry) => entry.id === id);
-      return canDownloadSubmissionVideo({
-        platform: sub?.platform,
-        contestPlatform: contest?.platform,
-        contentLink: sub?.content_link,
-      });
-    });
+    const downloadableIds = orderedDownloadableSelectedIds;
 
     if (downloadableIds.length === 0) {
       toast({
@@ -501,7 +513,19 @@ export function CreatorSubmissionsModal({
     }
 
     if (downloadableIds.length === 1) {
-      await handleDownloadReel(downloadableIds[0]);
+      const singleSubmissionId = downloadableIds[0];
+      const kind = classifyDownloadVideoPlatform({
+        platform: submissions.find((s) => s.id === singleSubmissionId)?.platform,
+        contestPlatform: contest.platform,
+        contentLink:
+          submissions.find((s) => s.id === singleSubmissionId)?.content_link,
+      });
+      // Single YouTube (desktop) or any multi-path selection opens the dialog.
+      if (kind === "youtube" && isDesktopDownloadEnabled()) {
+        setBulkDownloadDialogOpen(true);
+        return;
+      }
+      await handleDownloadReel(singleSubmissionId);
       return;
     }
 
@@ -521,16 +545,16 @@ export function CreatorSubmissionsModal({
   const runBulkDownloadReels = async (
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
+    options?: { submissionIds?: string[] },
   ) => {
-    const submissionIds = Array.from(selectedSubmissions).filter((id) => {
-      const sub = submissions.find((entry) => entry.id === id);
-      return canDownloadSubmissionVideo({
-        platform: sub?.platform,
-        contestPlatform: contest?.platform,
-        contentLink: sub?.content_link,
-      });
-    });
-    if (submissionIds.length < 2) return;
+    // Dialog may pass Instagram-only IDs for mixed selections.
+    const submissionIds =
+      options?.submissionIds && options.submissionIds.length > 0
+        ? options.submissionIds
+        : selectedDownloadSplit.instagramIds.length > 0
+          ? selectedDownloadSplit.instagramIds
+          : orderedDownloadableSelectedIds;
+    if (submissionIds.length < 1) return;
     if (!contest?.id) return;
 
     setBulkDownloadDialogOpen(false);
@@ -1491,11 +1515,7 @@ export function CreatorSubmissionsModal({
           avg_quality_score: number | null;
           best_quality_score: number | null;
           quality_score_sum: number | null;
-          quality_score_counts?: {
-            score1: number;
-            score2: number;
-            score3: number;
-          };
+          quality_score_counts?: QualityScoreCounts;
         }
       >;
 
@@ -1518,7 +1538,7 @@ export function CreatorSubmissionsModal({
           qualityEditSubmissionIds.length > 1
             ? "Quality scores updated"
             : "Quality score updated",
-        description: `Saved as ${qualityScore}/3.`,
+        description: `Saved as ${qualityScore}/5.`,
         variant: "success",
       });
       setQualityEditSubmissionIds([]);
@@ -1740,6 +1760,48 @@ export function CreatorSubmissionsModal({
       );
     return 0;
   });
+
+  const orderedSelectedDownloadIds = useMemo(() => {
+    const selected = selectedSubmissions;
+    const ordered = sortedSubmissions
+      .map((submission) => submission.id)
+      .filter((id) => selected.has(id));
+    const seen = new Set(ordered);
+    for (const id of selected) {
+      if (!seen.has(id)) ordered.push(id);
+    }
+    return ordered;
+  }, [selectedSubmissions, sortedSubmissions]);
+
+  const orderedDownloadableSelectedIds = useMemo(
+    () =>
+      orderedSelectedDownloadIds.filter((id) => {
+        const sub = submissions.find((entry) => entry.id === id);
+        return canDownloadSubmissionVideo({
+          platform: sub?.platform,
+          contestPlatform: contest.platform,
+          contentLink: sub?.content_link,
+        });
+      }),
+    [orderedSelectedDownloadIds, submissions, contest.platform],
+  );
+
+  const selectedDownloadSplit = useMemo(
+    () =>
+      splitDownloadSubmissionIdsByPlatform(
+        orderedDownloadableSelectedIds,
+        (id) => {
+          const sub = submissions.find((entry) => entry.id === id);
+          if (!sub) return null;
+          return {
+            platform: sub.platform,
+            contestPlatform: contest.platform,
+            contentLink: sub.content_link,
+          };
+        },
+      ),
+    [orderedDownloadableSelectedIds, submissions, contest.platform],
+  );
 
   // Pre-calculate expected rewards with cap logic (in submission time order)
   const expectedRewardsMap = new Map<string, number>();
@@ -5474,10 +5536,15 @@ export function CreatorSubmissionsModal({
         open={bulkDownloadDialogOpen}
         onOpenChange={setBulkDownloadDialogOpen}
         isDark={isDark}
-        videoCount={selectedSubmissions.size}
+        videoCount={orderedDownloadableSelectedIds.length}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={bulkDownloading}
         onConfirm={runBulkDownloadReels}
+        contestId={contest?.id ? String(contest.id) : undefined}
+        submissionIds={orderedDownloadableSelectedIds}
+        youtubeSubmissionIds={selectedDownloadSplit.youtubeIds}
+        instagramSubmissionIds={selectedDownloadSplit.instagramIds}
+        hasInstagramSelection={selectedDownloadSplit.instagramIds.length > 0}
       />
 
       <VerifyQualityDialog

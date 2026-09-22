@@ -60,20 +60,31 @@ async function fetchCreatorProfilesForUserIds(
   const db = createAdminClient();
   // Keep batches small — large `.in()` lists overflow HTTP headers (UUID × N).
   const CHUNK = 50;
+  const CONCURRENCY = 4;
+  const chunks: string[][] = [];
   for (let i = 0; i < userIds.length; i += CHUNK) {
-    const slice = userIds.slice(i, i + CHUNK);
-    const { data, error } = await db
-      .from("creator_profiles")
-      .select(CREATOR_PROFILES_SELECT)
-      .in("id", slice);
+    chunks.push(userIds.slice(i, i + CHUNK));
+  }
 
-    if (error) {
-      console.error("Error fetching creator profiles:", error);
-      continue;
-    }
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const results = await Promise.all(
+      chunks.slice(i, i + CONCURRENCY).map((ids) =>
+        db
+          .from("creator_profiles")
+          .select(CREATOR_PROFILES_SELECT)
+          .in("id", ids),
+      ),
+    );
 
-    for (const profile of data ?? []) {
-      map.set(profile.id, profile);
+    for (const { data, error } of results) {
+      if (error) {
+        console.error("Error fetching creator profiles:", error);
+        continue;
+      }
+
+      for (const profile of data ?? []) {
+        map.set(profile.id, profile);
+      }
     }
   }
 

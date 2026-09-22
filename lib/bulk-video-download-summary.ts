@@ -13,8 +13,54 @@ export type BulkVideoDownloadJobSummary = {
   namingPattern: string | null;
   fileNamePrefix: string | null;
   createdAt: string;
+  startedAt?: string | null;
   finishedAt: string | null;
+  source?: "cloud" | "desktop";
+  deliveryMode?: string | null;
 };
+
+/** True when the job originated from a YouTube .gocdownload manifest. */
+export function isDesktopDownloadJob(job: {
+  source?: string | null;
+}): boolean {
+  return job.source === "desktop";
+}
+
+/**
+ * Web "in progress" is only for cloud ZIP work. Desktop YouTube jobs are done
+ * once the text/.gocdownload file is delivered.
+ */
+export function isBulkDownloadJobInProgress(job: {
+  source?: string | null;
+  status: string;
+}): boolean {
+  if (isDesktopDownloadJob(job)) return false;
+  return job.status === "queued" || job.status === "running";
+}
+
+/**
+ * Desktop jobs left queued/running with no desktop-app start — the file was
+ * already delivered but the row was never closed (pre-fix behavior).
+ */
+export function isStuckDesktopManifestJob(job: {
+  source?: string | null;
+  status: string;
+  startedAt?: string | null;
+  started_at?: string | null;
+  successCount?: number;
+  success_count?: number;
+  failedCount?: number;
+  failed_count?: number;
+}): boolean {
+  if (!isDesktopDownloadJob(job)) return false;
+  if (job.status !== "queued" && job.status !== "running") return false;
+  const startedAt = job.startedAt ?? job.started_at ?? null;
+  if (startedAt) return false;
+  const success =
+    Number(job.successCount ?? job.success_count ?? 0) || 0;
+  const failed = Number(job.failedCount ?? job.failed_count ?? 0) || 0;
+  return success + failed === 0;
+}
 
 function createdAtMs(value: string | null | undefined): number {
   const parsed = Date.parse(value || "");
@@ -230,7 +276,10 @@ export function jobRowToDownloadSummary(row: {
   naming_pattern?: string | null;
   file_name_prefix?: string | null;
   created_at?: string | null;
+  started_at?: string | null;
   finished_at?: string | null;
+  source?: string | null;
+  delivery_mode?: string | null;
 }): BulkVideoDownloadJobSummary {
   const status =
     row.status === "queued" ||
@@ -256,6 +305,10 @@ export function jobRowToDownloadSummary(row: {
         ? row.file_name_prefix.trim()
         : null,
     createdAt: String(row.created_at || ""),
+    startedAt: row.started_at ? String(row.started_at) : null,
     finishedAt: row.finished_at ? String(row.finished_at) : null,
+    source: row.source === "desktop" ? "desktop" : "cloud",
+    deliveryMode:
+      typeof row.delivery_mode === "string" ? row.delivery_mode : null,
   };
 }

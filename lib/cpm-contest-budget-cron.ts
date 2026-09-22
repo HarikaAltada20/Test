@@ -70,7 +70,7 @@ export async function updateVideoPlatformCpmContestBudgets(
       return;
     }
 
-    const eligible = contests.filter((contest) => {
+    const eligible = contests.filter((contest: Record<string, any>) => {
       if (eligibility === "cron") {
         if (!isContestEligibleForScheduledMetricsCron(contest)) return false;
       } else if (!isContestEligibleForScheduledMetricsRefresh(contest)) {

@@ -21,6 +21,19 @@ export interface PayoutJobResult {
   error?: string;
 }
 
+function isTwitterTextImageLeaderboardContest(contest: {
+  contest_type?: string | null;
+  contest_format?: string | null;
+  platform?: string | null;
+}): boolean {
+  const platform = String(contest.platform || "").toLowerCase();
+  return (
+    contest.contest_type === "leaderboard" &&
+    contest.contest_format === "text_image" &&
+    (platform === "twitter" || platform === "x")
+  );
+}
+
 // Processes up to batchSize queued payout jobs. Returns per-job results.
 export async function processQueuedPayouts(
   batchSize: number = 10,

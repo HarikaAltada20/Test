@@ -6,6 +6,7 @@ import type {
 import type { VideoFilenamePattern } from "@/lib/video-download-filename";
 import {
   canAccessBulkVideoDownloadJob,
+  isStuckDesktopManifestJob,
 } from "@/lib/bulk-video-download-summary";
 import type { DownloadAccessUser } from "@/lib/video-download-auth";
 import {
@@ -58,6 +59,9 @@ export type BulkVideoDownloadJobRow = {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string;
+  /** cloud (default) | desktop — requires 20260905 migration. */
+  source?: "cloud" | "desktop";
+  delivery_mode?: string | null;
 };
 
 /** API/session shape returned to the client after joining submissions meta. */
@@ -67,6 +71,75 @@ export type BulkVideoDownloadSessionDto = BulkVideoDownloadJobRow & {
 };
 
 const ITEM_PAGE_SIZE = 500;
+
+const TERMINAL_JOB_STATUSES: ReadonlySet<BulkVideoDownloadJobStatus> = new Set([
+  "completed",
+  "failed",
+]);
+
+export function isTerminalBulkVideoDownloadJobStatus(
+  status: BulkVideoDownloadJobStatus | string | null | undefined,
+): boolean {
+  return status === "completed" || status === "failed";
+}
+
+/** Never regress completed/failed back to queued/running. */
+export function mergeJobStatusForUpdate(
+  current: BulkVideoDownloadJobStatus,
+  requested: BulkVideoDownloadJobStatus | undefined,
+): BulkVideoDownloadJobStatus | undefined {
+  if (!requested) return undefined;
+  if (TERMINAL_JOB_STATUSES.has(current) && !TERMINAL_JOB_STATUSES.has(requested)) {
+    return undefined;
+  }
+  return requested;
+}
+
+export async function countJobItemStatuses(jobId: string): Promise<{
+  success: number;
+  failed: number;
+  pending: number;
+  error?: string;
+}> {
+  const admin = createAdminClient();
+  const countStatus = async (status: string) => {
+    const { count, error } = await admin
+      .from("bulk_video_download_job_items")
+      .select("submission_id", { count: "exact", head: true })
+      .eq("job_id", jobId)
+      .eq("status", status);
+    if (error) return { count: 0, error: error.message };
+    return { count: count ?? 0 };
+  };
+
+  const [success, failed, pending] = await Promise.all([
+    countStatus("success"),
+    countStatus("failed"),
+    countStatus("pending"),
+  ]);
+  const err = success.error || failed.error || pending.error;
+  return {
+    success: success.count,
+    failed: failed.count,
+    pending: pending.count,
+    error: err,
+  };
+}
+
+export async function deleteBulkVideoDownloadJob(
+  jobId: string,
+): Promise<{ error?: string }> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("bulk_video_download_jobs")
+    .delete()
+    .eq("id", jobId);
+  if (error) {
+    console.error("[bulk-video-download-jobs] delete failed:", error);
+    return { error: error.message };
+  }
+  return {};
+}
 
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -166,6 +239,12 @@ function normalizeJobRow(raw: Record<string, unknown>): BulkVideoDownloadJobRow 
     started_at: raw.started_at ? String(raw.started_at) : null,
     finished_at: raw.finished_at ? String(raw.finished_at) : null,
     updated_at: String(raw.updated_at || ""),
+    source:
+      raw.source === "desktop" || raw.source === "cloud"
+        ? raw.source
+        : undefined,
+    delivery_mode:
+      typeof raw.delivery_mode === "string" ? raw.delivery_mode : null,
   };
 }
 
@@ -337,7 +416,7 @@ export async function replaceJobItems(
   return {};
 }
 
-/** Upsert only changed/known statuses (progress updates). */
+/** Upsert only changed/known statuses (progress updates). Terminal rows do not regress to pending. */
 export async function upsertJobItemStatuses(
   jobId: string,
   itemStatuses: BulkVideoDownloadItemStatus[],
@@ -345,8 +424,44 @@ export async function upsertJobItemStatuses(
   if (itemStatuses.length === 0) return {};
   const admin = createAdminClient();
 
-  for (let i = 0; i < itemStatuses.length; i += ITEM_PAGE_SIZE) {
-    const slice = itemStatuses.slice(i, i + ITEM_PAGE_SIZE);
+  const submissionIds = itemStatuses.map((item) => item.submissionId);
+  const { data: existingRows, error: existingError } = await admin
+    .from("bulk_video_download_job_items")
+    .select("submission_id, status")
+    .eq("job_id", jobId)
+    .in("submission_id", submissionIds);
+
+  if (existingError) {
+    console.error(
+      "[bulk-video-download-jobs] load items for monotonic upsert failed:",
+      existingError,
+    );
+    return { error: existingError.message };
+  }
+
+  const existingById = new Map<string, string>();
+  for (const row of existingRows || []) {
+    if (row && typeof row.submission_id === "string") {
+      existingById.set(row.submission_id, String(row.status || "pending"));
+    }
+  }
+
+  const rowsToWrite = itemStatuses.filter((item) => {
+    const current = existingById.get(item.submissionId);
+    if (!current) return true;
+    if (
+      (current === "success" || current === "failed") &&
+      item.status === "pending"
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  if (rowsToWrite.length === 0) return {};
+
+  for (let i = 0; i < rowsToWrite.length; i += ITEM_PAGE_SIZE) {
+    const slice = rowsToWrite.slice(i, i + ITEM_PAGE_SIZE);
     const rows = slice.map((item) => ({
       job_id: jobId,
       submission_id: item.submissionId,
@@ -441,6 +556,15 @@ export type CreateBulkVideoDownloadJobInput = {
   submissionIds: string[];
   zipParts: BulkVideoDownloadZipPart[];
   itemStatuses?: BulkVideoDownloadItemStatus[];
+  /** cloud (default) | desktop — requires 20260905 migration. */
+  source?: "cloud" | "desktop";
+  deliveryMode?: string | null;
+  /**
+   * Initial job status.
+   * Desktop YouTube jobs should be created as `completed` once the
+   * `.gocdownload` file is ready (web deliverable is the text file).
+   */
+  status?: BulkVideoDownloadJobStatus;
 };
 
 export async function createBulkVideoDownloadJob(
@@ -449,30 +573,79 @@ export async function createBulkVideoDownloadJob(
   const admin = createAdminClient();
   const submissionIds = input.submissionIds.filter(Boolean);
 
+  const status = input.status ?? "running";
+  const nowIso = new Date().toISOString();
+  const insertRow: Record<string, unknown> = {
+    id: input.id,
+    contest_id: input.contestId,
+    user_id: input.userId,
+    user_type: input.userType,
+    status,
+    total_count: input.totalCount || submissionIds.length,
+    success_count: 0,
+    failed_count: 0,
+    zip_part_index: 1,
+    zip_part_total: Math.max(1, input.zipPartTotal),
+    videos_per_zip: input.videosPerZip,
+    naming_pattern: input.namingPattern ?? null,
+    file_name_prefix: input.fileNamePrefix ?? null,
+    submission_ids: submissionIds,
+    zip_parts: input.zipParts,
+    started_at: status === "queued" ? null : nowIso,
+    finished_at:
+      status === "completed" || status === "failed" ? nowIso : null,
+  };
+  if (input.source) insertRow.source = input.source;
+  if (input.deliveryMode !== undefined) {
+    insertRow.delivery_mode = input.deliveryMode;
+  }
+
   const { data, error } = await admin
     .from("bulk_video_download_jobs")
-    .insert({
-      id: input.id,
-      contest_id: input.contestId,
-      user_id: input.userId,
-      user_type: input.userType,
-      status: "running",
-      total_count: input.totalCount || submissionIds.length,
-      success_count: 0,
-      failed_count: 0,
-      zip_part_index: 1,
-      zip_part_total: Math.max(1, input.zipPartTotal),
-      videos_per_zip: input.videosPerZip,
-      naming_pattern: input.namingPattern ?? null,
-      file_name_prefix: input.fileNamePrefix ?? null,
-      submission_ids: submissionIds,
-      zip_parts: input.zipParts,
-      started_at: new Date().toISOString(),
-    })
+    .insert(insertRow)
     .select("*")
     .single();
 
   if (error) {
+    // Retry without desktop-only columns if migration not applied yet.
+    const message = error.message || "";
+    const missingDesktopCols =
+      /source|delivery_mode/i.test(message) &&
+      (input.source || input.deliveryMode !== undefined);
+    if (missingDesktopCols) {
+      if (process.env.NODE_ENV === "production" && input.source === "desktop") {
+        console.error(
+          "[bulk-video-download-jobs] desktop columns missing — apply 20260905 migration",
+        );
+        return {
+          data: null,
+          error:
+            "Desktop download schema is not migrated. Apply db/migrations/20260905_bulk_video_download_desktop.sql",
+        };
+      }
+      delete insertRow.source;
+      delete insertRow.delivery_mode;
+      const retry = await admin
+        .from("bulk_video_download_jobs")
+        .insert(insertRow)
+        .select("*")
+        .single();
+      if (retry.error) {
+        console.error("[bulk-video-download-jobs] create failed:", retry.error);
+        return { data: null, error: retry.error.message };
+      }
+      const job = normalizeJobRow(retry.data as Record<string, unknown>);
+      const itemsResult = await replaceJobItems(
+        job.id,
+        submissionIds,
+        input.itemStatuses,
+      );
+      if (itemsResult.error) {
+        await deleteBulkVideoDownloadJob(job.id);
+        return { data: null, error: itemsResult.error };
+      }
+      return { data: job };
+    }
     console.error("[bulk-video-download-jobs] create failed:", error);
     return { data: null, error: error.message };
   }
@@ -484,6 +657,7 @@ export async function createBulkVideoDownloadJob(
     input.itemStatuses,
   );
   if (itemsResult.error) {
+    await deleteBulkVideoDownloadJob(job.id);
     return { data: null, error: itemsResult.error };
   }
   return { data: job };
@@ -500,86 +674,168 @@ export type UpdateBulkVideoDownloadJobInput = {
   zipParts?: BulkVideoDownloadZipPart[];
   itemStatuses?: BulkVideoDownloadItemStatus[];
   errorMessage?: string | null;
+  /** Set when desktop reports started (first time only). */
+  startedAt?: string | null;
   /** Mark floating summary button as seen (sets summary_viewed + summary_viewed_at). */
   summaryViewed?: boolean;
+  /**
+   * When set, update only if the row still has this updated_at (compare-and-set).
+   * Used by desktop status callbacks for bounded concurrent retries.
+   */
+  expectedUpdatedAt?: string;
 };
+
+const UPDATE_CAS_BACKOFF_MS = [0, 10, 25, 50, 100] as const;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export async function updateBulkVideoDownloadJob(
   input: UpdateBulkVideoDownloadJobInput,
-): Promise<{ data: BulkVideoDownloadJobRow | null; error?: string }> {
-  const admin = createAdminClient();
-  const patch: Record<string, unknown> = {};
-  if (input.status) patch.status = input.status;
-  if (typeof input.successCount === "number") {
-    patch.success_count = Math.max(0, input.successCount);
-  }
-  if (typeof input.failedCount === "number") {
-    patch.failed_count = Math.max(0, input.failedCount);
-  }
-  if (typeof input.zipPartIndex === "number") {
-    patch.zip_part_index = Math.max(1, input.zipPartIndex);
-  }
-  if (typeof input.zipPartTotal === "number") {
-    patch.zip_part_total = Math.max(1, input.zipPartTotal);
-  }
-  if (input.errorMessage !== undefined) {
-    patch.error_message = input.errorMessage;
-  }
-  if (input.summaryViewed === true) {
-    patch.summary_viewed = true;
-    patch.summary_viewed_at = new Date().toISOString();
-  }
-  if (input.status === "completed" || input.status === "failed") {
-    patch.finished_at = new Date().toISOString();
-  }
+  options?: { maxAttempts?: number },
+): Promise<{
+  data: BulkVideoDownloadJobRow | null;
+  error?: string;
+  conflict?: boolean;
+}> {
+  const maxAttempts = Math.max(
+    1,
+    Math.min(8, options?.maxAttempts ?? (input.expectedUpdatedAt ? 5 : 1)),
+  );
 
-  const existing = await getBulkVideoDownloadJobById({
-    id: input.id,
-    userId: input.userId,
-  });
-  if (existing.error) return { data: null, error: existing.error };
-  if (!existing.data) return { data: null };
-
-  const allowedIds = existing.data.submission_ids;
-  const scopedStatuses =
-    input.itemStatuses && input.itemStatuses.length > 0
-      ? scopeItemStatusesToJob(input.itemStatuses, allowedIds)
-      : [];
-  if (input.zipParts) {
-    patch.zip_parts = scopeZipPartsToJob(input.zipParts, allowedIds);
-  }
-
-  if (scopedStatuses.length > 0) {
-    const itemsResult = await upsertJobItemStatuses(input.id, scopedStatuses);
-    if (itemsResult.error) {
-      return { data: null, error: itemsResult.error };
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleepMs(UPDATE_CAS_BACKOFF_MS[Math.min(attempt, UPDATE_CAS_BACKOFF_MS.length - 1)]!);
     }
-    // Terminal sessions: derive counts from all stored item rows (authoritative).
-    if (input.status === "completed" || input.status === "failed") {
-      const allItems = await loadJobItemStatuses(input.id);
-      patch.success_count = allItems.filter(
-        (item) => item.status === "success",
-      ).length;
-      patch.failed_count = allItems.filter(
-        (item) => item.status === "failed",
-      ).length;
+
+    const existing = await getBulkVideoDownloadJobById({
+      id: input.id,
+      userId: input.userId,
+    });
+    if (existing.error) return { data: null, error: existing.error };
+    if (!existing.data) return { data: null };
+
+    const expectedUpdatedAt =
+      input.expectedUpdatedAt ?? existing.data.updated_at;
+    // On retry after conflict, always CAS against the freshly read stamp.
+    const casStamp =
+      attempt === 0 && input.expectedUpdatedAt
+        ? input.expectedUpdatedAt
+        : existing.data.updated_at;
+
+    const admin = createAdminClient();
+    const patch: Record<string, unknown> = {};
+    const mergedStatus = mergeJobStatusForUpdate(
+      existing.data.status,
+      input.status,
+    );
+    if (mergedStatus) patch.status = mergedStatus;
+    if (typeof input.successCount === "number") {
+      patch.success_count = Math.max(0, input.successCount);
+    }
+    if (typeof input.failedCount === "number") {
+      patch.failed_count = Math.max(0, input.failedCount);
+    }
+    if (typeof input.zipPartIndex === "number") {
+      patch.zip_part_index = Math.max(1, input.zipPartIndex);
+    }
+    if (typeof input.zipPartTotal === "number") {
+      patch.zip_part_total = Math.max(1, input.zipPartTotal);
+    }
+    if (input.errorMessage !== undefined) {
+      patch.error_message = input.errorMessage;
+    }
+    if (input.startedAt && !existing.data.started_at) {
+      patch.started_at = input.startedAt;
+    }
+    if (input.summaryViewed === true) {
+      patch.summary_viewed = true;
+      patch.summary_viewed_at = new Date().toISOString();
+    }
+    if (mergedStatus === "completed" || mergedStatus === "failed") {
+      patch.finished_at = new Date().toISOString();
+    }
+
+    const allowedIds = existing.data.submission_ids;
+    const scopedStatuses =
+      input.itemStatuses && input.itemStatuses.length > 0
+        ? scopeItemStatusesToJob(input.itemStatuses, allowedIds)
+        : [];
+    if (input.zipParts) {
+      patch.zip_parts = scopeZipPartsToJob(input.zipParts, allowedIds);
+    }
+
+    if (scopedStatuses.length > 0) {
+      const itemsResult = await upsertJobItemStatuses(input.id, scopedStatuses);
+      if (itemsResult.error) {
+        return { data: null, error: itemsResult.error };
+      }
+      const counts = await countJobItemStatuses(input.id);
+      if (counts.error) {
+        return { data: null, error: counts.error };
+      }
+      if (
+        mergedStatus === "completed" ||
+        mergedStatus === "failed" ||
+        counts.success > 0 ||
+        counts.failed > 0
+      ) {
+        patch.success_count = Math.max(
+          typeof patch.success_count === "number"
+            ? (patch.success_count as number)
+            : 0,
+          counts.success,
+        );
+        patch.failed_count = Math.max(
+          typeof patch.failed_count === "number"
+            ? (patch.failed_count as number)
+            : 0,
+          counts.failed,
+        );
+      }
+    }
+
+    // Touch updated_at explicitly so CAS stamp advances even for empty merges.
+    patch.updated_at = new Date().toISOString();
+
+    let query = admin
+      .from("bulk_video_download_jobs")
+      .update(patch)
+      .eq("id", input.id)
+      .eq("user_id", input.userId);
+
+    // Bounded compare-and-set when callers opt in (desktop callbacks) or when
+    // retrying after a conflict within this loop.
+    if (input.expectedUpdatedAt || maxAttempts > 1) {
+      query = query.eq("updated_at", casStamp || expectedUpdatedAt);
+    }
+
+    const { data, error } = await query.select("*").maybeSingle();
+
+    if (error) {
+      console.error("[bulk-video-download-jobs] update failed:", error);
+      return { data: null, error: error.message };
+    }
+    if (data) {
+      return { data: normalizeJobRow(data as Record<string, unknown>) };
+    }
+
+    // No row matched CAS — retry if attempts remain.
+    if (attempt + 1 >= maxAttempts) {
+      return {
+        data: null,
+        conflict: true,
+        error: "Job update conflict; retry event",
+      };
     }
   }
 
-  const { data, error } = await admin
-    .from("bulk_video_download_jobs")
-    .update(Object.keys(patch).length > 0 ? patch : { updated_at: new Date().toISOString() })
-    .eq("id", input.id)
-    .eq("user_id", input.userId)
-    .select("*")
-    .maybeSingle();
-
-  if (error) {
-    console.error("[bulk-video-download-jobs] update failed:", error);
-    return { data: null, error: error.message };
-  }
-  if (!data) return { data: null };
-  return { data: normalizeJobRow(data as Record<string, unknown>) };
+  return {
+    data: null,
+    conflict: true,
+    error: "Job update conflict; retry event",
+  };
 }
 
 export async function listBulkVideoDownloadJobsForContest(options: {
@@ -592,7 +848,7 @@ export async function listBulkVideoDownloadJobsForContest(options: {
   let query = admin
     .from("bulk_video_download_jobs")
     .select(
-      "id, contest_id, user_id, user_type, status, total_count, success_count, failed_count, zip_part_total, naming_pattern, file_name_prefix, created_at, finished_at",
+      "id, contest_id, user_id, user_type, status, total_count, success_count, failed_count, zip_part_total, naming_pattern, file_name_prefix, created_at, started_at, finished_at, source, delivery_mode",
     )
     .eq("contest_id", options.contestId)
     .order("created_at", { ascending: false })
@@ -606,11 +862,33 @@ export async function listBulkVideoDownloadJobsForContest(options: {
     console.error("[bulk-video-download-jobs] list failed:", error);
     return { data: [], error: error.message };
   }
+  const rows = (data || []).map((row) =>
+    normalizeJobRow(row as Record<string, unknown>),
+  );
   return {
-    data: (data || []).map((row) =>
-      normalizeJobRow(row as Record<string, unknown>),
-    ),
+    data: await completeStuckDesktopManifestJobs(rows),
   };
+}
+
+/** Close desktop jobs that never left "file delivered" / never started in the app. */
+async function completeStuckDesktopManifestJobs(
+  rows: BulkVideoDownloadJobRow[],
+): Promise<BulkVideoDownloadJobRow[]> {
+  const out: BulkVideoDownloadJobRow[] = [];
+  for (const row of rows) {
+    if (!isStuckDesktopManifestJob(row)) {
+      out.push(row);
+      continue;
+    }
+    const updated = await updateBulkVideoDownloadJob({
+      id: row.id,
+      userId: row.user_id,
+      status: "completed",
+      errorMessage: null,
+    });
+    out.push(updated.data || { ...row, status: "completed", finished_at: new Date().toISOString() });
+  }
+  return out;
 }
 
 export async function findBulkVideoDownloadJobByZipPartId(options: {
@@ -672,10 +950,14 @@ export async function getLatestBulkVideoDownloadJobForContest(options: {
   const rows = (data || []).map((row) =>
     normalizeJobRow(row as Record<string, unknown>),
   );
+  const resolved = await completeStuckDesktopManifestJobs(rows);
   const now = Date.now();
   const match =
-    rows.find((row) => row.status === "queued" || row.status === "running") ||
-    rows.find((row) => {
+    resolved.find((row) => {
+      if (row.source === "desktop") return false;
+      return row.status === "queued" || row.status === "running";
+    }) ||
+    resolved.find((row) => {
       if (row.status !== "completed" && row.status !== "failed") return false;
       const updated = Date.parse(
         row.updated_at || row.finished_at || row.created_at,

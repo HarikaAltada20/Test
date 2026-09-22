@@ -11779,7 +11779,7 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-600",
                         )}
                       >
-                        Creator&apos;s best verified reel quality (1–3) must
+                        Creator&apos;s best verified reel quality (1–5) must
                         meet this minimum.
                       </p>
                     </div>
@@ -11802,7 +11802,7 @@ export default function CreateContestPage({
                     <Input
                       type="number"
                       min={1}
-                      max={3}
+                      max={5}
                       value={contestMinBestQuality}
                       onChange={(e) => {
                         const raw = e.target.value;
@@ -11811,10 +11811,10 @@ export default function CreateContestPage({
                           return;
                         }
                         const v = parseInt(raw, 10);
-                        if (!Number.isNaN(v) && v >= 1 && v <= 3)
+                        if (!Number.isNaN(v) && v >= 1 && v <= 5)
                           setContestMinBestQuality(v);
                       }}
-                      placeholder="1–3"
+                      placeholder="1–5"
                       className={cn(
                         isDark
                           ? "bg-[#C9A7FF26] border border-gray-400 text-white"
@@ -11859,7 +11859,7 @@ export default function CreateContestPage({
                     <Input
                       type="number"
                       min={1}
-                      max={3}
+                      max={5}
                       step={0.1}
                       value={contestMinAvgQuality}
                       onChange={(e) => {
@@ -11869,10 +11869,10 @@ export default function CreateContestPage({
                           return;
                         }
                         const v = parseFloat(raw);
-                        if (!Number.isNaN(v) && v >= 1 && v <= 3)
+                        if (!Number.isNaN(v) && v >= 1 && v <= 5)
                           setContestMinAvgQuality(v);
                       }}
-                      placeholder="1.0–3.0"
+                      placeholder="1.0–5.0"
                       className={cn(
                         isDark
                           ? "bg-[#C9A7FF26] border border-gray-400 text-white"
@@ -11896,7 +11896,7 @@ export default function CreateContestPage({
                         )}
                       >
                         Creator&apos;s total quality score (sum of all verified
-                        reel ratings, 1–3 each) must meet this minimum.
+                        reel ratings, 1–5 each) must meet this minimum.
                       </p>
                     </div>
                     <Checkbox

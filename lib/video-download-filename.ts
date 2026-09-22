@@ -249,7 +249,7 @@ export function formatBulkZipQualityPart(
   const normalized = qualityScores.map((value) =>
     String(value).trim().toLowerCase(),
   );
-  for (const score of [1, 2, 3] as const) {
+  for (const score of [1, 2, 3, 4, 5] as const) {
     if (
       normalized.some(
         (value) =>
@@ -340,7 +340,7 @@ function takeTrailingQuality(value: string): {
   while (parts.length > 0) {
     const last = parts[parts.length - 1];
     const isQuality =
-      last === "unscored" || /^Q[1-3]$/i.test(last);
+      last === "unscored" || /^Q[1-5]$/i.test(last);
     if (!isQuality) break;
     qualityBits.unshift(parts.pop() as string);
   }

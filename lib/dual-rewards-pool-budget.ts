@@ -16,7 +16,7 @@ export type DualPoolSpendSubmissionRow = {
   bonus_paid?: boolean | null;
   dual_rewards_payout?: unknown;
   milestone_bonus_paid?: unknown;
-  metadata?: { milestone_bonus_paid?: unknown } | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 const MOST_VERIFIED_BONUS_TYPES = new Set([
@@ -1084,10 +1084,13 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   // read→update fallback races concurrent bulk/verify payouts and can
   // overspend — especially when the pool lives under platform keys and the
   // pre-20260908 helper only inspected root total_budget_cents.
+  const parsedRpcResult =
+    rpcData != null ? parseRpcPoolBudgetResult(rpcData) : null;
   const rpcReturnedNotConfigured =
     !rpcError &&
-    rpcData != null &&
-    parseRpcPoolBudgetResult(rpcData).error ===
+    parsedRpcResult != null &&
+    !parsedRpcResult.allowed &&
+    parsedRpcResult.error ===
       DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR;
   if (rpcReturnedNotConfigured) {
     return {

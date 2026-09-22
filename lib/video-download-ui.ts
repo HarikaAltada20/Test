@@ -35,6 +35,67 @@ function isTikTokOnlyPlatform(platform: string): boolean {
   return platform.includes("tiktok") && !platformHasInstagramOrYouTube(platform);
 }
 
+export type DownloadVideoPlatform = "instagram" | "youtube" | "unsupported";
+
+/**
+ * Classify a submission for bulk/single download routing.
+ * Prefer content_link host; fall back to platform / contest platform fields.
+ */
+export function classifyDownloadVideoPlatform(input: {
+  platform?: string | null;
+  contestPlatform?: string | null;
+  contentLink?: string | null;
+}): DownloadVideoPlatform {
+  const submissionPlatform = (input.platform || "").toLowerCase();
+  const contestPlatform = (input.contestPlatform || "").toLowerCase();
+  const link = (input.contentLink || "").toLowerCase();
+
+  // A concrete URL is the strongest signal, especially for multi-platform
+  // contests whose contest-level platform string can also include TikTok.
+  if (link.includes("tiktok.com")) return "unsupported";
+  if (link.includes("instagram.com")) return "instagram";
+  if (link.includes("youtube.com") || link.includes("youtu.be")) return "youtube";
+
+  if (isTikTokOnlyPlatform(submissionPlatform)) return "unsupported";
+  if (submissionPlatform.includes("instagram")) return "instagram";
+  if (submissionPlatform.includes("youtube")) return "youtube";
+
+  // Only use contest-level data when it identifies a single supported route.
+  // Mixed contest rows need a submission platform or content URL.
+  if (contestPlatform.includes("tiktok")) return "unsupported";
+  if (contestPlatform.includes("instagram")) return "instagram";
+  if (contestPlatform.includes("youtube")) return "youtube";
+  return "unsupported";
+}
+
+/**
+ * Split an ordered selection into YouTube vs Instagram IDs for dual delivery.
+ */
+export function splitDownloadSubmissionIdsByPlatform(
+  orderedIds: string[],
+  lookup: (id: string) => {
+    platform?: string | null;
+    contestPlatform?: string | null;
+    contentLink?: string | null;
+  } | null,
+): {
+  youtubeIds: string[];
+  instagramIds: string[];
+  unsupportedIds: string[];
+} {
+  const youtubeIds: string[] = [];
+  const instagramIds: string[] = [];
+  const unsupportedIds: string[] = [];
+  for (const id of orderedIds) {
+    const row = lookup(id);
+    const kind = classifyDownloadVideoPlatform(row || {});
+    if (kind === "youtube") youtubeIds.push(id);
+    else if (kind === "instagram") instagramIds.push(id);
+    else unsupportedIds.push(id);
+  }
+  return { youtubeIds, instagramIds, unsupportedIds };
+}
+
 /**
  * Client/server helper: whether a submission can be downloaded as IG/YT video.
  * Multi-platform contests (e.g. youtube,instagram,tiktok) still allow IG/YT rows.
@@ -44,27 +105,8 @@ export function canDownloadSubmissionVideo(input: {
   contestPlatform?: string | null;
   contentLink?: string | null;
 }): boolean {
-  const submissionPlatform = (input.platform || "").toLowerCase();
-  const contestPlatform = (input.contestPlatform || "").toLowerCase();
-  const link = input.contentLink || "";
-
-  const isInstagramLink = link.includes("instagram.com");
-  const isYouTubeLink =
-    link.includes("youtube.com") || /youtu\.?be/i.test(link);
-  const isTikTokLink = link.includes("tiktok.com");
-
-  if (isInstagramLink || isYouTubeLink) return true;
-  if (isTikTokLink) return false;
-
-  if (platformHasInstagramOrYouTube(submissionPlatform)) return true;
-  if (isTikTokOnlyPlatform(submissionPlatform)) return false;
-
-  // Contest CSV can include TikTok alongside IG/YT — don't treat that as TikTok-only.
-  if (isTikTokOnlyPlatform(contestPlatform)) return false;
-  if (contestPlatform.includes("tiktok") && platformHasInstagramOrYouTube(contestPlatform)) {
-    return false;
-  }
-  return platformHasInstagramOrYouTube(contestPlatform);
+  const kind = classifyDownloadVideoPlatform(input);
+  return kind === "instagram" || kind === "youtube";
 }
 
 export function canBulkDownloadContestVideos(

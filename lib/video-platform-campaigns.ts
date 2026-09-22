@@ -180,9 +180,10 @@ export function deriveSectionPlatformUiState(
   const allLive = createDefaultAllSectionLive();
 
   if (selected.length < 2) {
-    const only = selected[0] ?? ALL_PLATFORM_TAB;
+    const only: PlatformTabValue =
+      selected.length === 1 ? selected[0] : ALL_PLATFORM_TAB;
     for (const key of PLATFORM_SECTION_KEYS) {
-      tabs[key] = only === ALL_PLATFORM_TAB ? ALL_PLATFORM_TAB : only;
+      tabs[key] = only;
       allLive[key] = true;
     }
     return { tabs, allLive };

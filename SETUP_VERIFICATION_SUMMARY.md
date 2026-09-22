@@ -1,5 +1,9 @@
 # Setup Verification Summary
 
+> Security: the values below must remain placeholders. Rotate any credential
+> that was previously committed and purge it from Git history before sharing
+> the repository.
+
 ## 🔴 Critical Issue Found
 
 **QStash Schedule for Payout Processor is PAUSED**
@@ -38,7 +42,7 @@ Ensure the schedule has:
 - **Schedule**: `* * * * *` (every minute)
 - **Headers**: 
   ```
-  Authorization: Bearer T4zLg6xWvR7nY9sKbQfA8hC1eU3jM5dP0iB2oG6kVZ7xYJqD
+  Authorization: Bearer <CRON_SECRET>
   ```
 
 ### 3. Verify QStash Delivery
@@ -98,7 +102,7 @@ From your `.env` file, these are configured:
 ### Test Payout Processor
 ```bash
 curl -X GET https://www.gameofcreators.com/api/jobs/process-payouts \
-  -H "Authorization: Bearer T4zLg6xWvR7nY9sKbQfA8hC1eU3jM5dP0iB2oG6kVZ7xYJqD"
+  -H "Authorization: Bearer <CRON_SECRET>"
 ```
 
 Expected response:

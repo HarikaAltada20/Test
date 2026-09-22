@@ -128,6 +128,8 @@ import {
   canBulkDownloadContestVideos,
   canDownloadSubmissionVideo,
   buildBulkDownloadMetaMap,
+  splitDownloadSubmissionIdsByPlatform,
+  classifyDownloadVideoPlatform,
   type VideoFilenamePattern,
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
@@ -193,6 +195,7 @@ import {
   BulkVideoDownloadSummaryButton,
 } from "@/components/BulkVideoDownloadContestStatus";
 import { useBulkVideoDownloadProgress } from "@/components/BulkVideoDownloadProgressProvider";
+import { isDesktopDownloadEnabled } from "@/lib/goc-download/config";
 import {
   useBulkModerationProgress,
   type BulkModerationJobStatus,
@@ -308,7 +311,14 @@ import {
   formatQualitySumDisplay,
 } from "@/lib/creator-profile-stats";
 import { computeTrustScore } from "@/lib/trust-score";
-import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
+import {
+  EMPTY_QUALITY_SCORE_COUNTS,
+  parseQualityScore,
+  parseQualityScoreCounts,
+  sumQualityScoreCounts,
+  type QualityScore,
+  type QualityScoreCounts,
+} from "@/lib/quality-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -621,18 +631,26 @@ function CreatorQualityScoreBreakdownTooltip({
   requirementValue,
   creatorValue,
 }: {
-  breakdown: { score1: number; score2: number; score3: number };
+  breakdown: QualityScoreCounts;
   requirementLabel: string;
   belowThreshold: boolean;
   requirementValue: number;
   creatorValue: number | null;
 }) {
-  const total = breakdown.score1 + breakdown.score2 + breakdown.score3;
+  const total = sumQualityScoreCounts(breakdown);
   const creatorDisplay = creatorValue !== null ? String(creatorValue) : "—";
 
   return (
     <div className="space-y-1 text-xs">
       <p className="font-medium">Quality Score</p>
+      <p>
+        Score 5: {breakdown.score5} submission
+        {breakdown.score5 === 1 ? "" : "s"}
+      </p>
+      <p>
+        Score 4: {breakdown.score4} submission
+        {breakdown.score4 === 1 ? "" : "s"}
+      </p>
       <p>
         Score 3: {breakdown.score3} submission
         {breakdown.score3 === 1 ? "" : "s"}
@@ -3879,9 +3897,11 @@ export default function ContestDetailClient({
   const submissionQualityScoreFilterButtonLabel = useMemo(() => {
     if (submissionQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
-      { value: 3, label: "Score 3/3" },
-      { value: 2, label: "Score 2/3" },
-      { value: 1, label: "Score 1/3" },
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
@@ -3925,9 +3945,11 @@ export default function ContestDetailClient({
   const analyticsQualityScoreFilterButtonLabel = useMemo(() => {
     if (analyticsQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
-      { value: 3, label: "Score 3/3" },
-      { value: 2, label: "Score 2/3" },
-      { value: 1, label: "Score 1/3" },
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
       { value: "unscored", label: "No Quality Score" },
     ];
     const ordered = labels
@@ -4176,11 +4198,7 @@ export default function ContestDetailClient({
       {
         avg_quality_score: number | null;
         best_quality_score: number | null;
-        quality_score_counts?: {
-          score1: number;
-          score2: number;
-          score3: number;
-        };
+        quality_score_counts?: QualityScoreCounts;
       }
     >;
 
@@ -4207,9 +4225,7 @@ export default function ContestDetailClient({
                     null,
                   quality_score_counts: creatorQuality.quality_score_counts ??
                     existingCreator.quality_score_counts ?? {
-                      score1: 0,
-                      score2: 0,
-                      score3: 0,
+                      ...EMPTY_QUALITY_SCORE_COUNTS,
                     },
                 }
               : existingCreator,
@@ -4231,9 +4247,7 @@ export default function ContestDetailClient({
                 null,
               quality_score_counts: creatorQuality.quality_score_counts ??
                 existingCreator.quality_score_counts ?? {
-                  score1: 0,
-                  score2: 0,
-                  score3: 0,
+                  ...EMPTY_QUALITY_SCORE_COUNTS,
                 },
             },
           };
@@ -4248,7 +4262,7 @@ export default function ContestDetailClient({
           submissionIds.length > 1
             ? "Quality scores updated"
             : "Quality score updated",
-        description: `Saved as ${qualityScore}/3.`,
+        description: `Saved as ${qualityScore}/5.`,
         variant: "success",
       });
     }
@@ -4356,13 +4370,21 @@ export default function ContestDetailClient({
     }
   };
 
-  const handleNormalViewBulkDownload = async () => {
-    if (normalViewSelectedSubmissions.size === 0) return;
-
-    const downloadableIds = sortedSubmissions
+  const orderedNormalViewDownloadIds = useMemo(() => {
+    const selected = normalViewSelectedSubmissions;
+    const ordered = sortedSubmissions
       .map((submission) => submission.id)
-      .filter((id) => {
-        if (!normalViewSelectedSubmissions.has(id)) return false;
+      .filter((id) => selected.has(id));
+    const seen = new Set(ordered);
+    for (const id of selected) {
+      if (!seen.has(id)) ordered.push(id);
+    }
+    return ordered;
+  }, [normalViewSelectedSubmissions, sortedSubmissions]);
+
+  const orderedNormalViewDownloadableIds = useMemo(
+    () =>
+      orderedNormalViewDownloadIds.filter((id) => {
         const sub =
           currentSubmissions.find((entry) => entry.id === id) ||
           sortedSubmissions.find((entry) => entry.id === id);
@@ -4371,7 +4393,40 @@ export default function ContestDetailClient({
           contestPlatform: currentContest?.platform,
           contentLink: sub?.content_link,
         });
-      });
+      }),
+    [
+      orderedNormalViewDownloadIds,
+      currentSubmissions,
+      sortedSubmissions,
+      currentContest?.platform,
+    ],
+  );
+
+  const normalViewDownloadSplit = useMemo(
+    () =>
+      splitDownloadSubmissionIdsByPlatform(
+        orderedNormalViewDownloadableIds,
+        (id) => {
+          const sub = currentSubmissions.find((entry) => entry.id === id);
+          if (!sub) return null;
+          return {
+            platform: sub.platform,
+            contestPlatform: currentContest?.platform,
+            contentLink: sub.content_link,
+          };
+        },
+      ),
+    [
+      orderedNormalViewDownloadableIds,
+      currentSubmissions,
+      currentContest?.platform,
+    ],
+  );
+
+  const handleNormalViewBulkDownload = async () => {
+    if (normalViewSelectedSubmissions.size === 0) return;
+
+    const downloadableIds = orderedNormalViewDownloadableIds;
 
     if (downloadableIds.length === 0) {
       toast({
@@ -4384,7 +4439,20 @@ export default function ContestDetailClient({
     }
 
     if (downloadableIds.length === 1) {
-      await handleDownloadReel(downloadableIds[0]);
+      const singleSubmissionId = downloadableIds[0];
+      const submission =
+        currentSubmissions.find((s) => s.id === singleSubmissionId) ||
+        sortedSubmissions.find((s) => s.id === singleSubmissionId);
+      const kind = classifyDownloadVideoPlatform({
+        platform: submission?.platform,
+        contestPlatform: currentContest?.platform,
+        contentLink: submission?.content_link,
+      });
+      if (kind === "youtube" && isDesktopDownloadEnabled()) {
+        setNormalViewBulkDownloadDialogOpen(true);
+        return;
+      }
+      await handleDownloadReel(singleSubmissionId);
       return;
     }
 
@@ -4410,23 +4478,15 @@ export default function ContestDetailClient({
   const runNormalViewBulkDownload = async (
     namingPattern: VideoFilenamePattern,
     videosPerZip: number,
+    options?: { submissionIds?: string[] },
   ) => {
-    const selected = new Set(normalViewSelectedSubmissions);
-    // Keep leaderboard sort order (e.g. views high → low), not checkbox click order.
-    const submissionIds = sortedSubmissions
-      .map((submission) => submission.id)
-      .filter((id) => {
-        if (!selected.has(id)) return false;
-        const sub =
-          currentSubmissions.find((entry) => entry.id === id) ||
-          sortedSubmissions.find((entry) => entry.id === id);
-        return canDownloadSubmissionVideo({
-          platform: sub?.platform,
-          contestPlatform: currentContest?.platform,
-          contentLink: sub?.content_link,
-        });
-      });
-    if (submissionIds.length < 2) return;
+    const submissionIds =
+      options?.submissionIds && options.submissionIds.length > 0
+        ? options.submissionIds
+        : normalViewDownloadSplit.instagramIds.length > 0
+          ? normalViewDownloadSplit.instagramIds
+          : orderedNormalViewDownloadableIds;
+    if (submissionIds.length < 1) return;
     if (!currentContest?.id) return;
 
     setNormalViewBulkDownloadDialogOpen(false);
@@ -5185,9 +5245,7 @@ export default function ContestDetailClient({
             avg_quality_score: submission.creator?.avg_quality_score ?? null,
             best_quality_score: submission.creator?.best_quality_score ?? null,
             quality_score_counts: submission.creator?.quality_score_counts ?? {
-              score1: 0,
-              score2: 0,
-              score3: 0,
+              ...EMPTY_QUALITY_SCORE_COUNTS,
             },
             total_money_won: submission.creator?.total_money_won ?? 0,
             total_views: submission.creator?.total_views ?? 0,
@@ -5300,15 +5358,9 @@ export default function ContestDetailClient({
         group.creator.quality_score_sum = submission.creator.quality_score_sum;
       }
       const existingCounts = group.creator?.quality_score_counts;
-      const existingCountsTotal =
-        (existingCounts?.score1 ?? 0) +
-        (existingCounts?.score2 ?? 0) +
-        (existingCounts?.score3 ?? 0);
+      const existingCountsTotal = sumQualityScoreCounts(existingCounts);
       const submissionCounts = submission.creator?.quality_score_counts;
-      const submissionCountsTotal =
-        (submissionCounts?.score1 ?? 0) +
-        (submissionCounts?.score2 ?? 0) +
-        (submissionCounts?.score3 ?? 0);
+      const submissionCountsTotal = sumQualityScoreCounts(submissionCounts);
       if (
         submissionCounts &&
         submissionCountsTotal > 0 &&
@@ -7760,7 +7812,7 @@ export default function ContestDetailClient({
     options?: {
       skipReload?: boolean;
       closeCreatorModalOnSuccess?: boolean;
-      qualityScore?: 1 | 2 | 3;
+      qualityScore?: 1 | 2 | 3 | 4 | 5;
       /** After paid-reversal confirm — run verify API without quality score modal */
       skipQualityPrompt?: boolean;
       reverseMostVerifiedBonus?: boolean;
@@ -8132,7 +8184,7 @@ export default function ContestDetailClient({
               description: options?.skipQualityPrompt
                 ? "Submission moved to Verified."
                 : isVideoContestFormat && options?.qualityScore != null
-                  ? `Content verified with quality score ${options.qualityScore}/3.`
+                  ? `Content verified with quality score ${options.qualityScore}/5.`
                   : "Content has been verified and is now eligible for rewards",
               variant: "success" as const,
             };
@@ -8458,7 +8510,7 @@ export default function ContestDetailClient({
           job: BulkModerationJobStatus;
           submissionIds: string[];
           action: "verified" | "pending" | "rejected";
-          qualityScore?: 1 | 2 | 3;
+          qualityScore?: 1 | 2 | 3 | 4 | 5;
           closeCreatorModalOnSuccess?: boolean;
           contestId?: string;
         }>
@@ -8552,7 +8604,7 @@ export default function ContestDetailClient({
     reason?: string,
     options?: {
       closeCreatorModalOnSuccess?: boolean;
-      qualityScore?: 1 | 2 | 3;
+      qualityScore?: 1 | 2 | 3 | 4 | 5;
       /** After paid-reversal confirm — run verify API without quality score modal */
       skipQualityPrompt?: boolean;
       reverseMostVerifiedBonus?: boolean;
@@ -9928,12 +9980,24 @@ export default function ContestDetailClient({
       `[DOWNLOAD] [DEBUG] Starting download for submission: ${submissionId}`,
     );
 
+    const submission = currentSubmissions.find((s) => s.id === submissionId);
+    const kind = classifyDownloadVideoPlatform({
+      platform: submission?.platform,
+      contestPlatform: currentContest?.platform,
+      contentLink: submission?.content_link,
+    });
+
+    if (kind === "youtube" && isDesktopDownloadEnabled()) {
+      setNormalViewSelectedSubmissions(new Set([submissionId]));
+      setNormalViewBulkDownloadDialogOpen(true);
+      return;
+    }
+
     // Set loading state
     setDownloadingSubmissionId(submissionId);
 
     try {
       // Find the submission to check if it's Instagram
-      const submission = currentSubmissions.find((s) => s.id === submissionId);
       const isInstagram =
         submission?.content_link?.includes("instagram.com") || false;
 
@@ -11064,13 +11128,15 @@ export default function ContestDetailClient({
 
           const focusPlatformCard = (
             platform: MetricsRefreshPlatform | null,
-            run?: { total_submissions?: number | null } | null,
+            run?: object | null,
           ) => {
+            const totalSubmissions = (
+              run as { total_submissions?: number | null } | null | undefined
+            )?.total_submissions;
             // Don't show progress UI for platforms with no submissions.
             if (
-              run &&
-              typeof run.total_submissions === "number" &&
-              run.total_submissions <= 0
+              typeof totalSubmissions === "number" &&
+              totalSubmissions <= 0
             ) {
               setShowYoutubeRunPopup(false);
               setShowInstagramRunPopup(false);
@@ -14687,7 +14753,7 @@ export default function ContestDetailClient({
                             key={`summary-icon-${platform}`}
                             className="inline-flex shrink-0"
                           >
-                            {getPlatformIcon(platform, "sm")}
+                            {getPlatformIcon(platform)}
                           </span>
                         ))}
                       </div>
@@ -21950,9 +22016,11 @@ export default function ContestDetailClient({
 
                                   {(
                                     [
-                                      { value: 3, label: "Score 3/3" },
-                                      { value: 2, label: "Score 2/3" },
-                                      { value: 1, label: "Score 1/3" },
+                                      { value: 5, label: "Score 5/5" },
+                                      { value: 4, label: "Score 4/5" },
+                                      { value: 3, label: "Score 3/5" },
+                                      { value: 2, label: "Score 2/5" },
+                                      { value: 1, label: "Score 1/5" },
                                       {
                                         value: "unscored",
                                         label: "No Quality Score",
@@ -27739,12 +27807,9 @@ export default function ContestDetailClient({
                                           creatorPlatformViews <
                                             contestMinPlatformViews;
                                         const creatorQualityScoreBreakdown =
-                                          group.creator
-                                            ?.quality_score_counts ?? {
-                                            score1: 0,
-                                            score2: 0,
-                                            score3: 0,
-                                          };
+                                          parseQualityScoreCounts(
+                                            group.creator?.quality_score_counts,
+                                          );
                                         const groupHasInstagram =
                                           creatorGroupHasVideoPlatform(
                                             group,
@@ -27757,11 +27822,14 @@ export default function ContestDetailClient({
                                           );
                                         const instagramSubmissionCount = (
                                           group.submissions || []
-                                        ).filter((sub) =>
-                                          submissionMatchesVideoPlatform(
-                                            sub,
-                                            "instagram",
-                                          ),
+                                        ).filter(
+                                          (sub: {
+                                            platform?: string | null;
+                                          }) =>
+                                            submissionMatchesVideoPlatform(
+                                              sub,
+                                              "instagram",
+                                            ),
                                         ).length;
                                         return (
                                           <TableRow
@@ -27950,7 +28018,7 @@ export default function ContestDetailClient({
                                                 <CreatorWiseEligibilityText
                                                   value={
                                                     creatorBestQuality !== null
-                                                      ? `${creatorBestQuality} / 3`
+                                                      ? `${creatorBestQuality} / 5`
                                                       : "—"
                                                   }
                                                   belowThreshold={
@@ -27992,39 +28060,23 @@ export default function ContestDetailClient({
                                                       <p className="font-medium">
                                                         Total Quality Score
                                                       </p>
-                                                      <p>
-                                                        Score 3:{" "}
-                                                        {
-                                                          creatorQualityScoreBreakdown.score3
-                                                        }{" "}
-                                                        submission
-                                                        {creatorQualityScoreBreakdown.score3 ===
-                                                        1
-                                                          ? ""
-                                                          : "s"}
-                                                      </p>
-                                                      <p>
-                                                        Score 2:{" "}
-                                                        {
-                                                          creatorQualityScoreBreakdown.score2
-                                                        }{" "}
-                                                        submission
-                                                        {creatorQualityScoreBreakdown.score2 ===
-                                                        1
-                                                          ? ""
-                                                          : "s"}
-                                                      </p>
-                                                      <p>
-                                                        Score 1:{" "}
-                                                        {
-                                                          creatorQualityScoreBreakdown.score1
-                                                        }{" "}
-                                                        submission
-                                                        {creatorQualityScoreBreakdown.score1 ===
-                                                        1
-                                                          ? ""
-                                                          : "s"}
-                                                      </p>
+                                                      {[5, 4, 3, 2, 1].map(
+                                                        (score) => {
+                                                          const count =
+                                                            creatorQualityScoreBreakdown[
+                                                              `score${score}` as keyof QualityScoreCounts
+                                                            ];
+                                                          return (
+                                                            <p key={score}>
+                                                              Score {score}: {count}{" "}
+                                                              submission
+                                                              {count === 1
+                                                                ? ""
+                                                                : "s"}
+                                                            </p>
+                                                          );
+                                                        },
+                                                      )}
                                                       <p className="pt-1 border-t border-border/50">
                                                         {minQualityBelowThreshold
                                                           ? "Below"
@@ -28047,7 +28099,7 @@ export default function ContestDetailClient({
                                                 <CreatorWiseEligibilityText
                                                   value={
                                                     creatorAvgQuality !== null
-                                                      ? `${formatDecimalMetric(creatorAvgQuality)} / 3`
+                                                      ? `${formatDecimalMetric(creatorAvgQuality)} / 5`
                                                       : "—"
                                                   }
                                                   belowThreshold={
@@ -30408,9 +30460,11 @@ export default function ContestDetailClient({
 
                             {(
                               [
-                                { value: 3, label: "Score 3/3" },
-                                { value: 2, label: "Score 2/3" },
-                                { value: 1, label: "Score 1/3" },
+                                { value: 5, label: "Score 5/5" },
+                                { value: 4, label: "Score 4/5" },
+                                { value: 3, label: "Score 3/5" },
+                                { value: 2, label: "Score 2/5" },
+                                { value: 1, label: "Score 1/5" },
                                 {
                                   value: "unscored",
                                   label: "No Quality Score",
@@ -33613,10 +33667,17 @@ export default function ContestDetailClient({
         open={normalViewBulkDownloadDialogOpen}
         onOpenChange={setNormalViewBulkDownloadDialogOpen}
         isDark={isDark}
-        videoCount={normalViewSelectedSubmissions.size}
+        videoCount={orderedNormalViewDownloadableIds.length}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
         onConfirm={runNormalViewBulkDownload}
+        contestId={
+          currentContest?.id ? String(currentContest.id) : undefined
+        }
+        submissionIds={orderedNormalViewDownloadableIds}
+        youtubeSubmissionIds={normalViewDownloadSplit.youtubeIds}
+        instagramSubmissionIds={normalViewDownloadSplit.instagramIds}
+        hasInstagramSelection={normalViewDownloadSplit.instagramIds.length > 0}
       />
 
       <BulkVideoDownloadContestStatus
@@ -34379,9 +34440,7 @@ export default function ContestDetailClient({
                         null,
                       quality_score_counts: qualityScoreCounts ??
                         existingCreator.quality_score_counts ?? {
-                          score1: 0,
-                          score2: 0,
-                          score3: 0,
+                          ...EMPTY_QUALITY_SCORE_COUNTS,
                         },
                     },
                   };

@@ -1,5 +1,11 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  buildPaginationMeta,
+  resolveDateBounds,
+  aggregateRewardsFromSnapshots,
+  rankTopCreatorsFromSnapshots,
+} from "@/lib/daily-challenge-history";
 
 export type CompetitionPeriod =
   | "today"
@@ -571,44 +577,271 @@ export async function getDailyChallengeLeaderboard(params: {
   };
 }
 
+export type WinnersHistoryQuery = {
+  page?: number;
+  limit?: number;
+  period?: "day" | "week" | "month" | null;
+  category?: "views" | "reels" | null;
+  eventId?: string | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  month?: string | null;
+};
+
+type WinnerSnapshotRow = {
+  id: string;
+  event_id: string;
+  snapshot_date: string;
+  period: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  category: string;
+  winner_creator_id: string | null;
+  rank_at_snapshot: number | null;
+  is_eligible: boolean;
+  promoted: boolean;
+  metrics_json: Record<string, unknown> | null;
+  rules_json: Record<string, unknown> | null;
+  reason: string | null;
+  prize_minor_units: number | string | null;
+  prize_currency: string | null;
+  created_at: string;
+};
+
+/**
+ * Paginated winners archive across all events (or a filtered subset).
+ * Eligible winners with winner_creator_id are treated as paid rewards.
+ */
+export async function getDailyWinnersHistoryPaginated(params: WinnersHistoryQuery = {}) {
+  const page = Math.max(1, Math.floor(Number(params.page) || 1));
+  const limit = Math.min(50, Math.max(5, Math.floor(Number(params.limit) || 10)));
+  const { fromDate, toDate } = resolveDateBounds({
+    fromDate: params.fromDate ?? null,
+    toDate: params.toDate ?? null,
+    month: params.month ?? null,
+  });
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("competition_daily_winner_snapshot")
+    .select("*", { count: "exact" })
+    .order("period_start", { ascending: false })
+    .order("snapshot_date", { ascending: false })
+    .order("category", { ascending: true });
+
+  if (params.eventId) query = query.eq("event_id", params.eventId);
+  if (params.period) query = query.eq("period", params.period);
+  if (params.category) query = query.eq("category", params.category);
+  if (fromDate) query = query.gte("snapshot_date", fromDate);
+  if (toDate) query = query.lte("snapshot_date", toDate);
+
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+  const { data, error, count } = await query.range(from, to);
+  if (error) throw error;
+
+  const rows = (data || []) as WinnerSnapshotRow[];
+  const eventIds = [...new Set(rows.map((r) => r.event_id).filter(Boolean))];
+  const creatorIds = [
+    ...new Set(rows.map((r) => r.winner_creator_id).filter(Boolean) as string[]),
+  ];
+
+  const [eventsRes, usersRes] = await Promise.all([
+    eventIds.length
+      ? supabase.from("competition_event").select("id,name").in("id", eventIds)
+      : Promise.resolve({ data: [], error: null }),
+    creatorIds.length
+      ? supabase
+          .from("users")
+          .select("id,username,full_name,profile_picture_url")
+          .in("id", creatorIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (eventsRes.error) throw eventsRes.error;
+  if (usersRes.error) throw usersRes.error;
+
+  const eventNameById = new Map(
+    ((eventsRes.data || []) as Array<{ id: string; name: string | null }>).map((e) => [
+      e.id,
+      e.name || "Daily Challenge",
+    ]),
+  );
+  const userById = new Map(
+    (
+      (usersRes.data || []) as Array<{
+        id: string;
+        username: string | null;
+        full_name: string | null;
+        profile_picture_url: string | null;
+      }>
+    ).map((u) => [u.id, u]),
+  );
+
+  const winners = rows.map((row) => {
+    const user = row.winner_creator_id ? userById.get(row.winner_creator_id) : null;
+    const metrics = (row.metrics_json || {}) as Record<string, unknown>;
+    const username =
+      user?.username ||
+      (typeof metrics.username === "string" ? metrics.username : null) ||
+      user?.full_name ||
+      (typeof metrics.fullName === "string" ? metrics.fullName : null) ||
+      null;
+    return {
+      ...row,
+      event_name: eventNameById.get(row.event_id) || "Daily Challenge",
+      winner: row.winner_creator_id
+        ? {
+            id: row.winner_creator_id,
+            username: username || "Creator",
+            fullName: user?.full_name || (typeof metrics.fullName === "string" ? metrics.fullName : null),
+            profilePictureUrl:
+              user?.profile_picture_url ||
+              (typeof metrics.profilePictureUrl === "string"
+                ? metrics.profilePictureUrl
+                : null),
+          }
+        : null,
+    };
+  });
+
+  const totalItems = Number(count || 0);
+  return {
+    winners,
+    pagination: buildPaginationMeta(page, limit, totalItems),
+  };
+}
+
+/** @deprecated Prefer getDailyWinnersHistoryPaginated for archive UX. */
 export async function getDailyWinnersHistory(
   limit = 30,
   eventId?: string | null,
   period?: "day" | "week" | "month" | null,
 ) {
+  const result = await getDailyWinnersHistoryPaginated({
+    page: 1,
+    limit: Math.min(50, Math.max(5, Math.floor(limit) || 30)),
+    eventId,
+    period,
+  });
+  return result.winners;
+}
+
+export async function getDailyChallengeRewardsOverview(eventId?: string | null) {
   const supabase = await createClient();
-  let resolvedEventId = eventId ?? null;
+  const emptySummary = {
+    totalPaidMinorUnits: 0,
+    dailyPaidMinorUnits: 0,
+    weeklyPaidMinorUnits: 0,
+    monthlyPaidMinorUnits: 0,
+    totalRewardCount: 0,
+    dailyRewardCount: 0,
+    weeklyRewardCount: 0,
+    monthlyRewardCount: 0,
+    prizeCurrency: "INR",
+  };
 
-  if (!resolvedEventId) {
-    let latestQuery = supabase
+  let summary = emptySummary;
+  let topCreators: Array<{
+    rank: number;
+    creatorId: string;
+    username: string;
+    fullName: string | null;
+    profilePictureUrl: string | null;
+    winCount: number;
+    totalPaidMinorUnits: number;
+    dailyWins: number;
+    weeklyWins: number;
+    monthlyWins: number;
+    prizeCurrency: string;
+  }> = [];
+
+  const [{ data: summaryRaw, error: summaryErr }, { data: topRaw, error: topErr }] =
+    await Promise.all([
+      supabase.rpc("get_daily_challenge_rewards_summary", {
+        p_event_id: eventId ?? null,
+      }),
+      supabase.rpc("get_daily_challenge_top_creators", {
+        p_limit: 10,
+        p_event_id: eventId ?? null,
+      }),
+    ]);
+
+  if (!summaryErr && !topErr) {
+    const summaryRow = Array.isArray(summaryRaw) ? summaryRaw[0] : summaryRaw;
+    summary = summaryRow
+      ? {
+          totalPaidMinorUnits: asNonNegativeNumber(summaryRow.total_paid_minor_units),
+          dailyPaidMinorUnits: asNonNegativeNumber(summaryRow.daily_paid_minor_units),
+          weeklyPaidMinorUnits: asNonNegativeNumber(summaryRow.weekly_paid_minor_units),
+          monthlyPaidMinorUnits: asNonNegativeNumber(summaryRow.monthly_paid_minor_units),
+          totalRewardCount: asNonNegativeNumber(summaryRow.total_reward_count),
+          dailyRewardCount: asNonNegativeNumber(summaryRow.daily_reward_count),
+          weeklyRewardCount: asNonNegativeNumber(summaryRow.weekly_reward_count),
+          monthlyRewardCount: asNonNegativeNumber(summaryRow.monthly_reward_count),
+          prizeCurrency: String(summaryRow.prize_currency || "INR"),
+        }
+      : emptySummary;
+
+    topCreators = ((topRaw || []) as Array<{
+      creator_id: string | null;
+      username: string | null;
+      full_name: string | null;
+      profile_picture_url: string | null;
+      win_count: number | string | null;
+      total_paid_minor_units: number | string | null;
+      daily_wins: number | string | null;
+      weekly_wins: number | string | null;
+      monthly_wins: number | string | null;
+      prize_currency: string | null;
+    }>).map((row, index) => ({
+      rank: index + 1,
+      creatorId: String(row.creator_id || ""),
+      username: row.username || row.full_name || "Creator",
+      fullName: row.full_name || null,
+      profilePictureUrl: row.profile_picture_url || null,
+      winCount: asNonNegativeNumber(row.win_count),
+      totalPaidMinorUnits: asNonNegativeNumber(row.total_paid_minor_units),
+      dailyWins: asNonNegativeNumber(row.daily_wins),
+      weeklyWins: asNonNegativeNumber(row.weekly_wins),
+      monthlyWins: asNonNegativeNumber(row.monthly_wins),
+      prizeCurrency: String(row.prize_currency || summary.prizeCurrency || "INR"),
+    }));
+  } else {
+    // Fallback when RPCs are not yet migrated: aggregate from snapshot rows.
+    let fallbackQuery = supabase
       .from("competition_daily_winner_snapshot")
-      .select("event_id,period_start,snapshot_date")
-      .order("period_start", { ascending: false })
-      .order("snapshot_date", { ascending: false })
-      .limit(1);
-    if (period) {
-      latestQuery = latestQuery.eq("period", period);
-    }
-    const { data: latestWithSnapshot, error: eventErr } = await latestQuery.maybeSingle();
-    if (eventErr) throw eventErr;
-    resolvedEventId = latestWithSnapshot?.event_id ?? null;
+      .select(
+        "winner_creator_id,is_eligible,period,prize_minor_units,prize_currency,metrics_json",
+      )
+      .not("winner_creator_id", "is", null)
+      .eq("is_eligible", true)
+      .limit(5000);
+    if (eventId) fallbackQuery = fallbackQuery.eq("event_id", eventId);
+    const { data: fallbackRows, error: fallbackErr } = await fallbackQuery;
+    if (fallbackErr) throw fallbackErr;
+    const rows = fallbackRows || [];
+    summary = aggregateRewardsFromSnapshots(rows);
+    topCreators = rankTopCreatorsFromSnapshots(rows, 10, summary.prizeCurrency).map(
+      (row, index) => ({
+        rank: index + 1,
+        ...row,
+      }),
+    );
   }
 
-  if (!resolvedEventId) return [];
+  const { data: events, error: eventsErr } = await supabase
+    .from("competition_event")
+    .select("id,name,starts_at,ends_at,is_active")
+    .order("starts_at", { ascending: false })
+    .limit(100);
+  if (eventsErr) throw eventsErr;
 
-  let query = supabase
-    .from("competition_daily_winner_snapshot")
-    .select("*")
-    .eq("event_id", resolvedEventId)
-    .order("period_start", { ascending: false })
-    .order("snapshot_date", { ascending: false })
-    .limit(Math.max(1, limit) * 2);
-  if (period) {
-    query = query.eq("period", period);
-  }
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  return {
+    summary,
+    topCreators,
+    events: events || [],
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 export async function snapshotWinnersForPeriod(
