@@ -105,6 +105,23 @@ function cacheKeyFromQuery(query: ServerCampaignListQuery): string {
   return buildListUrl(query);
 }
 
+function hasSameCampaignListScope(
+  current: ServerCampaignListQuery,
+  previous: ServerCampaignListQuery,
+): boolean {
+  return (
+    current.isAdminView === previous.isAdminView &&
+    current.tab === previous.tab &&
+    current.sort === previous.sort &&
+    current.platform === previous.platform &&
+    current.contestType === previous.contestType &&
+    current.contestFormat === previous.contestFormat &&
+    current.postContestPhase === previous.postContestPhase &&
+    current.search === previous.search &&
+    current.enabled === previous.enabled
+  );
+}
+
 function parseListPayload<T>(payload: unknown): ServerCampaignListResult<T> | null {
   if (!payload || typeof payload !== "object") return null;
   const p = payload as Record<string, unknown>;
@@ -184,6 +201,8 @@ export function useServerCampaignList<T>(
   );
   const requestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousQueryRef = useRef(query);
+  const keepPreviousResultsRef = useRef(false);
   const queryRef = useRef(query);
   queryRef.current = query;
   const seededRef = useRef(false);
@@ -238,13 +257,15 @@ export function useServerCampaignList<T>(
 
       // Cache hit: paint immediately; optional quiet background revalidation.
       if (cached) {
+        keepPreviousResultsRef.current = false;
         applyResult(cached);
         setLoading(false);
         setIsValidating(Boolean(opts?.quiet));
       } else {
-        // No cached page for this tab/filter — show spinner, never flash empty state.
-        setLoading(true);
-        setIsValidating(false);
+        // Keep the current page visible during page and page-size navigation.
+        const keepPreviousResults = keepPreviousResultsRef.current;
+        setLoading(!keepPreviousResults);
+        setIsValidating(keepPreviousResults);
       }
 
       const requestId = ++requestIdRef.current;
@@ -274,6 +295,7 @@ export function useServerCampaignList<T>(
         }
         listCache.set(key, parsed as ServerCampaignListResult<unknown>);
         applyResult(parsed);
+        keepPreviousResultsRef.current = false;
         // Background only — do not await (keeps tab switches responsive).
         void prefetchSiblingTabs(current);
       } catch (err) {
@@ -286,6 +308,7 @@ export function useServerCampaignList<T>(
         if (requestId === requestIdRef.current) {
           setLoading(false);
           setIsValidating(false);
+          keepPreviousResultsRef.current = false;
         }
       }
     },
@@ -295,19 +318,32 @@ export function useServerCampaignList<T>(
   useEffect(() => {
     if (!query.enabled) return;
 
+    const previousQuery = previousQueryRef.current;
+    previousQueryRef.current = query;
+    const isPageNavigation =
+      hasSameCampaignListScope(query, previousQuery) &&
+      (query.page !== previousQuery.page || query.limit !== previousQuery.limit);
+    keepPreviousResultsRef.current = isPageNavigation;
+
     // Instant paint from cache when switching tabs/filters.
     const key = cacheKeyFromQuery(query);
     const cached = listCache.get(key) as ServerCampaignListResult<T> | undefined;
     if (cached) {
+      keepPreviousResultsRef.current = false;
       applyResult(cached);
       setLoading(false);
       setIsValidating(false);
     } else {
-      // Avoid showing the previous tab's campaigns while the new tab loads.
-      setContests([]);
-      setTotal(0);
-      setLoading(true);
-      setIsValidating(false);
+      if (isPageNavigation) {
+        setLoading(false);
+        setIsValidating(true);
+      } else {
+        // Avoid showing another tab or filter's campaigns while it loads.
+        setContests([]);
+        setTotal(0);
+        setLoading(true);
+        setIsValidating(false);
+      }
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);

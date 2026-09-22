@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   campaignMatchesPlatformFilter,
+  campaignPlatformMatchMode,
   campaignPlatformFilterLabel,
   campaignPlatformsForMediaType,
   expandAvailableCampaignPlatforms,
+  isCampaignPlatformSelected,
   normalizeCampaignPlatformFilter,
   parseCampaignPlatformTokens,
   postgrestPlatformOrFilter,
+  setCampaignPlatformMatchMode,
   toggleCampaignPlatformFilter,
 } from "./campaign-platform-filter";
 
@@ -23,6 +26,17 @@ describe("parseCampaignPlatformTokens", () => {
   it("treats x as twitter and ignores All Platforms", () => {
     assert.deepEqual(parseCampaignPlatformTokens("x"), ["twitter"]);
     assert.deepEqual(parseCampaignPlatformTokens("all"), []);
+  });
+
+  it("parses the multiple-platform mode prefix separately from platforms", () => {
+    assert.deepEqual(
+      parseCampaignPlatformTokens("multiple:instagram,youtube"),
+      ["instagram", "youtube"],
+    );
+    assert.equal(
+      campaignPlatformMatchMode("multiple:instagram,youtube"),
+      "multiple",
+    );
   });
 });
 
@@ -45,22 +59,73 @@ describe("expandAvailableCampaignPlatforms", () => {
 describe("normalizeCampaignPlatformFilter", () => {
   it("keeps a single platform and maps empty / unknown to all", () => {
     assert.equal(normalizeCampaignPlatformFilter("youtube"), "youtube");
-    assert.equal(normalizeCampaignPlatformFilter("youtube,instagram,tiktok,twitter"), "all");
+    assert.equal(normalizeCampaignPlatformFilter("all"), "all");
     assert.equal(normalizeCampaignPlatformFilter("not-a-platform"), "all");
+  });
+
+  it("keeps selecting every checkbox distinct from the All Platforms option", () => {
+    assert.equal(
+      normalizeCampaignPlatformFilter(
+        "youtube,instagram,tiktok,twitter",
+      ),
+      "youtube,instagram,tiktok,twitter",
+    );
+    assert.equal(
+      normalizeCampaignPlatformFilter(
+        "multiple:youtube,instagram,tiktok,twitter",
+      ),
+      "multiple:youtube,instagram,tiktok,twitter",
+    );
+  });
+
+  it("preserves multiple-platform mode, including an unfiltered selection", () => {
+    assert.equal(
+      normalizeCampaignPlatformFilter("multiple:instagram,youtube"),
+      "multiple:youtube,instagram",
+    );
+    assert.equal(
+      normalizeCampaignPlatformFilter("multiple:all"),
+      "multiple:all",
+    );
   });
 });
 
 describe("campaignMatchesPlatformFilter", () => {
-  it("matches multi-platform contests when any selected platform is present", () => {
+  it("single mode returns one-platform campaigns for any selected platform", () => {
     assert.equal(
-      campaignMatchesPlatformFilter("youtube,instagram,tiktok", "youtube"),
+      campaignMatchesPlatformFilter("youtube", "youtube,instagram"),
       true,
     );
     assert.equal(
-      campaignMatchesPlatformFilter("youtube,instagram,tiktok", "twitter"),
+      campaignMatchesPlatformFilter("instagram", "youtube,instagram"),
+      true,
+    );
+    assert.equal(
+      campaignMatchesPlatformFilter("youtube,instagram", "youtube,instagram"),
       false,
     );
     assert.equal(campaignMatchesPlatformFilter("youtube", "all"), true);
+  });
+
+  it("multiple mode requires the exact selected platform set", () => {
+    assert.equal(
+      campaignMatchesPlatformFilter(
+        "instagram,youtube",
+        "multiple:youtube,instagram",
+      ),
+      true,
+    );
+    assert.equal(
+      campaignMatchesPlatformFilter(
+        "youtube,instagram,tiktok",
+        "multiple:youtube,instagram",
+      ),
+      false,
+    );
+    assert.equal(
+      campaignMatchesPlatformFilter("youtube", "multiple:youtube,instagram"),
+      false,
+    );
   });
 });
 
@@ -75,6 +140,21 @@ describe("toggleCampaignPlatformFilter", () => {
       "youtube,instagram",
     );
     assert.equal(toggleCampaignPlatformFilter("youtube", "youtube"), "all");
+  });
+
+  it("preserves exact matching when toggling multiple-platform selections", () => {
+    assert.equal(
+      setCampaignPlatformMatchMode("youtube", "multiple"),
+      "multiple:youtube",
+    );
+    assert.equal(
+      toggleCampaignPlatformFilter("multiple:youtube", "instagram"),
+      "multiple:youtube,instagram",
+    );
+    assert.equal(
+      toggleCampaignPlatformFilter("multiple:youtube", "youtube"),
+      "multiple:all",
+    );
   });
 });
 
@@ -97,15 +177,31 @@ describe("campaignPlatformsForMediaType", () => {
 });
 
 describe("postgrestPlatformOrFilter", () => {
-  it("builds overlap clauses without using combined CSV values", () => {
+  it("builds exact single-platform clauses", () => {
     assert.equal(
       postgrestPlatformOrFilter("youtube"),
-      "platform.ilike.%youtube%",
+      "platform.eq.youtube",
     );
     assert.equal(
       postgrestPlatformOrFilter("twitter"),
-      "platform.ilike.%twitter%,platform.eq.x",
+      "platform.eq.twitter,platform.eq.x",
     );
     assert.equal(postgrestPlatformOrFilter("all"), null);
+  });
+
+  it("builds exact clauses for either CSV order in multiple mode", () => {
+    const clause = postgrestPlatformOrFilter("multiple:youtube,instagram");
+    assert.match(clause ?? "", /platform\.eq\."youtube,instagram"/);
+    assert.match(clause ?? "", /platform\.eq\."instagram,youtube"/);
+  });
+});
+
+describe("isCampaignPlatformSelected", () => {
+  it("does not treat the multiple-mode prefix as part of the first platform", () => {
+    const filter = "multiple:youtube,tiktok,twitter";
+    assert.equal(isCampaignPlatformSelected(filter, "youtube"), true);
+    assert.equal(isCampaignPlatformSelected(filter, "tiktok"), true);
+    assert.equal(isCampaignPlatformSelected(filter, "twitter"), true);
+    assert.equal(isCampaignPlatformSelected(filter, "instagram"), false);
   });
 });
