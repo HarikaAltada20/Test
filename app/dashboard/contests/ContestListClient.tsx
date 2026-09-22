@@ -760,6 +760,7 @@ export function ContestListClient({
     availablePlatforms: serverAvailablePlatforms,
     loading: listLoading,
     isValidating: listValidating,
+    error: listError,
     refresh: refreshServerList,
   } = useServerCampaignList<Contest>(
     {
@@ -4092,6 +4093,7 @@ export function ContestListClient({
             ref={brandContestsResultsRef}
             id="brand-contests-results"
             className="scroll-mt-4 mt-4"
+            aria-busy={listValidating && contests.length > 0}
           >
             <div
               className="mb-3 flex min-h-7 items-center justify-end"
@@ -4107,9 +4109,16 @@ export function ContestListClient({
               >
                 {listLoading && contests.length === 0
                   ? "Loading campaigns…"
+                  : listValidating && contests.length > 0
+                    ? "Updating campaigns…"
                   : campaignResultSummary}
               </span>
             </div>
+            {listError && (
+              <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">
+                Campaigns could not be refreshed. {contests.length > 0 ? "The previous results are still shown." : "Please try again."}
+              </p>
+            )}
             {listLoading || (listValidating && contests.length === 0) ? (
               <div className="flex min-h-[40vh] items-center justify-center py-16">
                 <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
