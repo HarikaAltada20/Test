@@ -316,6 +316,80 @@ body {
   animation: spin-slow-reverse 15s linear infinite;
 }
 
+/* Brands "Connected at the source" — platform icons orbit the hub */
+@keyframes source-orbit-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes source-orbit-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes source-api-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-source-orbit-outer {
+  animation: source-orbit-cw 10s linear infinite;
+}
+
+.animate-source-orbit-outer-counter {
+  animation: source-orbit-ccw 10s linear infinite;
+}
+
+.animate-source-orbit-inner {
+  animation: source-orbit-cw 10s linear infinite;
+}
+
+.animate-source-orbit-inner-counter {
+  animation: source-orbit-ccw 10s linear infinite;
+}
+
+.animate-source-api-pulse {
+  animation: source-api-pulse 2.2s ease-in-out infinite;
+}
+
+/* Real Engagement card — profiles scroll up behind the scanner */
+@keyframes engagement-profiles-scroll {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, -50%, 0);
+  }
+}
+
+.animate-engagement-profiles-scroll {
+  animation: engagement-profiles-scroll 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-source-orbit-outer,
+  .animate-source-orbit-outer-counter,
+  .animate-source-orbit-inner,
+  .animate-source-orbit-inner-counter,
+  .animate-source-api-pulse,
+  .animate-engagement-profiles-scroll {
+    animation: none;
+  }
+}
+
 .bg-orange-ellipse {
   background: radial-gradient(
     ellipse at center,
@@ -568,7 +642,7 @@ body {
 
 @media (min-width: 1110px) {
   .text-resp {
-    font-size: 1rem; 
+    font-size: 1rem;
   }
 }
 

@@ -50,7 +50,8 @@ export default function PickWhatFitsCard({
   const [cursorReady, setCursorReady] = useState(false);
   const [showClickBurst, setShowClickBurst] = useState(false);
 
-  const findVisibleChipPos = (label: string): CursorPos | null => {
+  /** Only count a chip when its full width is inside the fade-safe area (no clipped text). */
+  const findFullyVisibleChipPos = (label: string): CursorPos | null => {
     const card = cardRef.current;
     if (!card) return null;
 
@@ -58,35 +59,26 @@ export default function PickWhatFitsCard({
     const chips = card.querySelectorAll<HTMLElement>(`[data-chip="${label}"]`);
     if (!chips.length) return null;
 
+    // Match the ~10%/90% edge mask so chips aren't half-cut when clicked
+    const edgePad = Math.max(36, cardRect.width * 0.12);
+    const safeLeft = cardRect.left + edgePad;
+    const safeRight = cardRect.right - edgePad;
     const midX = cardRect.left + cardRect.width / 2;
+
     let best: HTMLElement | null = null;
     let bestDist = Infinity;
 
     chips.forEach((chip) => {
       const r = chip.getBoundingClientRect();
+      const fullyVisible = r.left >= safeLeft && r.right <= safeRight;
+      if (!fullyVisible) return;
       const cx = (r.left + r.right) / 2;
-      const inView =
-        r.right > cardRect.left + 28 && r.left < cardRect.right - 28;
-      if (!inView) return;
       const dist = Math.abs(cx - midX);
       if (dist < bestDist) {
         bestDist = dist;
         best = chip;
       }
     });
-
-    if (!best) {
-      // Fall back to whichever instance is closest to center
-      chips.forEach((chip) => {
-        const r = chip.getBoundingClientRect();
-        const cx = (r.left + r.right) / 2;
-        const dist = Math.abs(cx - midX);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = chip;
-        }
-      });
-    }
 
     if (!best) return null;
     const chipRect = best.getBoundingClientRect();
@@ -96,32 +88,34 @@ export default function PickWhatFitsCard({
     };
   };
 
-  /** Wait until a chip for `label` is reasonably in view, then pause its row. */
+  /** Wait until the chip is fully on-screen, then pause its row. */
   const waitForChipAndPause = async (
     label: string,
     cancelled: () => boolean,
   ): Promise<CursorPos | null> => {
     const row = ROW_PAUSE_FOR[label];
-    const deadline = performance.now() + 4000;
+    // Keep waiting across marquee loops until the chip is fully visible
+    const deadline = performance.now() + 20000;
 
     while (performance.now() < deadline) {
       if (cancelled()) return null;
-      const pos = findVisibleChipPos(label);
+      const pos = findFullyVisibleChipPos(label);
       if (pos) {
         if (row === "one") setRowOnePaused(true);
         if (row === "two") setRowTwoPaused(true);
-        await wait(40);
+        await wait(50);
         if (cancelled()) return null;
-        return findVisibleChipPos(label) ?? pos;
+        // Re-check after pause — still must be fully visible
+        const settled = findFullyVisibleChipPos(label);
+        if (settled) return settled;
+        // Drifted into the fade — resume and keep waiting
+        if (row === "one") setRowOnePaused(false);
+        if (row === "two") setRowTwoPaused(false);
       }
-      await wait(60);
+      await wait(50);
     }
 
-    // Timeout: pause anyway and use best available position
-    if (row === "one") setRowOnePaused(true);
-    if (row === "two") setRowTwoPaused(true);
-    await wait(40);
-    return findVisibleChipPos(label);
+    return null;
   };
 
   useEffect(() => {
@@ -147,21 +141,21 @@ export default function PickWhatFitsCard({
 
         const pos = await waitForChipAndPause(label, isCancelled);
         if (cancelled) return;
+        // Skip click if the chip never fully appeared
+        if (!pos) continue;
 
-        if (pos) {
-          if (!shownCursor) {
-            setCursorPos({
-              x: pos.x - 28,
-              y: pos.y - 22,
-            });
-            setCursorReady(true);
-            setCursorVisible(true);
-            shownCursor = true;
-            await wait(120);
-            if (cancelled) return;
-          }
-          setCursorPos(pos);
+        if (!shownCursor) {
+          setCursorPos({
+            x: pos.x - 28,
+            y: pos.y - 22,
+          });
+          setCursorReady(true);
+          setCursorVisible(true);
+          shownCursor = true;
+          await wait(120);
+          if (cancelled) return;
         }
+        setCursorPos(pos);
 
         await wait(700);
         if (cancelled) return;

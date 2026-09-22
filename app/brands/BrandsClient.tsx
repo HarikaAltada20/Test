@@ -218,28 +218,40 @@ const connectionPath = ({ x, y, arc }: Person) => {
 
 const profiles = [
   {
-    name: "@free_giveaway",
+    name: "@anand",
     status: "Bot detected",
-    image: "https://i.pravatar.cc/100?img=12",
-    type: "bad",
+    image: "https://i.pravatar.cc/100?img=11",
+    type: "bad" as const,
   },
   {
     name: "@free_giveaway",
     status: "Bot detected · Fake view",
     image: "https://i.pravatar.cc/100?img=47",
-    type: "bad",
+    type: "bad" as const,
   },
   {
     name: "@riya",
     status: "Verified Views",
     image: "https://i.pravatar.cc/100?img=32",
-    type: "good",
+    type: "good" as const,
+  },
+  {
+    name: "@free_giveaway",
+    status: "Bot detected",
+    image: "https://i.pravatar.cc/100?img=12",
+    type: "bad" as const,
+  },
+  {
+    name: "@riya",
+    status: "Verified Views",
+    image: "https://i.pravatar.cc/100?img=5",
+    type: "good" as const,
   },
   {
     name: "@anand",
     status: "Verified Views",
-    image: "https://i.pravatar.cc/100?img=11",
-    type: "good",
+    image: "https://i.pravatar.cc/100?img=33",
+    type: "good" as const,
   },
 ];
 
@@ -1994,93 +2006,94 @@ export default function BrandsClient({
                   />
                 ) : null}
 
-                {/* Background profiles */}
-                <div className="absolute left-1/2 top-10 z-[1] flex w-[230px] -translate-x-1/2 flex-col gap-2.5">
-                  {profiles.map((profile, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        "relative flex h-[42px] items-center gap-2 rounded-[12px] px-2",
-                        isLight
-                          ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                          : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
-                        index === 1 && "opacity-45",
-                      )}
-                    >
+                {/* Background profiles — infinite vertical scroll behind scanner */}
+                <div className="absolute inset-x-0 top-6 z-[1] h-[230px] overflow-hidden sm:top-8 sm:h-[250px]">
+                  <div className="animate-engagement-profiles-scroll absolute left-1/2 top-0 flex w-[230px] flex-col gap-2.5 will-change-transform">
+                    {[...profiles, ...profiles].map((profile, index) => (
                       <div
+                        key={`${profile.name}-${profile.status}-${index}`}
                         className={cn(
-                          "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
-                          isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
+                          "relative flex h-[42px] shrink-0 items-center gap-2 rounded-[12px] px-2",
+                          isLight
+                            ? "border-[0.69px] border-[#0000000D] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
+                            : "border border-white/[0.07] bg-[#151515]/90 shadow-[0_5px_20px_rgba(0,0,0,0.3)]",
                         )}
                       >
-                        <img
-                          src={profile.image}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-
-                      <div className="min-w-0 flex-1 leading-none">
                         <div
                           className={cn(
-                            "truncate text-[11px] font-medium",
-                            isLight ? "text-black/70" : "text-white/65",
+                            "h-[30px] w-[30px] shrink-0 overflow-hidden rounded-full",
+                            isLight ? "bg-[#C8C8C8]" : "bg-[#292929]",
                           )}
                         >
-                          {profile.name}
+                          <img
+                            src={profile.image}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
                         </div>
-                        <div
-                          className={cn(
-                            "mt-1 truncate text-[9px]",
-                            isLight
-                              ? "text-black/40"
-                              : profile.type === "bad"
-                                ? "text-white/20"
-                                : "text-white/25",
-                          )}
-                        >
-                          {profile.status}
-                        </div>
-                      </div>
 
-                      <div
-                        className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full ${
-                          profile.type === "bad"
-                            ? "bg-[#d92d25]"
-                            : "bg-[#26a844]"
-                        }`}
-                      >
-                        {profile.type === "bad" ? (
-                          <svg
-                            viewBox="0 0 12 12"
-                            className="h-2 w-2"
-                            fill="none"
+                        <div className="min-w-0 flex-1 leading-none">
+                          <div
+                            className={cn(
+                              "truncate text-[11px] font-medium",
+                              isLight ? "text-black/70" : "text-white/65",
+                            )}
                           >
-                            <path
-                              d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
-                              stroke="white"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            viewBox="0 0 12 12"
-                            className="h-2 w-2"
-                            fill="none"
+                            {profile.name}
+                          </div>
+                          <div
+                            className={cn(
+                              "mt-1 truncate text-[9px]",
+                              isLight
+                                ? "text-black/40"
+                                : profile.type === "bad"
+                                  ? "text-white/20"
+                                  : "text-white/25",
+                            )}
                           >
-                            <path
-                              d="M2.5 6.2L4.8 8.3L9.5 3.7"
-                              stroke="white"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
+                            {profile.status}
+                          </div>
+                        </div>
+
+                        <div
+                          className={`flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full ${
+                            profile.type === "bad"
+                              ? "bg-[#d92d25]"
+                              : "bg-[#26a844]"
+                          }`}
+                        >
+                          {profile.type === "bad" ? (
+                            <svg
+                              viewBox="0 0 12 12"
+                              className="h-2 w-2"
+                              fill="none"
+                            >
+                              <path
+                                d="M3.5 3.5L8.5 8.5M8.5 3.5L3.5 8.5"
+                                stroke="white"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              viewBox="0 0 12 12"
+                              className="h-2 w-2"
+                              fill="none"
+                            >
+                              <path
+                                d="M2.5 6.2L4.8 8.3L9.5 3.7"
+                                stroke="white"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
                 {/* Fade over profiles */}
@@ -2094,12 +2107,14 @@ export default function BrandsClient({
                 />
 
                 {/* Pinched purple curve */}
-                <div className="pointer-events-none absolute inset-x-0 top-[92px] z-[4] h-[150px]">
+                <div className="pointer-events-none absolute inset-x-0 top-[92px] z-[4] h-[150px] overflow-hidden">
+                  {/* Soft purple glow — clipped so blur can't inflate curve height */}
                   <div
                     className={cn(
-                      "absolute inset-0 blur-[18px]",
-                      isLight ? "opacity-90" : "opacity-70",
+                      "absolute inset-x-0 top-1/2 h-[70%] -translate-y-1/2 blur-[14px]",
+                      isLight ? "opacity-80" : "opacity-55",
                     )}
+                    aria-hidden
                   >
                     <svg
                       viewBox="0 0 1000 200"
@@ -2132,27 +2147,50 @@ export default function BrandsClient({
                         <stop offset="0%" stopColor="#754FF6" />
                         <stop offset="100%" stopColor="#442E90" />
                       </radialGradient>
-                      <filter id="engagementNoise">
+                      <filter
+                        id="engagementNoise"
+                        x="0%"
+                        y="0%"
+                        width="100%"
+                        height="100%"
+                        filterUnits="objectBoundingBox"
+                      >
                         <feTurbulence
                           type="fractalNoise"
                           baseFrequency="0.9"
                           numOctaves="2"
                           stitchTiles="stitch"
+                          result="noise"
                         />
-                        <feColorMatrix type="saturate" values="0" />
-                        <feBlend in="SourceGraphic" mode="overlay" />
+                        <feColorMatrix
+                          in="noise"
+                          type="saturate"
+                          values="0"
+                          result="desat"
+                        />
+                        <feBlend
+                          in="SourceGraphic"
+                          in2="desat"
+                          mode="overlay"
+                        />
                       </filter>
+                      <clipPath id="engagementCurveClip" clipPathUnits="userSpaceOnUse">
+                        <path d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z" />
+                      </clipPath>
                     </defs>
                     <path
                       d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
                       fill="url(#engagementPurple)"
                     />
-                    <path
-                      d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
-                      fill="white"
-                      opacity="0.05"
-                      filter="url(#engagementNoise)"
-                    />
+                    {/* Grain clipped to the curve — no white fringe outside the path */}
+                    <g clipPath="url(#engagementCurveClip)">
+                      <path
+                        d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
+                        fill="#754FF6"
+                        opacity="0.35"
+                        filter="url(#engagementNoise)"
+                      />
+                    </g>
                   </svg>
 
                   <div className="absolute inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
@@ -2239,120 +2277,131 @@ export default function BrandsClient({
                     isLight ? "text-[#22C55E]" : "text-green-400",
                   )}
                 >
-                  <span className="mr-2">●</span>
+                  <span className="mr-2 inline-block animate-source-api-pulse">
+                    ●
+                  </span>
                   API Connected
                 </div>
 
                 {/* Semicircle orbit */}
-                <div className="absolute inset-x-0 top-10 bottom-[118px]">
-                  <div className="absolute left-1/2 top-[58%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2">
-                    <div className="pointer-events-none absolute inset-x-0 top-0 h-[52%] overflow-hidden">
-                      <div
-                        className={cn(
-                          "absolute left-1/2 top-[150px] h-[292px] w-[292px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed",
-                          isLight ? "border-black/20" : "border-white/15",
-                        )}
-                      />
-                      <div
-                        className={cn(
-                          "absolute left-1/2 top-[150px] h-[230px] w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed",
-                          isLight ? "border-black/20" : "border-white/15",
-                        )}
-                      />
-                      <div
-                        className={cn(
-                          "absolute left-1/2 top-[150px] h-[168px] w-[168px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed",
-                          isLight ? "border-black/20" : "border-white/15",
-                        )}
-                      />
-                    </div>
+                <div className="absolute inset-x-0 top-6 bottom-[110px] overflow-visible sm:top-10 sm:bottom-[118px]">
+                  {/* Extra padding so badges aren't clipped at top / left / right */}
+                  <div className="absolute left-1/2 top-[68%] h-[396px] w-[396px] -translate-x-1/2 -translate-y-1/2">
+                    <div className="absolute left-1/2 top-1/2 h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
+                      {/* Rings — hard clip at hub midline */}
+                      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1/2 overflow-hidden">
+                        <div className="absolute left-1/2 top-[170px] h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
+                          <div
+                            className={cn(
+                              "absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border",
+                              isLight
+                                ? "border-black/20"
+                                : "border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]",
+                            )}
+                          />
+                          <div
+                            className={cn(
+                              "absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2 rounded-full border",
+                              isLight
+                                ? "border-black/20"
+                                : "border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]",
+                            )}
+                          />
+                        </div>
+                      </div>
 
-                    <div
-                      className={cn(
-                        "absolute left-1/2 top-1/2 z-10 flex h-[80px] w-[80px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
-                        isLight
-                          ? "bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
-                          : "bg-[#1c1c1c] shadow-[0_22px_40px_rgba(109,70,255,0.55)]",
-                      )}
-                    >
-                      {!isLight ? (
-                        <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_92%,rgba(124,58,237,0.95),transparent_56%)]" />
-                      ) : null}
-                      <Image
-                        src={
+                      {/* Badges — padded clip so full badge shows on the upper arc;
+                          still hides once they rotate into the bottom half */}
+                      <div className="absolute -inset-x-7 -top-7 z-20 h-[calc(50%+28px+28px)] overflow-hidden">
+                        <div className="absolute left-1/2 top-[calc(170px+28px)] h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
+                          {/* Outer ring — Instagram + YouTube (opposite) */}
+                          <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2">
+                            <div className="absolute inset-0 animate-source-orbit-outer">
+                              <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
+                                <div
+                                  className={cn(
+                                    "flex h-14 w-14 animate-source-orbit-outer-counter items-center justify-center rounded-full",
+                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                  )}
+                                >
+                                  <SiInstagram className="h-6 w-6 text-[#E1306C]" />
+                                </div>
+                              </div>
+                              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2">
+                                <div
+                                  className={cn(
+                                    "flex h-14 w-14 animate-source-orbit-outer-counter items-center justify-center rounded-full",
+                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                  )}
+                                >
+                                  <SiYoutube className="h-6 w-6 text-[#FF0000]" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Inner ring — TikTok + X (opposite, 90° from outer) */}
+                          <div className="absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2">
+                            <div className="absolute inset-0 animate-source-orbit-inner">
+                              <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                                <div
+                                  className={cn(
+                                    "flex h-14 w-14 animate-source-orbit-inner-counter items-center justify-center rounded-full",
+                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                  )}
+                                >
+                                  <SiTiktok
+                                    className={cn(
+                                      "h-6 w-6",
+                                      isLight ? "text-black" : "text-white",
+                                    )}
+                                  />
+                                </div>
+                              </div>
+                              <div className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2">
+                                <div
+                                  className={cn(
+                                    "flex h-14 w-14 animate-source-orbit-inner-counter items-center justify-center rounded-full",
+                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                  )}
+                                >
+                                  <FaXTwitter
+                                    className={cn(
+                                      "h-5 w-5",
+                                      isLight ? "text-black" : "text-white",
+                                    )}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Center logo */}
+                      <div
+                        className={cn(
+                          "absolute left-1/2 top-[40%] z-30 flex h-[80px] w-[80px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
                           isLight
-                            ? "/images/Group (1).png"
-                            : "/images/Group@2x.png"
-                        }
-                        alt="Game of Creators"
-                        width={48}
-                        height={48}
-                        className="relative z-10 h-12 w-12 object-contain"
-                      />
-                    </div>
-
-                    <div
-                      className={cn(
-                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
-                        isLight
-                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                          : "bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
-                      )}
-                      style={{
-                        left: "calc(50% - 76px)",
-                        top: "calc(50% - 76px)",
-                      }}
-                    >
-                      <SiTiktok
-                        className={cn(
-                          "h-6 w-6",
-                          isLight ? "text-black" : "text-white",
+                            ? "bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
+                            : "bg-[#1c1c1c] shadow-[0_22px_40px_rgba(109,70,255,0.55)]",
                         )}
-                      />
-                    </div>
-
-                    <div
-                      className={cn(
-                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
-                        isLight
-                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                          : "bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
-                      )}
-                      style={{
-                        left: "calc(50% + 76px)",
-                        top: "calc(50% - 76px)",
-                      }}
-                    >
-                      <FaXTwitter
-                        className={cn(
-                          "h-5 w-5",
-                          isLight ? "text-black" : "text-white",
-                        )}
-                      />
-                    </div>
-
-                    <div
-                      className={cn(
-                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
-                        isLight
-                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                          : "bg-[#2b2b2b] shadow-[0_0_28px_rgba(124,58,237,0.7)]",
-                      )}
-                      style={{ left: "calc(50% - 118px)", top: "50%" }}
-                    >
-                      <SiYoutube className="h-6 w-6 text-[#FF0000]" />
-                    </div>
-
-                    <div
-                      className={cn(
-                        "absolute z-20 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
-                        isLight
-                          ? "bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                          : "bg-[#2b2b2b] shadow-[0_8px_20px_rgba(0,0,0,0.35)]",
-                      )}
-                      style={{ left: "calc(50% + 118px)", top: "50%" }}
-                    >
-                      <SiInstagram className="h-6 w-6 text-[#E1306C]" />
+                      >
+                        {!isLight ? (
+                          <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_92%,rgba(124,58,237,0.95),transparent_56%)]" />
+                        ) : null}
+                        <Image
+                          src={
+                            isLight
+                              ? "/images/Group (1).png"
+                              : "/images/Group@2x.png"
+                          }
+                          alt="Game of Creators"
+                          width={48}
+                          height={48}
+                          className="relative z-10 h-12 w-12 object-contain"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
