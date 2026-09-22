@@ -11,11 +11,13 @@ import { cn } from "@/lib/utils";
 import {
   CAMPAIGN_FILTER_PLATFORM_LABELS,
   CAMPAIGN_FILTER_PLATFORMS,
+  MULTIPLE_CAMPAIGN_FILTER_PLATFORMS,
   campaignPlatformMatchMode,
   campaignPlatformFilterLabel,
   isAllCampaignPlatformFilter,
   isCampaignPlatformSelected,
   normalizeCampaignPlatformFilter,
+  selectedCampaignPlatforms,
   setCampaignPlatformMatchMode,
   type CampaignFilterPlatform,
   toggleCampaignPlatformFilter,
@@ -43,7 +45,13 @@ export function CampaignPlatformFilter({
   );
   const normalized = normalizeCampaignPlatformFilter(value, available);
   const matchMode = campaignPlatformMatchMode(normalized);
-  const allSelected = isAllCampaignPlatformFilter(normalized);
+  const modePlatforms =
+    matchMode === "multiple" ? MULTIPLE_CAMPAIGN_FILTER_PLATFORMS : available;
+  const selectedPlatforms = selectedCampaignPlatforms(normalized, modePlatforms);
+  const allSelected =
+    matchMode === "multiple"
+      ? selectedPlatforms.length === MULTIPLE_CAMPAIGN_FILTER_PLATFORMS.length
+      : isAllCampaignPlatformFilter(normalized);
   const platformLabel = campaignPlatformFilterLabel(normalized, available);
 
   return (
@@ -61,7 +69,7 @@ export function CampaignPlatformFilter({
           )}
         >
           <span className="truncate">
-            {allSelected
+            {isAllCampaignPlatformFilter(normalized)
               ? platformLabel
               : `${matchMode === "single" ? "Single" : "Multiple"}: ${platformLabel}`}
           </span>
@@ -84,6 +92,8 @@ export function CampaignPlatformFilter({
               "grid grid-cols-2 gap-1 rounded-lg p-1 mb-1",
               isDark ? "bg-slate-900" : "bg-slate-100",
             )}
+            role="group"
+            aria-label="Campaign platform mode"
           >
             <MatchModeButton
               label="Single Platform"
@@ -121,20 +131,20 @@ export function CampaignPlatformFilter({
             )}
           >
             {matchMode === "single"
-              ? "Shows single-platform campaigns for any checked platform."
-              : "Shows campaigns matching exactly the checked platform set."}
+              ? "Choose platforms to see single-platform campaigns. All campaigns includes every campaign."
+              : "Choose 2 or 3 platforms. Campaigns must match the exact selection."}
           </p>
           <PlatformFilterRow
-            label="All Platforms"
+            label={matchMode === "multiple" ? "All 3 platforms" : "All campaigns"}
             checked={allSelected}
             isDark={isDark}
             onToggle={() =>
               onChange(
-                setCampaignPlatformMatchMode("all", matchMode, available),
+                toggleCampaignPlatformFilter(normalized, "all", available),
               )
             }
           />
-          {available.map((platform) => (
+          {modePlatforms.map((platform) => (
             <PlatformFilterRow
               key={platform}
               label={CAMPAIGN_FILTER_PLATFORM_LABELS[platform]}
@@ -144,6 +154,11 @@ export function CampaignPlatformFilter({
                 available,
               )}
               isDark={isDark}
+              disabled={
+                matchMode === "multiple" &&
+                selectedPlatforms.length === 2 &&
+                selectedPlatforms.includes(platform)
+              }
               onToggle={() =>
                 onChange(
                   toggleCampaignPlatformFilter(normalized, platform, available),
@@ -151,6 +166,16 @@ export function CampaignPlatformFilter({
               }
             />
           ))}
+          {matchMode === "multiple" && (
+            <p
+              className={cn(
+                "px-2 pt-1 text-[11px] leading-4",
+                isDark ? "text-slate-400" : "text-slate-500",
+              )}
+            >
+              At least two platforms must stay selected. Twitter is available in Single Platform.
+            </p>
+          )}
         </div>
       </PopoverContent>
     </Popover>
@@ -191,19 +216,24 @@ function PlatformFilterRow({
   label,
   checked,
   isDark,
+  disabled = false,
   onToggle,
 }: {
   label: string;
   checked: boolean;
   isDark: boolean;
+  disabled?: boolean;
   onToggle: () => void;
 }) {
   return (
     <button
       type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
       onClick={onToggle}
       className={cn(
-        "flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors",
+        "flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55",
         isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
       )}
     >

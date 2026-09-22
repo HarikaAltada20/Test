@@ -762,6 +762,7 @@ export function ContestListClient({
     isValidating: listValidating,
     error: listError,
     refresh: refreshServerList,
+    retry: retryServerList,
   } = useServerCampaignList<Contest>(
     {
       isAdminView,
@@ -4093,7 +4094,7 @@ export function ContestListClient({
             ref={brandContestsResultsRef}
             id="brand-contests-results"
             className="scroll-mt-4 mt-4"
-            aria-busy={listValidating && contests.length > 0}
+            aria-busy={listLoading || listValidating}
           >
             <div
               className="mb-3 flex min-h-7 items-center justify-end"
@@ -4107,21 +4108,52 @@ export function ContestListClient({
                     : "border-slate-200 bg-white text-slate-600",
                 )}
               >
-                {listLoading && contests.length === 0
+                {listError && contests.length === 0
+                  ? "Campaigns couldn’t load"
+                  : listLoading && contests.length === 0
                   ? "Loading campaigns…"
                   : listValidating && contests.length > 0
                     ? "Updating campaigns…"
                   : campaignResultSummary}
               </span>
             </div>
-            {listError && (
+            {listError && contests.length > 0 && (
               <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">
-                Campaigns could not be refreshed. {contests.length > 0 ? "The previous results are still shown." : "Please try again."}
+                Campaigns could not be refreshed. Showing the last loaded results for these filters.
               </p>
             )}
-            {listLoading || (listValidating && contests.length === 0) ? (
+            {listError && contests.length === 0 ? (
+              <div
+                role="alert"
+                className={cn(
+                  "flex min-h-[40vh] flex-col items-center justify-center gap-3 rounded-2xl border px-6 py-12 text-center",
+                  isDark
+                    ? "border-white/10 bg-white/[0.03] text-slate-300"
+                    : "border-slate-200 bg-white text-slate-600",
+                )}
+              >
+                <p className="text-base font-semibold text-slate-900 dark:text-white">
+                  We couldn’t load these campaigns.
+                </p>
+                <p className="text-sm">Check your connection and try again.</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void retryServerList()}
+                  className="mt-1"
+                >
+                  <RefreshCw aria-hidden="true" className="mr-2 h-4 w-4" />
+                  Retry
+                </Button>
+              </div>
+            ) : listLoading || (listValidating && contests.length === 0) ? (
               <div className="flex min-h-[40vh] items-center justify-center py-16">
-                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+                <div className="flex flex-col items-center gap-4" role="status" aria-live="polite">
+                  <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+                  <span className={cn("text-sm font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Loading campaigns…
+                  </span>
+                </div>
               </div>
             ) : displayViewMode === "grid" ? (
               <div
