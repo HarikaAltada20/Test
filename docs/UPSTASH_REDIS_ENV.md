@@ -27,6 +27,12 @@ This doc lists what to add to your `.env` (and Vercel Environment Variables) so 
 
 **Fallback behavior:** If Instagram-specific vars are not set, the Instagram queue will fall back to `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 
+For sequential multi-platform refreshes, the shared
+`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and `CRON_SECRET` are
+all required. Platform-specific Redis credentials alone cannot coordinate the
+cross-platform chain. The API returns `503` instead of starting a partial
+refresh when this configuration is incomplete.
+
 ---
 
 ## Where to get Upstash values

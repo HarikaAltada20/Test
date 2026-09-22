@@ -1,7 +1,7 @@
-import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
 import { computeEffectiveCpmUsd } from "@/lib/report-export-metrics";
-import { normalizeSubmissionStatus } from "@/lib/admin-analytics";
-import { normalizeBrandPlatformKey } from "@/lib/brand-analytics-graph";
+import { normalizeSubmissionStatus, contestMatchesAnalyticsContestTypes, listAnalyticsContestPlatforms } from "@/lib/admin-analytics";
+import { normalizeBrandPlatformKey, brandContestMatchesPlatforms, isBrandTwitterContest } from "@/lib/brand-analytics-graph";
 import type {
   BrandAnalyticsBundle,
   BrandAnalyticsCreatorsBundle,
@@ -58,28 +58,16 @@ function getContestLifecycle(
   return "active";
 }
 
-function getContestSpent(contest: BrandContestRow): number {
-  const details = contest.contest_based_details as Record<string, unknown> | null;
-  if (!details) return 0;
-  if (
-    contest.contest_type === "leaderboard" &&
-    (details.leaderboard_contest as { total_prize?: number })?.total_prize
-  ) {
-    return Number((details.leaderboard_contest as { total_prize: number }).total_prize) || 0;
-  }
-  if (
-    contest.contest_type === "cpm" &&
-    (details.cpm_contest as { total_budget?: number })?.total_budget
-  ) {
-    return Number((details.cpm_contest as { total_budget: number }).total_budget) || 0;
-  }
-  if (contest.contest_type === "milestone") {
-    return getPoolBudgetCentsFromDetails("milestone", details);
-  }
-  if (contest.contest_type === "dual_rewards") {
-    return getPoolBudgetCentsFromDetails("dual_rewards", details);
-  }
-  return 0;
+/** Campaign budget / projected spend for brand analytics (multi-platform aware). */
+export function getContestSpent(contest: BrandContestRow): number {
+  return getChargeableBudgetCents({
+    id: contest.id,
+    contest_type: contest.contest_type,
+    contest_based_details: contest.contest_based_details as
+      | Record<string, unknown>
+      | null
+      | undefined,
+  });
 }
 
 function parsePaymentDetails(paymentDetails: unknown): Record<string, unknown> | null {
@@ -216,14 +204,12 @@ function buildCampaignList(
   const isPc = ctx.dataSource === "pc_submissions";
   let list = allBrandContests.filter((c) => {
     if (ctx.contestTypeSet !== null) {
-      if (
-        !ctx.contestTypeSet.has((c.contest_type ?? "").toString().toLowerCase())
-      ) {
+      if (!contestMatchesAnalyticsContestTypes(c, ctx.contestTypeSet)) {
         return false;
       }
     }
     const allowed = resolveAllowedPlatforms(ctx);
-    return allowed.includes(normalizeBrandPlatformKey(c));
+    return brandContestMatchesPlatforms(c, allowed);
   });
 
   if (isPc) {
@@ -234,7 +220,7 @@ function buildCampaignList(
     );
     list = list.filter(
       (c) =>
-        normalizeBrandPlatformKey(c) !== "twitter" && pcIdSet.has(c.id),
+        !isBrandTwitterContest(c) && pcIdSet.has(c.id),
     );
   }
 
@@ -354,65 +340,130 @@ export function buildBrandOverviewResponse(
     totalComments: number;
   };
 
+  const emptyPlatformStat = (): PlatformStat => ({
+    contests: 0,
+    submissions: 0,
+    views: 0,
+    spent: 0,
+    publishedContests: 0,
+    draftContests: 0,
+    activeContests: 0,
+    upcomingContests: 0,
+    endedContests: 0,
+    pendingApprovalContests: 0,
+    approvedContests: 0,
+    rejectedContests: 0,
+    verifiedSubmissions: 0,
+    paidSubmissions: 0,
+    pendingSubmissions: 0,
+    rejectedSubmissions: 0,
+    totalLikes: 0,
+    totalComments: 0,
+  });
+
   const platformStats: Record<string, PlatformStat> = {};
   const rangeContestIds = new Set(rangeContests.map((c) => c.id));
+  const allowedPlatforms = new Set(resolveAllowedPlatforms(ctx));
+  const scopedById = new Map(scopedContests.map((c) => [c.id, c] as const));
+  const contestsCountedByPlatform = new Map<string, Set<string>>();
 
-  for (const contest of scopedContests) {
-    const platform = normalizeBrandPlatformKey(contest);
-    const activity = getContestActivityTotals(contest, bundle);
-    const inRange = rangeContestIds.has(contest.id);
-    const mod = inRange ? modStatus(contest) : "";
-    const life = getContestLifecycle(contest);
+  const ensurePlatformStat = (platform: string): PlatformStat => {
+    const key = platform === "x" ? "twitter" : platform;
+    if (!platformStats[key]) platformStats[key] = emptyPlatformStat();
+    return platformStats[key];
+  };
 
-    if (!platformStats[platform]) {
-      platformStats[platform] = {
-        contests: 0,
-        submissions: 0,
-        views: 0,
-        spent: 0,
-        publishedContests: 0,
-        draftContests: 0,
-        activeContests: 0,
-        upcomingContests: 0,
-        endedContests: 0,
-        pendingApprovalContests: 0,
-        approvedContests: 0,
-        rejectedContests: 0,
-        verifiedSubmissions: 0,
-        paidSubmissions: 0,
-        pendingSubmissions: 0,
-        rejectedSubmissions: 0,
-        totalLikes: 0,
-        totalComments: 0,
-      };
-    }
-
-    const ps = platformStats[platform];
-    if (activity.submissions > 0) ps.contests++;
-    ps.submissions += activity.submissions;
-    ps.views += activity.views;
-    ps.totalLikes += activity.likes;
-    ps.totalComments += activity.comments;
-    if (mod === "published") ps.publishedContests++;
-    else if (mod === "draft") ps.draftContests++;
-    else if (mod === "pending_approval") ps.pendingApprovalContests++;
-    else if (mod === "approved") ps.approvedContests++;
-    else if (mod === "rejected") ps.rejectedContests++;
-    if (mod === "published") {
-      if (life === "upcoming") ps.upcomingContests++;
-      else if (life === "active") ps.activeContests++;
-      else if (life === "ended") ps.endedContests++;
-    }
-    if (activity.submissions > 0) ps.spent += getContestSpent(contest);
-  }
-
-  // Per-platform status counts from rollup rows
+  // Multi-platform contests: bucket metrics by submission/rollup platform, not contest CSV primary.
   if (includeVideo) {
     for (const row of bundle.contestRollup) {
-      const contest = scopedContests.find((c) => c.id === row.contest_id);
-      if (!contest) continue;
-      const platform = normalizeBrandPlatformKey(contest);
-      const ps = platformStats[platform];
+      if (!scopedById.has(row.contest_id)) continue;
+      const platform = String(row.platform ?? "unknown").toLowerCase();
+      if (!allowedPlatforms.has(platform)) continue;
+      const useRow = hasStatusFilter(ctx)
+        ? statusMatchesFilter(row.status, ctx)
+        : true;
+      if (!useRow) continue;
+
+      const ps = ensurePlatformStat(platform);
+      ps.submissions += row.submission_count;
+      ps.views += row.views_sum;
+      ps.totalLikes += row.likes_sum;
+      ps.totalComments += row.comments_sum;
+      const st = normalizeSubmissionStatus(row.status);
+      if (st === "verified") ps.verifiedSubmissions += row.submission_count;
+      else if (st === "paid") ps.paidSubmissions += row.submission_count;
+      else if (st === "pending") ps.pendingSubmissions += row.submission_count;
+      else if (st === "rejected") ps.rejectedSubmissions += row.submission_count;
+
+      if (row.submission_count > 0) {
+        if (!contestsCountedByPlatform.has(platform)) {
+          contestsCountedByPlatform.set(platform, new Set());
+        }
+        contestsCountedByPlatform.get(platform)!.add(row.contest_id);
+      }
+    }
+
+    for (const [platform, contestIds] of contestsCountedByPlatform) {
+      const ps = ensurePlatformStat(platform);
+      ps.contests = contestIds.size;
+      for (const contestId of contestIds) {
+        const contest = scopedById.get(contestId);
+        if (!contest) continue;
+        const contestPlatforms = listAnalyticsContestPlatforms(
+          contest.platform,
+          contest.contest_based_details,
+        ).filter((p) => allowedPlatforms.has(p));
+        // Attribute spend once to the primary allowed platform for the contest.
+        if (contestPlatforms[0] === platform) {
+          ps.spent += getContestSpent(contest);
+        }
+        const inRange = rangeContestIds.has(contest.id);
+        const mod = inRange ? modStatus(contest) : "";
+        const life = getContestLifecycle(contest);
+        if (mod === "published") ps.publishedContests++;
+        else if (mod === "draft") ps.draftContests++;
+        else if (mod === "pending_approval") ps.pendingApprovalContests++;
+        else if (mod === "approved") ps.approvedContests++;
+        else if (mod === "rejected") ps.rejectedContests++;
+        if (mod === "published") {
+          if (life === "upcoming") ps.upcomingContests++;
+          else if (life === "active") ps.activeContests++;
+          else if (life === "ended") ps.endedContests++;
+        }
+      }
+    }
+  }
+
+  if (includeTwitter) {
+    for (const contest of scopedContests) {
+      if (!isBrandTwitterContest(contest)) continue;
+      const activity = getContestActivityTotals(contest, bundle);
+      if (activity.submissions <= 0) continue;
+      const ps = ensurePlatformStat("twitter");
+      ps.contests++;
+      ps.submissions += activity.submissions;
+      ps.views += activity.views;
+      ps.totalLikes += activity.likes;
+      ps.totalComments += activity.comments;
+      ps.spent += getContestSpent(contest);
+      const inRange = rangeContestIds.has(contest.id);
+      const mod = inRange ? modStatus(contest) : "";
+      const life = getContestLifecycle(contest);
+      if (mod === "published") ps.publishedContests++;
+      else if (mod === "draft") ps.draftContests++;
+      else if (mod === "pending_approval") ps.pendingApprovalContests++;
+      else if (mod === "approved") ps.approvedContests++;
+      else if (mod === "rejected") ps.rejectedContests++;
+      if (mod === "published") {
+        if (life === "upcoming") ps.upcomingContests++;
+        else if (life === "active") ps.activeContests++;
+        else if (life === "ended") ps.endedContests++;
+      }
+    }
+    for (const row of bundle.twitterContestRollup) {
+      const contest = scopedById.get(row.contest_id);
+      if (!contest || !isBrandTwitterContest(contest)) continue;
+      const ps = platformStats.twitter;
       if (!ps) continue;
       const useRow = hasStatusFilter(ctx)
         ? statusMatchesFilter(row.status, ctx)
@@ -424,21 +475,6 @@ export function buildBrandOverviewResponse(
       else if (st === "pending") ps.pendingSubmissions += row.submission_count;
       else if (st === "rejected") ps.rejectedSubmissions += row.submission_count;
     }
-  }
-  if (includeTwitter) for (const row of bundle.twitterContestRollup) {
-    const contest = scopedContests.find((c) => c.id === row.contest_id);
-    if (!contest || normalizeBrandPlatformKey(contest) !== "twitter") continue;
-    const ps = platformStats.twitter;
-    if (!ps) continue;
-    const useRow = hasStatusFilter(ctx)
-      ? statusMatchesFilter(row.status, ctx)
-      : true;
-    if (!useRow) continue;
-    const st = normalizeSubmissionStatus(row.status);
-    if (st === "verified") ps.verifiedSubmissions += row.submission_count;
-    else if (st === "paid") ps.paidSubmissions += row.submission_count;
-    else if (st === "pending") ps.pendingSubmissions += row.submission_count;
-    else if (st === "rejected") ps.rejectedSubmissions += row.submission_count;
   }
 
   const monthlyData: Record<
@@ -551,14 +587,12 @@ export async function buildBrandContestsResponse(
 
   let list = allBrandContests.filter((c) => {
     if (ctx.contestTypeSet !== null) {
-      if (
-        !ctx.contestTypeSet.has((c.contest_type ?? "").toString().toLowerCase())
-      ) {
+      if (!contestMatchesAnalyticsContestTypes(c, ctx.contestTypeSet)) {
         return false;
       }
     }
     const allowed = resolveAllowedPlatforms(ctx);
-    return allowed.includes(normalizeBrandPlatformKey(c));
+    return brandContestMatchesPlatforms(c, allowed);
   });
 
   if (isPc) {
@@ -569,7 +603,7 @@ export async function buildBrandContestsResponse(
     );
     list = list.filter(
       (c) =>
-        normalizeBrandPlatformKey(c) !== "twitter" && pcIdSet.has(c.id),
+        !isBrandTwitterContest(c) && pcIdSet.has(c.id),
     );
   }
 
@@ -580,7 +614,7 @@ export async function buildBrandContestsResponse(
   list = contestsWithActivity(list, bundle);
 
   const twitterContestIds = list
-    .filter((c) => normalizeBrandPlatformKey(c) === "twitter")
+    .filter((c) => isBrandTwitterContest(c))
     .map((c) => c.id);
   const twitterLeaderboardPaidByContest =
     await fetchTwitterLeaderboardPaidByContest(supabase, twitterContestIds);
@@ -817,35 +851,88 @@ export function buildBrandDetailedResponse(
     : null;
 
   const platformStats: Record<string, unknown> = {};
-  for (const contest of scopedContests) {
-    const platform = normalizeBrandPlatformKey(contest);
-    const key = platform === "x" ? "twitter" : platform;
-    const activity = getContestActivityTotals(contest, bundle);
-    if (activity.submissions <= 0) continue;
+  const allowedPlatforms = new Set(resolveAllowedPlatforms(ctx));
+  const scopedById = new Map(scopedContests.map((c) => [c.id, c] as const));
+  const contestsCountedByPlatform = new Map<string, Set<string>>();
 
-    if (!platformStats[key]) {
-      platformStats[key] = {
-        contests: 0,
-        submissions: 0,
-        views: 0,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        quote_reposts: 0,
-        spent: 0,
-      };
+  if (includeVideo) {
+    for (const row of bundle.contestRollup) {
+      if (!scopedById.has(row.contest_id)) continue;
+      const platform = String(row.platform ?? "unknown").toLowerCase();
+      if (!allowedPlatforms.has(platform)) continue;
+      if (!statusMatchesFilter(row.status, ctx)) continue;
+
+      if (!platformStats[platform]) {
+        platformStats[platform] = {
+          contests: 0,
+          submissions: 0,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          quote_reposts: 0,
+          spent: 0,
+        };
+      }
+      const ps = platformStats[platform] as Record<string, number>;
+      ps.submissions += row.submission_count;
+      ps.views += row.views_sum;
+      ps.likes += row.likes_sum;
+      ps.comments += row.comments_sum;
+      ps.shares += row.shares_sum;
+      if (row.submission_count > 0) {
+        if (!contestsCountedByPlatform.has(platform)) {
+          contestsCountedByPlatform.set(platform, new Set());
+        }
+        contestsCountedByPlatform.get(platform)!.add(row.contest_id);
+      }
     }
-    const ps = platformStats[key] as Record<string, number>;
-    ps.contests++;
-    ps.submissions += activity.submissions;
-    ps.views += activity.views;
-    ps.likes += activity.likes;
-    ps.comments += activity.comments;
-    ps.shares += activity.shares;
-    ps.retweets = (ps.retweets || 0) + (activity.retweets || 0);
-    ps.quote_reposts =
-      (ps.quote_reposts || 0) + (activity.quoteReposts || 0);
-    ps.spent += getContestSpent(contest);
+    for (const [platform, contestIds] of contestsCountedByPlatform) {
+      const ps = platformStats[platform] as Record<string, number>;
+      ps.contests = contestIds.size;
+      for (const contestId of contestIds) {
+        const contest = scopedById.get(contestId);
+        if (!contest) continue;
+        const contestPlatforms = listAnalyticsContestPlatforms(
+          contest.platform,
+          contest.contest_based_details,
+        ).filter((p) => allowedPlatforms.has(p));
+        if (contestPlatforms[0] === platform) {
+          ps.spent += getContestSpent(contest);
+        }
+      }
+    }
+  }
+
+  if (includeTwitter) {
+    for (const contest of scopedContests) {
+      if (!isBrandTwitterContest(contest)) continue;
+      const activity = getContestActivityTotals(contest, bundle);
+      if (activity.submissions <= 0) continue;
+      if (!platformStats.twitter) {
+        platformStats.twitter = {
+          contests: 0,
+          submissions: 0,
+          views: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          quote_reposts: 0,
+          spent: 0,
+        };
+      }
+      const ps = platformStats.twitter as Record<string, number>;
+      ps.contests++;
+      ps.submissions += activity.submissions;
+      ps.views += activity.views;
+      ps.likes += activity.likes;
+      ps.comments += activity.comments;
+      ps.shares += activity.shares;
+      ps.retweets = (ps.retweets || 0) + (activity.retweets || 0);
+      ps.quote_reposts =
+        (ps.quote_reposts || 0) + (activity.quoteReposts || 0);
+      ps.spent += getContestSpent(contest);
+    }
   }
 
   const contestTypeStats: Record<

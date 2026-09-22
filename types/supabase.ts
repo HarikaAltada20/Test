@@ -328,7 +328,7 @@ export interface Database {
           max_submissions_per_creator: number;
           content_type: "ugc" | "clipping" | "other" | null;
           bonus_details: Json | null;
-          max_earnings_per_creator: number | null; // Per-contest cap (in cents), NOT platform-wide
+          max_earnings_per_creator: Json | number | null; // cents number, or platform-keyed map for multi-platform
           payout_adjustment_percentage: number | null;
           payout_adjustment_mode: string | null;
           trust_score: number | null;
@@ -388,7 +388,7 @@ export interface Database {
           max_submissions_per_creator?: number;
           content_type?: "ugc" | "clipping" | "other" | null;
           bonus_details?: Json | null;
-          max_earnings_per_creator?: number | null;
+          max_earnings_per_creator?: Json | number | null;
           payout_adjustment_percentage?: number | null;
           payout_adjustment_mode?: string | null;
           trust_score?: number | null;
@@ -446,7 +446,7 @@ export interface Database {
           max_submissions_per_creator?: number;
           content_type?: "ugc" | "clipping" | "other" | null;
           bonus_details?: Json | null;
-          max_earnings_per_creator?: number | null;
+          max_earnings_per_creator?: Json | number | null;
           payout_adjustment_percentage?: number | null;
           payout_adjustment_mode?: string | null;
           trust_score?: number | null;
@@ -1043,7 +1043,7 @@ export interface Database {
           max_submissions_per_creator: number | null;
           content_type: "ugc" | "clipping" | "other" | null;
           bonus_details: Json | null;
-          max_earnings_per_creator: number | null;
+          max_earnings_per_creator: Json | number | null;
           trust_score: number | null;
         };
       };

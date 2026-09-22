@@ -10,7 +10,39 @@ import {
   buildBrandCreatorsResponse,
   buildBrandDetailedResponse,
   buildBrandOverviewResponse,
+  getContestSpent,
 } from "@/lib/brand-analytics-response";
+
+describe("getContestSpent multi-platform leaderboard", () => {
+  it("sums per-platform prize pools when root leaderboard_contest is cleared", () => {
+    const spent = getContestSpent({
+      id: "multi-lb",
+      title: "Multi LB",
+      platform: "youtube,instagram",
+      contest_type: "leaderboard",
+      start_date: "2026-06-01T00:00:00.000Z",
+      end_date: "2026-06-30T00:00:00.000Z",
+      created_at: "2026-06-01T00:00:00.000Z",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_prize: 10_000 },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_prize: 4_000 },
+        },
+      },
+      moderation_status: "published",
+      status: "active",
+      post_contest_status: null,
+      payment_details: null,
+      max_earnings_per_creator: null,
+      thumbnail_url: null,
+    });
+    assert.equal(spent, 14_000);
+  });
+});
 
 function baseCtx(
   overrides: Partial<BrandAnalyticsQueryContext> = {},

@@ -4,7 +4,11 @@ import {
   creditCreatorWithdrawableBalance,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
-import { isTwitterTextImageLeaderboardContest } from "@/lib/non-twitter-leaderboard-creator-prize";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import {
+  isKeyedMaxEarningsMap,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
 import {
   acquireCreatorContestPayoutLease,
   releaseCreatorContestPayoutLease,
@@ -15,6 +19,19 @@ export interface PayoutJobResult {
   id: string;
   status: "done" | "error";
   error?: string;
+}
+
+function isTwitterTextImageLeaderboardContest(contest: {
+  contest_type?: string | null;
+  contest_format?: string | null;
+  platform?: string | null;
+}): boolean {
+  const platform = String(contest.platform || "").toLowerCase();
+  return (
+    contest.contest_type === "leaderboard" &&
+    contest.contest_format === "text_image" &&
+    (platform === "twitter" || platform === "x")
+  );
 }
 
 // Processes up to batchSize queued payout jobs. Returns per-job results.
@@ -61,7 +78,7 @@ export async function processQueuedPayouts(
       // Load submission + contest
       const { data: sub, error: subErr } = await supabaseAdmin
         .from("submissions")
-        .select("id, contest_id, creator_id, status, earnings, views")
+        .select("id, contest_id, creator_id, status, earnings, views, platform")
         .eq("id", job.submission_id)
         .single();
       if (subErr || !sub)
@@ -138,26 +155,22 @@ export async function processQueuedPayouts(
 
       if (!rewardAmount || rewardAmount <= 0) {
         if ((contest as any).contest_type === "cpm") {
-          const cpm = (contest as any)?.contest_based_details?.cpm_contest;
-          const rate =
-            typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
-          let effectiveViews = sub.views || 0;
-          if (
-            typeof cpm?.min_views === "number" &&
-            effectiveViews < cpm.min_views
-          )
-            effectiveViews = 0;
-          if (
-            typeof cpm?.max_views === "number" &&
-            effectiveViews > cpm.max_views
-          )
-            effectiveViews = cpm.max_views;
-          rewardAmount = Math.round(((effectiveViews * rate) / 1000) * 100);
+          rewardAmount = computeCpmRawCentsForRow(
+            {
+              views: sub.views,
+              platform: (sub as any).platform,
+              other_stats: (sub as any).other_stats,
+            },
+            ((contest as any)?.contest_based_details as Record<
+              string,
+              unknown
+            >) || null,
+            (contest as any)?.platform,
+          );
         } else if ((contest as any).contest_type === "leaderboard") {
           const {
             applyCreatorMaxEarningsCapCents,
             computeNonTwitterLeaderboardSubmissionPrizeCents,
-            sumPaidEarningsCents,
           } = await import("@/lib/non-twitter-leaderboard-creator-prize");
           const { fetchContestSubmissionsAllPages } =
             await import("@/lib/fetch-contest-submissions");
@@ -170,7 +183,14 @@ export async function processQueuedPayouts(
               contestId: sub.contest_id,
               submissionId: sub.id,
               views: sub.views,
+              platform: (sub as any).platform,
               prizes,
+              contestBasedDetails:
+                ((contest as any)?.contest_based_details as Record<
+                  string,
+                  unknown
+                >) || null,
+              contestPlatform: (contest as any)?.platform,
             });
           if (prizeResult.error) {
             throw new Error(
@@ -178,19 +198,16 @@ export async function processQueuedPayouts(
             );
           }
           rewardAmount = prizeResult.prizeCents;
-          const maxEarningsPerCreator =
-            Number((contest as any).max_earnings_per_creator) ||
-            Number(
-              (contest as any)?.contest_based_details?.leaderboard_contest
-                ?.max_earnings_per_creator,
-            ) ||
-            0;
-          if (rewardAmount > 0 && maxEarningsPerCreator > 0) {
+          const maxEarningsPerCreator = resolveMaxEarningsCentsForSubmission(
+            contest as any,
+            (sub as any).platform,
+          );
+          if (rewardAmount > 0 && maxEarningsPerCreator && maxEarningsPerCreator > 0) {
             const { data: paidRowsForCap, error: paidRowsForCapErr } =
               await fetchContestSubmissionsAllPages(
                 supabaseAdmin,
                 sub.contest_id,
-                "earnings, paid",
+                "earnings, paid, platform",
                 {
                   creatorId: sub.creator_id,
                   paid: true,
@@ -205,14 +222,26 @@ export async function processQueuedPayouts(
                 )}`,
               );
             }
+            const alreadyPaidCents = (
+              (paidRowsForCap || []) as Array<{
+                earnings?: number | null;
+                paid?: boolean | null;
+                platform?: string | null;
+              }>
+            ).reduce((sum, row) => {
+              if (row.paid !== true) return sum;
+              if (
+                isKeyedMaxEarningsMap((contest as any).max_earnings_per_creator) &&
+                String(row.platform || "").toLowerCase() !==
+                  String((sub as any).platform || "").toLowerCase()
+              ) {
+                return sum;
+              }
+              return sum + Math.max(0, Number(row.earnings) || 0);
+            }, 0);
             rewardAmount = applyCreatorMaxEarningsCapCents({
               amountCents: rewardAmount,
-              alreadyPaidCents: sumPaidEarningsCents(
-                (paidRowsForCap || []) as Array<{
-                  earnings?: number | null;
-                  paid?: boolean | null;
-                }>,
-              ),
+              alreadyPaidCents,
               maxEarningsCents: maxEarningsPerCreator,
             });
           }

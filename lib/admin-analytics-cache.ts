@@ -5,12 +5,13 @@ import {
   ADMIN_ANALYTICS_CONTEST_TYPES,
   ADMIN_ANALYTICS_BASE_STATUSES,
   aggregateAdminAnalyticsFromDailyRows,
+  contestMatchesAnalyticsPlatforms,
+  contestMatchesAnalyticsContestTypes,
   expandStatusFilterIds,
   getContestAdvertiserName,
+  hasAdminAnalyticsVideoPlatform,
   isAdminAnalyticsContestType,
-  isAdminAnalyticsPlatform,
   isApprovedAnalyticsContest,
-  normalizeAnalyticsPlatform,
   type AdminAnalyticsAdvertiserOption,
   type AdminAnalyticsBaseStatus,
   type AdminAnalyticsContest,
@@ -231,44 +232,55 @@ function mergeDailyRows(
 }
 
 /**
- * DB-side daily aggregates (SUM/GROUP BY). Contest IDs are chunked for RPC
- * payload limits; results are merged in Node (compact day×status rows only).
+ * Daily aggregates filtered by selected platforms.
+ * Reads rollup rows directly so multi-platform contests only contribute the
+ * selected platform buckets (RPC admin_analytics_daily collapses platform).
  */
 async function fetchAnalyticsDailyRows(
   supabase: ReturnType<typeof createAdminClient>,
   contestIds: string[],
   fromIso: string,
   toIso: string,
+  platforms: AdminAnalyticsPlatform[],
 ): Promise<AdminAnalyticsDailySqlRow[]> {
   if (contestIds.length === 0) return [];
 
   const CONTEST_ID_CHUNK = 500;
   const chunks: AdminAnalyticsDailySqlRow[] = [];
+  const platformFilter =
+    platforms.length > 0 ? platforms : [...ADMIN_ANALYTICS_PLATFORMS];
+  const fromDay = fromIso.slice(0, 10);
+  const toDay = toIso.slice(0, 10);
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc("admin_analytics_daily", {
-      p_from: fromIso,
-      p_to: toIso,
-      p_contest_ids: idChunk,
-    });
+    const { data, error } = await supabase
+      .from("admin_analytics_submission_daily_rollup")
+      .select(
+        "day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+      )
+      .in("contest_id", idChunk)
+      .in("platform", platformFilter)
+      .gte("day_key", fromDay)
+      .lte("day_key", toDay);
+
     if (error) {
-      const code = (error as { code?: string }).code ?? "";
-      const msg = (error.message ?? "").toLowerCase();
-      const missingRpc =
-        code === "PGRST202" ||
-        code === "42883" ||
-        msg.includes("could not find the function") ||
-        (msg.includes("function") && msg.includes("does not exist")) ||
-        msg.includes("schema cache");
-      if (missingRpc) {
+      // Fallback to legacy RPC (no platform filter) if rollup table is unavailable.
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "admin_analytics_daily",
+        {
+          p_from: fromIso,
+          p_to: toIso,
+          p_contest_ids: idChunk,
+        },
+      );
+      if (rpcError) {
         throw new Error(
-          "Admin analytics RPCs are not deployed yet. Apply migrations 20260714_admin_analytics_daily_rpc.sql and 20260719_admin_analytics_daily_rollups.sql before using this page.",
+          `Failed to aggregate admin analytics: ${rpcError.message}`,
         );
       }
-      throw new Error(
-        `Failed to aggregate admin analytics: ${error.message}`,
-      );
+      chunks.push(...((rpcData ?? []) as AdminAnalyticsDailySqlRow[]));
+      continue;
     }
     chunks.push(...((data ?? []) as AdminAnalyticsDailySqlRow[]));
   }
@@ -316,9 +328,7 @@ function parsePcOverviewRpcPayload(
 }
 
 /**
- * PC overlay metrics + campaign IDs in one DB scan (admin_analytics_pc_overview).
- * Scans the full type/platform/advertiser scope; metrics rows are filtered to
- * scopedContestIds when a campaign filter is active.
+ * PC overlay metrics + campaign IDs, filtered by selected platforms.
  */
 async function fetchPcAnalyticsOverview(
   supabase: ReturnType<typeof createAdminClient>,
@@ -326,6 +336,7 @@ async function fetchPcAnalyticsOverview(
   scopedContestIds: string[],
   fromIso: string,
   toIso: string,
+  platforms: AdminAnalyticsPlatform[],
 ): Promise<{
   dailyRows: AdminAnalyticsDailySqlRow[];
   contestIds: Set<string>;
@@ -338,39 +349,63 @@ async function fetchPcAnalyticsOverview(
   const CONTEST_ID_CHUNK = 500;
   const dailyChunks: AdminAnalyticsDailySqlRow[] = [];
   const contestIdSet = new Set<string>();
+  const platformFilter =
+    platforms.length > 0 ? platforms : [...ADMIN_ANALYTICS_PLATFORMS];
+  const fromDay = fromIso.slice(0, 10);
+  const toDay = toIso.slice(0, 10);
 
   for (let i = 0; i < scopeContestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = scopeContestIds.slice(i, i + CONTEST_ID_CHUNK);
-    const { data, error } = await supabase.rpc("admin_analytics_pc_overview", {
-      p_from: fromIso,
-      p_to: toIso,
-      p_contest_ids: idChunk,
-    });
+    const { data, error } = await supabase
+      .from("admin_analytics_pc_daily_rollup")
+      .select(
+        "contest_id, day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+      )
+      .in("contest_id", idChunk)
+      .in("platform", platformFilter)
+      .gte("day_key", fromDay)
+      .lte("day_key", toDay);
+
     if (error) {
-      const code = (error as { code?: string }).code ?? "";
-      const msg = (error.message ?? "").toLowerCase();
-      const missingRpc =
-        code === "PGRST202" ||
-        code === "42883" ||
-        msg.includes("could not find the function") ||
-        (msg.includes("function") && msg.includes("does not exist")) ||
-        msg.includes("schema cache");
-      if (missingRpc) {
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "admin_analytics_pc_overview",
+        {
+          p_from: fromIso,
+          p_to: toIso,
+          p_contest_ids: idChunk,
+        },
+      );
+      if (rpcError) {
         throw new Error(
-          "Admin analytics PC RPCs are not deployed yet. Apply migrations 20260718_pc_metrics_admin_analytics_scale.sql and 20260719_admin_analytics_daily_rollups.sql before using the PC Submissions tab.",
+          `Failed to aggregate PC admin analytics: ${rpcError.message}`,
         );
       }
-      throw new Error(
-        `Failed to aggregate PC admin analytics: ${error.message}`,
-      );
+      const parsed = parsePcOverviewRpcPayload(rpcData);
+      for (const id of parsed.contestIds) contestIdSet.add(id);
+      for (const row of parsed.dailyRows) {
+        const contestId = String(row.contest_id ?? "");
+        if (contestId && !scopedSet.has(contestId)) continue;
+        const { contest_id: _contestId, ...rollup } = row;
+        dailyChunks.push(rollup);
+      }
+      continue;
     }
-    const parsed = parsePcOverviewRpcPayload(data);
-    for (const id of parsed.contestIds) contestIdSet.add(id);
-    for (const row of parsed.dailyRows) {
+
+    for (const row of data ?? []) {
       const contestId = String(row.contest_id ?? "");
-      if (contestId && !scopedSet.has(contestId)) continue;
-      const { contest_id: _contestId, ...rollup } = row;
-      dailyChunks.push(rollup);
+      if (!contestId) continue;
+      contestIdSet.add(contestId);
+      if (!scopedSet.has(contestId)) continue;
+      dailyChunks.push({
+        day_key: row.day_key,
+        status: row.status,
+        submission_count: row.submission_count,
+        views_sum: row.views_sum,
+        likes_sum: row.likes_sum,
+        comments_sum: row.comments_sum,
+        shares_sum: row.shares_sum,
+        payouts_cents_sum: row.payouts_cents_sum,
+      });
     }
   }
 
@@ -440,10 +475,7 @@ async function loadAdminAnalyticsOverview(
 
   const videoApprovedContests = contests.filter(
     (c) =>
-      isApprovedAnalyticsContest(c) &&
-      isAdminAnalyticsPlatform(
-        normalizeAnalyticsPlatform(c.platform, c.contest_based_details),
-      ),
+      isApprovedAnalyticsContest(c) && hasAdminAnalyticsVideoPlatform(c),
   );
 
   const contestTypeSet = new Set(params.contestTypes);
@@ -451,12 +483,10 @@ async function loadAdminAnalyticsOverview(
   // Scope by type/platform only — not contest start/end dates — so late
   // submissions after end_date still count when created_at is in range.
   const contestsInRange = videoApprovedContests.filter((c) => {
-    const type = (c.contest_type ?? "").toLowerCase();
-    if (!isAdminAnalyticsContestType(type) || !contestTypeSet.has(type)) {
+    if (!contestMatchesAnalyticsContestTypes(c, contestTypeSet)) {
       return false;
     }
-    const p = normalizeAnalyticsPlatform(c.platform, c.contest_based_details);
-    return isAdminAnalyticsPlatform(p) && platformSet.has(p);
+    return contestMatchesAnalyticsPlatforms(c, platformSet);
   });
 
   const advertiserIdSet =
@@ -488,6 +518,7 @@ async function loadAdminAnalyticsOverview(
       scopedContestIds,
       from.toISOString(),
       to.toISOString(),
+      params.platforms,
     );
   } else if (includePc) {
     const contestsForScopeIds = contestsForScope.map((c) => c.id);
@@ -497,6 +528,7 @@ async function loadAdminAnalyticsOverview(
       scopedContestIds,
       from.toISOString(),
       to.toISOString(),
+      params.platforms,
     );
     pcDailyRows = pcOverview.dailyRows;
     pcContestIdSet = pcOverview.contestIds;
@@ -603,7 +635,7 @@ function normalizeListKey(ids: string[] | null): string {
 function buildCacheKeyParts(params: AdminAnalyticsOverviewParams): string[] {
   return [
     ADMIN_ANALYTICS_CACHE_TAG,
-    "v7-daily-rollups",
+    "v8-multi-platform-filter",
     params.source,
     params.fromIso,
     params.toIso,

@@ -46,11 +46,13 @@ import { createClient } from "@/utils/supabase/client";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import {
-  getPoolBudgetCentsFromDetails,
-  isCpmContestType,
-} from "@/lib/contest-type";
+import { isCpmContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
+import {
+  parseVideoContestPlatforms,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+} from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
@@ -484,9 +486,10 @@ export default function CreatorsClient({
         contest.contest_based_details?.leaderboard_contest?.total_prize || 0
       );
     }
-    return getPoolBudgetCentsFromDetails(
+    return resolveContestPoolBudgetCents(
       contest.contest_type,
-      contest.contest_based_details
+      contest.contest_based_details,
+      contest.platform,
     );
   };
 
@@ -495,6 +498,7 @@ export default function CreatorsClient({
       contest_type: contest.contest_type,
       post_contest_status: contest.post_contest_status,
       contest_based_details: contest.contest_based_details,
+      platform: contest.platform,
     });
 
   // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)
@@ -514,7 +518,11 @@ export default function CreatorsClient({
     // Second: Get CPM rate (only for CPM-style contests, incl. dual rewards)
     const getCpmRate = (contest: any) => {
       if (isCpmContestType(contest.contest_type)) {
-        return contest.contest_based_details?.cpm_contest?.cpm_rate_usd || 0;
+        const rates = resolveContestPlatformCpmRates(
+          contest.contest_based_details,
+          contest.platform,
+        );
+        return rates.reduce((max, row) => Math.max(max, row.rateUsd), 0);
       }
       return 0;
     };
@@ -590,7 +598,7 @@ export default function CreatorsClient({
   const instagramContests = getContestsWithLiveAndEnded(
     contests.filter(
       (c) =>
-        c.platform?.toLowerCase() === "instagram" &&
+        parseVideoContestPlatforms(c.platform).includes("instagram") &&
         !mostPopularContestIds.has(c.id)
     ),
     5
@@ -598,7 +606,7 @@ export default function CreatorsClient({
   const youtubeContests = getContestsWithLiveAndEnded(
     contests.filter(
       (c) =>
-        c.platform?.toLowerCase() === "youtube" &&
+        parseVideoContestPlatforms(c.platform).includes("youtube") &&
         !mostPopularContestIds.has(c.id)
     ),
     5

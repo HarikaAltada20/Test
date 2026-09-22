@@ -137,6 +137,43 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import {
+  ALL_PLATFORM_TAB,
+  attachPlatformCampaignsToDetails,
+  areSectionValuesEqual,
+  applyLegacyCreatorEarningsToSnapshots,
+  applyPlatformContentColumnsToSnapshots,
+  buildFlushedPlatformCampaigns,
+  buildPlatformContentColumns,
+  buildPlatformCreatorEarningsColumns,
+  clonePlatformCampaignSnapshot,
+  createDefaultAllSectionLive,
+  createDefaultPlatformCampaignSnapshot,
+  createDefaultSectionPlatforms,
+  deriveSectionPlatformUiState,
+  isPlatformKeyedContentMap,
+  parseVideoContestPlatforms,
+  patchSnapshotSection,
+  persistedPlatformCampaignToSnapshot,
+  PER_PLATFORM_SECTION_KEYS,
+  PLATFORM_SECTION_KEYS,
+  platformSectionHint,
+  platformsForTab,
+  prizePoolCentsForPlatformScope,
+  preparePlatformCampaignsForSave,
+  primaryPlatformOf,
+  readPersistedPlatformCampaigns,
+  sectionCompletionByTab,
+  serializeVideoContestPlatforms,
+  validatePlatformCampaignSnapshot,
+  type PlatformCampaignSnapshot,
+  type PlatformSectionKey,
+  type PlatformTabValue,
+  type VideoContestPlatform,
+  type VideoContentType,
+} from "@/lib/video-platform-campaigns";
+import { VideoPlatformMultiSelect } from "@/components/contest/VideoPlatformMultiSelect";
+import { PlatformCampaignTabs } from "@/components/contest/PlatformCampaignTabs";
 import { isVideoContestFormat } from "@/lib/trust-score";
 import { sanitizeContestCreatorRequirementPayload } from "@/lib/contest-creator-requirements-validation";
 
@@ -452,7 +489,7 @@ type ContestData = {
   content_type?: "ugc" | "clipping" | "other" | null;
   contest_format?: string | null; // Text/image vs video campaign format
   bonus_details?: { description_html?: string; description_json?: any } | null;
-  max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
+  max_earnings_per_creator?: number | Record<string, unknown> | null; // cents or platform-keyed map
   // Categories, subcategories, and interests
   categories?: string[] | null;
   subcategories?:
@@ -519,6 +556,26 @@ export default function EditContestPage({
   // Common contest fields
   const [title, setTitle] = useState("");
   const [platform, setPlatform] = useState<string>("");
+  const [selectedPlatforms, setSelectedPlatforms] = useState<
+    VideoContestPlatform[]
+  >(["youtube"]);
+  const [activePlatform, setActivePlatform] =
+    useState<VideoContestPlatform>("youtube");
+  const [sectionPlatforms, setSectionPlatforms] = useState(
+    createDefaultSectionPlatforms,
+  );
+  const [allSectionLive, setAllSectionLive] = useState(
+    createDefaultAllSectionLive,
+  );
+  const applyingSectionRef = useRef(false);
+  const [prizeViewContestType, setPrizeViewContestType] = useState<
+    "leaderboard" | "cpm" | "milestone" | "dual_rewards"
+  >("leaderboard");
+  const [platformCampaigns, setPlatformCampaigns] = useState<
+    Partial<Record<VideoContestPlatform, PlatformCampaignSnapshot>>
+  >({});
+  const platformCampaignsRef = useRef(platformCampaigns);
+  platformCampaignsRef.current = platformCampaigns;
   // YouTube analytics visibility (brand-side)
   const [showBrandCoreAnalytics, setShowBrandCoreAnalytics] =
     useState<boolean>(true);
@@ -561,6 +618,7 @@ export default function EditContestPage({
   const [inspirationLinks, setInspirationLinks] = useState<
     { url: string; description: string }[]
   >([]);
+  const [resources, setResources] = useState<ResourceItem[]>([]);
   // Twitter target link state (separate from inspirationLinks for clarity)
   const [twitterTargetUrl, setTwitterTargetUrl] = useState<string>("");
   const [twitterTargetDescription, setTwitterTargetDescription] =
@@ -776,6 +834,510 @@ export default function EditContestPage({
     useState<number | "">("");
   const [milestoneBonusTopReelsPayout, setMilestoneBonusTopReelsPayout] =
     useState<string>("");
+
+  const isVideoEditContest = contest?.contest_format === "video";
+  const isMultiVideoPlatforms =
+    isVideoEditContest && selectedPlatforms.length > 1;
+
+  const captureCurrentPlatformSnapshot = (): PlatformCampaignSnapshot => {
+    let nextBriefHtml = briefHtml;
+    let nextBriefJson = briefJson;
+    let nextRulesHtml = rulesHtml;
+    let nextRulesJson = rulesJson;
+    let nextBonusHtml = bonusHtml;
+    let nextBonusJson = bonusJson;
+    if (richTextEditorRef.current) {
+      const content = richTextEditorRef.current.getContent();
+      nextBriefHtml = content.html;
+      nextBriefJson = content.json;
+    }
+    if (rulesRichTextEditorRef.current) {
+      const content = rulesRichTextEditorRef.current.getContent();
+      nextRulesHtml = content.html;
+      nextRulesJson = content.json;
+    }
+    if (bonusEnabled && bonusRichTextEditorRef.current) {
+      const content = bonusRichTextEditorRef.current.getContent();
+      nextBonusHtml = content.html;
+      nextBonusJson = content.json;
+    }
+    const videoContentType: VideoContentType =
+      contentType === "ugc" ||
+      contentType === "clipping" ||
+      contentType === "other"
+        ? contentType
+        : "";
+    const prizePool = winnerAmounts.reduce((sum, amount) => sum + amount, 0);
+    return {
+      contestType: contestType || "leaderboard",
+      contentType: videoContentType,
+      brief: nextBriefHtml,
+      briefHtml: nextBriefHtml,
+      briefJson: nextBriefJson,
+      rulesHtml: nextRulesHtml,
+      rulesJson: nextRulesJson,
+      winnerCount,
+      winnerAmounts: [...winnerAmounts],
+      totalPrizePool: prizePool,
+      flatFeeBonus,
+      flatFeeBonusCap,
+      cpmRate,
+      minViews,
+      maxViews,
+      totalBudget,
+      termsConditions,
+      milestoneRows: milestoneRows.map((row) => ({ ...row })),
+      milestoneBonusEnabled,
+      milestoneBonusTopViewsMin,
+      milestoneBonusTopViewsPayout,
+      milestoneBonusTopViewsMinReels,
+      milestoneBonusTopReelsMin,
+      milestoneBonusTopReelsMinViews,
+      milestoneBonusTopReelsPayout,
+      maxEarningsPerCreator,
+      bonusEnabled,
+      bonusHtml: nextBonusHtml,
+      bonusJson: nextBonusJson,
+      resources: resources.map((item) => ({ ...item })),
+      inspirationLinks: inspirationLinks.map((item) => ({ ...item })),
+    };
+  };
+
+  const scheduleEditorContent = (
+    editor:
+      | { setContent: (content: unknown) => void }
+      | null
+      | undefined,
+    content: unknown,
+  ) => {
+    if (!editor || content == null || content === "") return;
+    const apply = () => editor.setContent(content);
+    setTimeout(apply, 0);
+    setTimeout(apply, 100);
+    setTimeout(apply, 300);
+  };
+
+  const applyPlatformSnapshot = (snapshot: PlatformCampaignSnapshot) => {
+    setContestType(snapshot.contestType);
+    setPrizeViewContestType(snapshot.contestType);
+    setContentType(snapshot.contentType || "");
+    setBriefHtml(snapshot.briefHtml || snapshot.brief || "");
+    setBriefJson(snapshot.briefJson ?? null);
+    setRulesHtml(snapshot.rulesHtml || "");
+    setRulesJson(snapshot.rulesJson ?? null);
+    setWinnerCount(snapshot.winnerCount);
+    setWinnerAmounts([...snapshot.winnerAmounts]);
+    setFlatFeeBonus(snapshot.flatFeeBonus);
+    setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
+    setCpmRate(snapshot.cpmRate);
+    setMinViews(snapshot.minViews);
+    setMaxViews(snapshot.maxViews);
+    setTotalBudget(snapshot.totalBudget);
+    setTermsConditions(snapshot.termsConditions);
+    setMilestoneRows(
+      snapshot.milestoneRows.length > 0
+        ? snapshot.milestoneRows.map((row) => ({ ...row }))
+        : [createEmptyMilestoneRow()],
+    );
+    setMilestoneBonusEnabled(snapshot.milestoneBonusEnabled);
+    setMilestoneBonusTopViewsMin(snapshot.milestoneBonusTopViewsMin);
+    setMilestoneBonusTopViewsPayout(snapshot.milestoneBonusTopViewsPayout);
+    setMilestoneBonusTopViewsMinReels(snapshot.milestoneBonusTopViewsMinReels);
+    setMilestoneBonusTopReelsMin(snapshot.milestoneBonusTopReelsMin);
+    setMilestoneBonusTopReelsMinViews(snapshot.milestoneBonusTopReelsMinViews);
+    setMilestoneBonusTopReelsPayout(snapshot.milestoneBonusTopReelsPayout);
+    setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator ?? "");
+    setBonusEnabled(Boolean(snapshot.bonusEnabled));
+    setBonusHtml(snapshot.bonusHtml || "");
+    setBonusJson(snapshot.bonusJson ?? null);
+    setResources((snapshot.resources ?? []).map((item) => ({ ...item })));
+    setInspirationLinks(
+      (snapshot.inspirationLinks ?? []).map((item) => ({ ...item })),
+    );
+    scheduleEditorContent(
+      richTextEditorRef.current,
+      snapshot.briefJson ?? snapshot.briefHtml ?? snapshot.brief ?? "",
+    );
+    scheduleEditorContent(
+      rulesRichTextEditorRef.current,
+      snapshot.rulesJson ?? snapshot.rulesHtml ?? "",
+    );
+    if (snapshot.bonusEnabled) {
+      scheduleEditorContent(
+        bonusRichTextEditorRef.current,
+        snapshot.bonusJson ?? snapshot.bonusHtml ?? "",
+      );
+    }
+  };
+
+  const applySectionFromSnapshot = (
+    section: PlatformSectionKey,
+    snapshot: PlatformCampaignSnapshot,
+  ) => {
+    applyingSectionRef.current = true;
+    switch (section) {
+      case "campaignType":
+        setContestType(snapshot.contestType);
+        break;
+      case "contentType":
+        setContentType(snapshot.contentType || "");
+        break;
+      case "brief":
+        setBriefHtml(snapshot.briefHtml || snapshot.brief || "");
+        setBriefJson(snapshot.briefJson ?? null);
+        scheduleEditorContent(
+          richTextEditorRef.current,
+          snapshot.briefJson ?? snapshot.briefHtml ?? snapshot.brief ?? "",
+        );
+        break;
+      case "rules":
+        setRulesHtml(snapshot.rulesHtml || "");
+        setRulesJson(snapshot.rulesJson ?? null);
+        scheduleEditorContent(
+          rulesRichTextEditorRef.current,
+          snapshot.rulesJson ?? snapshot.rulesHtml ?? "",
+        );
+        break;
+      case "prize":
+        setPrizeViewContestType(snapshot.contestType);
+        setWinnerCount(snapshot.winnerCount);
+        setWinnerAmounts([...snapshot.winnerAmounts]);
+        setCpmRate(snapshot.cpmRate);
+        setMinViews(snapshot.minViews);
+        setMaxViews(snapshot.maxViews);
+        // CPM / milestone / dual pool budget is shared — keep the form value.
+        setTermsConditions(snapshot.termsConditions);
+        setMilestoneRows(
+          snapshot.milestoneRows.length > 0
+            ? snapshot.milestoneRows.map((row) => ({ ...row }))
+            : [createEmptyMilestoneRow()],
+        );
+        setMilestoneBonusEnabled(snapshot.milestoneBonusEnabled);
+        setMilestoneBonusTopViewsMin(snapshot.milestoneBonusTopViewsMin);
+        setMilestoneBonusTopViewsPayout(snapshot.milestoneBonusTopViewsPayout);
+        setMilestoneBonusTopViewsMinReels(
+          snapshot.milestoneBonusTopViewsMinReels,
+        );
+        setMilestoneBonusTopReelsMin(snapshot.milestoneBonusTopReelsMin);
+        setMilestoneBonusTopReelsMinViews(
+          snapshot.milestoneBonusTopReelsMinViews,
+        );
+        setMilestoneBonusTopReelsPayout(snapshot.milestoneBonusTopReelsPayout);
+        break;
+      case "earnings":
+        setFlatFeeBonus(snapshot.flatFeeBonus);
+        setFlatFeeBonusCap(snapshot.flatFeeBonusCap);
+        setTotalBudget(snapshot.totalBudget);
+        setMaxEarningsPerCreator(snapshot.maxEarningsPerCreator ?? "");
+        setBonusEnabled(Boolean(snapshot.bonusEnabled));
+        setBonusHtml(snapshot.bonusHtml || "");
+        setBonusJson(snapshot.bonusJson ?? null);
+        if (snapshot.bonusEnabled) {
+          scheduleEditorContent(
+            bonusRichTextEditorRef.current,
+            snapshot.bonusJson ?? snapshot.bonusHtml ?? "",
+          );
+        }
+        break;
+      case "resources":
+        setResources((snapshot.resources ?? []).map((item) => ({ ...item })));
+        break;
+      case "inspiration":
+        setInspirationLinks(
+          (snapshot.inspirationLinks ?? []).map((item) => ({ ...item })),
+        );
+        break;
+    }
+    window.setTimeout(() => {
+      applyingSectionRef.current = false;
+    }, 50);
+  };
+
+  const peekFlushedCampaigns = (
+    map = platformCampaignsRef.current,
+    tabs = sectionPlatforms,
+    live = allSectionLive,
+    platforms = selectedPlatforms,
+  ) =>
+    buildFlushedPlatformCampaigns(
+      platforms,
+      tabs,
+      captureCurrentPlatformSnapshot(),
+      map,
+      live,
+    );
+
+  const flushAllSections = () => {
+    const next = preparePlatformCampaignsForSave(
+      selectedPlatforms,
+      sectionPlatforms,
+      captureCurrentPlatformSnapshot(),
+      platformCampaignsRef.current,
+      allSectionLive,
+    );
+    platformCampaignsRef.current = next;
+    setPlatformCampaigns(next);
+    return next;
+  };
+
+  const markAllSectionLive = (section: PlatformSectionKey) => {
+    if (applyingSectionRef.current) return;
+    if (sectionPlatforms[section] !== ALL_PLATFORM_TAB) return;
+    const current = captureCurrentPlatformSnapshot();
+    setPlatformCampaigns((prev) => {
+      const next = { ...prev };
+      for (const p of selectedPlatforms) {
+        const existing = next[p] ?? createDefaultPlatformCampaignSnapshot();
+        next[p] = patchSnapshotSection(existing, section, current);
+      }
+      platformCampaignsRef.current = next;
+      return next;
+    });
+    setAllSectionLive((prev) =>
+      prev[section] ? prev : { ...prev, [section]: true },
+    );
+  };
+
+  const switchSectionPlatform = (
+    section: PlatformSectionKey,
+    nextTab: PlatformTabValue,
+  ) => {
+    if (nextTab === sectionPlatforms[section]) return;
+    const flushed = peekFlushedCampaigns();
+    const targets = platformsForTab(nextTab, selectedPlatforms);
+    const sourcePlatform = targets[0] ?? selectedPlatforms[0];
+    const source =
+      flushed[sourcePlatform] ??
+      createDefaultPlatformCampaignSnapshot();
+    if (!flushed[sourcePlatform]) {
+      flushed[sourcePlatform] = source;
+    }
+    platformCampaignsRef.current = flushed;
+    setPlatformCampaigns(flushed);
+    applySectionFromSnapshot(section, source);
+    setSectionPlatforms((prev) => ({ ...prev, [section]: nextTab }));
+    setAllSectionLive((prev) => {
+      if (nextTab !== ALL_PLATFORM_TAB) {
+        return { ...prev, [section]: false };
+      }
+      const snapshots = selectedPlatforms.map(
+        (p) => flushed[p] ?? createDefaultPlatformCampaignSnapshot(),
+      );
+      const allMatch = snapshots.every((snap) =>
+        areSectionValuesEqual(section, snapshots[0], snap),
+      );
+      return { ...prev, [section]: allMatch };
+    });
+  };
+
+  const handleVideoPlatformsChange = (next: VideoContestPlatform[]) => {
+    if (next.length === 0) return;
+    const current = captureCurrentPlatformSnapshot();
+    const flushedCurrent = buildFlushedPlatformCampaigns(
+      selectedPlatforms,
+      sectionPlatforms,
+      current,
+      platformCampaignsRef.current,
+      allSectionLive,
+    );
+    const nextTabs = { ...sectionPlatforms };
+    const nextLive = { ...allSectionLive };
+    for (const key of PLATFORM_SECTION_KEYS) {
+      const tab = nextTabs[key];
+      if (tab !== ALL_PLATFORM_TAB && !next.includes(tab)) {
+        nextTabs[key] = next.length > 1 ? ALL_PLATFORM_TAB : next[0];
+        nextLive[key] = next.length > 1;
+      }
+    }
+    if (next.length > 1 && selectedPlatforms.length < 2) {
+      for (const key of PER_PLATFORM_SECTION_KEYS) {
+        nextTabs[key] = next[0];
+        nextLive[key] = false;
+      }
+      nextTabs.campaignType = ALL_PLATFORM_TAB;
+      nextTabs.contentType = ALL_PLATFORM_TAB;
+      nextLive.campaignType = true;
+      nextLive.contentType = true;
+    }
+    const nextMap = buildFlushedPlatformCampaigns(
+      next,
+      nextTabs,
+      current,
+      flushedCurrent,
+      nextLive,
+    );
+    for (const p of next) {
+      if (!nextMap[p]) {
+        nextMap[p] = patchSnapshotSection(
+          patchSnapshotSection(
+            createDefaultPlatformCampaignSnapshot(),
+            "campaignType",
+            current,
+          ),
+          "contentType",
+          current,
+        );
+      }
+    }
+    platformCampaignsRef.current = nextMap;
+    setPlatformCampaigns(nextMap);
+    setSelectedPlatforms(next);
+    setPlatform(serializeVideoContestPlatforms(next));
+    setActivePlatform(next[0]);
+    setSectionPlatforms(nextTabs);
+    setAllSectionLive(nextLive);
+  };
+
+  useEffect(() => {
+    if (
+      selectedPlatforms.length < 2 ||
+      sectionPlatforms.prize === ALL_PLATFORM_TAB ||
+      sectionPlatforms.prize === sectionPlatforms.campaignType
+    ) {
+      setPrizeViewContestType(contestType || "leaderboard");
+    }
+  }, [
+    contestType,
+    selectedPlatforms.length,
+    sectionPlatforms.prize,
+    sectionPlatforms.campaignType,
+  ]);
+
+  const applyMultiPlatformSave = (
+    details: Record<string, unknown>,
+    options?: { requireBriefAndRules?: boolean },
+  ): {
+    details: Record<string, unknown>;
+    platform: string;
+    contestType: "leaderboard" | "cpm" | "milestone" | "dual_rewards";
+    briefHtml: string;
+    briefJson: unknown;
+    rulesHtml: string;
+    rulesJson: unknown;
+    contentType: string;
+    resources: unknown;
+    inspirationLinks: unknown;
+    maxEarningsPerCreator: number | string;
+    maxEarningsColumn: unknown;
+    bonusEnabled: boolean;
+    bonusHtml: string;
+    bonusJson: unknown;
+    bonusDetails: unknown;
+    error?: string;
+  } => {
+    const isRaidTwitterEdit =
+      platform === "twitter" &&
+      contentType === "raid" &&
+      contest?.contest_format === "text_image";
+    const singleMaxColumn =
+      maxEarningsPerCreator &&
+      parseFloat(maxEarningsPerCreator.toString()) > 0
+        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+        : null;
+    if (!isVideoEditContest || selectedPlatforms.length < 2) {
+      return {
+        details,
+        platform:
+          isVideoEditContest && selectedPlatforms.length > 0
+            ? serializeVideoContestPlatforms(selectedPlatforms)
+            : platform,
+        contestType: contestType || "leaderboard",
+        briefHtml,
+        briefJson,
+        rulesHtml,
+        rulesJson,
+        contentType: contentType || "",
+        resources,
+        inspirationLinks,
+        maxEarningsPerCreator,
+        maxEarningsColumn: singleMaxColumn,
+        bonusEnabled,
+        bonusHtml,
+        bonusJson,
+        bonusDetails:
+          bonusEnabled && bonusHtml
+            ? {
+                description_html: bonusHtml,
+                description_json: bonusJson,
+              }
+            : null,
+      };
+    }
+    const flushed = flushAllSections();
+    for (const p of selectedPlatforms) {
+      const snap = flushed[p] ?? createDefaultPlatformCampaignSnapshot();
+      const platformError = validatePlatformCampaignSnapshot(p, snap, {
+        requireBriefAndRules: options?.requireBriefAndRules,
+        requireResources: options?.requireBriefAndRules,
+        requireInspiration:
+          Boolean(options?.requireBriefAndRules) && !isRaidTwitterEdit,
+      });
+      if (platformError) {
+        return {
+          details,
+          platform: serializeVideoContestPlatforms(selectedPlatforms),
+          contestType: contestType || "leaderboard",
+          briefHtml,
+          briefJson,
+          rulesHtml,
+          rulesJson,
+          contentType: contentType || "",
+          resources,
+          inspirationLinks,
+          maxEarningsPerCreator,
+          maxEarningsColumn: singleMaxColumn,
+          bonusEnabled,
+          bonusHtml,
+          bonusJson,
+          bonusDetails:
+            bonusEnabled && bonusHtml
+              ? {
+                  description_html: bonusHtml,
+                  description_json: bonusJson,
+                }
+              : null,
+          error: platformError,
+        };
+      }
+    }
+    const primary = primaryPlatformOf(selectedPlatforms);
+    const primarySnap =
+      flushed[primary] ?? createDefaultPlatformCampaignSnapshot();
+    const twitterCampaign = (details as { twitter_campaign?: unknown })
+      .twitter_campaign;
+    const contentColumns = buildPlatformContentColumns(
+      selectedPlatforms,
+      flushed,
+    );
+    const earningsColumns = buildPlatformCreatorEarningsColumns(
+      selectedPlatforms,
+      flushed,
+    );
+    return {
+      details: attachPlatformCampaignsToDetails(
+        {
+          ...(twitterCampaign ? { twitter_campaign: twitterCampaign } : {}),
+        },
+        selectedPlatforms,
+        flushed,
+      ),
+      platform: serializeVideoContestPlatforms(selectedPlatforms),
+      contestType: primarySnap.contestType,
+      briefHtml: contentColumns.brief_html,
+      briefJson: contentColumns.brief_json,
+      rulesHtml: contentColumns.rules_html,
+      rulesJson: contentColumns.rules_json,
+      contentType: primarySnap.contentType || "",
+      resources: contentColumns.resources,
+      inspirationLinks: contentColumns.inspiration_links,
+      maxEarningsPerCreator: primarySnap.maxEarningsPerCreator,
+      maxEarningsColumn: earningsColumns.max_earnings_per_creator,
+      bonusEnabled: primarySnap.bonusEnabled,
+      bonusHtml: primarySnap.bonusHtml,
+      bonusJson: primarySnap.bonusJson,
+      bonusDetails: earningsColumns.bonus_details,
+    };
+  };
   const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusHtml, setBonusHtml] = useState("");
   const [bonusJson, setBonusJson] = useState<any>(null);
@@ -786,7 +1348,6 @@ export default function EditContestPage({
   const bonusRichTextEditorRef = useRef<any>(null);
 
   // Resources State Variables
-  const [resources, setResources] = useState<ResourceItem[]>([]);
   const [resourceFile, setResourceFile] = useState<File | null>(null);
   const [resourceFilePreview, setResourceFilePreview] = useState<string | null>(
     null,
@@ -798,6 +1359,62 @@ export default function EditContestPage({
   const resourceFileRef = useRef<HTMLInputElement>(null);
   const [resourceSuccess, setResourceSuccess] = useState<string | null>(null);
   const [resourceError, setResourceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    markAllSectionLive("campaignType");
+  }, [contestType]);
+
+  useEffect(() => {
+    markAllSectionLive("contentType");
+  }, [contentType]);
+
+  useEffect(() => {
+    markAllSectionLive("brief");
+  }, [briefHtml]);
+
+  useEffect(() => {
+    markAllSectionLive("rules");
+  }, [rulesHtml]);
+
+  useEffect(() => {
+    markAllSectionLive("prize");
+  }, [
+    winnerCount,
+    winnerAmounts,
+    cpmRate,
+    minViews,
+    maxViews,
+    contestType === "leaderboard" ? "" : totalBudget,
+    termsConditions,
+    milestoneRows,
+    milestoneBonusEnabled,
+    milestoneBonusTopViewsMin,
+    milestoneBonusTopViewsPayout,
+    milestoneBonusTopViewsMinReels,
+    milestoneBonusTopReelsMin,
+    milestoneBonusTopReelsMinViews,
+    milestoneBonusTopReelsPayout,
+  ]);
+
+  useEffect(() => {
+    markAllSectionLive("earnings");
+  }, [
+    flatFeeBonus,
+    flatFeeBonusCap,
+    contestType === "leaderboard" ? totalBudget : "",
+    maxEarningsPerCreator,
+    bonusEnabled,
+    bonusHtml,
+    bonusJson,
+  ]);
+
+  useEffect(() => {
+    markAllSectionLive("resources");
+  }, [resources]);
+
+  useEffect(() => {
+    markAllSectionLive("inspiration");
+  }, [inspirationLinks]);
 
   // State for bottom error display
   const [formFeedback, setFormFeedback] = useState<string | null>(null);
@@ -1234,8 +1851,23 @@ export default function EditContestPage({
             setTitle(data.title || "");
             setPlatform(data.platform || "");
 
-            // Handle rich text content loading
-            if (data.brief_html && data.brief_json) {
+            const parsedVideoPlatformsEarly = parseVideoContestPlatforms(
+              data.platform,
+            );
+            const isMultiPlatformVideoEdit =
+              data.contest_format !== "text_image" &&
+              parsedVideoPlatformsEarly.length > 1;
+
+            // Handle rich text content loading.
+            // Multi-platform contests store brief_json/rules_json as platform-keyed
+            // maps — those are hydrated into snapshots further below. Applying the
+            // map directly to the editor clears content / races the snapshot apply.
+            if (
+              !isMultiPlatformVideoEdit &&
+              !isPlatformKeyedContentMap(data.brief_json) &&
+              data.brief_html &&
+              data.brief_json
+            ) {
               setBriefHtml(data.brief_html);
               setBriefJson(data.brief_json);
               // Set content in editor if ref is available
@@ -1244,10 +1876,24 @@ export default function EditContestPage({
                   richTextEditorRef.current.setContent(data.brief_json);
                 }
               }, 100);
+            } else if (
+              !isMultiPlatformVideoEdit &&
+              data.brief_html &&
+              !data.brief_json
+            ) {
+              setBriefHtml(data.brief_html);
+              setTimeout(() => {
+                richTextEditorRef.current?.setContent(data.brief_html);
+              }, 100);
             }
 
             // Handle rules rich text content loading
-            if (data.rules_html && data.rules_json) {
+            if (
+              !isMultiPlatformVideoEdit &&
+              !isPlatformKeyedContentMap(data.rules_json) &&
+              data.rules_html &&
+              data.rules_json
+            ) {
               setRulesHtml(data.rules_html);
 
               const rawRulesJson: any = data.rules_json;
@@ -1347,13 +1993,11 @@ export default function EditContestPage({
               setEndTime(timeString);
             }
 
-            // Parse inspiration_links
-            let parsedInspirationLinks: { url: string; description: string }[] =
-              [];
+            // Inspiration / resources: flat arrays only here. Multi-platform
+            // platform-keyed columns hydrate into snapshots further below.
             if (Array.isArray(data.inspiration_links)) {
-              parsedInspirationLinks = data.inspiration_links;
+              setInspirationLinks(data.inspiration_links);
             }
-            setInspirationLinks(parsedInspirationLinks);
 
             // Parse tracking_links
             let parsedTrackingLinks: { url: string; description: string }[] =
@@ -1570,8 +2214,11 @@ export default function EditContestPage({
               ytVisibility.show_demographics_to_brand ?? true,
             );
 
-            // Load existing resources (array format only)
-            setResources(data.resources || []);
+            // Load existing resources (flat array only; multi-platform
+            // platform-keyed columns are hydrated into snapshots below)
+            if (Array.isArray(data.resources)) {
+              setResources(data.resources);
+            }
 
             // Load new features (2025-10-01)
             setMultipleSubmissionsEnabled(
@@ -1668,8 +2315,13 @@ export default function EditContestPage({
               }
             }
 
-            // Load bonus details
-            if (data.bonus_details?.description_html) {
+            // Load bonus details (flat shape only; multi-platform hydrates below)
+            if (
+              !isMultiPlatformVideoEdit &&
+              !isPlatformKeyedContentMap(data.bonus_details) &&
+              data.bonus_details?.description_html &&
+              typeof data.bonus_details.description_html === "string"
+            ) {
               setBonusEnabled(true);
               setBonusHtml(data.bonus_details.description_html);
               setBonusJson(data.bonus_details.description_json);
@@ -1682,8 +2334,12 @@ export default function EditContestPage({
               }, 100);
             }
 
-            // Load max earnings per creator
-            if (data.max_earnings_per_creator) {
+            // Load max earnings per creator (flat cents only; multi-platform map hydrates below)
+            if (
+              !isMultiPlatformVideoEdit &&
+              typeof data.max_earnings_per_creator === "number" &&
+              data.max_earnings_per_creator > 0
+            ) {
               setMaxEarningsPerCreator(
                 (data.max_earnings_per_creator / 100).toString(),
               );
@@ -2042,6 +2698,95 @@ export default function EditContestPage({
                   quoteRepostWeightIsObject &&
                     quoteRepostsWeightObj._showMultipliers === true,
                 );
+              }
+            }
+
+            const parsedVideoPlatforms = parseVideoContestPlatforms(
+              data.platform,
+            );
+            if (
+              data.contest_format !== "text_image" &&
+              parsedVideoPlatforms.length > 0
+            ) {
+              setSelectedPlatforms(parsedVideoPlatforms);
+              setActivePlatform(parsedVideoPlatforms[0]);
+              if (parsedVideoPlatforms.length > 1) {
+                const details = (data.contest_based_details || {}) as Record<
+                  string,
+                  any
+                >;
+                const persistedMap = readPersistedPlatformCampaigns(details);
+                const loadedMap: Partial<
+                  Record<VideoContestPlatform, PlatformCampaignSnapshot>
+                > = {};
+                for (const p of parsedVideoPlatforms) {
+                  if (persistedMap[p]) {
+                    loadedMap[p] = persistedPlatformCampaignToSnapshot(
+                      persistedMap[p]!,
+                    );
+                  }
+                }
+                const primary = parsedVideoPlatforms[0];
+                if (!loadedMap[primary]) {
+                  loadedMap[primary] = persistedPlatformCampaignToSnapshot({
+                    contest_type: resolveContestType(data),
+                    content_type: data.content_type,
+                    brief_html: data.brief_html,
+                    // Never seed the TipTap doc with a platform-keyed map.
+                    brief_json: isPlatformKeyedContentMap(data.brief_json)
+                      ? null
+                      : data.brief_json,
+                    rules_html: data.rules_html,
+                    rules_json: isPlatformKeyedContentMap(data.rules_json)
+                      ? null
+                      : data.rules_json,
+                    leaderboard_contest: details.leaderboard_contest,
+                    cpm_contest: details.cpm_contest,
+                    milestone_contest: details.milestone_contest,
+                    total_budget_cents: details.total_budget_cents,
+                  });
+                }
+                for (const p of parsedVideoPlatforms) {
+                  if (!loadedMap[p]) {
+                    loadedMap[p] = clonePlatformCampaignSnapshot(
+                      loadedMap[primary]!,
+                    );
+                  }
+                }
+                const hydratedMap = applyLegacyCreatorEarningsToSnapshots(
+                  parsedVideoPlatforms,
+                  {
+                    max_earnings_per_creator: data.max_earnings_per_creator,
+                    bonus_details: data.bonus_details,
+                  },
+                  applyPlatformContentColumnsToSnapshots(
+                    parsedVideoPlatforms,
+                    {
+                      brief_html: data.brief_html,
+                      brief_json: data.brief_json,
+                      rules_html: data.rules_html,
+                      rules_json: data.rules_json,
+                      resources: data.resources,
+                      inspiration_links: data.inspiration_links,
+                    },
+                    loadedMap,
+                  ),
+                );
+                setPlatformCampaigns(hydratedMap);
+                platformCampaignsRef.current = hydratedMap;
+                const uiState = deriveSectionPlatformUiState(
+                  parsedVideoPlatforms,
+                  hydratedMap,
+                );
+                setSectionPlatforms(uiState.tabs);
+                setAllSectionLive(uiState.allLive);
+                applyPlatformSnapshot(hydratedMap[primary]!);
+                for (const section of PER_PLATFORM_SECTION_KEYS) {
+                  const tab = uiState.tabs[section];
+                  if (tab === ALL_PLATFORM_TAB || tab === primary) continue;
+                  const snap = hydratedMap[tab];
+                  if (snap) applySectionFromSnapshot(section, snap);
+                }
               }
             }
           }
@@ -3564,11 +4309,40 @@ export default function EditContestPage({
           contestMinPlatformViews,
         }),
       );
-      updatePayload.content_type = contentType || null;
+      const multiSave = applyMultiPlatformSave(contestBasedDetails, {
+        requireBriefAndRules: !datesOnly,
+      });
+      if (multiSave.error) {
+        showError(multiSave.error);
+        setIsSubmitting(false);
+        if (submitTimeoutId) clearTimeout(submitTimeoutId);
+        return;
+      }
+      contestBasedDetails = multiSave.details;
+      updatePayload.platform = multiSave.platform || null;
+      updatePayload.brief_html = multiSave.briefHtml;
+      updatePayload.brief_json = multiSave.briefJson;
+      updatePayload.rules_html = multiSave.rulesHtml;
+      updatePayload.rules_json =
+        multiSave.rulesJson && typeof multiSave.rulesJson === "object"
+          ? multiSave.rulesJson
+          : {};
+      updatePayload.contest_type = multiSave.contestType;
+      updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+        contestBasedDetails,
+        contest?.contest_based_details,
+      );
+      updatePayload.content_type = multiSave.contentType || null;
       updatePayload.category = category || null;
+      if (contentType !== "raid") {
+        updatePayload.inspiration_links = multiSave.inspirationLinks;
+      }
 
-      // Capture bonus content before saving
-      if (bonusEnabled && bonusRichTextEditorRef.current) {
+      // Capture bonus / max earnings (multi-platform uses flushed primary snapshot)
+      if (isVideoEditContest && selectedPlatforms.length > 1) {
+        updatePayload.bonus_details = multiSave.bonusDetails;
+        updatePayload.max_earnings_per_creator = multiSave.maxEarningsColumn;
+      } else if (bonusEnabled && bonusRichTextEditorRef.current) {
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
@@ -3578,16 +4352,21 @@ export default function EditContestPage({
               description_json: json,
             }
           : null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       } else {
         updatePayload.bonus_details = null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       }
-
-      // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator =
-        maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
-          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-          : null;
+      // Save resources array directly (files are already uploaded when added)
+      updatePayload.resources = multiSave.resources ?? resources;
     }
     try {
       // Use the already-uploaded thumbnail URL (from thumbnailPreview)
@@ -3596,8 +4375,6 @@ export default function EditContestPage({
         // If a new thumbnail was uploaded, use its URL; otherwise, keep the existing one
         finalThumbnailUrl = thumbnailPreview || contest.thumbnail_url || "";
         updatePayload.thumbnail_url = finalThumbnailUrl;
-        // Save resources array directly (files are already uploaded when added)
-        updatePayload.resources = resources;
       }
 
       // Debug: Log the update payload
@@ -6760,7 +7537,7 @@ export default function EditContestPage({
     }
 
     // YouTube analytics visibility (brand side) — stored in contest_based_details.youtube_analytics_visibility
-    if (!datesOnly && platform?.toLowerCase() === "youtube") {
+    if (!datesOnly && selectedPlatforms.includes("youtube")) {
       contestBasedDetails.youtube_analytics_visibility = {
         show_core_to_brand: showBrandCoreAnalytics,
         show_traffic_to_brand: showBrandTrafficSources,
@@ -8114,11 +8891,40 @@ export default function EditContestPage({
           contestMinPlatformViews,
         }),
       );
-      updatePayload.content_type = contentType || null;
+      const multiSave = applyMultiPlatformSave(contestBasedDetails, {
+        requireBriefAndRules: !datesOnly,
+      });
+      if (multiSave.error) {
+        showError(multiSave.error);
+        setIsSubmitting(false);
+        if (submitTimeoutId) clearTimeout(submitTimeoutId);
+        return;
+      }
+      contestBasedDetails = multiSave.details;
+      updatePayload.platform = multiSave.platform || null;
+      updatePayload.brief_html = multiSave.briefHtml;
+      updatePayload.brief_json = multiSave.briefJson;
+      updatePayload.rules_html = multiSave.rulesHtml;
+      updatePayload.rules_json =
+        multiSave.rulesJson && typeof multiSave.rulesJson === "object"
+          ? multiSave.rulesJson
+          : {};
+      updatePayload.contest_type = multiSave.contestType;
+      updatePayload.contest_based_details = preserveExistingBudgetSpentFields(
+        contestBasedDetails,
+        contest?.contest_based_details,
+      );
+      updatePayload.content_type = multiSave.contentType || null;
       updatePayload.category = category || null;
+      if (contentType !== "raid") {
+        updatePayload.inspiration_links = multiSave.inspirationLinks;
+      }
 
-      // Capture bonus content before saving
-      if (bonusEnabled && bonusRichTextEditorRef.current) {
+      // Capture bonus / max earnings (multi-platform uses flushed primary snapshot)
+      if (isVideoEditContest && selectedPlatforms.length > 1) {
+        updatePayload.bonus_details = multiSave.bonusDetails;
+        updatePayload.max_earnings_per_creator = multiSave.maxEarningsColumn;
+      } else if (bonusEnabled && bonusRichTextEditorRef.current) {
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
@@ -8128,16 +8934,21 @@ export default function EditContestPage({
               description_json: json,
             }
           : null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       } else {
         updatePayload.bonus_details = null;
+        updatePayload.max_earnings_per_creator =
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null;
       }
-
-      // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator =
-        maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
-          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-          : null;
+      // Save resources array directly (files are already uploaded when added)
+      updatePayload.resources = multiSave.resources ?? resources;
     }
 
     try {
@@ -8145,8 +8956,6 @@ export default function EditContestPage({
         // Use the already-uploaded thumbnail URL (from thumbnailPreview) if it exists, otherwise keep the existing one
         updatePayload.thumbnail_url =
           thumbnailPreview || contest.thumbnail_url || "";
-        // Save resources array directly (files are already uploaded when added)
-        updatePayload.resources = resources;
       }
 
       if (updatePayload.contest_based_details) {
@@ -8773,38 +9582,30 @@ export default function EditContestPage({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="platform">Platform</Label>
-                <Select
-                  value={platform}
-                  onValueChange={(value) => {
-                    setPlatform(value);
-                    if (value === "twitter") {
-                      setContentType("raid");
-                    }
-                  }}
-                >
-                  <SelectTrigger
-                    id="platform"
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white",
-                    )}
-                  >
-                    <SelectValue placeholder="Select campaign platform" />
-                  </SelectTrigger>
-                  <SelectContent isDark={isDark}>
-                    {contest?.contest_format === "text_image"
-                      ? getTextImagePlatforms().map((platformConfig) => (
-                          <SelectItem
-                            key={platformConfig.id}
-                            isDark={isDark}
-                            value={platformConfig.id}
-                          >
-                            {platformConfig.displayName}
-                          </SelectItem>
-                        ))
-                      : getVideoPlatforms().map((platformConfig) => (
+                {contest?.contest_format === "text_image" ? (
+                  <>
+                    <Label htmlFor="platform">Platform</Label>
+                    <Select
+                      value={platform}
+                      onValueChange={(value) => {
+                        setPlatform(value);
+                        if (value === "twitter") {
+                          setContentType("raid");
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        id="platform"
+                        className={cn(
+                          isDark
+                            ? "bg-[#180438] border border-gray-600"
+                            : "bg-white",
+                        )}
+                      >
+                        <SelectValue placeholder="Select campaign platform" />
+                      </SelectTrigger>
+                      <SelectContent isDark={isDark}>
+                        {getTextImagePlatforms().map((platformConfig) => (
                           <SelectItem
                             key={platformConfig.id}
                             isDark={isDark}
@@ -8813,11 +9614,20 @@ export default function EditContestPage({
                             {platformConfig.displayName}
                           </SelectItem>
                         ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Choose the platform where creators will submit content.
-                </p>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Choose the platform where creators will submit content.
+                    </p>
+                  </>
+                ) : (
+                  <VideoPlatformMultiSelect
+                    value={selectedPlatforms}
+                    onChange={handleVideoPlatformsChange}
+                    isDark={isDark}
+                    disabled={datesOnly}
+                  />
+                )}
               </div>
 
               {/* Content Type Selection - Moved here from Additional Features */}
@@ -9860,6 +10670,14 @@ export default function EditContestPage({
                   </Button>
                 </div>
               </div>
+              {isVideoEditContest && (
+                <PlatformCampaignTabs
+                  platforms={selectedPlatforms}
+                  active={sectionPlatforms.brief}
+                  onChange={(tab) => switchSectionPlatform("brief", tab)}
+                  isDark={isDark}
+                />
+              )}
               <p
                 className={`text-md ${isDark ? "text-white" : "text-gray-600"}`}
               >
@@ -9902,6 +10720,7 @@ export default function EditContestPage({
                 </div>
               ) : (
                 <NovelEditor
+                  key={`edit-brief-${sectionPlatforms.brief}`}
                   value={briefHtml}
                   placeholder="Describe your product, what you want creators to do, key messages, target audience, and any specific requirements..."
                   height="250px"
@@ -10130,6 +10949,14 @@ export default function EditContestPage({
                   </Button>
                 </div>
               </div>
+              {isVideoEditContest && (
+                <PlatformCampaignTabs
+                  platforms={selectedPlatforms}
+                  active={sectionPlatforms.rules}
+                  onChange={(tab) => switchSectionPlatform("rules", tab)}
+                  isDark={isDark}
+                />
+              )}
 
               {showRulesPreview ? (
                 <div
@@ -10166,6 +10993,7 @@ export default function EditContestPage({
               ) : (
                 <div className="min-h-[300px]">
                   <NovelEditor
+                    key={`edit-rules-${sectionPlatforms.rules}`}
                     value={rulesHtml}
                     placeholder="Content rules and guidelines..."
                     height="250px"
@@ -10192,10 +11020,30 @@ export default function EditContestPage({
           {!datesOnly && (
             <div className="mb-12">
               <div>
-                <CardTitle className="mb-3 text-lg md:text-2xl">
-                  Resources for Participants{" "}
-                  <span className="text-red-500">*</span>
-                </CardTitle>
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                  <CardTitle className="text-lg md:text-2xl">
+                    Resources for Participants{" "}
+                    <span className="text-red-500">*</span>
+                  </CardTitle>
+                  {isVideoEditContest && (
+                    <PlatformCampaignTabs
+                      platforms={selectedPlatforms}
+                      active={sectionPlatforms.resources}
+                      onChange={(tab) => switchSectionPlatform("resources", tab)}
+                      isDark={isDark}
+                      hint={platformSectionHint(
+                        sectionPlatforms.resources,
+                        selectedPlatforms,
+                        allSectionLive.resources,
+                      )}
+                      completeByTab={sectionCompletionByTab(
+                        "resources",
+                        selectedPlatforms,
+                        platformCampaigns,
+                      )}
+                    />
+                  )}
+                </div>
                 <CardDescription className="text-sm md:text-[13px]">
                   Provide at least one resource to help participants understand
                   your brand and campaign requirements. You can upload assets
@@ -10948,20 +11796,47 @@ export default function EditContestPage({
           {!datesOnly && (
             <div>
               <div>
-                <CardTitle className="mb-2 text-lg md:text-2xl">
-                  {platform === "twitter" &&
-                  contentType === "raid" &&
-                  contest?.contest_format === "text_image" ? (
-                    <>
-                      Target Tweet <span className="text-red-500">*</span>
-                    </>
-                  ) : (
-                    <>
-                      Inspiration Content{" "}
-                      <span className="text-red-500">*</span>
-                    </>
-                  )}
-                </CardTitle>
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                  <CardTitle className="text-lg md:text-2xl">
+                    {platform === "twitter" &&
+                    contentType === "raid" &&
+                    contest?.contest_format === "text_image" ? (
+                      <>
+                        Target Tweet <span className="text-red-500">*</span>
+                      </>
+                    ) : (
+                      <>
+                        Inspiration Content{" "}
+                        <span className="text-red-500">*</span>
+                      </>
+                    )}
+                  </CardTitle>
+                  {isVideoEditContest &&
+                    !(
+                      platform === "twitter" &&
+                      contentType === "raid" &&
+                      contest?.contest_format === "text_image"
+                    ) && (
+                      <PlatformCampaignTabs
+                        platforms={selectedPlatforms}
+                        active={sectionPlatforms.inspiration}
+                        onChange={(tab) =>
+                          switchSectionPlatform("inspiration", tab)
+                        }
+                        isDark={isDark}
+                        hint={platformSectionHint(
+                          sectionPlatforms.inspiration,
+                          selectedPlatforms,
+                          allSectionLive.inspiration,
+                        )}
+                        completeByTab={sectionCompletionByTab(
+                          "inspiration",
+                          selectedPlatforms,
+                          platformCampaigns,
+                        )}
+                      />
+                    )}
+                </div>
                 <CardDescription className="mb-4 text-md">
                   {platform === "twitter" &&
                   contentType === "raid" &&
@@ -11404,8 +12279,17 @@ export default function EditContestPage({
 
           <Separator />
 
+          {!datesOnly && isVideoEditContest && (
+            <PlatformCampaignTabs
+              platforms={selectedPlatforms}
+              active={sectionPlatforms.prize}
+              onChange={(tab) => switchSectionPlatform("prize", tab)}
+              isDark={isDark}
+            />
+          )}
+
           {/* Prize Distribution - Conditional for Leaderboard */}
-          {!datesOnly && contestType === "leaderboard" && (
+          {!datesOnly && prizeViewContestType === "leaderboard" && (
             <div className="space-y-4">
               <div className="flex items-center flex-col gap-3 md:flex-row md:justify-between">
                 <h3 className="text-lg font-medium">Prize distribution</h3>
@@ -11650,7 +12534,8 @@ export default function EditContestPage({
 
           {/* Milestone Configuration - Conditional for Milestone */}
           {!datesOnly &&
-            (contestType === "milestone" || contestType === "dual_rewards") && (
+            (prizeViewContestType === "milestone" ||
+              prizeViewContestType === "dual_rewards") && (
               <div className="space-y-6 py-4 px-1">
                 <h3 className="text-lg font-medium">
                   Milestone campaign configuration
@@ -11839,7 +12724,7 @@ export default function EditContestPage({
                   </Button>
                 </div>
 
-                {contestType !== "dual_rewards" && (
+                {prizeViewContestType !== "dual_rewards" && (
                   <div className="space-y-2">
                     <Label htmlFor="milestoneTotalBudget">
                       Total campaign budget (USD){" "}
@@ -11863,9 +12748,9 @@ export default function EditContestPage({
                       placeholder="Maximum amount reserved for this campaign"
                     />
                     <p className="text-xs text-muted-foreground">
-                      This is the pool you fund upfront (similar to a CPM
-                      budget). Payouts are drawn from it as creators hit
-                      milestones.
+                      Shared across all selected platforms. This is the pool you
+                      fund upfront (similar to a CPM budget). Payouts are drawn
+                      from it as creators hit milestones.
                     </p>
                   </div>
                 )}
@@ -12056,7 +12941,7 @@ export default function EditContestPage({
             )}
 
           {/* CPM Configuration — CPM and dual rewards */}
-          {!datesOnly && isCpmContestType(contestType) && (
+          {!datesOnly && isCpmContestType(prizeViewContestType) && (
             <div className="space-y-6">
               {/* <Separator /> */}
               <div className="space-y-6 py-4 px-1">
@@ -12129,7 +13014,7 @@ export default function EditContestPage({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="totalBudget">
-                      {contestType === "dual_rewards"
+                      {prizeViewContestType === "dual_rewards"
                         ? "Total campaign budget (USD)"
                         : "Total Budget (USD)"}{" "}
                       <span className="text-red-500">*</span>
@@ -12152,7 +13037,7 @@ export default function EditContestPage({
                       step="0.01"
                     />
                     <p className="text-xs text-muted-foreground">
-                      {contestType === "dual_rewards"
+                      {prizeViewContestType === "dual_rewards"
                         ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
                         : "Required: The maximum total amount to be paid out for CPM earnings in this campaign."}
                     </p>
@@ -12979,7 +13864,7 @@ export default function EditContestPage({
                         plan is{" "}
                         {formatCurrencyFromCents(planFeatures.minContestBudget)}
                         . Please increase your{" "}
-                        {contestType === "dual_rewards"
+                        {prizeViewContestType === "dual_rewards"
                           ? "total campaign budget."
                           : "CPM pool budget."}
                       </AlertDescription>
@@ -13607,7 +14492,7 @@ export default function EditContestPage({
                 )}
               </div>
 
-              {!datesOnly && platform?.toLowerCase() === "youtube" && (
+              {!datesOnly && selectedPlatforms.includes("youtube") && (
                 <div
                   className={cn(
                     "space-y-3 rounded-xl border p-4",
@@ -13710,11 +14595,23 @@ export default function EditContestPage({
                         Motivate creators with bonuses beyond the main prize
                         pool or CPM rate.
                       </p>
+                      {!datesOnly && isVideoEditContest && (
+                        <div className="pt-3">
+                          <PlatformCampaignTabs
+                            platforms={selectedPlatforms}
+                            active={sectionPlatforms.earnings}
+                            onChange={(tab) =>
+                              switchSectionPlatform("earnings", tab)
+                            }
+                            isDark={isDark}
+                          />
+                        </div>
+                      )}
                     </div>
 
-                    {contestType !== "milestone" && (
+                    {prizeViewContestType !== "milestone" && (
                       <>
-                        {contestType !== "dual_rewards" && (
+                        {prizeViewContestType !== "dual_rewards" && (
                           <>
                             {/* Flat Fee Bonus — hidden for dual (CPM + milestone pools only) */}
                             <div
@@ -13859,8 +14756,16 @@ export default function EditContestPage({
                                 Bonus is enabled.
                                 <br />
                                 <strong>Prize Pool:</strong>{" "}
-                                {formatCurrencyFromCents(totalPrizePool)} (for
-                                rankings)
+                                {formatCurrencyFromCents(
+                                  prizePoolCentsForPlatformScope({
+                                    scopeTab: sectionPlatforms.earnings,
+                                    prizeTab: sectionPlatforms.prize,
+                                    selected: selectedPlatforms,
+                                    snapshots: platformCampaigns,
+                                    livePrizePoolCents: totalPrizePool,
+                                  }),
+                                )}{" "}
+                                (for rankings)
                                 <br />
                                 <strong>Total Budget:</strong>{" "}
                                 {totalBudget

@@ -11,6 +11,7 @@ import {
   isMetricsTargetMismatch,
   type MetricsRefreshTarget,
 } from "@/lib/post-campaign-enqueue-guards";
+import { createMetricsRefreshRunProgressWriter } from "@/lib/metrics-refresh-run-progress";
 
 type SubmissionCandidate = {
   id: string;
@@ -275,6 +276,30 @@ export async function POST(
     const creatorIds = Object.keys(submissionsByCreator);
     const now = new Date().toISOString();
 
+    const { data: progressBaseRow } = await supabaseAdmin
+      .from("tiktok_metrics_refresh_runs")
+      .select(
+        "processed_submissions, success_count, permanent_failure_count, temporary_failure_count, reviewed_count",
+      )
+      .eq("id", runId)
+      .single();
+    const progress = createMetricsRefreshRunProgressWriter({
+      supabase: supabaseAdmin,
+      table: "tiktok_metrics_refresh_runs",
+      runId,
+      writeSkippedRecent: false,
+      base: {
+        processed_submissions: progressBaseRow?.processed_submissions ?? 0,
+        reviewed_count: progressBaseRow?.reviewed_count ?? 0,
+        success_count: progressBaseRow?.success_count ?? 0,
+        temporary_failure_count:
+          progressBaseRow?.temporary_failure_count ?? 0,
+        permanent_failure_count:
+          progressBaseRow?.permanent_failure_count ?? 0,
+        skipped_recent_count: 0,
+      },
+    });
+
     await mapLimit(creatorIds, 3, async (creatorId) => {
       const subs = submissionsByCreator[creatorId];
       const result = await syncCreatorTikTokDisplayMetrics(
@@ -329,6 +354,7 @@ export async function POST(
           }
         }
       }
+      await progress.addProcessed(subs.length);
     });
 
     // Instagram-style run accounting:
@@ -390,29 +416,15 @@ export async function POST(
     }
 
     const reviewedInBatch = batch.length;
-    const { data: runRow } = await supabaseAdmin
-      .from("tiktok_metrics_refresh_runs")
-      .select("processed_submissions, success_count, permanent_failure_count, temporary_failure_count, reviewed_count")
-      .eq("id", runId)
-      .eq("current_batch_index", batchIndex)
-      .single();
-
-    if (runRow) {
-      await supabaseAdmin
-        .from("tiktok_metrics_refresh_runs")
-        .update({
-          reviewed_count: (runRow.reviewed_count ?? 0) + reviewedInBatch,
-          processed_submissions: (runRow.processed_submissions ?? 0) + processedInBatch,
-          success_count: (runRow.success_count ?? 0) + successTransitions,
-          permanent_failure_count: (runRow.permanent_failure_count ?? 0) + permanentTransitions,
-          temporary_failure_count: (runRow.temporary_failure_count ?? 0) + temporaryTransitions,
-          current_batch_index: batchIndex + 1,
-          last_batch_completed_at: now,
-          updated_at: now,
-        })
-        .eq("id", runId)
-        .eq("current_batch_index", batchIndex);
-    }
+    await progress.awaitIdle();
+    await progress.finalize(batchIndex, now, {
+      processed: processedInBatch,
+      reviewed: reviewedInBatch,
+      success: successTransitions,
+      temporaryFailure: temporaryTransitions,
+      permanentFailure: permanentTransitions,
+      skipped: 0,
+    });
 
     return NextResponse.json({
       hasMore,

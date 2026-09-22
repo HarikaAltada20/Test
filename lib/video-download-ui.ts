@@ -27,6 +27,14 @@ const NATIVE_DOWNLOAD_SETTLE_MS = 2000;
 const QUEUED_DOWNLOAD_POLL_MS = 2000;
 const QUEUED_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
+function platformHasInstagramOrYouTube(platform: string): boolean {
+  return platform.includes("instagram") || platform.includes("youtube");
+}
+
+function isTikTokOnlyPlatform(platform: string): boolean {
+  return platform.includes("tiktok") && !platformHasInstagramOrYouTube(platform);
+}
+
 export type DownloadVideoPlatform = "instagram" | "youtube" | "unsupported";
 
 /**
@@ -38,26 +46,25 @@ export function classifyDownloadVideoPlatform(input: {
   contestPlatform?: string | null;
   contentLink?: string | null;
 }): DownloadVideoPlatform {
-  const platform = (
-    input.platform ||
-    input.contestPlatform ||
-    ""
-  ).toLowerCase();
+  const submissionPlatform = (input.platform || "").toLowerCase();
+  const contestPlatform = (input.contestPlatform || "").toLowerCase();
   const link = (input.contentLink || "").toLowerCase();
 
-  if (platform.includes("tiktok") || link.includes("tiktok.com")) {
-    return "unsupported";
-  }
-  if (link.includes("instagram.com") || platform.includes("instagram")) {
-    return "instagram";
-  }
-  if (
-    link.includes("youtube.com") ||
-    link.includes("youtu.be") ||
-    platform.includes("youtube")
-  ) {
-    return "youtube";
-  }
+  // A concrete URL is the strongest signal, especially for multi-platform
+  // contests whose contest-level platform string can also include TikTok.
+  if (link.includes("tiktok.com")) return "unsupported";
+  if (link.includes("instagram.com")) return "instagram";
+  if (link.includes("youtube.com") || link.includes("youtu.be")) return "youtube";
+
+  if (isTikTokOnlyPlatform(submissionPlatform)) return "unsupported";
+  if (submissionPlatform.includes("instagram")) return "instagram";
+  if (submissionPlatform.includes("youtube")) return "youtube";
+
+  // Only use contest-level data when it identifies a single supported route.
+  // Mixed contest rows need a submission platform or content URL.
+  if (contestPlatform.includes("tiktok")) return "unsupported";
+  if (contestPlatform.includes("instagram")) return "instagram";
+  if (contestPlatform.includes("youtube")) return "youtube";
   return "unsupported";
 }
 
@@ -91,6 +98,7 @@ export function splitDownloadSubmissionIdsByPlatform(
 
 /**
  * Client/server helper: whether a submission can be downloaded as IG/YT video.
+ * Multi-platform contests (e.g. youtube,instagram,tiktok) still allow IG/YT rows.
  */
 export function canDownloadSubmissionVideo(input: {
   platform?: string | null;
@@ -104,9 +112,7 @@ export function canDownloadSubmissionVideo(input: {
 export function canBulkDownloadContestVideos(
   contestPlatform?: string | null,
 ): boolean {
-  const platform = (contestPlatform || "").toLowerCase();
-  if (platform.includes("tiktok")) return false;
-  return platform.includes("instagram") || platform.includes("youtube");
+  return platformHasInstagramOrYouTube((contestPlatform || "").toLowerCase());
 }
 
 export function chunkArray<T>(items: T[], size: number): T[][] {

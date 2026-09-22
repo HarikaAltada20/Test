@@ -1,4 +1,5 @@
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import { sumPersistedPlatformCampaignsChargeableCents } from "@/lib/video-platform-campaigns";
 
 export type ContestForChargeableBudget = {
   id: string;
@@ -19,6 +20,9 @@ export function getChargeableBudgetCents(
 ): number {
   const contestType = contest.contest_type;
   const details = contest.contest_based_details;
+  const multiPlatformCents =
+    sumPersistedPlatformCampaignsChargeableCents(details);
+  if (multiPlatformCents != null) return multiPlatformCents;
 
   if (contestType === "leaderboard") {
     const leaderboard = (details?.leaderboard_contest ?? {}) as {

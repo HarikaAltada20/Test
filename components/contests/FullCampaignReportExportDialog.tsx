@@ -115,6 +115,8 @@ export type FullCampaignReportExportDialogProps = {
     submission: ContestAnalyticsExportSubmission,
   ) => number;
   isTwitterTextImage?: boolean;
+  /** Active multi-platform tab label (All / YouTube / …) shown in the dialog. */
+  platformScopeLabel?: string;
 };
 
 export function FullCampaignReportExportDialog({
@@ -137,6 +139,7 @@ export function FullCampaignReportExportDialog({
   getReportStatus,
   getReportExpectedCents,
   isTwitterTextImage = false,
+  platformScopeLabel,
 }: FullCampaignReportExportDialogProps) {
   const [format, setFormat] = useState<LeaderboardExportFormat>("xlsx");
   const [submissionFilter, setSubmissionFilter] =
@@ -334,6 +337,9 @@ export function FullCampaignReportExportDialog({
         submissionFilter,
         exportedAt,
         sortLabel,
+        filtersApplied: platformScopeLabel
+          ? `${formatSubmissionDataScopeLabel(submissionFilter)} · ${platformScopeLabel}`
+          : undefined,
       });
 
       const sortDividerLine = getReportExportSortDividerLine(sortOption);
@@ -395,7 +401,8 @@ export function FullCampaignReportExportDialog({
             Combined export with cover page, submissions, creator-wise data, and
             analytics overview. {scopedSubmissions.length} submissions ·{" "}
             {scopedCreatorGroups.length} creators ·{" "}
-            {formatSubmissionDataScopeLabel(submissionFilter)}.
+            {formatSubmissionDataScopeLabel(submissionFilter)}
+            {platformScopeLabel ? ` · ${platformScopeLabel}` : ""}.
           </DialogDescription>
         </DialogHeader>
 

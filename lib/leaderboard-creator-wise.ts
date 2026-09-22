@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 
 export type CreatorAggRow = {
   creator_id: string;
@@ -31,16 +32,140 @@ type RpcCreatorRow = {
   total_creator_count?: string | number | null;
 };
 
+export type CreatorAggregateSubmissionRow = {
+  creator_id?: string | null;
+  views?: number | null;
+  earnings?: number | null;
+  status?: string | null;
+  platform?: string | null;
+  created_at?: string | null;
+};
+
+function leaderboardVideoPlatformFilter(
+  platform?: string | null,
+): "youtube" | "instagram" | "tiktok" | null {
+  const value = String(platform || "")
+    .toLowerCase()
+    .trim();
+  if (value === "youtube" || value === "instagram" || value === "tiktok") {
+    return value;
+  }
+  return null;
+}
+
+/**
+ * Group eligible submissions into creator-wise ranks.
+ * Matches contest_sorted_creator_aggregates_page: views desc, created_at asc,
+ * then creators by total_views desc / best rank asc.
+ */
+export function aggregateCreatorsFromSubmissions(
+  submissions: CreatorAggregateSubmissionRow[],
+  page: number = 1,
+  limit: number = 25,
+  platform?: string | null,
+): PaginatedCreatorAggResult {
+  const platformFilter = leaderboardVideoPlatformFilter(platform);
+  const eligible = submissions.filter((row) => {
+    if (!row.creator_id) return false;
+    if (!platformFilter) return true;
+    return leaderboardVideoPlatformFilter(row.platform) === platformFilter;
+  });
+
+  const ranked = [...eligible].sort((a, b) => {
+    const viewsA = Number(a.views) || 0;
+    const viewsB = Number(b.views) || 0;
+    if (viewsB !== viewsA) return viewsB - viewsA;
+    const createdA = a.created_at || "";
+    const createdB = b.created_at || "";
+    if (createdA < createdB) return -1;
+    if (createdA > createdB) return 1;
+    return 0;
+  });
+
+  const byCreator = new Map<string, CreatorAggRow>();
+  ranked.forEach((row, index) => {
+    const creatorId = String(row.creator_id);
+    const rank = index + 1;
+    const views = Number(row.views) || 0;
+    const earnings = Number(row.earnings) || 0;
+    const existing = byCreator.get(creatorId);
+    if (!existing) {
+      byCreator.set(creatorId, {
+        creator_id: creatorId,
+        total_views: views,
+        total_earnings: earnings,
+        submission_count: 1,
+        submission_ranks: [rank],
+        best_rank: rank,
+        has_paid_submission: row.status === "paid",
+        platform: leaderboardVideoPlatformFilter(row.platform) ?? row.platform ?? null,
+        pending_submission_count: row.status === "pending" ? 1 : 0,
+      });
+      return;
+    }
+    existing.total_views += views;
+    existing.total_earnings += earnings;
+    existing.submission_count += 1;
+    existing.submission_ranks.push(rank);
+    existing.best_rank = Math.min(existing.best_rank, rank);
+    if (row.status === "paid") existing.has_paid_submission = true;
+    if (row.status === "pending") {
+      existing.pending_submission_count =
+        (existing.pending_submission_count ?? 0) + 1;
+    }
+  });
+
+  const allRows = [...byCreator.values()].sort((a, b) => {
+    if (b.total_views !== a.total_views) return b.total_views - a.total_views;
+    return a.best_rank - b.best_rank;
+  });
+
+  const from = Math.max(0, (page - 1) * limit);
+  return {
+    rows: allRows.slice(from, from + limit),
+    totalEntries: allRows.length,
+  };
+}
+
 /**
  * Per-creator aggregates for the whole contest — paginated in SQL.
  * Only the requested page of creators is returned; ranking/sorting happens in Postgres.
+ * When `platform` is set, aggregates only that platform's non-rejected submissions.
  */
 export async function getSortedCreatorAggregates(
   supabase: SupabaseClient,
   contestId: string,
   page: number = 1,
   limit: number = 25,
+  platform?: string | null,
 ): Promise<PaginatedCreatorAggResult> {
+  const platformFilter = leaderboardVideoPlatformFilter(platform);
+  if (platformFilter) {
+    const { data, error } = await fetchContestSubmissionsAllPages<
+      CreatorAggregateSubmissionRow
+    >(supabase, contestId, "creator_id, views, earnings, status, platform, created_at", {
+      statusNeq: "rejected",
+      platform: platformFilter,
+      order: [
+        { column: "views", ascending: false, nullsFirst: false },
+        { column: "created_at", ascending: true },
+      ],
+    });
+    if (error) {
+      throw new Error(
+        `Failed to fetch platform creator aggregates: ${
+          (error as { message?: string })?.message || String(error)
+        }`,
+      );
+    }
+    return aggregateCreatorsFromSubmissions(
+      data || [],
+      page,
+      limit,
+      platformFilter,
+    );
+  }
+
   const offset = (page - 1) * limit;
 
   const { data, error } = await supabase.rpc("contest_sorted_creator_aggregates_page", {

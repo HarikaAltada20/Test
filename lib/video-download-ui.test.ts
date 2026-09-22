@@ -73,6 +73,41 @@ describe("video-download-ui", () => {
     assert.equal(canBulkDownloadContestVideos("twitter"), false);
   });
 
+  it("allows bulk download on multi-platform contests that include IG or YT", () => {
+    assert.equal(
+      canBulkDownloadContestVideos("youtube,instagram,tiktok"),
+      true,
+    );
+    assert.equal(canBulkDownloadContestVideos("tiktok,youtube"), true);
+    assert.equal(canBulkDownloadContestVideos("instagram,tiktok"), true);
+  });
+
+  it("downloads IG/YT rows on multi-platform contests and skips TikTok", () => {
+    assert.equal(
+      canDownloadSubmissionVideo({
+        platform: "youtube",
+        contestPlatform: "youtube,instagram,tiktok",
+        contentLink: "https://youtu.be/abcdefghijk",
+      }),
+      true,
+    );
+    assert.equal(
+      canDownloadSubmissionVideo({
+        contestPlatform: "youtube,instagram,tiktok",
+        contentLink: "https://www.instagram.com/reel/abc/",
+      }),
+      true,
+    );
+    assert.equal(
+      canDownloadSubmissionVideo({
+        platform: "tiktok",
+        contestPlatform: "youtube,instagram,tiktok",
+        contentLink: "https://www.tiktok.com/@x/video/1",
+      }),
+      false,
+    );
+  });
+
   it("builds per-submission success and failure rows from queue failures", () => {
     const metaById = buildBulkDownloadMetaMap(["a", "b"], (id) =>
       id === "a"

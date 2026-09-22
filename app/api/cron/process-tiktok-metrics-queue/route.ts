@@ -21,6 +21,7 @@ import {
 } from "@/lib/qstash";
 import { refreshContestStats } from "@/lib/contest-stats";
 import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
+import { advanceMultiPlatformMetricsChainAfterTerminal, isFinalPlatformInMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -184,6 +185,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
           error_message: `Failed to enqueue next batch: ${enqueueResult.error}`,
         })
         .eq("id", job.runId);
+      await advanceMultiPlatformMetricsChainAfterTerminal({
+        contestId: job.contestId,
+        platform: "tiktok",
+        metricsTarget: job.metricsTarget ?? "submissions",
+        baseUrl,
+      });
       return NextResponse.json(
         {
           processed: 1,
@@ -248,6 +255,12 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       })
       .eq("id", job.runId)
       .eq("status", "running");
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "tiktok",
+      metricsTarget: job.metricsTarget ?? "submissions",
+      baseUrl,
+    });
     return NextResponse.json(
       {
         processed: 1,
@@ -267,19 +280,40 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .eq("id", job.runId);
 
     const isPostCampaignTarget = job.metricsTarget === "post_campaign";
-    await supabaseAdmin
-      .from("contests")
-      .update(
-        isPostCampaignTarget
-          ? { post_campaign_last_metrics_updated: now }
-          : { last_metrics_updated: now },
-      )
-      .eq("id", job.contestId);
+    const metricsTarget = job.metricsTarget ?? "submissions";
+    const isFinalPlatform = await isFinalPlatformInMetricsChain(
+      job.contestId,
+      metricsTarget,
+      "tiktok",
+    );
 
-    if (!isPostCampaignTarget) {
-      await refreshContestStats(job.contestId);
-      await persistContestBudgetSpent(job.contestId, supabaseAdmin);
+    if (isFinalPlatform) {
+      await supabaseAdmin
+        .from("contests")
+        .update(
+          isPostCampaignTarget
+            ? { post_campaign_last_metrics_updated: now }
+            : { last_metrics_updated: now },
+        )
+        .eq("id", job.contestId);
+
+      if (!isPostCampaignTarget) {
+        await refreshContestStats(job.contestId);
+        await persistContestBudgetSpent(job.contestId, supabaseAdmin);
+      }
+    } else {
+      console.info(
+        "[process-tiktok-metrics-queue] mid-chain TikTok done; deferring contest finalize",
+        { contestId: job.contestId, runId: job.runId, metricsTarget },
+      );
     }
+
+    await advanceMultiPlatformMetricsChainAfterTerminal({
+      contestId: job.contestId,
+      platform: "tiktok",
+      metricsTarget,
+      baseUrl,
+    });
   }
 
   return NextResponse.json({

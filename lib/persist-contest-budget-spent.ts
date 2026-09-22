@@ -9,6 +9,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { enrichContestWithCalculatedBudgets } from "@/lib/contest-service";
 import { clearContestsCache } from "@/lib/cache-utils";
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
+import { VIDEO_CONTEST_PLATFORMS } from "@/lib/video-platform-campaigns";
 
 type Details = Record<string, unknown>;
 
@@ -38,6 +39,20 @@ export function mergePersistedBudgetSpentFields(
     };
   }
 
+  for (const platform of VIDEO_CONTEST_PLATFORMS) {
+    const enrichedCampaign = asRecord(enriched[platform]);
+    const enrichedPlatformLb = asRecord(enrichedCampaign.leaderboard_contest);
+    if (enrichedPlatformLb.budget_spent == null) continue;
+    const baseCampaign = asRecord(base[platform]);
+    next[platform] = {
+      ...baseCampaign,
+      leaderboard_contest: {
+        ...asRecord(baseCampaign.leaderboard_contest),
+        budget_spent: Number(enrichedPlatformLb.budget_spent) || 0,
+      },
+    };
+  }
+
   const enrichedCpm = asRecord(enriched.cpm_contest);
   if (enrichedCpm.budget_spent != null) {
     next.cpm_contest = {
@@ -48,10 +63,20 @@ export function mergePersistedBudgetSpentFields(
 
   const enrichedMs = asRecord(enriched.milestone_contest);
   if (enrichedMs.budget_spent != null) {
-    next.milestone_contest = {
-      ...asRecord(base.milestone_contest),
-      budget_spent: Number(enrichedMs.budget_spent) || 0,
-    };
+    const spent = Number(enrichedMs.budget_spent) || 0;
+    const baseMilestone = base.milestone_contest;
+    // Multi-platform contests store ladders under youtube|instagram|tiktok
+    // and must not grow a stub root milestone_contest (no total_budget_cents).
+    if (
+      baseMilestone &&
+      typeof baseMilestone === "object" &&
+      !Array.isArray(baseMilestone)
+    ) {
+      next.milestone_contest = {
+        ...asRecord(baseMilestone),
+        budget_spent: spent,
+      };
+    }
   }
 
   if (enriched.pool_budget_spent_cents != null) {

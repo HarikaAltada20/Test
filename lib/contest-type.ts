@@ -30,11 +30,10 @@ export type ContestBasedDetailsForPool = {
   milestone_contest?: { total_budget_cents?: number | null } | null;
 } | null;
 
-/**
- * Unified prize pool in cents from contest_based_details.
- * Dual rewards: prefer root total_budget_cents; else legacy milestone_contest.total_budget_cents or cpm_contest.total_budget.
- */
-export function getPoolBudgetCentsFromDetails(
+/** Multi-platform contests copy the shared pool under these keys (do not sum). */
+const POOL_BUDGET_PLATFORM_KEYS = ["youtube", "instagram", "tiktok"] as const;
+
+function readDirectPoolBudgetCents(
   contestType: string | null | undefined,
   details: ContestBasedDetailsForPool,
 ): number {
@@ -55,6 +54,34 @@ export function getPoolBudgetCentsFromDetails(
   if (contestType === "milestone") {
     const ms = details.milestone_contest?.total_budget_cents;
     return typeof ms === "number" ? ms : 0;
+  }
+  return 0;
+}
+
+/**
+ * Unified prize pool in cents from contest_based_details.
+ * Dual rewards: prefer root total_budget_cents; else legacy milestone_contest.total_budget_cents or cpm_contest.total_budget.
+ * Multi-platform: when root payout is empty, use the shared pool copied under youtube|instagram|tiktok (do not sum).
+ */
+export function getPoolBudgetCentsFromDetails(
+  contestType: string | null | undefined,
+  details: ContestBasedDetailsForPool,
+): number {
+  const direct = readDirectPoolBudgetCents(contestType, details);
+  if (direct > 0) return direct;
+  if (!details || typeof details !== "object") return 0;
+
+  const record = details as Record<string, unknown>;
+  for (const key of POOL_BUDGET_PLATFORM_KEYS) {
+    const nested = record[key];
+    if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
+      continue;
+    }
+    const cents = readDirectPoolBudgetCents(
+      contestType,
+      nested as ContestBasedDetailsForPool,
+    );
+    if (cents > 0) return cents;
   }
   return 0;
 }

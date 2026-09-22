@@ -10,6 +10,10 @@ import {
 } from "@/lib/contest-type";
 import { platformCampaignMetricsToRows } from "@/lib/contest-analytics-campaign-metrics";
 import {
+  getAnalyticsCampaignBudgetCents,
+  resolveAnalyticsExpectedCpmDisplay,
+} from "@/lib/contest-analytics-roi";
+import {
   buildTwitterRaidExportRows,
   campaignMetricsToRows,
   computeTwitterCampaignMetrics,
@@ -80,6 +84,8 @@ export type ContestAnalyticsSnapshotContext = {
   isTwitterPlatform: boolean;
   contestFormat: string | null | undefined;
   platform: string | null | undefined;
+  scopedPlatform?: string | null;
+  contestBasedDetails?: Record<string, unknown> | null;
   contentType: string | null | undefined;
   leaderboardTotalPrizeCents: number;
   allSubmissions: ContestAnalyticsExportSubmission[];
@@ -168,9 +174,19 @@ function computeTotalInvestment(
   }
 
   if (contestType === "leaderboard") {
+    const budgetCents = getAnalyticsCampaignBudgetCents(
+      {
+        contest_type: contestType,
+        contest_based_details: ctx.contestBasedDetails ?? null,
+        platform: ctx.platform,
+      },
+      ctx.scopedPlatform,
+    );
     return {
       label: "Total Investment",
-      value: ctx.formatMoney(ctx.leaderboardTotalPrizeCents),
+      value: ctx.formatMoney(
+        budgetCents > 0 ? budgetCents : ctx.leaderboardTotalPrizeCents,
+      ),
       note: "Prize Pool",
     };
   }
@@ -448,11 +464,15 @@ export function buildContestAnalyticsTabSnapshot(
 
     roiRows.push(["Expected Reward", ctx.formatMoney(expectedRewardCents)]);
 
-    const cpmValue =
-      totalViews === 0
-        ? "$0.00"
-        : `$${((expectedRewardCents / 100 / totalViews) * 1000).toFixed(3)}`;
-    roiRows.push(["Expected CPM", cpmValue]);
+    const cpmDisplay = resolveAnalyticsExpectedCpmDisplay({
+      submissions: subs,
+      details: ctx.contestBasedDetails ?? null,
+      contestPlatformCsv: ctx.platform,
+      scopedPlatform: ctx.scopedPlatform,
+      expectedPayoutCents: expectedRewardCents,
+      totalViews,
+    });
+    roiRows.push(["Expected CPM", cpmDisplay.value]);
 
     if (isCpm && ctx.postContestStatus !== "payouts_processed") {
       const totalPaid = subs

@@ -1,7 +1,17 @@
 /**
  * Flat-fee bonus expected per submission (cents), in submission `created_at` order,
  * with global bonus budget cap. Matches admin UI / CreatorSubmissionsModal logic.
+ *
+ * Multi-platform: same bonus+budget → one All-tab FCFS pool. Different per-platform
+ * bonus/budget → independent FCFS ladders.
  */
+
+import {
+  parseVideoContestPlatforms,
+  resolveFlatFeeBonusPlan,
+  flatFeeBonusLadderForSubmission,
+  type FlatFeeBonusLadder,
+} from "@/lib/video-platform-campaigns";
 
 export type FlatFeeBonusSubmissionInput = {
   id: string;
@@ -10,64 +20,155 @@ export type FlatFeeBonusSubmissionInput = {
   moderation_status?: string | null;
   status?: string | null;
   paid?: boolean;
+  platform?: string | null;
 };
 
 export type FlatFeeBonusContestInput = {
   contest_type?: string | null;
-  contest_based_details?: {
-    cpm_contest?: {
-      flat_fee_bonus?: number;
-      total_budget?: number;
-      flat_fee_bonus_cap?: number | null;
-    };
-    leaderboard_contest?: {
-      flat_fee_bonus?: number;
-      total_budget?: number;
-    };
-  } | null;
+  platform?: string | null;
+  contest_based_details?: Record<string, unknown> | null;
 };
+
+function isTwitterFlatFeeBonusRow(
+  submission: Pick<FlatFeeBonusSubmissionInput, "is_twitter_tweet" | "platform">,
+): boolean {
+  if (submission.is_twitter_tweet === true) return true;
+  const platform = String(submission.platform || "").toLowerCase();
+  return platform === "twitter" || platform === "x";
+}
+
+/** Normalize UI/API rows so Twitter tweets and `approved` still count as verified. */
+export function toFlatFeeBonusSubmissionInput(row: {
+  id?: string | null;
+  created_at?: string | null;
+  tweet_created_at?: string | null;
+  is_twitter_tweet?: boolean;
+  moderation_status?: string | null;
+  status?: string | null;
+  paid?: boolean;
+  platform?: string | null;
+}): FlatFeeBonusSubmissionInput {
+  return {
+    id: String(row.id || ""),
+    created_at: row.created_at || row.tweet_created_at || null,
+    is_twitter_tweet: isTwitterFlatFeeBonusRow(row),
+    moderation_status: row.moderation_status ?? null,
+    status: row.status ?? null,
+    paid: row.paid === true,
+    platform: row.platform ?? null,
+  };
+}
 
 export function getFlatFeeBonusCentsFromContest(
   contest: FlatFeeBonusContestInput | null | undefined,
 ): number {
   if (!contest) return 0;
-  if (contest.contest_type === "cpm") {
-    return (
-      Number(
-        (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus,
-      ) || 0
-    );
+  const plan = resolveFlatFeeBonusPlan(
+    contest.contest_based_details,
+    contest.platform,
+    contest.contest_type,
+  );
+  if (plan.shareAcrossAllPlatforms || plan.platforms.length < 2) {
+    return plan.shared.amountCents;
   }
-  if (contest.contest_type === "leaderboard") {
-    return (
-      Number(
-        (contest.contest_based_details as any)?.leaderboard_contest
-          ?.flat_fee_bonus,
-      ) || 0
-    );
-  }
-  return 0;
+  const fromPlatforms = Math.max(
+    0,
+    ...plan.platforms.map(
+      (platform) => plan.byPlatform[platform]?.amountCents || 0,
+    ),
+  );
+  return fromPlatforms > 0 ? fromPlatforms : plan.shared.amountCents;
+}
+
+export function getFlatFeeBonusLadderForSubmission(
+  contest: FlatFeeBonusContestInput | null | undefined,
+  submissionPlatform?: string | null,
+): FlatFeeBonusLadder {
+  if (!contest) return { amountCents: 0, budgetCents: null };
+  const plan = resolveFlatFeeBonusPlan(
+    contest.contest_based_details,
+    contest.platform,
+    contest.contest_type,
+  );
+  return flatFeeBonusLadderForSubmission(
+    plan,
+    submissionPlatform,
+    contest.platform,
+  );
 }
 
 export function getNormalizedSubmissionStatusForFlatFeeBonus(
   submission: FlatFeeBonusSubmissionInput,
 ): string {
-  const isTwitterTweet = submission.is_twitter_tweet === true;
+  const isTwitterTweet = isTwitterFlatFeeBonusRow(submission);
   const rawStatus =
     (isTwitterTweet
       ? submission.moderation_status || submission.status
-      : submission.status) || "pending";
+      : submission.status || submission.moderation_status) || "pending";
   const statusLower = String(rawStatus).toLowerCase();
 
-  if (isTwitterTweet) {
-    if (statusLower === "paid") return "paid";
-    if (statusLower === "approved" || statusLower === "verified")
-      return "verified";
-    if (statusLower === "rejected") return "rejected";
-    return "pending";
+  if (statusLower === "paid") return "paid";
+  if (statusLower === "approved" || statusLower === "verified") {
+    return "verified";
+  }
+  if (statusLower === "rejected") return "rejected";
+  return statusLower;
+}
+
+function isFlatFeeBonusEligibleStatus(
+  submission: FlatFeeBonusSubmissionInput,
+): boolean {
+  const normalizedStatus = getNormalizedSubmissionStatusForFlatFeeBonus(
+    submission,
+  );
+  return (
+    normalizedStatus === "verified" ||
+    normalizedStatus === "paid" ||
+    submission.paid === true
+  );
+}
+
+function allocateFlatFeeBonusWalk(
+  rows: readonly FlatFeeBonusSubmissionInput[],
+  amountCents: number,
+  budgetCents: number | null,
+  map: Map<string, number>,
+): void {
+  if (amountCents <= 0) {
+    rows.forEach((s) => map.set(s.id, 0));
+    return;
   }
 
-  return statusLower;
+  const bonusBudget =
+    budgetCents != null && budgetCents > 0
+      ? budgetCents
+      : Number.MAX_SAFE_INTEGER;
+
+  const sorted = [...rows].sort((a, b) => {
+    const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return at - bt;
+  });
+
+  let currentTotalExpectedBonus = 0;
+  sorted.forEach((sub) => {
+    if (!isFlatFeeBonusEligibleStatus(sub)) {
+      map.set(sub.id, 0);
+      return;
+    }
+    const remainingBudget = bonusBudget - currentTotalExpectedBonus;
+    if (remainingBudget <= 0) {
+      map.set(sub.id, 0);
+      return;
+    }
+    if (remainingBudget >= amountCents) {
+      map.set(sub.id, amountCents);
+      currentTotalExpectedBonus += amountCents;
+    } else {
+      map.set(sub.id, remainingBudget);
+      currentTotalExpectedBonus += remainingBudget;
+    }
+  });
 }
 
 /**
@@ -79,70 +180,48 @@ export function buildFlatFeeBonusExpectedCentsBySubmissionId(
   submissions: readonly FlatFeeBonusSubmissionInput[],
 ): Map<string, number> {
   const map = new Map<string, number>();
+  const rows = submissions.map((s) => toFlatFeeBonusSubmissionInput(s));
   if (!contest) {
-    submissions.forEach((s) => map.set(s.id, 0));
+    rows.forEach((s) => map.set(s.id, 0));
     return map;
   }
-  const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest);
-  if (flatFeeBonus <= 0 || !submissions.length) {
-    submissions.forEach((s) => map.set(s.id, 0));
+  if (!rows.length) return map;
+
+  const plan = resolveFlatFeeBonusPlan(
+    contest.contest_based_details,
+    contest.platform,
+    contest.contest_type,
+  );
+
+  if (plan.shareAcrossAllPlatforms || plan.platforms.length < 2) {
+    allocateFlatFeeBonusWalk(
+      rows,
+      plan.shared.amountCents,
+      plan.shared.budgetCents,
+      map,
+    );
+    rows.forEach((s) => {
+      if (!map.has(s.id)) map.set(s.id, 0);
+    });
     return map;
   }
 
-  const totalBudget =
-    contest.contest_type === "cpm"
-      ? Number(
-          (contest.contest_based_details as any)?.cpm_contest?.total_budget,
-        ) || 0
-      : Number(
-          (contest.contest_based_details as any)?.leaderboard_contest
-            ?.total_budget,
-        ) || 0;
-
-  const bonusBudget =
-    contest.contest_type === "cpm"
-      ? Number(
-          (contest.contest_based_details as any)?.cpm_contest
-            ?.flat_fee_bonus_cap,
-        ) || totalBudget
-      : totalBudget;
-
-  const sorted = [...submissions].sort((a, b) => {
-    const at = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return at - bt;
-  });
-
-  let currentTotalExpectedBonus = 0;
-
-  sorted.forEach((sub) => {
-    const normalizedStatus = getNormalizedSubmissionStatusForFlatFeeBonus(sub);
-    const isBonusStatus =
-      normalizedStatus === "verified" ||
-      normalizedStatus === "paid" ||
-      sub.paid === true;
-
-    if (isBonusStatus) {
-      const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-      if (remainingBudget > 0) {
-        if (remainingBudget >= flatFeeBonus) {
-          map.set(sub.id, flatFeeBonus);
-          currentTotalExpectedBonus += flatFeeBonus;
-        } else {
-          map.set(sub.id, remainingBudget);
-          currentTotalExpectedBonus += remainingBudget;
-        }
-      } else {
-        map.set(sub.id, 0);
-      }
-    } else {
-      map.set(sub.id, 0);
-    }
-  });
-
-  submissions.forEach((s) => {
-    if (!map.has(s.id)) map.set(s.id, 0);
-  });
+  rows.forEach((s) => map.set(s.id, 0));
+  for (const platform of plan.platforms) {
+    const ladder = plan.byPlatform[platform] ?? plan.shared;
+    const platformRows = rows.filter((row) => {
+      const key =
+        parseVideoContestPlatforms(row.platform)[0] ??
+        parseVideoContestPlatforms(contest.platform)[0];
+      return key === platform;
+    });
+    allocateFlatFeeBonusWalk(
+      platformRows,
+      ladder.amountCents,
+      ladder.budgetCents,
+      map,
+    );
+  }
 
   return map;
 }

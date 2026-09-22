@@ -37,7 +37,6 @@ import {
   Eye,
   FileText,
   CheckCheck,
-  Gift,
   Tag,
   Star,
   AlertTriangle,
@@ -60,13 +59,18 @@ import {
   getEndedOpportunityPhaseLabel,
 } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import {
-  getPoolBudgetCentsFromDetails,
-  isCpmContestType,
-  isMilestoneContestType,
-} from "@/lib/contest-type";
+import { isCpmContestType } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
-import { getPlatformIconWithFallback } from "@/lib/platform-icons";
+import { getMultipleSubmissionsBadgeLabel } from "@/lib/contest-list-card-metrics";
+import {
+  formatContestListCpmRatesText,
+  formatContestPlatformLabel,
+  resolveBonusDetails,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+  resolveLeaderboardFlatFeeBonusBudgetCents,
+} from "@/lib/video-platform-campaigns";
+import { getContestPlatformIcons } from "@/lib/platform-icons";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
@@ -100,7 +104,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
+import { CampaignPlatformFilter } from "@/components/campaign-list/CampaignPlatformFilter";
 import {
+  CAMPAIGN_FILTER_PLATFORMS,
+  expandAvailableCampaignPlatforms,
+  normalizeCampaignPlatformFilter,
+  type CampaignFilterPlatform,
+} from "@/lib/campaign-platform-filter";
+import {
+  ContestListFlatFeeBonusBadge,
   ContestListStatsFooter,
   ContestListSubmissionBadges,
 } from "@/components/ContestListCardMetrics";
@@ -423,7 +435,52 @@ const getContestBudgetSpentForTracker = (contest: Contest): number =>
     contest_type: contest.contest_type,
     post_contest_status: contest.post_contest_status,
     contest_based_details: contest.contest_based_details,
+    platform: contest.platform,
   });
+
+const getContestListPoolBudgetCents = (contest: Contest): number =>
+  resolveContestPoolBudgetCents(
+    contest.contest_type,
+    contest.contest_based_details,
+    contest.platform,
+  );
+
+const getContestListLeaderboardBonusBudgetCents = (contest: Contest): number =>
+  contest.contest_type === "leaderboard"
+    ? resolveLeaderboardFlatFeeBonusBudgetCents(
+        contest.contest_based_details as unknown as Record<string, unknown> | null,
+        contest.platform,
+      )
+    : 0;
+
+const isTwitterLikePlatform = (platform?: string | null) => {
+  const lower = platform?.toLowerCase();
+  return lower === "twitter" || lower === "x";
+};
+
+const getContestListCpmRateRow = (
+  contest: Contest,
+): { label: string; value: string } | null => {
+  if (!isCpmContestType(contest.contest_type)) return null;
+
+  if (isTwitterLikePlatform(contest.platform)) {
+    const rate =
+      contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
+    if (rate == null) return null;
+    return {
+      label: "Points Rate: ",
+      value: `${formatMoney(rate * 100)} / 1k points`,
+    };
+  }
+
+  const rates = resolveContestPlatformCpmRates(
+    contest.contest_based_details as Record<string, unknown> | null | undefined,
+    contest.platform,
+  );
+  const value = formatContestListCpmRatesText(rates, formatMoney);
+  if (!value) return null;
+  return { label: "CPM Rate: ", value };
+};
 
 const getContestPrimaryFinancialText = (contest: Contest): string => {
   if (contest.contest_type === "leaderboard") {
@@ -432,20 +489,13 @@ const getContestPrimaryFinancialText = (contest: Contest): string => {
     )}`;
   }
   if (contest.contest_type === "milestone") {
-    return `Budget: ${formatMoney(
-      contest.contest_based_details?.milestone_contest?.total_budget_cents || 0,
-    )}`;
+    return `Budget: ${formatMoney(getContestListPoolBudgetCents(contest))}`;
   }
   if (
     contest.contest_type === "cpm" ||
     contest.contest_type === "dual_rewards"
   ) {
-    return `Budget: ${formatMoney(
-      getPoolBudgetCentsFromDetails(
-        contest.contest_type,
-        contest.contest_based_details,
-      ),
-    )}`;
+    return `Budget: ${formatMoney(getContestListPoolBudgetCents(contest))}`;
   }
   return `Budget: ${formatMoney(0)}`;
 };
@@ -639,7 +689,7 @@ export function ContestListClient({
   useEffect(() => {
     const stored = readStoredContestListFilters(contestListFiltersStorageKey);
     setSortOption(stored.sortOption as SortOptionType);
-    setPlatformFilter(stored.platformFilter);
+    setPlatformFilter(normalizeCampaignPlatformFilter(stored.platformFilter));
     setContestTypeFilter(stored.contestTypeFilter);
     setContestFormatFilter(stored.contestFormatFilter);
     setLimit(stored.limit);
@@ -784,8 +834,12 @@ export function ContestListClient({
   }, [refreshServerList]);
 
   const postPhaseCounts = serverPostPhaseCounts;
-  const availablePlatforms =
-    serverAvailablePlatforms.length > 0 ? serverAvailablePlatforms : ["all"];
+  const platformFilterOptions = useMemo(() => {
+    const expanded = expandAvailableCampaignPlatforms(
+      serverAvailablePlatforms,
+    ).filter((platform): platform is CampaignFilterPlatform => platform !== "all");
+    return expanded.length > 0 ? expanded : [...CAMPAIGN_FILTER_PLATFORMS];
+  }, [serverAvailablePlatforms]);
 
   useLayoutEffect(() => {
     const checkMode = () => {
@@ -1152,37 +1206,17 @@ export function ContestListClient({
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
-                        {(contest.max_submissions_per_creator ?? 1) > 1
-                          ? `${contest.max_submissions_per_creator} Submissions`
-                          : "Multiple Entries"}
+                        {getMultipleSubmissionsBadgeLabel(contest)}
                       </Badge>
                     );
                   }
                   return null;
                 })()}
-                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[12px]",
-                      isDark
-                        ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200",
-                    )}
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus ||
-                        0,
-                    )}
-                    /submission
-                  </Badge>
-                )}
+                <ContestListFlatFeeBonusBadge
+                  contest={contest}
+                  isDark={isDark}
+                  size="compact"
+                />
                 {/* Don't show content_type badge for Twitter text_image contests (we show campaign_type badge instead) */}
                 {(() => {
                   const isTwitterTextImage =
@@ -1212,7 +1246,7 @@ export function ContestListClient({
                   }
                   return null;
                 })()}
-                {contest.bonus_details?.description_html && (
+                {resolveBonusDetails(contest)?.description_html && (
                   <Badge
                     variant="outline"
                     className={cn(
@@ -1248,12 +1282,12 @@ export function ContestListClient({
               >
                 <div className="flex items-center">
                   <div className="mr-2 flex-shrink-0">
-                    {getPlatformIconWithFallback(contest.platform, "sm")}
+                    {getContestPlatformIcons(contest.platform, "sm")}
                   </div>
                   <span>
                     Platform:{" "}
                     <span className="font-medium ">
-                      {contest.platform || "N/A"}
+                      {formatContestPlatformLabel(contest.platform)}
                     </span>
                   </span>
                 </div>
@@ -1323,44 +1357,28 @@ export function ContestListClient({
                     </span>
                   </span>
                 </div>
-                {isCpmContestType(contest.contest_type) &&
-                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                    null && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                {(() => {
+                  const cpmRow = getContestListCpmRateRow(contest);
+                  if (!cpmRow) return null;
+                  return (
+                    <div className="flex items-start">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                       <span>
-                        {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
-                          ? "Points Rate: "
-                          : "CPM Rate: "}
-                        <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100,
-                          )}{" "}
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "/ 1k points"
-                            : "/ 1k views"}
-                        </span>
+                        {cpmRow.label}
+                        <span className="font-medium">{cpmRow.value}</span>
                       </span>
                     </div>
-                  )}
+                  );
+                })()}
                 {isCpmContestType(contest.contest_type) &&
-                  getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  ) > 0 && (
+                  getContestListPoolBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span>
                         Total Budget:{" "}
                         <span className="font-medium ">
                           {formatMoney(
-                            getPoolBudgetCentsFromDetails(
-                              contest.contest_type,
-                              contest.contest_based_details,
-                            ),
+                            getContestListPoolBudgetCents(contest),
                           )}
                         </span>
                       </span>
@@ -1384,38 +1402,27 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.total_budget != null &&
-                  contest.contest_based_details.leaderboard_contest
-                    .total_budget > 0 && (
+                {getContestListLeaderboardBonusBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
                       <span>
                         Total Bonus Budget:{" "}
                         <span className="font-medium text-green-700 dark:text-green-300">
                           {formatMoney(
-                            contest.contest_based_details.leaderboard_contest
-                              .total_budget,
+                            getContestListLeaderboardBonusBudgetCents(contest),
                           )}
                         </span>
                       </span>
                     </div>
                   )}
-                {isMilestoneContestType(contest.contest_type) &&
-                  contest.contest_based_details?.milestone_contest
-                    ?.total_budget_cents != null &&
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents > 0 && (
+                {contest.contest_type === "milestone" &&
+                  getContestListPoolBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
                       <span>
                         Total Budget:{" "}
                         <span className="font-medium text-blue-700 dark:text-blue-300">
-                          {formatMoney(
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents,
-                          )}
+                          {formatMoney(getContestListPoolBudgetCents(contest))}
                         </span>
                       </span>
                     </div>
@@ -1424,15 +1431,9 @@ export function ContestListClient({
 
               {/* Budget Spent Progress Bar for CPM and dual contests */}
               {isCpmContestType(contest.contest_type) &&
-                getPoolBudgetCentsFromDetails(
-                  contest.contest_type,
-                  contest.contest_based_details,
-                ) > 0 &&
+                getContestListPoolBudgetCents(contest) > 0 &&
                 (() => {
-                  const totalBudget = getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  );
+                  const totalBudget = getContestListPoolBudgetCents(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
                     getContestBudgetSpentForTracker(contest),
@@ -1480,21 +1481,13 @@ export function ContestListClient({
                 })()}
 
               {/* Bonus Budget Tracker for Leaderboard campaigns */}
-              {contest.contest_type === "leaderboard" &&
-                contest.contest_based_details?.leaderboard_contest
-                  ?.total_budget != null &&
-                contest.contest_based_details.leaderboard_contest.total_budget >
-                  0 &&
+              {getContestListLeaderboardBonusBudgetCents(contest) > 0 &&
                 (() => {
                   const totalBudget =
-                    contest.contest_based_details.leaderboard_contest
-                      .total_budget;
-                  const budgetSpent =
-                    contest.contest_based_details.leaderboard_contest
-                      .budget_spent || 0;
+                    getContestListLeaderboardBonusBudgetCents(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
-                    budgetSpent,
+                    getContestBudgetSpentForTracker(contest),
                   );
 
                   return (
@@ -1538,17 +1531,11 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
-              {/* Budget Tracker for Milestone campaigns — uses persisted
-                milestone_contest.budget_spent (same helper as CPM/dual). */}
+              {/* Budget Tracker for Milestone campaigns — same pool helper as CPM/dual. */}
               {contest.contest_type === "milestone" &&
-                contest.contest_based_details?.milestone_contest
-                  ?.total_budget_cents != null &&
-                contest.contest_based_details.milestone_contest
-                  .total_budget_cents > 0 &&
+                getContestListPoolBudgetCents(contest) > 0 &&
                 (() => {
-                  const totalBudget =
-                    contest.contest_based_details.milestone_contest
-                      .total_budget_cents;
+                  const totalBudget = getContestListPoolBudgetCents(contest);
                   const budgetSpent = getContestBudgetSpentForTracker(contest);
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
@@ -1655,9 +1642,9 @@ export function ContestListClient({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
-                className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
+                className="text-sm  bg-[#7F39EC] text-white py-1"
               >
-                {contest.platform || "Platform"}
+                {formatContestPlatformLabel(contest.platform)}
               </Badge>
               <Badge
                 variant="outline"
@@ -1971,9 +1958,7 @@ export function ContestListClient({
                           )}
                         >
                           <CheckCheck className="h-3 w-3 mr-1" />
-                          {(contest.max_submissions_per_creator ?? 1) > 1
-                            ? `${contest.max_submissions_per_creator} Submissions`
-                            : "Multiple Entries"}
+                          {getMultipleSubmissionsBadgeLabel(contest)}
                         </Badge>
                       );
                     }
@@ -2008,33 +1993,13 @@ export function ContestListClient({
                     }
                     return null;
                   })()}
-                  {/* Flat Fee Bonus Badge */}
-                  {(contest.contest_based_details?.cpm_contest
-                    ?.flat_fee_bonus ||
-                    contest.contest_based_details?.leaderboard_contest
-                      ?.flat_fee_bonus) && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-sm px-3 py-1 font-medium",
-                        isDark
-                          ? "bg-green-900/30 text-green-300 border-green-700/50"
-                          : "bg-green-50 text-green-700 border-green-200",
-                      )}
-                    >
-                      <Gift className="h-3 w-3 mr-1" />
-                      {formatMoney(
-                        contest.contest_based_details?.cpm_contest
-                          ?.flat_fee_bonus ||
-                          contest.contest_based_details?.leaderboard_contest
-                            ?.flat_fee_bonus ||
-                          0,
-                      )}
-                      /submission
-                    </Badge>
-                  )}
+                  <ContestListFlatFeeBonusBadge
+                    contest={contest}
+                    isDark={isDark}
+                    size="default"
+                  />
                   {/* Bonus Available Badge */}
-                  {contest.bonus_details?.description_html && (
+                  {resolveBonusDetails(contest)?.description_html && (
                     <Badge
                       variant="outline"
                       className={cn(
@@ -2064,7 +2029,7 @@ export function ContestListClient({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
                   <div className="flex items-center">
                     <div className="mr-2 flex-shrink-0">
-                      {getPlatformIconWithFallback(contest.platform, "sm")}
+                      {getContestPlatformIcons(contest.platform, "sm")}
                     </div>
                     <span
                       style={{
@@ -2074,7 +2039,7 @@ export function ContestListClient({
                     >
                       Platform:{" "}
                       <span className="font-medium">
-                        {contest.platform || "N/A"}
+                        {formatContestPlatformLabel(contest.platform)}
                       </span>
                     </span>
                   </div>
@@ -2164,39 +2129,26 @@ export function ContestListClient({
                       </span>
                     </span>
                   </div>
-                  {isCpmContestType(contest.contest_type) &&
-                    contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                      null && (
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                  {(() => {
+                    const cpmRow = getContestListCpmRateRow(contest);
+                    if (!cpmRow) return null;
+                    return (
+                      <div className="flex items-start">
+                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                         <span
                           style={{
                             color: isDark ? "white" : "#475569",
                             transition: "none",
                           }}
                         >
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "Points Rate: "
-                            : "CPM Rate: "}
-                          <span className="font-medium">
-                            {formatMoney(
-                              contest.contest_based_details.cpm_contest
-                                .cpm_rate_usd * 100,
-                            )}{" "}
-                            {contest.platform?.toLowerCase() === "twitter" ||
-                            contest.platform?.toLowerCase() === "x"
-                              ? "/ 1k points"
-                              : "/ 1k views"}
-                          </span>
+                          {cpmRow.label}
+                          <span className="font-medium">{cpmRow.value}</span>
                         </span>
                       </div>
-                    )}
+                    );
+                  })()}
                   {isCpmContestType(contest.contest_type) &&
-                    getPoolBudgetCentsFromDetails(
-                      contest.contest_type,
-                      contest.contest_based_details,
-                    ) > 0 && (
+                    getContestListPoolBudgetCents(contest) > 0 && (
                       <div className="flex items-center">
                         <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                         <span
@@ -2208,10 +2160,7 @@ export function ContestListClient({
                           Total Budget:{" "}
                           <span className="font-medium">
                             {formatMoney(
-                              getPoolBudgetCentsFromDetails(
-                                contest.contest_type,
-                                contest.contest_based_details,
-                              ),
+                              getContestListPoolBudgetCents(contest),
                             )}
                           </span>
                         </span>
@@ -2240,11 +2189,28 @@ export function ContestListClient({
                         </span>
                       </div>
                     )}
-                  {isMilestoneContestType(contest.contest_type) &&
-                    contest.contest_based_details?.milestone_contest
-                      ?.total_budget_cents != null &&
-                    contest.contest_based_details.milestone_contest
-                      .total_budget_cents > 0 && (
+                  {getContestListLeaderboardBonusBudgetCents(contest) > 0 && (
+                      <div className="flex items-center">
+                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                        <span
+                          style={{
+                            color: isDark ? "white" : "#475569",
+                            transition: "none",
+                          }}
+                        >
+                          Total Bonus Budget:{" "}
+                          <span className="font-medium text-green-700 dark:text-green-300">
+                            {formatMoney(
+                              getContestListLeaderboardBonusBudgetCents(
+                                contest,
+                              ),
+                            )}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                  {contest.contest_type === "milestone" &&
+                    getContestListPoolBudgetCents(contest) > 0 && (
                       <div className="flex items-center">
                         <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
                         <span
@@ -2255,10 +2221,7 @@ export function ContestListClient({
                         >
                           Total Budget:{" "}
                           <span className="font-medium text-blue-700 dark:text-blue-300">
-                            {formatMoney(
-                              contest.contest_based_details.milestone_contest
-                                .total_budget_cents,
-                            )}
+                            {formatMoney(getContestListPoolBudgetCents(contest))}
                           </span>
                         </span>
                       </div>
@@ -2267,15 +2230,9 @@ export function ContestListClient({
 
                 {/* Budget Spent Progress Bar for CPM and dual contests */}
                 {isCpmContestType(contest.contest_type) &&
-                  getPoolBudgetCentsFromDetails(
-                    contest.contest_type,
-                    contest.contest_based_details,
-                  ) > 0 &&
+                  getContestListPoolBudgetCents(contest) > 0 &&
                   (() => {
-                    const totalBudget = getPoolBudgetCentsFromDetails(
-                      contest.contest_type,
-                      contest.contest_based_details,
-                    );
+                    const totalBudget = getContestListPoolBudgetCents(contest);
                     const tracker = getBudgetTrackerValues(
                       totalBudget,
                       getContestBudgetSpentForTracker(contest),
@@ -2324,21 +2281,13 @@ export function ContestListClient({
                   })()}
 
                 {/* Bonus Budget Tracker for Leaderboard campaigns */}
-                {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.total_budget != null &&
-                  contest.contest_based_details.leaderboard_contest
-                    .total_budget > 0 &&
+                {getContestListLeaderboardBonusBudgetCents(contest) > 0 &&
                   (() => {
                     const totalBudget =
-                      contest.contest_based_details.leaderboard_contest
-                        .total_budget;
-                    const budgetSpent =
-                      contest.contest_based_details.leaderboard_contest
-                        .budget_spent || 0;
+                      getContestListLeaderboardBonusBudgetCents(contest);
                     const tracker = getBudgetTrackerValues(
                       totalBudget,
-                      budgetSpent,
+                      getContestBudgetSpentForTracker(contest),
                     );
 
                     return (
@@ -2379,16 +2328,11 @@ export function ContestListClient({
                       </div>
                     );
                   })()}
-                {/* Milestone budget_spent: persisted field via getContestBudgetSpentForTracker */}
+                {/* Milestone budget: pool helper so multi-platform contests still show */}
                 {contest.contest_type === "milestone" &&
-                  contest.contest_based_details?.milestone_contest
-                    ?.total_budget_cents != null &&
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents > 0 &&
+                  getContestListPoolBudgetCents(contest) > 0 &&
                   (() => {
-                    const totalBudget =
-                      contest.contest_based_details.milestone_contest
-                        .total_budget_cents;
+                    const totalBudget = getContestListPoolBudgetCents(contest);
                     const budgetSpent =
                       getContestBudgetSpentForTracker(contest);
                     const tracker = getBudgetTrackerValues(
@@ -2502,9 +2446,9 @@ export function ContestListClient({
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
-                className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
+                className="text-sm bg-[#7F39EC] text-white py-1"
               >
-                {contest.platform || "Platform"}
+                {formatContestPlatformLabel(contest.platform)}
               </Badge>
               <Badge
                 variant="outline"
@@ -3985,18 +3929,13 @@ export function ContestListClient({
                 </SelectContent>
               </Select>
 
-              <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
-                  <SelectValue placeholder="Platform" />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  {availablePlatforms.map((p) => (
-                    <SelectItem isDark={isDark} key={p} value={p}>
-                      {p === "all" ? "All Platforms" : p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CampaignPlatformFilter
+                value={platformFilter}
+                onChange={setPlatformFilter}
+                platforms={platformFilterOptions}
+                isDark={isDark}
+                triggerClassName="border border-gray-400"
+              />
 
               {/* Campaign Type Filter */}
               <Select

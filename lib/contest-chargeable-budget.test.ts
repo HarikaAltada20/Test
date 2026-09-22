@@ -53,6 +53,96 @@ describe("getChargeableBudgetCents", () => {
     assert.equal(cents, 25_000);
   });
 
+  it("sums per-platform campaigns when multiple platforms are configured", () => {
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "leaderboard",
+      contest_based_details: {
+        leaderboard_contest: { total_prize: 10_000 },
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_prize: 10_000 },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_prize: 4_000 },
+        },
+      },
+    });
+    assert.equal(cents, 14_000);
+  });
+
+  it("sums per-platform leaderboard bonus budgets when configured", () => {
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "leaderboard",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            total_prize: 10_000,
+            flat_fee_bonus: 200,
+            total_budget: 4_000,
+          },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: {
+            total_prize: 4_000,
+            flat_fee_bonus: 500,
+            total_budget: 2_500,
+          },
+        },
+      },
+    });
+    assert.equal(cents, 20_500);
+  });
+
+  it("charges a matching multi-platform prize ladder once", () => {
+    const sharedLadder = {
+      total_prize: 10_000,
+      winner_count: 2,
+      prizes: [
+        { position: 1, amount: 6_000 },
+        { position: 2, amount: 4_000 },
+      ],
+    };
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "leaderboard",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: sharedLadder,
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { ...sharedLadder },
+        },
+      },
+    });
+    assert.equal(cents, 10_000);
+  });
+
+  it("uses shared campaign budget once for multi-platform CPM", () => {
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "cpm",
+      contest_based_details: {
+        cpm_contest: { total_budget: 4_000 },
+        youtube: {
+          contest_type: "cpm",
+          cpm_contest: { total_budget: 4_000 },
+        },
+        instagram: {
+          contest_type: "cpm",
+          cpm_contest: { total_budget: 4_000 },
+        },
+      },
+    });
+    assert.equal(cents, 4_000);
+  });
+
   it("dual_rewards uses root total_budget_cents", () => {
     const cents = getChargeableBudgetCents({
       id: "c1",

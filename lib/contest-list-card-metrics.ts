@@ -24,6 +24,13 @@ export function formatCompactCount(n: number): string {
   return n.toLocaleString();
 }
 
+export function getMultipleSubmissionsBadgeLabel(contest: {
+  max_submissions_per_creator?: number | null;
+}): string {
+  const max = Number(contest?.max_submissions_per_creator) || 1;
+  return max > 1 ? `${max} Submissions` : "Multiple Entries";
+}
+
 export function getAdminSubmissionTotal(
   contest: ContestListMetricsContest,
 ): number {

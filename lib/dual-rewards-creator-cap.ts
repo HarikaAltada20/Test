@@ -8,6 +8,7 @@ export type DualCreatorCapSubmissionRow = {
   created_at: string;
   mRawCents: number;
   cRawCents: number;
+  platform?: string | null;
 };
 
 export function buildDualRewardCreatorCapSplitMaps(
@@ -63,6 +64,52 @@ export function buildDualRewardCreatorCapSplitMaps(
     remaining -= alloc;
   }
 
+  return { milestoneCappedBySubmissionId, cpmCappedBySubmissionId };
+}
+
+/**
+ * When max earnings is platform-keyed, apply each platform's cap independently.
+ * A legacy number still uses one contest-wide running cap.
+ */
+export function buildDualRewardCreatorCapSplitMapsByPlatform(
+  submissions: DualCreatorCapSubmissionRow[],
+  getMaxCentsForPlatform: (
+    platform?: string | null,
+  ) => number | null | undefined,
+  options?: { keyedCaps?: boolean },
+): {
+  milestoneCappedBySubmissionId: Map<string, number>;
+  cpmCappedBySubmissionId: Map<string, number>;
+} {
+  if (!options?.keyedCaps) {
+    const first = submissions[0];
+    const max =
+      getMaxCentsForPlatform(first?.platform) ??
+      getMaxCentsForPlatform(null) ??
+      0;
+    return buildDualRewardCreatorCapSplitMaps(submissions, max);
+  }
+
+  const groups = new Map<string, DualCreatorCapSubmissionRow[]>();
+  for (const row of submissions) {
+    const key = String(row.platform || "").toLowerCase() || "_";
+    const list = groups.get(key) || [];
+    list.push(row);
+    groups.set(key, list);
+  }
+
+  const milestoneCappedBySubmissionId = new Map<string, number>();
+  const cpmCappedBySubmissionId = new Map<string, number>();
+  for (const rows of groups.values()) {
+    const cap = getMaxCentsForPlatform(rows[0]?.platform) ?? 0;
+    const maps = buildDualRewardCreatorCapSplitMaps(rows, cap);
+    maps.milestoneCappedBySubmissionId.forEach((value, id) => {
+      milestoneCappedBySubmissionId.set(id, value);
+    });
+    maps.cpmCappedBySubmissionId.forEach((value, id) => {
+      cpmCappedBySubmissionId.set(id, value);
+    });
+  }
   return { milestoneCappedBySubmissionId, cpmCappedBySubmissionId };
 }
 

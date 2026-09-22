@@ -1,13 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { getCpmEligibleViewsFromRow } from "@/lib/cpm-eligible-views";
 import type { MilestonePayoutRule } from "@/lib/contest-utils-client";
 import {
   buildMilestoneSubmissionPayoutCentsMapForCreator,
+  buildMilestoneSubmissionPayoutCentsMapForCreatorFromDetails,
+  contestMilestonesRequireWinnerLimitFcfs,
   getMilestoneEligibleViewsFromRow,
   getMilestonePayoutCentsFromViews,
   milestonesRequireContestWideFcfs,
 } from "@/lib/milestone-contest-expected-spend";
-import { buildDualRewardCreatorCapSplitMaps } from "@/lib/dual-rewards-creator-cap";
+import { buildDualRewardCreatorCapSplitMapsByPlatform } from "@/lib/dual-rewards-creator-cap";
+import {
+  isKeyedMaxEarningsMap,
+  resolveMaxEarningsCentsForSubmission,
+  resolveMilestoneContestForPlatform,
+} from "@/lib/video-platform-campaigns";
 
 export const DUAL_PAYOUT_ELIGIBLE_STATUSES = [
   "pending",
@@ -52,7 +61,11 @@ export function toDualPayoutEligibleRecords(
 }
 
 export function computeDualCpmRawCentsFromRow(
-  row: { views?: number | null },
+  row: {
+    views?: number | null;
+    platform?: string | null;
+    other_stats?: unknown;
+  },
   cpm:
     | {
         cpm_rate_usd?: number;
@@ -63,7 +76,7 @@ export function computeDualCpmRawCentsFromRow(
     | undefined,
 ): number {
   const rate = typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
-  let effectiveViews = Number(row.views) || 0;
+  let effectiveViews = getCpmEligibleViewsFromRow(row);
   if (typeof cpm?.min_views === "number" && effectiveViews < cpm.min_views) {
     effectiveViews = 0;
   }
@@ -78,7 +91,39 @@ function buildMilestoneRawMapForCreator(
   milestones: MilestonePayoutRule[],
   contestFcfsRows: DualPayoutEligibleRecord[] | null,
   creatorId: string,
+  details?: Record<string, unknown> | null,
+  contestPlatformCsv?: string | null,
 ): Map<string, number> {
+  if (details) {
+    if (
+      contestFcfsRows &&
+      contestFcfsRows.length > 0 &&
+      contestMilestonesRequireWinnerLimitFcfs(details, contestPlatformCsv)
+    ) {
+      return buildMilestoneSubmissionPayoutCentsMapForCreatorFromDetails(
+        contestFcfsRows,
+        details,
+        contestPlatformCsv,
+        creatorId,
+      );
+    }
+
+    const map = new Map<string, number>();
+    for (const r of creatorRecords) {
+      const cfg = resolveMilestoneContestForPlatform(
+        details,
+        r.platform,
+        contestPlatformCsv,
+      );
+      const views = getMilestoneEligibleViewsFromRow(r);
+      map.set(
+        String(r.id),
+        getMilestonePayoutCentsFromViews(views, cfg?.milestones ?? []),
+      );
+    }
+    return map;
+  }
+
   if (
     contestFcfsRows &&
     contestFcfsRows.length > 0 &&
@@ -105,6 +150,12 @@ export function buildDualCreatorCapMapsFromCreatorRows(
   milestoneRawBySubmissionId: Map<string, number>,
   cpmCfg: unknown,
   maxCap: number,
+  options?: {
+    details?: Record<string, unknown> | null;
+    contestPlatformCsv?: string | null;
+    maxEarningsPerCreator?: unknown;
+    bonusDetails?: unknown;
+  },
 ): DualCreatorCapMaps {
   const dualRows = [...creatorRecords]
     .sort(
@@ -114,10 +165,31 @@ export function buildDualCreatorCapMapsFromCreatorRows(
     .map((r) => ({
       id: String(r.id),
       created_at: String(r.created_at || ""),
+      platform: r.platform,
       mRawCents: Number(milestoneRawBySubmissionId.get(String(r.id)) || 0),
-      cRawCents: computeDualCpmRawCentsFromRow(r, cpmCfg as any),
+      cRawCents: options?.details
+        ? computeCpmRawCentsForRow(
+            r,
+            options.details,
+            options.contestPlatformCsv,
+          )
+        : computeDualCpmRawCentsFromRow(r, cpmCfg as any),
     }));
-  return buildDualRewardCreatorCapSplitMaps(dualRows, maxCap);
+  const keyed = isKeyedMaxEarningsMap(options?.maxEarningsPerCreator);
+  return buildDualRewardCreatorCapSplitMapsByPlatform(
+    dualRows,
+    (platform) =>
+      resolveMaxEarningsCentsForSubmission(
+        {
+          max_earnings_per_creator: options?.maxEarningsPerCreator ?? maxCap,
+          bonus_details: options?.bonusDetails,
+          platform: options?.contestPlatformCsv,
+          contest_based_details: options?.details,
+        },
+        platform,
+      ) ?? maxCap,
+    { keyedCaps: keyed },
+  );
 }
 
 async function fetchCreatorPayoutSubmissions(
@@ -179,11 +251,23 @@ export async function loadDualCreatorCapMaps(
   milestones: MilestonePayoutRule[],
   cpmCfg: unknown,
   maxCap: number,
+  options?: {
+    details?: Record<string, unknown> | null;
+    contestPlatformCsv?: string | null;
+    maxEarningsPerCreator?: unknown;
+    bonusDetails?: unknown;
+  },
 ): Promise<
   | { maps: DualCreatorCapMaps; error?: undefined }
   | { maps?: undefined; error: string }
 > {
-  const needsFcfs = milestonesRequireContestWideFcfs(milestones);
+  const details = options?.details ?? null;
+  const needsFcfs = details
+    ? contestMilestonesRequireWinnerLimitFcfs(
+        details,
+        options?.contestPlatformCsv,
+      )
+    : milestonesRequireContestWideFcfs(milestones);
 
   const creatorResult = await fetchCreatorPayoutSubmissions(
     supabaseAdmin,
@@ -212,6 +296,8 @@ export async function loadDualCreatorCapMaps(
     milestones,
     needsFcfs ? contestFcfsRows : null,
     creatorId,
+    details,
+    options?.contestPlatformCsv,
   );
 
   const maps = buildDualCreatorCapMapsFromCreatorRows(
@@ -219,6 +305,12 @@ export async function loadDualCreatorCapMaps(
     milestoneRaw,
     cpmCfg,
     maxCap,
+    {
+      details,
+      contestPlatformCsv: options?.contestPlatformCsv,
+      maxEarningsPerCreator: options?.maxEarningsPerCreator ?? maxCap,
+      bonusDetails: options?.bonusDetails,
+    },
   );
 
   return { maps };

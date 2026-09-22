@@ -2,7 +2,60 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getSortedCreatorAggregates } from "@/lib/leaderboard-creator-wise";
 import { fetchPendingSubmissionCountsByCreator } from "@/lib/leaderboard-pending-counts";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
+import { leaderboardSubmissionBannerCounts } from "@/lib/leaderboard-submission-counts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+function leaderboardVideoPlatformFilter(
+  platform?: string | null,
+): "youtube" | "instagram" | "tiktok" | null {
+  const value = String(platform || "")
+    .toLowerCase()
+    .trim();
+  if (value === "youtube" || value === "instagram" || value === "tiktok") {
+    return value;
+  }
+  return null;
+}
+
+async function fetchLeaderboardSubmissionStatusCounts(
+  supabase: SupabaseClient,
+  contestId: string,
+  platformFilter: "youtube" | "instagram" | "tiktok" | null,
+) {
+  let totalQuery = supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("contest_id", contestId);
+  let rejectedQuery = supabase
+    .from("submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("contest_id", contestId)
+    .eq("status", SUBMISSION_STATUS.rejected);
+  if (platformFilter) {
+    totalQuery = totalQuery.eq("platform", platformFilter);
+    rejectedQuery = rejectedQuery.eq("platform", platformFilter);
+  }
+  const [totalResult, rejectedResult] = await Promise.all([
+    totalQuery,
+    rejectedQuery,
+  ]);
+  if (totalResult.error) {
+    console.error(
+      "[leaderboard] total submission count failed:",
+      totalResult.error.message,
+    );
+  }
+  if (rejectedResult.error) {
+    console.error(
+      "[leaderboard] rejected submission count failed:",
+      rejectedResult.error.message,
+    );
+  }
+  return leaderboardSubmissionBannerCounts(
+    totalResult.count || 0,
+    rejectedResult.count || 0,
+  );
+}
 
 function buildCreatorDisplay(
   creatorProfile: any,
@@ -60,9 +113,16 @@ async function getLeaderboardGroupedByCreator(
   contestId: string,
   page: number,
   limit: number,
+  platform?: string | null,
 ) {
   const from = (page - 1) * limit;
-  const { rows: pageCreators, totalEntries } = await getSortedCreatorAggregates(supabase, contestId, page, limit);
+  const { rows: pageCreators, totalEntries } = await getSortedCreatorAggregates(
+    supabase,
+    contestId,
+    page,
+    limit,
+    platform,
+  );
   const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
   const creatorIds = pageCreators.map((c) => c.creator_id);
 
@@ -96,11 +156,19 @@ async function getLeaderboardGroupedByCreator(
   const creatorBonusPaidTotalMap = new Map<string, number>();
   const creatorMostVerifiedBonusPaidViewsMap = new Map<string, number>();
   const creatorMostVerifiedBonusPaidReelsMap = new Map<string, number>();
-  const { data: creatorBonusRows, error: creatorBonusError } = await supabase
+  const platformFilter = leaderboardVideoPlatformFilter(platform);
+  let creatorBonusQuery = supabase
     .from("submissions")
-    .select("creator_id, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid")
+    .select(
+      "creator_id, platform, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid",
+    )
     .eq("contest_id", contestId)
     .in("creator_id", creatorIds);
+  if (platformFilter) {
+    creatorBonusQuery = creatorBonusQuery.eq("platform", platformFilter);
+  }
+  const { data: creatorBonusRows, error: creatorBonusError } =
+    await creatorBonusQuery;
 
   const displayStatusByCreator = new Map<string, string | null>();
   const rpcSupportsPendingCount =
@@ -123,6 +191,38 @@ async function getLeaderboardGroupedByCreator(
       agg.creator_id,
       pendingCount > 0 ? SUBMISSION_STATUS.pending : null,
     );
+  }
+
+  const platformsByCreator = new Map<string, string[]>();
+  if (platformFilter) {
+    for (const agg of pageCreators) {
+      platformsByCreator.set(agg.creator_id, [platformFilter]);
+    }
+  } else {
+    const { data: creatorPlatformRows, error: creatorPlatformError } =
+      await supabase
+        .from("submissions")
+        .select("creator_id, platform")
+        .eq("contest_id", contestId)
+        .in("creator_id", creatorIds)
+        .neq("status", "rejected");
+    if (creatorPlatformError) {
+      console.error(
+        "Error fetching creator platforms for creator-wise:",
+        creatorPlatformError,
+      );
+    } else {
+      for (const row of creatorPlatformRows || []) {
+        const creatorId = String((row as { creator_id?: string }).creator_id || "");
+        const rowPlatform = leaderboardVideoPlatformFilter(
+          (row as { platform?: string | null }).platform,
+        );
+        if (!creatorId || !rowPlatform) continue;
+        const list = platformsByCreator.get(creatorId) || [];
+        if (!list.includes(rowPlatform)) list.push(rowPlatform);
+        platformsByCreator.set(creatorId, list);
+      }
+    }
   }
 
   if (creatorBonusError) {
@@ -204,6 +304,10 @@ async function getLeaderboardGroupedByCreator(
         creatorMostVerifiedBonusPaidReelsMap.get(agg.creator_id) ?? 0,
       display_status: displayStatusByCreator.get(agg.creator_id) ?? null,
       pending_submission_count: pendingCount,
+      platform: agg.platform ?? null,
+      platforms:
+        platformsByCreator.get(agg.creator_id) ??
+        (agg.platform ? [agg.platform] : []),
       submissions: [],
     };
   });
@@ -221,6 +325,7 @@ export type LeaderboardFetchParams = {
   page: number;
   limit: number;
   groupBy: string;
+  platform?: string;
 };
 
 /**
@@ -231,6 +336,7 @@ export async function fetchLeaderboardPayload(
   params: LeaderboardFetchParams,
 ): Promise<Record<string, unknown>> {
   const { contestId, page, limit, groupBy } = params;
+  const platformFilter = leaderboardVideoPlatformFilter(params.platform);
   const from = (page - 1) * limit;
   const to = page * limit - 1;
 
@@ -258,33 +364,31 @@ export async function fetchLeaderboardPayload(
     throw new Error("Contest not found");
   }
 
+  const submissionStatusCounts = await fetchLeaderboardSubmissionStatusCounts(
+    supabase,
+    contestId,
+    platformFilter,
+  );
+  const totalSubmissions = submissionStatusCounts.total;
+  const rejectedCount = submissionStatusCounts.rejected;
+  const totalEntries = submissionStatusCounts.active;
+
   if (groupBy === "creator") {
     const creatorWiseResult = await getLeaderboardGroupedByCreator(
       supabase,
       contestId,
       page,
       limit,
+      platformFilter,
     );
     return {
       ...creatorWiseResult,
       lastUpdated: new Date().toISOString(),
       contestType: contestData.contest_type,
       groupBy: "creator",
+      totalSubmissions,
+      rejectedCount,
     };
-  }
-
-  let countQuery = supabase
-    .from("submissions")
-    .select("id", { count: "exact", head: true })
-    .eq("contest_id", contestId);
-
-  countQuery = countQuery.neq("status", "rejected");
-
-  const { count: totalEntries, error: countError } = await countQuery;
-
-  if (countError) {
-    console.error("Error fetching submission count:", countError);
-    throw new Error(`Failed to fetch submission count: ${countError.message}`);
   }
 
   const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
@@ -311,7 +415,10 @@ export async function fetchLeaderboardPayload(
     )
     .eq("contest_id", contestId);
 
-  submissionsQuery = submissionsQuery.neq("status", "rejected");
+  submissionsQuery = submissionsQuery.neq("status", SUBMISSION_STATUS.rejected);
+  if (platformFilter) {
+    submissionsQuery = submissionsQuery.eq("platform", platformFilter);
+  }
 
   const { data: submissions, error: submissionsError } = await submissionsQuery
     .order("views", { ascending: false, nullsFirst: false })
@@ -331,6 +438,8 @@ export async function fetchLeaderboardPayload(
       totalPages: totalPages,
       totalEntries: totalEntries || 0,
       contestType: contestData.contest_type,
+      totalSubmissions,
+      rejectedCount,
     };
   }
 
@@ -436,5 +545,7 @@ export async function fetchLeaderboardPayload(
     totalPages: totalPages,
     totalEntries: totalEntries || 0,
     contestType: contestData.contest_type,
+    totalSubmissions,
+    rejectedCount,
   };
 }

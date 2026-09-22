@@ -24,6 +24,7 @@ import {
   isMetricsTargetMismatch,
   type MetricsRefreshTarget,
 } from "@/lib/post-campaign-enqueue-guards";
+import { createMetricsRefreshRunProgressWriter } from "@/lib/metrics-refresh-run-progress";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -297,6 +298,28 @@ export async function POST(
 
     let skippedRecentCount = 0;
     const now = new Date().toISOString();
+    const { data: progressBaseRow } = await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .select(
+        "processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count",
+      )
+      .eq("id", runId)
+      .single();
+    const progress = createMetricsRefreshRunProgressWriter({
+      supabase: supabaseAdmin,
+      table: "instagram_insights_refresh_runs",
+      runId,
+      base: {
+        processed_submissions: progressBaseRow?.processed_submissions ?? 0,
+        reviewed_count: progressBaseRow?.reviewed_count ?? 0,
+        success_count: progressBaseRow?.success_count ?? 0,
+        temporary_failure_count:
+          progressBaseRow?.temporary_failure_count ?? 0,
+        permanent_failure_count:
+          progressBaseRow?.permanent_failure_count ?? 0,
+        skipped_recent_count: progressBaseRow?.skipped_recent_count ?? 0,
+      },
+    });
     const tokenUpdatesByCreator = new Map<string, InstagramAccount>();
     const submissionUpdates: Array<{
       id: string;
@@ -509,8 +532,10 @@ export async function POST(
           .eq("submission_id", up.id)
           .select("submission_id")
           .maybeSingle();
+        const updated = !error && data != null;
+        if (updated) await progress.addProcessed(1);
         return {
-          updated: !error && data != null,
+          updated,
           newStatus: up.insights_status,
           previousStatus: up.previous_insights_status,
         };
@@ -527,8 +552,10 @@ export async function POST(
         .eq("id", up.id)
         .select("id")
         .maybeSingle();
+      const updated = !error && data != null;
+      if (updated) await progress.addProcessed(1);
       return {
-        updated: !error && data != null,
+        updated,
         newStatus: up.insights_status,
         previousStatus: up.previous_insights_status,
       };
@@ -571,30 +598,15 @@ export async function POST(
     });
 
     const reviewedInBatch = batch.length;
-    const { data: runRow } = await supabaseAdmin
-      .from("instagram_insights_refresh_runs")
-      .select("processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count")
-      .eq("id", runId)
-      .eq("current_batch_index", batchIndex)
-      .single();
-
-    if (runRow) {
-      await supabaseAdmin
-        .from("instagram_insights_refresh_runs")
-        .update({
-          reviewed_count: (runRow.reviewed_count ?? 0) + reviewedInBatch,
-          processed_submissions: (runRow.processed_submissions ?? 0) + processedInBatch,
-          success_count: (runRow.success_count ?? 0) + successTransitions,
-          permanent_failure_count: (runRow.permanent_failure_count ?? 0) + permanentTransitions,
-          temporary_failure_count: (runRow.temporary_failure_count ?? 0) + temporaryTransitions,
-          skipped_recent_count: (runRow.skipped_recent_count ?? 0) + skippedRecentCount,
-          current_batch_index: batchIndex + 1,
-          last_batch_completed_at: now,
-          updated_at: now,
-        })
-        .eq("id", runId)
-        .eq("current_batch_index", batchIndex);
-    }
+    await progress.awaitIdle();
+    await progress.finalize(batchIndex, now, {
+      processed: processedInBatch,
+      reviewed: reviewedInBatch,
+      success: successTransitions,
+      temporaryFailure: temporaryTransitions,
+      permanentFailure: permanentTransitions,
+      skipped: skippedRecentCount,
+    });
 
     await insertMetaGraphUsageLogRow({
       source: "instagram_insights_batch",

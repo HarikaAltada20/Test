@@ -19,12 +19,14 @@ import {
 } from "@/lib/post-campaign-enqueue-guards";
 import {
   metricsRunTableForPlatform,
-  postCampaignEnqueuePathForPlatform,
-  postCampaignPlatformLabel,
-  postCampaignStatusPathForPlatform,
   resolvePostCampaignRefreshPlatforms,
-  type PostCampaignVideoPlatform,
 } from "@/lib/post-campaign-platforms";
+import {
+  parseRequestedRefreshPlatforms,
+  partitionRefreshPlatformsByQueueAvailability,
+  resolveMetricsRefreshPlatformQueue,
+} from "@/lib/multi-platform-metrics-refresh";
+import { startMultiPlatformMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
 
 const YT_SCOPES: YouTubeRefreshScope[] = [
   "basic",
@@ -45,17 +47,6 @@ function resolveBaseUrl(request: Request): string {
       : `https://${process.env.NEXT_PUBLIC_APP_URL}`;
   }
   return "http://localhost:3000";
-}
-
-function isQueueEnabledForPlatform(platform: PostCampaignVideoPlatform): boolean {
-  switch (platform) {
-    case "instagram":
-      return isInstagramInsightsQueueEnabled();
-    case "youtube":
-      return isYouTubeMetricsQueueEnabled();
-    case "tiktok":
-      return isTikTokMetricsQueueEnabled();
-  }
 }
 
 export async function POST(
@@ -104,7 +95,8 @@ export async function POST(
     if (
       scope !== "basic" &&
       !isAdmin &&
-      contestPlatforms.includes("youtube")
+      contestPlatforms.includes("youtube") &&
+      contest.advertiser_id !== user.id
     ) {
       return NextResponse.json(
         { error: "Admin access required for this analytics scope" },
@@ -162,15 +154,33 @@ export async function POST(
       contestId,
     );
 
-    const platforms = resolvePostCampaignRefreshPlatforms({
+    const allowedPlatforms = resolvePostCampaignRefreshPlatforms({
       contestPlatform: contest.platform,
       rowPlatforms: overlayPlatformRows,
+    });
+
+    if (allowedPlatforms.length === 0) {
+      return NextResponse.json(
+        {
+          error: `Post-campaign metrics refresh not supported for platform: ${contest.platform}`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const requestedPlatforms = parseRequestedRefreshPlatforms(body?.platforms);
+    const platforms = resolveMetricsRefreshPlatformQueue({
+      allowedPlatforms,
+      requestedPlatforms,
     });
 
     if (platforms.length === 0) {
       return NextResponse.json(
         {
-          error: `Post-campaign metrics refresh not supported for platform: ${contest.platform}`,
+          error:
+            requestedPlatforms.length > 0
+              ? "None of the requested platforms are available on this contest."
+              : `Post-campaign metrics refresh not supported for platform: ${contest.platform}`,
         },
         { status: 400 },
       );
@@ -195,76 +205,62 @@ export async function POST(
     const baseUrl = resolveBaseUrl(request);
     const cookieHeader = request.headers.get("cookie");
 
-    const queueTargets = platforms.filter((p) => isQueueEnabledForPlatform(p));
+    const {
+      available: queueTargets,
+      unavailable: unavailableQueueTargets,
+    } = partitionRefreshPlatformsByQueueAvailability(platforms, {
+      youtube: isYouTubeMetricsQueueEnabled(),
+      instagram: isInstagramInsightsQueueEnabled(),
+      tiktok: isTikTokMetricsQueueEnabled(),
+    });
+
+    if (queueTargets.length > 0 && unavailableQueueTargets.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Multi-platform post-campaign refresh is not fully configured. Missing queues: ${unavailableQueueTargets.join(", ")}.`,
+        },
+        { status: 503 },
+      );
+    }
 
     if (queueTargets.length > 0) {
-      const runs: Array<{
-        platform: PostCampaignVideoPlatform;
-        platformLabel: string;
-        runId: string | undefined;
-        alreadyActive: boolean;
-        statusPath: string;
-      }> = [];
+      // Sequential Redis chain: YouTube → Instagram → TikTok (subset only).
+      // First platform enqueued now; processors advance the chain via QStash.
+      const chainResult = await startMultiPlatformMetricsChain({
+        baseUrl,
+        contestId,
+        platforms: queueTargets,
+        metricsTarget: "post_campaign",
+        scope,
+        cookieHeader,
+      });
 
-      for (const target of queueTargets) {
-        const enqueueUrl = `${baseUrl.replace(/\/$/, "")}${postCampaignEnqueuePathForPlatform(
-          contestId,
-          target,
-        )}`;
-        const enqueueBody: Record<string, unknown> = {
-          metricsTarget: "post_campaign",
-        };
-        if (target === "youtube") {
-          enqueueBody.scope = scope;
-        }
-
-        const enqueueRes = await fetch(enqueueUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-          },
-          credentials: "include",
-          body: JSON.stringify(enqueueBody),
-        });
-        const enqueueData = await enqueueRes.json().catch(() => ({}));
-        if (!enqueueRes.ok) {
-          return NextResponse.json(
-            {
-              error:
-                enqueueData?.error ??
-                `Failed to start ${postCampaignPlatformLabel(target)} post-campaign refresh`,
-            },
-            { status: enqueueRes.status },
-          );
-        }
-
-        runs.push({
-          platform: target,
-          platformLabel: postCampaignPlatformLabel(target),
-          runId:
-            typeof enqueueData.runId === "string"
-              ? enqueueData.runId
-              : undefined,
-          alreadyActive: Boolean(enqueueData.alreadyActive),
-          statusPath: postCampaignStatusPathForPlatform(target),
-        });
+      if (chainResult.error) {
+        return NextResponse.json(
+          { error: chainResult.error },
+          { status: chainResult.status ?? 500 },
+        );
       }
 
+      const runs = chainResult.runs;
       const count = existingCount;
       const existingUpdated =
         contest.post_campaign_last_metrics_updated ?? null;
-      const labels = runs.map((r) => r.platformLabel).join(", ");
+      const labels = runs.map((r) => r.platformLabel).join(" → ");
       const anyAlreadyActive = runs.some((r) => r.alreadyActive);
+      const orderNote = chainResult.chain
+        ? " Queued in order (YouTube → Instagram → TikTok)."
+        : "";
 
       return NextResponse.json({
         success: true,
         queued: true,
+        chain: chainResult.chain,
         refreshInProgress: true,
         count,
         message: anyAlreadyActive
           ? `Post-campaign refresh already in progress for ${labels}. Metrics will update shortly.`
-          : `${labels} post-campaign metrics refresh started. Metrics update in the background.`,
+          : `${labels} post-campaign metrics refresh started.${orderNote} Metrics update in the background.`,
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,

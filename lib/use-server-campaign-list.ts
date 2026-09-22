@@ -10,6 +10,7 @@ import type {
   PostPhaseCounts,
 } from "@/lib/campaign-list-filters-storage";
 import { SSR_CAMPAIGN_LIST_DEFAULTS } from "@/lib/campaign-list-filters-storage";
+import { expandAvailableCampaignPlatforms } from "@/lib/campaign-platform-filter";
 
 export type ServerCampaignListQuery = {
   isAdminView: boolean;
@@ -114,9 +115,11 @@ function parseListPayload<T>(payload: unknown): ServerCampaignListResult<T> | nu
     tabCounts: (p.tabCounts as CampaignListTabCounts) || EMPTY_TAB_COUNTS,
     postPhaseCounts:
       (p.postPhaseCounts as PostPhaseCounts) || EMPTY_POST_PHASE,
-    availablePlatforms: Array.isArray(p.availablePlatforms)
-      ? (p.availablePlatforms as string[])
-      : ["all"],
+    availablePlatforms: expandAvailableCampaignPlatforms(
+      Array.isArray(p.availablePlatforms)
+        ? (p.availablePlatforms as string[])
+        : ["all"],
+    ),
   };
 }
 

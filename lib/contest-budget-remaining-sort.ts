@@ -1,27 +1,17 @@
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
 } from "@/lib/contest-type";
 import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
+import {
+  resolveContestPoolBudgetCents,
+  resolveLeaderboardFlatFeeBonusBudgetCents,
+} from "@/lib/video-platform-campaigns";
 
 type ContestBudgetSortInput = {
   contest_type?: string | null;
-  contest_based_details?: {
-    leaderboard_contest?: {
-      total_prize?: number;
-      total_budget?: number;
-      budget_spent?: number;
-    };
-    cpm_contest?: {
-      total_budget?: number;
-      budget_spent?: number;
-    };
-    milestone_contest?: {
-      total_budget_cents?: number;
-      budget_spent?: number;
-    };
-    total_budget_cents?: number;
-  } | null;
+  platform?: string | null;
+  post_contest_status?: string | null;
+  contest_based_details?: Record<string, unknown> | null;
 };
 
 function getRemainingFromTotalAndSpent(
@@ -42,13 +32,24 @@ export function getContestBudgetRemainingForSort(
   if (!details || !contest.contest_type) return -1;
 
   if (contest.contest_type === "leaderboard") {
-    const leaderboard = details.leaderboard_contest;
-    if (leaderboard?.total_budget != null && leaderboard.total_budget > 0) {
+    const bonusBudget = resolveLeaderboardFlatFeeBonusBudgetCents(
+      details,
+      contest.platform,
+    );
+    if (bonusBudget > 0) {
       return getRemainingFromTotalAndSpent(
-        leaderboard.total_budget,
-        leaderboard.budget_spent,
+        bonusBudget,
+        getPoolBudgetSpentCentsForDisplay({
+          contest_type: contest.contest_type,
+          post_contest_status: contest.post_contest_status,
+          contest_based_details: details,
+          platform: contest.platform,
+        }),
       );
     }
+    const leaderboard = details.leaderboard_contest as
+      | { total_prize?: number }
+      | undefined;
     if (leaderboard?.total_prize != null && leaderboard.total_prize > 0) {
       return leaderboard.total_prize;
     }
@@ -56,17 +57,27 @@ export function getContestBudgetRemainingForSort(
   }
 
   if (contest.contest_type === "milestone") {
-    const total = details.milestone_contest?.total_budget_cents ?? 0;
-    return getRemainingFromTotalAndSpent(
-      total,
-      details.milestone_contest?.budget_spent,
+    const total = resolveContestPoolBudgetCents(
+      contest.contest_type,
+      details,
+      contest.platform,
     );
+    if (total <= 0) return -1;
+
+    const spent = getPoolBudgetSpentCentsForDisplay({
+      contest_type: contest.contest_type,
+      post_contest_status: contest.post_contest_status,
+      contest_based_details: details,
+      platform: contest.platform,
+    });
+    return getRemainingFromTotalAndSpent(total, spent);
   }
 
   if (isCpmContestType(contest.contest_type)) {
-    const total = getPoolBudgetCentsFromDetails(
+    const total = resolveContestPoolBudgetCents(
       contest.contest_type,
       details,
+      contest.platform,
     );
     if (total <= 0) return -1;
 
@@ -106,23 +117,45 @@ export function getContestBudgetSpentForSort(
   if (!details || !contest.contest_type) return -1;
 
   if (contest.contest_type === "leaderboard") {
-    const leaderboard = details.leaderboard_contest;
-    if (leaderboard?.total_budget != null && leaderboard.total_budget > 0) {
-      return Math.max(0, leaderboard.budget_spent ?? 0);
-    }
-    return -1;
+    const bonusBudget = resolveLeaderboardFlatFeeBonusBudgetCents(
+      details,
+      contest.platform,
+    );
+    if (bonusBudget <= 0) return -1;
+    return Math.max(
+      0,
+      getPoolBudgetSpentCentsForDisplay({
+        contest_type: contest.contest_type,
+        post_contest_status: contest.post_contest_status,
+        contest_based_details: details,
+        platform: contest.platform,
+      }),
+    );
   }
 
   if (contest.contest_type === "milestone") {
-    const total = details.milestone_contest?.total_budget_cents ?? 0;
+    const total = resolveContestPoolBudgetCents(
+      contest.contest_type,
+      details,
+      contest.platform,
+    );
     if (total <= 0) return -1;
-    return Math.max(0, details.milestone_contest?.budget_spent ?? 0);
+    return Math.max(
+      0,
+      getPoolBudgetSpentCentsForDisplay({
+        contest_type: contest.contest_type,
+        post_contest_status: contest.post_contest_status,
+        contest_based_details: details,
+        platform: contest.platform,
+      }),
+    );
   }
 
   if (isCpmContestType(contest.contest_type)) {
-    const total = getPoolBudgetCentsFromDetails(
+    const total = resolveContestPoolBudgetCents(
       contest.contest_type,
       details,
+      contest.platform,
     );
     if (total <= 0) return -1;
 

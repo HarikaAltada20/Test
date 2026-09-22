@@ -28,4 +28,23 @@ describe("getPoolBudgetCentsFromDetails dual_rewards", () => {
       12_000,
     );
   });
+
+  it("uses shared multi-platform pool without summing platform copies", () => {
+    const cents = getPoolBudgetCentsFromDetails("dual_rewards", {
+      pool_budget_spent_cents: 3_300,
+      youtube: { contest_type: "dual_rewards", total_budget_cents: 10_000 },
+      instagram: { contest_type: "dual_rewards", total_budget_cents: 10_000 },
+      tiktok: { contest_type: "dual_rewards", total_budget_cents: 10_000 },
+    } as Parameters<typeof getPoolBudgetCentsFromDetails>[1]);
+    assert.equal(cents, 10_000);
+  });
+
+  it("ignores empty root total_budget_cents and reads platform pool", () => {
+    const cents = getPoolBudgetCentsFromDetails("dual_rewards", {
+      total_budget_cents: 0,
+      youtube: { total_budget_cents: 25_000 },
+      instagram: { total_budget_cents: 25_000 },
+    } as Parameters<typeof getPoolBudgetCentsFromDetails>[1]);
+    assert.equal(cents, 25_000);
+  });
 });

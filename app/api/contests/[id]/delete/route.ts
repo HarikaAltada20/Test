@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceRoleClient } from '@supabase/supabase-js';
 import { invalidateCampaignListCachesAfterMutation } from '@/lib/campaign-list-cache';
+import { flattenContestResources } from '@/lib/video-platform-campaigns';
 
 // Type definitions for better type safety
 interface ResourceItem {
@@ -16,7 +17,7 @@ interface ContestData {
   moderation_status: string;
   payment_details: unknown;
   thumbnail_url: string | null;
-  resources: ResourceItem[] | null;
+  resources: unknown;
 }
 
 type ParsedPaymentDetails = {
@@ -172,10 +173,11 @@ export async function DELETE(
         }
     }
     
-    // Delete resources (new array structure)
+    // Delete resources (array or platform-keyed map)
     // Only delete internal resources (uploaded files), not external links
-    if (contest.resources && Array.isArray(contest.resources)) {
-        contest.resources.forEach((resource: ResourceItem) => {
+    const contestResources = flattenContestResources(contest.resources);
+    if (contestResources.length > 0) {
+        contestResources.forEach((resource: ResourceItem) => {
             if (resource.type === 'internal' && resource.url) {
                 const resourcePath = extractStoragePath(resource.url);
                 if (resourcePath) {
