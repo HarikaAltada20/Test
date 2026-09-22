@@ -7,6 +7,12 @@ export const CAMPAIGN_FILTER_PLATFORMS = [
   "twitter",
 ] as const;
 
+export const MULTIPLE_CAMPAIGN_FILTER_PLATFORMS = [
+  "youtube",
+  "instagram",
+  "tiktok",
+] as const;
+
 export type CampaignFilterPlatform =
   (typeof CAMPAIGN_FILTER_PLATFORMS)[number];
 
@@ -16,6 +22,7 @@ export type CampaignPlatformMatchMode =
 
 const MULTIPLE_PLATFORM_FILTER_PREFIX = "multiple:";
 const SINGLE_PLATFORM_FILTER_PREFIX = "single:";
+const ALL_MULTIPLE_PLATFORMS = MULTIPLE_CAMPAIGN_FILTER_PLATFORMS.join(",");
 
 export const CAMPAIGN_FILTER_PLATFORM_LABELS: Record<
   CampaignFilterPlatform,
@@ -98,7 +105,10 @@ export function isAllCampaignPlatformFilter(
   filter: string | null | undefined,
 ): boolean {
   const value = platformFilterSelectionValue(filter);
-  return !value || value === "all";
+  return (
+    campaignPlatformMatchMode(filter) === "single" &&
+    (!value || value === "all")
+  );
 }
 
 export function expandAvailableCampaignPlatforms(
@@ -126,29 +136,36 @@ export function campaignPlatformsForMediaType(
   return [...CAMPAIGN_FILTER_PLATFORMS];
 }
 
-/** "all" or a canonical CSV such as "instagram,youtube". */
+/** Normalize global, single-platform, and exact multi-platform selections. */
 export function normalizeCampaignPlatformFilter(
   raw: string | null | undefined,
   available: readonly CampaignFilterPlatform[] = CAMPAIGN_FILTER_PLATFORMS,
 ): string {
   const mode = campaignPlatformMatchMode(raw);
-  const allowed = CAMPAIGN_FILTER_PLATFORMS.filter((platform) =>
-    available.includes(platform),
-  );
+  const allowed: readonly CampaignFilterPlatform[] =
+    mode === "multiple"
+      ? MULTIPLE_CAMPAIGN_FILTER_PLATFORMS
+      : CAMPAIGN_FILTER_PLATFORMS.filter((platform) =>
+          available.includes(platform),
+        );
   if (allowed.length === 0) {
-    return serializeCampaignPlatformFilter(mode, "all");
+    return "all";
   }
 
   const rawValue = platformFilterSelectionValue(raw);
   if (!rawValue || rawValue === "all") {
-    return serializeCampaignPlatformFilter(mode, "all");
+    return mode === "multiple"
+      ? serializeCampaignPlatformFilter(mode, ALL_MULTIPLE_PLATFORMS)
+      : "all";
   }
 
   const selected = parseCampaignPlatformTokens(rawValue).filter((platform) =>
     allowed.includes(platform),
   );
-  if (selected.length === 0) {
-    return serializeCampaignPlatformFilter(mode, "all");
+  if (selected.length < (mode === "multiple" ? 2 : 1)) {
+    return mode === "multiple"
+      ? serializeCampaignPlatformFilter(mode, ALL_MULTIPLE_PLATFORMS)
+      : "all";
   }
 
   const selection = CAMPAIGN_FILTER_PLATFORMS.filter((platform) =>
@@ -184,8 +201,22 @@ export function setCampaignPlatformMatchMode(
   available: readonly CampaignFilterPlatform[] = CAMPAIGN_FILTER_PLATFORMS,
 ): string {
   const normalized = normalizeCampaignPlatformFilter(filter, available);
+  if (mode === "multiple") {
+    const selected = parseCampaignPlatformTokens(normalized).filter((platform) =>
+      MULTIPLE_CAMPAIGN_FILTER_PLATFORMS.some(
+        (candidate) => candidate === platform,
+      ),
+    );
+    return normalizeCampaignPlatformFilter(
+      serializeCampaignPlatformFilter(
+        mode,
+        selected.length >= 2 ? selected.join(",") : ALL_MULTIPLE_PLATFORMS,
+      ),
+      available,
+    );
+  }
   if (isAllCampaignPlatformFilter(normalized)) {
-    return serializeCampaignPlatformFilter(mode, "all");
+    return "all";
   }
   return normalizeCampaignPlatformFilter(
     serializeCampaignPlatformFilter(
@@ -218,7 +249,14 @@ export function campaignPlatformFilterLabel(
   available: readonly CampaignFilterPlatform[] = CAMPAIGN_FILTER_PLATFORMS,
 ): string {
   const normalized = normalizeCampaignPlatformFilter(filter, available);
-  if (isAllCampaignPlatformFilter(normalized)) return "All Platforms";
+  if (isAllCampaignPlatformFilter(normalized)) return "All campaigns";
+  if (
+    campaignPlatformMatchMode(normalized) === "multiple" &&
+    parseCampaignPlatformTokens(normalized).length ===
+      MULTIPLE_CAMPAIGN_FILTER_PLATFORMS.length
+  ) {
+    return "All 3 platforms";
+  }
   return parseCampaignPlatformTokens(normalized)
     .map((platform) => CAMPAIGN_FILTER_PLATFORM_LABELS[platform])
     .join(", ");
@@ -229,13 +267,22 @@ export function toggleCampaignPlatformFilter(
   platform: CampaignFilterPlatform | "all",
   available: readonly CampaignFilterPlatform[] = CAMPAIGN_FILTER_PLATFORMS,
 ): string {
-  if (platform === "all") return "all";
-  if (!available.includes(platform)) {
-    return normalizeCampaignPlatformFilter(current, available);
-  }
-
   const normalized = normalizeCampaignPlatformFilter(current, available);
   const mode = campaignPlatformMatchMode(normalized);
+  if (platform === "all") {
+    return mode === "multiple"
+      ? serializeCampaignPlatformFilter(mode, ALL_MULTIPLE_PLATFORMS)
+      : "all";
+  }
+  if (
+    mode === "multiple"
+      ? !MULTIPLE_CAMPAIGN_FILTER_PLATFORMS.some(
+          (candidate) => candidate === platform,
+        )
+      : !available.includes(platform)
+  ) {
+    return normalized;
+  }
   const selected = new Set(
     isAllCampaignPlatformFilter(normalized)
       ? []
@@ -246,8 +293,12 @@ export function toggleCampaignPlatformFilter(
     return serializeCampaignPlatformFilter(mode, platform);
   }
 
-  if (selected.has(platform)) selected.delete(platform);
-  else selected.add(platform);
+  if (selected.has(platform)) {
+    if (mode === "multiple" && selected.size === 2) return normalized;
+    selected.delete(platform);
+  } else {
+    selected.add(platform);
+  }
 
   return normalizeCampaignPlatformFilter(
     serializeCampaignPlatformFilter(

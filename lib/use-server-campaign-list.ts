@@ -170,10 +170,7 @@ async function prefetchSiblingTabs(current: ServerCampaignListQuery) {
   await Promise.all(tasks);
 }
 
-/**
- * Fetches a server-sorted campaign page. Uses an in-memory cache so switching
- * tabs/filters shows data immediately when previously loaded.
- */
+/** Fetches server-sorted campaign pages and caches results for revisits. */
 export function useServerCampaignList<T>(
   query: ServerCampaignListQuery,
   initial?: Partial<ServerCampaignListResult<T>>,
@@ -202,7 +199,6 @@ export function useServerCampaignList<T>(
   const requestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previousQueryRef = useRef(query);
-  const keepPreviousResultsRef = useRef(false);
   const queryRef = useRef(query);
   queryRef.current = query;
   const seededRef = useRef(false);
@@ -255,17 +251,15 @@ export function useServerCampaignList<T>(
         ? (listCache.get(key) as ServerCampaignListResult<T> | undefined)
         : undefined;
 
-      // Cache hit: paint immediately; optional quiet background revalidation.
+      // A cache hit is safe to paint because it belongs to this exact query.
       if (cached) {
-        keepPreviousResultsRef.current = false;
         applyResult(cached);
         setLoading(false);
         setIsValidating(Boolean(opts?.quiet));
       } else {
-        // Keep the current page visible during page and page-size navigation.
-        const keepPreviousResults = keepPreviousResultsRef.current;
-        setLoading(!keepPreviousResults);
-        setIsValidating(keepPreviousResults);
+        setContests([]);
+        setLoading(true);
+        setIsValidating(false);
       }
 
       const requestId = ++requestIdRef.current;
@@ -295,7 +289,6 @@ export function useServerCampaignList<T>(
         }
         listCache.set(key, parsed as ServerCampaignListResult<unknown>);
         applyResult(parsed);
-        keepPreviousResultsRef.current = false;
         // Background only — do not await (keeps tab switches responsive).
         void prefetchSiblingTabs(current);
       } catch (err) {
@@ -308,7 +301,6 @@ export function useServerCampaignList<T>(
         if (requestId === requestIdRef.current) {
           setLoading(false);
           setIsValidating(false);
-          keepPreviousResultsRef.current = false;
         }
       }
     },
@@ -318,32 +310,28 @@ export function useServerCampaignList<T>(
   useEffect(() => {
     if (!query.enabled) return;
 
+    // Invalidate an in-flight response immediately, before a debounced query
+    // starts, so it cannot repaint cards from the previous selection.
+    requestIdRef.current += 1;
     const previousQuery = previousQueryRef.current;
     previousQueryRef.current = query;
-    const isPageNavigation =
-      hasSameCampaignListScope(query, previousQuery) &&
-      (query.page !== previousQuery.page || query.limit !== previousQuery.limit);
-    keepPreviousResultsRef.current = isPageNavigation;
-
-    // Instant paint from cache when switching tabs/filters.
+    const sameScope = hasSameCampaignListScope(query, previousQuery);
     const key = cacheKeyFromQuery(query);
     const cached = listCache.get(key) as ServerCampaignListResult<T> | undefined;
+    setError(null);
     if (cached) {
-      keepPreviousResultsRef.current = false;
+      // Only show cached cards for the exact query the user selected.
       applyResult(cached);
       setLoading(false);
-      setIsValidating(false);
+      setIsValidating(true);
     } else {
-      if (isPageNavigation) {
-        setLoading(false);
-        setIsValidating(true);
-      } else {
-        // Avoid showing another tab or filter's campaigns while it loads.
-        setContests([]);
-        setTotal(0);
-        setLoading(true);
-        setIsValidating(false);
-      }
+      // Never leave cards from the previous query on screen while the new
+      // page/filter is loading. Keep the total only within the same scope so
+      // pagination remains stable during page and page-size changes.
+      setContests([]);
+      if (!sameScope) setTotal(0);
+      setLoading(true);
+      setIsValidating(false);
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -376,6 +364,7 @@ export function useServerCampaignList<T>(
     () => fetchPage({ bustCache: true }),
     [fetchPage],
   );
+  const retry = useCallback(() => fetchPage(), [fetchPage]);
 
   return {
     contests,
@@ -388,6 +377,7 @@ export function useServerCampaignList<T>(
     hasLoadedOnce,
     error,
     refresh,
+    retry,
     setContests,
   };
 }
