@@ -102,6 +102,54 @@ body {
   animation: scroll-right 40s linear infinite;
 }
 
+/* PickWhatFitsCard — filter chip marquees */
+.animate-pick-fits-left {
+  animation: scroll-left 18s linear infinite;
+  width: max-content;
+}
+
+.animate-pick-fits-right {
+  animation: scroll-right 20s linear infinite;
+  width: max-content;
+}
+
+.animate-pick-fits-paused {
+  animation-play-state: paused;
+}
+
+/* Moving gray highlight on PaidDirectlyCard dashed connector — one pass only */
+@keyframes paid-dash-flow {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(280%);
+  }
+}
+
+.animate-paid-dash-flow-once {
+  animation: paid-dash-flow 3.5s ease-in-out forwards;
+}
+
+/* KnowYourNumbersCard — soft badge float */
+@keyframes know-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-know-float {
+  animation: know-float 2.8s ease-in-out infinite;
+}
+
+.animate-know-float-delayed {
+  animation: know-float 2.8s ease-in-out 0.35s infinite;
+}
+
 .hide-before-animate {
   opacity: 0;
 }

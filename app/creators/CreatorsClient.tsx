@@ -33,6 +33,9 @@ import { Badge } from "@/components/ui/badge";
 import CtcBanner from "@/components/CtcBanner";
 import Testimonials from "../../components/Testimonials";
 import FAQ from "@/components/FAQ";
+import PaidDirectlyCard from "@/components/PaidDirectlyCard";
+import KnowYourNumbersCard from "@/components/KnowYourNumbersCard";
+import PickWhatFitsCard from "@/components/PickWhatFitsCard";
 import { createClient } from "@/utils/supabase/client";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
@@ -203,16 +206,6 @@ const creators = [
     src: "/images/Ellipse 2355 (6).avif",
     alt: "Creator 5",
   },
-];
-
-const filters = [
-  "Content Type",
-  "Platform",
-  "Content Type",
-  "Category / Niche",
-  "Earning Potential",
-  "Reward Model",
-  "Campaign Status",
 ];
 
 interface CreatorsClientProps {
@@ -1032,11 +1025,13 @@ export default function CreatorsClient({
                   </div>
 
                   {/* $600 credited notification — in front of girl */}
-                  <div className="pointer-events-none   bg-[#FFFFFFCC]
+                  <div
+                    className="pointer-events-none   bg-[#FFFFFFCC]
   border-[0.64px]
   border-[#FFFFFF40]
   backdrop-blur-[19.0909px]
-  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl px-3 py-2.5 text-black sm:left-[18%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3">
+  shadow-[0px_10.18px_20.36px_-2.55px_#00000026] absolute left-[2%] top-[68%] z-20 w-[min(94%,260px)] rounded-2xl px-3 py-2.5 text-black sm:left-[18%] sm:top-[65%] sm:w-[300px] sm:px-3.5 sm:py-3"
+                  >
                     <div className="flex items-start gap-2.5">
                       <div className="relative mt-0.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-white">
                         <Image
@@ -1243,7 +1238,6 @@ export default function CreatorsClient({
                 isAnimated ? "slide-up" : "hide-before-animate",
                 isLight ? "text-black" : "text-[#EFEFEF]",
               )}
-            
             >
               As easy as you think
             </h2>
@@ -1468,12 +1462,11 @@ export default function CreatorsClient({
         >
           <div className="container mx-auto max-w-[1150px]">
             <h2
-             className={cn(
-              "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
-              isAnimated ? "slide-up" : "hide-before-animate",
-              isLight ? "text-black" : "text-[#EFEFEF]",
-            )}
-              
+              className={cn(
+                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+                isAnimated ? "slide-up" : "hide-before-animate",
+                isLight ? "text-black" : "text-[#EFEFEF]",
+              )}
             >
               Why Creators Choose GoC
             </h2>
@@ -1482,130 +1475,7 @@ export default function CreatorsClient({
               {/* Top row — 2 wide cards */}
               <div className="grid gap-4 md:grid-cols-2 md:gap-5">
                 {/* Get Paid Directly */}
-                <div
-                  className={cn(
-                    "relative w-full overflow-visible rounded-[20px] px-4 pb-5 pt-8 sm:px-6 sm:pb-[22px] sm:pt-[54px]",
-                    isLight
-                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A] text-black"
-                      : "border border-[#303030] bg-[#151515] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]",
-                  )}
-                >
-                  <div className="relative flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    {/* Account balance card */}
-                    <div className="relative ml-3 w-full max-w-[204px] sm:ml-6 sm:h-[172px] sm:w-[204px]">
-                      <div
-                        className={cn(
-                          "relative h-auto w-full rounded-[17px] px-[15px] pb-4 pt-[17px] sm:h-[172px] sm:pb-0",
-                          isLight
-                            ? "border border-[#0000000D] bg-[#F1F1F1]"
-                            : "border border-[#2c2c2c] bg-[#151515]",
-                        )}
-                      >
-                      <p
-                        className={cn(
-                          "text-[13px] font-normal uppercase tracking-[-0.1px]",
-                          isLight ? "text-black/45" : "text-[#777]",
-                        )}
-                      >
-                        Account Balance
-                      </p>
-
-                      <p
-                        className={cn(
-                          "mt-[5px] text-[30px] font-normal leading-none tracking-[-1px]",
-                          isLight ? "text-black" : "text-[#e5e5e5]",
-                        )}
-                      >
-                        $3,400
-                      </p>
-
-                      <button
-                        className="
-            mt-[15px]
-            flex h-[34px] items-center gap-2
-            rounded-[9px]
-            bg-gradient-to-b from-[#ff9700] to-[#ee8500]
-            px-[14px]
-            text-[13px]
-            font-medium
-            text-white
-            shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]
-            transition
-            hover:brightness-110
-          "
-                      >
-                        <span className="text-[17px] leading-none">↗</span>
-                        Withdraw
-                      </button>
-                      </div>
-                    </div>
-
-                    {/* Dashed connector — desktop only */}
-                    <div
-                      className={cn(
-                        "hidden h-px flex-1 border border-transparent sm:block",
-                        isLight ? "border-black/20" : "[border-image:linear-gradient(90deg,#000000_0%,#969696_17.31%,#000000_35.1%)_1]",
-                      )}
-                    />
-
-                    {/* Payment icons */}
-                    <div className="flex items-center sm:shrink-0">
-                      {/* Crypto */}
-                      <div className="relative z-10 h-[43px] w-[43px] overflow-hidden rounded-full">
-                        <Image
-                          src="/images/Frame 2147243912.png"
-                          alt="Crypto"
-                          fill
-                          className="object-cover"
-                          sizes="43px"
-                        />
-                      </div>
-
-                      {/* PhonePe */}
-                      <div className="relative -ml-[9px] z-20 h-[43px] w-[43px] overflow-hidden rounded-full">
-                        <Image
-                          src="/images/Ellipse 41.png"
-                          alt="PhonePe"
-                          fill
-                          className="object-cover"
-                          sizes="43px"
-                        />
-                      </div>
-
-                      {/* GPay */}
-                      <div className="relative -ml-[9px] z-30 h-[43px] w-[43px] overflow-hidden rounded-full">
-                        <Image
-                          src="/images/Ellipse 42.png"
-                          alt="GPay"
-                          fill
-                          className="object-cover"
-                          sizes="43px"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom content */}
-                  <div className="mt-6 sm:mt-[40px]">
-                    <h2
-                      className={cn(
-                        "text-[18px] font-semibold leading-[26px] tracking-[-0.5px] sm:text-[22px] sm:leading-[28px]",
-                        isLight ? "text-black" : "text-[#d0d0d0]",
-                      )}
-                    >
-                      Get Paid Directly
-                    </h2>
-
-                    <p
-                      className={cn(
-                        "mt-[7px] text-[14px] font-normal leading-[22px] tracking-[-0.2px] sm:text-[17px] sm:leading-[24px]",
-                        isLight ? "text-black/50" : "text-[#858585]",
-                      )}
-                    >
-                      Withdraw your earnings straight to UPI and Crypto
-                    </p>
-                  </div>
-                </div>
+                <PaidDirectlyCard isLight={isLight} />
 
                 {/* Create Together */}
                 <div
@@ -1616,396 +1486,182 @@ export default function CreatorsClient({
                       : "border border-white/10 bg-[#171717]",
                   )}
                 >
-      {/* Dotted Curved Lines */}
-      <svg
-        className="pointer-events-none absolute left-0 top-8 h-[180px] w-full"
-        viewBox="0 0 570 180"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* Top-left curved lines */}
-        <path
-          d="M 95 80 Q 150 35 215 45"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.55"
-        />
-
-        <path
-          d="M 165 65 Q 215 20 270 40"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.55"
-        />
-
-        {/* Top-right curved lines */}
-        <path
-          d="M 475 80 Q 420 35 355 45"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.55"
-        />
-
-        <path
-          d="M 405 65 Q 355 20 300 40"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.55"
-        />
-
-        {/* Center-left curved connection */}
-        <path
-          d="M 270 42 Q 245 75 235 115"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.55"
-        />
-
-        {/* Center-right curved connection */}
-        <path
-          d="M 300 42 Q 325 75 335 115"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.55"
-        />
-
-        {/* Outer-left arc */}
-        <path
-          d="M 40 100 Q 110 40 180 35"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.25"
-        />
-
-        {/* Outer-right arc */}
-        <path
-          d="M 530 100 Q 460 40 390 35"
-          stroke={isLight ? "#A3A3A3" : "#737373"}
-          strokeWidth="1"
-          strokeDasharray="20 16"
-          opacity="0.25"
-        />
-      </svg>
-
-      {/* Creator Images */}
-      <div className="relative z-10 flex h-[180px] items-start justify-center">
-
-        {/* Top Creator */}
-        <div className="absolute left-1/2 top-0 -translate-x-1/2">
-          <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-orange-400 bg-[#111] p-[2px]">
-            <Image
-              src="/images/Ellipse 2355.avif"
-              alt="Creator"
-              width={48}
-              height={48}
-              className="h-full w-full rounded-full object-cover"
-            />
-          </div>
-        </div>
-
-        {/* Left Creator */}
-        <div className="absolute left-[22%] top-[90px]">
-          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
-            <Image
-              src="/images/Ellipse 2355 (1).avif"
-              alt="Creator"
-              width={40}
-              height={40}
-              className="h-full w-full rounded-full object-cover"
-            />
-          </div>
-        </div>
-
-        {/* Right Creator */}
-        <div className="absolute right-[22%] top-[90px]">
-          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
-            <Image
-              src="/images/Ellipse 2355 (2).avif"
-              alt="Creator"
-              width={40}
-              height={40}
-              className="h-full w-full rounded-full object-cover"
-            />
-          </div>
-        </div>
-
-        {/* Bottom-left Creator */}
-        <div className="absolute left-[35%] top-[130px]">
-          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
-            <Image
-              src="/images/Ellipse 2355 (3).avif"
-              alt="Creator"
-              width={40}
-              height={40}
-              className="h-full w-full rounded-full object-cover"
-            />
-          </div>
-        </div>
-
-        {/* Bottom-right Creator */}
-        <div className="absolute right-[35%] top-[130px]">
-          <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
-            <Image
-              src="/images/Ellipse 2355 (4).avif"
-              alt="Creator"
-              width={40}
-              height={40}
-              className="h-full w-full rounded-full object-cover"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Text */}
-      <div className="relative z-10 mt-2">
-        <h3
-          className={cn(
-            "text-[22px] font-semibold",
-            isLight ? "text-black" : "text-white/80",
-          )}
-        >
-          Create Together
-        </h3>
-
-        <p
-          className={cn(
-            "mt-2 text-[16px]",
-            isLight ? "text-black/50" : "text-white/50",
-          )}
-        >
-          Connect with creators and share opportunities.
-        </p>
-      </div>
-    </div>
-              </div>
-
-              {/* Bottom row — 3 cards */}
-              <div className="grid gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3">
-                {/* Know Your Numbers */}
-                <div
-                  className={cn(
-                    "relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] sm:h-[365px]",
-                    isLight
-                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
-                      : "border border-white/10 bg-[#171717] shadow-[0_8px_30px_rgba(0,0,0,0.35)]",
-                  )}
-                >
-                  {/* Chart area */}
-                  <div className="absolute left-4 right-4 top-4 h-[180px] sm:left-6 sm:right-6 sm:top-6 sm:h-[205px]">
-                    {/* Grid */}
-                    <div
-                      className="absolute inset-0 opacity-30"
-                      style={{
-                        backgroundImage: isLight
-                          ? `
-              linear-gradient(to right, rgba(0,0,0,0.08) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(0,0,0,0.08) 1px, transparent 1px)
-            `
-                          : `
-              linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)
-            `,
-                        backgroundSize: "34px 34px",
-                      }}
+                  {/* Dotted Curved Lines */}
+                  <svg
+                    className="pointer-events-none absolute left-0 top-8 h-[180px] w-full"
+                    viewBox="0 0 570 180"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    {/* Top-left curved lines */}
+                    <path
+                      d="M 95 80 Q 150 35 215 45"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.55"
                     />
 
-                    {/* Chart line */}
-                    <svg
-                      className="absolute inset-0 h-full w-full"
-                      viewBox="0 0 340 180"
-                      fill="none"
-                      preserveAspectRatio="none"
-                    >
-                      <path
-                        d="M38 142
-               C55 153, 67 145, 78 116
-               C91 82, 104 91, 117 113
-               C132 139, 143 149, 158 133
-               C174 115, 168 72, 192 59
-               C213 48, 229 82, 244 71
-               C256 63, 248 38, 258 28"
-                        stroke="#FF8800"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
+                    <path
+                      d="M 165 65 Q 215 20 270 40"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.55"
+                    />
 
-                      {/* Highlight point */}
-                      <circle
-                        cx="192"
-                        cy="59"
-                        r="4"
-                        fill={isLight ? "#111" : "white"}
-                      />
-                    </svg>
+                    {/* Top-right curved lines */}
+                    <path
+                      d="M 475 80 Q 420 35 355 45"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.55"
+                    />
 
-                    {/* Shares badge */}
-                    <div
-                      className={cn(
-                        "absolute left-[8px] top-[8px] flex items-center gap-2 rounded-full px-2 py-1.5 shadow-lg sm:left-[18px]",
-                        isLight
-                          ? "bg-white shadow-[0_8px_20px_rgba(0,0,0,0.1)]"
-                          : "bg-[#171717]/95",
-                      )}
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D8C2FF]">
-                        <svg
-                          width="22"
-                          height="22"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="#7F39EC"
-                          strokeWidth="1.8"
-                        >
-                          <path d="M20 4L10.5 13.5" />
-                          <path d="M20 4L14 20L10.5 13.5L4 10L20 4Z" />
-                        </svg>
-                      </div>
+                    <path
+                      d="M 405 65 Q 355 20 300 40"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.55"
+                    />
 
-                      <div className="pr-1 leading-none">
-                        <p
-                          className={cn(
-                            "text-sm font-semibold",
-                            isLight ? "text-black" : "text-white",
-                          )}
-                        >
-                          423
-                        </p>
-                        <p
-                          className={cn(
-                            "mt-1 text-[9px]",
-                            isLight ? "text-black/40" : "text-white/40",
-                          )}
-                        >
-                          Shares
-                        </p>
-                      </div>
-                    </div>
+                    {/* Center-left curved connection */}
+                    <path
+                      d="M 270 42 Q 245 75 235 115"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.55"
+                    />
 
-                    {/* Earnings icon */}
-                    <div className="absolute right-[8px] top-0 flex h-11 w-11 items-center justify-center rounded-full bg-white sm:right-[15px]">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D9FFD9]">
-                        <span className="text-xl font-light text-[#36C759]">
-                          $
-                        </span>
+                    {/* Center-right curved connection */}
+                    <path
+                      d="M 300 42 Q 325 75 335 115"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.55"
+                    />
+
+                    {/* Outer-left arc */}
+                    <path
+                      d="M 40 100 Q 110 40 180 35"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.25"
+                    />
+
+                    {/* Outer-right arc */}
+                    <path
+                      d="M 530 100 Q 460 40 390 35"
+                      stroke={isLight ? "#A3A3A3" : "#737373"}
+                      strokeWidth="1"
+                      strokeDasharray="20 16"
+                      opacity="0.25"
+                    />
+                  </svg>
+
+                  {/* Creator Images */}
+                  <div className="relative z-10 flex h-[180px] items-start justify-center">
+                    {/* Top Creator */}
+                    <div className="absolute left-1/2 top-0 -translate-x-1/2">
+                      <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-orange-400 bg-[#111] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355.avif"
+                          alt="Creator"
+                          width={48}
+                          height={48}
+                          className="h-full w-full rounded-full object-cover"
+                        />
                       </div>
                     </div>
 
-                    {/* Views badge */}
-                    <div
-                      className={cn(
-                        "absolute bottom-[12px] right-[0px] flex items-center gap-2 rounded-full px-2.5 py-1.5 sm:bottom-[18px] sm:right-[3px]",
-                        isLight
-                          ? "bg-white shadow-[0_8px_20px_rgba(0,0,0,0.1)]"
-                          : "bg-[#171717] shadow-[0_8px_20px_rgba(0,0,0,0.4)]",
-                      )}
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FFE0C8]">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#FF8800]">
-                          <div className="h-2.5 w-2.5 rounded-full bg-[#FF8800]" />
-                        </div>
+                    {/* Left Creator */}
+                    <div className="absolute left-[22%] top-[90px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (1).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
                       </div>
+                    </div>
 
-                      <div className="pr-1 leading-none">
-                        <p
-                          className={cn(
-                            "text-sm font-semibold",
-                            isLight ? "text-black" : "text-white",
-                          )}
-                        >
-                          1.2M
-                        </p>
-                        <p
-                          className={cn(
-                            "mt-1 text-[9px]",
-                            isLight ? "text-black/40" : "text-white/40",
-                          )}
-                        >
-                          Views
-                        </p>
+                    {/* Right Creator */}
+                    <div className="absolute right-[22%] top-[90px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (2).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom-left Creator */}
+                    <div className="absolute left-[35%] top-[130px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (3).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bottom-right Creator */}
+                    <div className="absolute right-[35%] top-[130px]">
+                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                        <Image
+                          src="/images/Ellipse 2355 (4).avif"
+                          alt="Creator"
+                          width={40}
+                          height={40}
+                          className="h-full w-full rounded-full object-cover"
+                        />
                       </div>
                     </div>
                   </div>
 
                   {/* Text */}
-                  <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
+                  <div className="relative z-10 mt-2">
                     <h3
                       className={cn(
-                        "text-[18px] font-semibold leading-tight sm:text-[21px]",
+                        "text-[22px] font-semibold",
                         isLight ? "text-black" : "text-white/80",
                       )}
                     >
-                      Know Your Numbers
+                      Create Together
                     </h3>
 
                     <p
                       className={cn(
-                        "mt-2 text-[14px] leading-5 sm:text-[16px] sm:leading-6",
-                        isLight ? "text-black/50" : "text-white/45",
+                        "mt-2 text-[16px]",
+                        isLight ? "text-black/50" : "text-white/50",
                       )}
                     >
-                      Track views, performance, and
-                      <br className="hidden sm:block" /> earnings easily.
+                      Connect with creators and share opportunities.
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Bottom row — 3 cards */}
+              <div className="grid gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3">
+                {/* Know Your Numbers */}
+                <KnowYourNumbersCard isLight={isLight} />
 
                 {/* Pick What Fits */}
-                <div
-                  className={cn(
-                    "relative h-[340px] w-full min-w-0 overflow-hidden rounded-[20px] sm:h-[365px]",
-                    isLight
-                      ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
-                      : "border border-white/[0.08] bg-[#171717]",
-                  )}
-                >
-                  {/* Filter chips */}
-                  <div className="absolute inset-x-0 top-[72px] px-4 sm:top-[94px] sm:px-0">
-                    <div className="mx-auto flex max-w-[540px] flex-wrap justify-center gap-2 sm:absolute sm:-left-[58px] sm:top-0 sm:w-[540px] sm:justify-start sm:gap-[10px]">
-                      {filters.map((filter, index) => (
-                        <div
-                          key={`${filter}-${index}`}
-                          className={cn(
-                            "flex h-[32px] shrink-0 items-center rounded-full px-3 text-[12px] font-medium leading-none sm:h-[37px] sm:px-4 sm:text-[13px]",
-                            isLight
-                              ? "border border-[#0000000D] bg-[#DEDEDE] text-black/70 shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                              : "bg-[#555] text-[#e5e5e5]",
-                          )}
-                        >
-                          {filter}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Text — aligned with Know Your Numbers */}
-                  <div className="absolute bottom-5 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
-                    <h3
-                      className={cn(
-                        "text-[18px] font-semibold leading-tight sm:text-[21px]",
-                        isLight ? "text-black" : "text-white/80",
-                      )}
-                    >
-                      Pick What Fits
-                    </h3>
-
-                    <p
-                      className={cn(
-                        "mt-2 text-[14px] leading-5 sm:text-[16px] sm:leading-6",
-                        isLight ? "text-black/50" : "text-white/45",
-                      )}
-                    >
-                      Choose campaigns that match your
-                      <br className="hidden sm:block" /> content style.
-                    </p>
-                  </div>
-                </div>
+                <PickWhatFitsCard isLight={isLight} />
 
                 {/* Grow With Every Campaign */}
                 <div
