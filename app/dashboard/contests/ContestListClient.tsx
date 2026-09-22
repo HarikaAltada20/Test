@@ -71,7 +71,7 @@ import {
   resolveLeaderboardFlatFeeBonusBudgetCents,
 } from "@/lib/video-platform-campaigns";
 import { getContestPlatformIcons } from "@/lib/platform-icons";
-import { PaginationControls } from "@/components/ui/pagination-controls";
+import { CampaignListPagination } from "@/components/campaign-list/CampaignListPagination";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
 import {
@@ -108,6 +108,7 @@ import { CampaignPlatformFilter } from "@/components/campaign-list/CampaignPlatf
 import {
   CAMPAIGN_FILTER_PLATFORMS,
   expandAvailableCampaignPlatforms,
+  isAllCampaignPlatformFilter,
   normalizeCampaignPlatformFilter,
   type CampaignFilterPlatform,
 } from "@/lib/campaign-platform-filter";
@@ -675,6 +676,11 @@ export function ContestListClient({
   /** List layout only at lg+ (1024px), same as creator Opportunities */
   const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
   const brandContestsResultsRef = useRef<HTMLDivElement>(null);
+  const pageSizeScrollAnchorRef = useRef<{
+    distanceFromBottom: number;
+    previousContests: Contest[];
+    targetLimit: number;
+  } | null>(null);
 
   // Use external viewMode if provided, otherwise use internal state
   const viewMode =
@@ -2676,9 +2682,54 @@ export function ContestListClient({
   ]);
 
   const total = serverTotal;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const hasPreviousPage = page > 1;
-  const hasNextPage = page < totalPages;
+  const campaignResultStart = total > 0 ? (page - 1) * limit + 1 : 0;
+  const campaignResultEnd = total > 0 ? Math.min(page * limit, total) : 0;
+  const campaignResultSummary =
+    total > 0
+      ? `Showing ${campaignResultStart}-${campaignResultEnd} of ${total} ${total === 1 ? "campaign" : "campaigns"}`
+      : "Showing 0 campaigns";
+
+  const handleCampaignPageSizeChange = useCallback(
+    (nextLimit: number) => {
+      if (nextLimit === limit) return;
+      const documentHeight = document.documentElement.scrollHeight;
+      pageSizeScrollAnchorRef.current = {
+        distanceFromBottom: Math.max(
+          0,
+          documentHeight - (window.scrollY + window.innerHeight),
+        ),
+        previousContests: contests,
+        targetLimit: nextLimit,
+      };
+      setLimit(nextLimit);
+      setPage(1);
+    },
+    [contests, limit],
+  );
+
+  useLayoutEffect(() => {
+    const anchor = pageSizeScrollAnchorRef.current;
+    if (!anchor || anchor.targetLimit !== limit) return;
+
+    const restoreBottomDistance = () => {
+      const targetTop = Math.max(
+        0,
+        document.documentElement.scrollHeight -
+          window.innerHeight -
+          anchor.distanceFromBottom,
+      );
+      if (Math.abs(window.scrollY - targetTop) > 1) {
+        window.scrollTo({ top: targetTop, behavior: "auto" });
+      }
+    };
+
+    restoreBottomDistance();
+    const replacementPageRendered = contests !== anchor.previousContests;
+    if (replacementPageRendered && !listLoading && !listValidating) {
+      pageSizeScrollAnchorRef.current = null;
+      requestAnimationFrame(restoreBottomDistance);
+    }
+  }, [contests, limit, listLoading, listValidating, total]);
   const hasCreatedContests = serverTabCounts.all > 0;
   const hasPendingApprovalOrPublishedContest =
     serverTabCounts.pending_approval +
@@ -4042,6 +4093,23 @@ export function ContestListClient({
             id="brand-contests-results"
             className="scroll-mt-4 mt-4"
           >
+            <div
+              className="mb-3 flex min-h-7 items-center justify-end"
+              aria-live="polite"
+            >
+              <span
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-semibold tabular-nums shadow-sm",
+                  isDark
+                    ? "border-white/10 bg-white/[0.05] text-slate-300"
+                    : "border-slate-200 bg-white text-slate-600",
+                )}
+              >
+                {listLoading && contests.length === 0
+                  ? "Loading campaigns…"
+                  : campaignResultSummary}
+              </span>
+            </div>
             {listLoading || (listValidating && contests.length === 0) ? (
               <div className="flex min-h-[40vh] items-center justify-center py-16">
                 <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
@@ -4073,7 +4141,7 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      {platformFilter !== "all" ||
+                      {!isAllCampaignPlatformFilter(platformFilter) ||
                       contestTypeFilter !== "all" ||
                       searchQuery.trim() !== "" ||
                       contestFormatFilter !== "all"
@@ -4107,7 +4175,7 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      {platformFilter !== "all" ||
+                      {!isAllCampaignPlatformFilter(platformFilter) ||
                       contestTypeFilter !== "all" ||
                       searchQuery.trim() !== "" ||
                       contestFormatFilter !== "all"
@@ -4120,106 +4188,16 @@ export function ContestListClient({
             )}
 
             {total > 0 && (
-              <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-                  <div
-                    className="text-sm"
-                    style={{
-                      color: isDark ? "#cbd5e1" : "#4b5563",
-                      transition: "none",
-                    }}
-                  >
-                    {(() => {
-                      const startItem = (page - 1) * limit + 1;
-                      const endItem = Math.min(page * limit, total);
-                      return `Showing ${startItem}-${endItem} of ${total} contests`;
-                    })()}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-sm"
-                      style={{
-                        color: isDark ? "#cbd5e1" : "#4b5563",
-                        transition: "none",
-                      }}
-                    >
-                      Show:
-                    </span>
-                    <Select
-                      value={limit.toString()}
-                      onValueChange={(value) => {
-                        const newLimit = parseInt(value, 10);
-                        setLimit(newLimit);
-                        setPage(1);
-                      }}
-                    >
-                      <SelectTrigger
-                        className={cn(
-                          "w-20",
-                          isDark && "border border-gray-600",
-                        )}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent
-                        isDark={isDark}
-                        className={cn(
-                          isDark && "border-gray-600 bg-[#07031D] text-white",
-                        )}
-                      >
-                        {[9, 15, 21, 30].map((size) => (
-                          <SelectItem
-                            isDark={isDark}
-                            key={size}
-                            value={size.toString()}
-                            className={cn(
-                              isDark &&
-                                "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
-                            )}
-                          >
-                            {size}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <span
-                      className="text-sm"
-                      style={{
-                        color: isDark ? "#cbd5e1" : "#4b5563",
-                        transition: "none",
-                      }}
-                    >
-                      per page
-                    </span>
-                  </div>
-                </div>
-                {totalPages > 1 && (
-                  <PaginationControls
-                    page={page}
-                    limit={limit}
-                    total={total}
-                    totalPages={totalPages}
-                    hasNextPage={hasNextPage}
-                    hasPreviousPage={hasPreviousPage}
-                    onPageChange={setPage}
-                    onLimitChange={(nextLimit) => {
-                      setLimit(nextLimit);
-                      setPage(1);
-                    }}
-                    // Keep page buttons clickable during background refresh
-                    // (same UX as opportunities ? only block on hard empty load).
-                    loading={
-                      listLoading || (listValidating && contests.length === 0)
-                    }
-                    isDark={isDark}
-                    showResultInfo={false}
-                    showPageSizeSelector={false}
-                    showEdgeButtons={false}
-                    showPrevNextButtons={true}
-                    pageSizeOptions={[9, 15, 21, 30]}
-                  />
-                )}
-              </div>
+              <CampaignListPagination
+                page={page}
+                limit={limit}
+                total={total}
+                onPageChange={setPage}
+                onLimitChange={handleCampaignPageSizeChange}
+                // Keep navigation available during background refreshes.
+                loading={listLoading || (listValidating && contests.length === 0)}
+                isDark={isDark}
+              />
             )}
           </div>
           {shouldShowContestTypeGuide && (

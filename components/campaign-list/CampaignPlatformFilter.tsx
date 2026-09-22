@@ -11,8 +11,12 @@ import { cn } from "@/lib/utils";
 import {
   CAMPAIGN_FILTER_PLATFORM_LABELS,
   CAMPAIGN_FILTER_PLATFORMS,
+  campaignPlatformMatchMode,
   campaignPlatformFilterLabel,
+  isAllCampaignPlatformFilter,
+  isCampaignPlatformSelected,
   normalizeCampaignPlatformFilter,
+  setCampaignPlatformMatchMode,
   type CampaignFilterPlatform,
   toggleCampaignPlatformFilter,
 } from "@/lib/campaign-platform-filter";
@@ -38,7 +42,9 @@ export function CampaignPlatformFilter({
     platforms.includes(platform),
   );
   const normalized = normalizeCampaignPlatformFilter(value, available);
-  const allSelected = normalized === "all";
+  const matchMode = campaignPlatformMatchMode(normalized);
+  const allSelected = isAllCampaignPlatformFilter(normalized);
+  const platformLabel = campaignPlatformFilterLabel(normalized, available);
 
   return (
     <Popover>
@@ -55,7 +61,9 @@ export function CampaignPlatformFilter({
           )}
         >
           <span className="truncate">
-            {campaignPlatformFilterLabel(normalized, available)}
+            {allSelected
+              ? platformLabel
+              : `${matchMode === "single" ? "Single" : "Multiple"}: ${platformLabel}`}
           </span>
           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
         </Button>
@@ -71,17 +79,70 @@ export function CampaignPlatformFilter({
         )}
       >
         <div className="flex flex-col gap-1">
+          <div
+            className={cn(
+              "grid grid-cols-2 gap-1 rounded-lg p-1 mb-1",
+              isDark ? "bg-slate-900" : "bg-slate-100",
+            )}
+          >
+            <MatchModeButton
+              label="Single Platform"
+              active={matchMode === "single"}
+              isDark={isDark}
+              onClick={() =>
+                onChange(
+                  setCampaignPlatformMatchMode(
+                    normalized,
+                    "single",
+                    available,
+                  ),
+                )
+              }
+            />
+            <MatchModeButton
+              label="Multiple Platform"
+              active={matchMode === "multiple"}
+              isDark={isDark}
+              onClick={() =>
+                onChange(
+                  setCampaignPlatformMatchMode(
+                    normalized,
+                    "multiple",
+                    available,
+                  ),
+                )
+              }
+            />
+          </div>
+          <p
+            className={cn(
+              "px-2 pb-1 text-[11px] leading-4",
+              isDark ? "text-slate-400" : "text-slate-500",
+            )}
+          >
+            {matchMode === "single"
+              ? "Shows single-platform campaigns for any checked platform."
+              : "Shows campaigns matching exactly the checked platform set."}
+          </p>
           <PlatformFilterRow
             label="All Platforms"
             checked={allSelected}
             isDark={isDark}
-            onToggle={() => onChange("all")}
+            onToggle={() =>
+              onChange(
+                setCampaignPlatformMatchMode("all", matchMode, available),
+              )
+            }
           />
           {available.map((platform) => (
             <PlatformFilterRow
               key={platform}
               label={CAMPAIGN_FILTER_PLATFORM_LABELS[platform]}
-              checked={!allSelected && normalized.split(",").includes(platform)}
+              checked={isCampaignPlatformSelected(
+                normalized,
+                platform,
+                available,
+              )}
               isDark={isDark}
               onToggle={() =>
                 onChange(
@@ -93,6 +154,36 @@ export function CampaignPlatformFilter({
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function MatchModeButton({
+  label,
+  active,
+  isDark,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  isDark: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-md px-2 py-1.5 text-[12px] font-semibold transition-colors",
+        active
+          ? "bg-[#4211a1] text-white"
+          : isDark
+            ? "text-slate-300 hover:bg-slate-800"
+            : "text-slate-600 hover:bg-white",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 
