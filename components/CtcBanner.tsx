@@ -145,7 +145,7 @@ export default function CtcBanner() {
   return (
     <section
       className={cn(
-        "relative flex flex-col items-center justify-center min-h-[420px] md:min-h-[480px] text-center overflow-hidden py-16 md:py-20 transition-colors duration-300",
+        "relative flex flex-col items-center justify-center min-h-[320px] md:min-h-[380px] text-center overflow-hidden transition-colors duration-300",
         isLight
           ? "bg-[#F1F1F1] text-black"
           : "bg-black text-white",
@@ -262,7 +262,7 @@ export default function CtcBanner() {
             </div>
 
             {/* Static circles around heading + buttons */}
-            <div className="relative mt-10 flex flex-col items-center justify-center w-full max-w-[780px] py-16 sm:py-20 md:py-24">
+            <div className="relative mt-3 flex flex-col items-center justify-center w-full max-w-[780px] py-10 sm:py-12 md:py-14">
               <div
                 className={cn(
                   "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
@@ -297,7 +297,7 @@ export default function CtcBanner() {
 
               <div
                 className={cn(
-                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[300px] md:w-[300px] -translate-x-1/2 -translate-y-1/2",
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[400px] md:w-[400px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
                   isLight ? "opacity-40" : "opacity-85",
                 )}
               >
@@ -313,7 +313,7 @@ export default function CtcBanner() {
 
               <h2
                 className={cn(
-                  `relative z-10 text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-center ${
+                  `relative z-10 text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-center leading-[1.15] ${
                     inView ? "slide-up" : "opacity-0 translate-y-10"
                   }`,
                   isLight ? "text-black" : "text-white",
@@ -327,11 +327,13 @@ export default function CtcBanner() {
                     that drive results.
                   </>
                 ) : (
-                  "Start Earning as a Creator"
+                  <>
+                    Start Earning as a Creator
+                  </>
                 )}
               </h2>
 
-              <div className="relative z-10 mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <div className="relative z-10 mt-5 sm:mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                 {isBrands ? (
                   <button
                     type="button"

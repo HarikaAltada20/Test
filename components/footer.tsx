@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Twitter, Instagram, Youtube, Mail, MapPin } from "lucide-react";
+import { Mail, MapPin } from "lucide-react";
 import logoLight from "@/public/images/Primary Logo white 1 (2).png";
 import logoWhite from "@/public/images/Primary_Logo_white.png";
 import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
@@ -56,33 +56,46 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="YouTube"
-                className="text-[#FF0000] hover:opacity-80 transition-opacity"
+                className="hover:opacity-80 transition-opacity"
               >
-                <Youtube className="h-5 w-5" />
+                <Image
+                  src="/images/Frame (2).png"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 object-contain"
+                />
               </Link>
               <Link
                 href="https://www.instagram.com/try_gameofcreators/"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Instagram"
-                className="text-[#E1306C] hover:opacity-80 transition-opacity"
+                className="hover:opacity-80 transition-opacity"
               >
-                <Instagram className="h-5 w-5" />
+                <Image
+                  src="/images/Frame (3).png"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 object-contain"
+                />
               </Link>
-             
-                <Link
-                  href="https://x.com/gameofcreators"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="X"
-                  className={cn(
-                    "text-white hover:opacity-80 transition-opacity",
-                    isLight ? "text-black" : "text-white",
-                  )}               
-                >
-                  <Twitter className="h-5 w-5" />
-                </Link>
-             
+              <Link
+                href="https://x.com/gameofcreators"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X"
+                className="hover:opacity-80 transition-opacity"
+              >
+                <Image
+                  src="/images/Frame (4).png"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 object-contain"
+                />
+              </Link>
             </div>
           </div>
 

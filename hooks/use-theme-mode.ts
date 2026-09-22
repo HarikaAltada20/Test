@@ -1,142 +1,79 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 export type ThemeMode = "light" | "dark";
 
-const PRESET_TO_MODE: Record<string, ThemeMode> = {
-  "game-of-creators": "dark",
-  "clean-professional": "light",
-  "dark-professional": "dark",
-};
-
 /**
- * Resolve the active marketing/dashboard theme.
- * Priority: live DOM → explicit dashboard-mode → legacy preset → light.
- * Explicit mode must beat preset so marketing toggles survive navigation.
+ * Marketing site (home / creators / brands) is dark-only.
+ * Light mode is disabled for these pages; dashboard keeps its own theme.
  */
-export function readThemeMode(): ThemeMode {
-  if (typeof window === "undefined") return "light";
-
-  const attr = document.documentElement.getAttribute("data-theme");
-  if (attr === "dark" || attr === "light") return attr;
-
-  try {
-    const saved = window.localStorage.getItem("dashboard-mode");
-    if (saved === "dark" || saved === "light") return saved;
-
-    const preset = window.localStorage.getItem("dashboard-preset");
-    if (preset && PRESET_TO_MODE[preset]) {
-      return PRESET_TO_MODE[preset];
-    }
-  } catch {
-    // ignore storage errors
-  }
-
-  return "light";
+export function readMarketingThemeMode(): ThemeMode {
+  return "dark";
 }
 
-function applyThemeMode(mode: ThemeMode) {
+function applyMarketingDarkMode() {
   const root = document.documentElement;
-  root.setAttribute("data-theme", mode);
-
-  if (mode === "dark") {
-    root.style.backgroundColor = "#07031E";
-    root.style.color = "rgb(248, 250, 252)";
-    root.classList.add("dark");
-  } else {
-    root.style.backgroundColor = "#F1F1F1";
-    root.style.color = "#111827";
-    root.classList.remove("dark");
-  }
-
-  try {
-    window.localStorage.setItem("dashboard-mode", mode);
-    window.localStorage.removeItem("dashboard-preset");
-    document.cookie = `dashboard-mode=${mode}; path=/; max-age=31536000; SameSite=Lax`;
-    document.cookie =
-      "dashboard-preset=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
-  } catch {
-    // ignore storage errors
-  }
+  root.setAttribute("data-theme", "dark");
+  root.style.backgroundColor = "#07031E";
+  root.style.color = "rgb(248, 250, 252)";
+  root.classList.add("dark");
 
   window.dispatchEvent(
-    new CustomEvent("theme-change", { detail: { mode } }),
+    new CustomEvent("theme-change", {
+      detail: { mode: "dark" as const, scope: "marketing" as const },
+    }),
   );
 }
 
-export function useThemeMode(serverMode?: ThemeMode) {
-  const [mode, setModeState] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return serverMode ?? "light";
-    return readThemeMode();
-  });
+/** @deprecated Prefer readMarketingThemeMode */
+export function readThemeMode(): ThemeMode {
+  return readMarketingThemeMode();
+}
+
+export function useThemeMode(_serverMode?: ThemeMode) {
+  const pathname = usePathname();
+  const [mode] = useState<ThemeMode>("dark");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setModeState(readThemeMode());
+    const isDashboardPath = () =>
+      typeof window !== "undefined" &&
+      (pathname?.startsWith("/dashboard") ??
+        window.location.pathname.startsWith("/dashboard"));
+
+    // Never overwrite the dashboard theme while on /dashboard.
+    if (!isDashboardPath()) {
+      applyMarketingDarkMode();
+    }
     setMounted(true);
 
-    const syncFromDom = () => {
-      const attr = document.documentElement.getAttribute("data-theme");
-      if (attr === "dark" || attr === "light") {
-        setModeState(attr);
-      }
-    };
-
-    const onThemeChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ mode?: ThemeMode }>).detail;
-      if (detail?.mode === "dark" || detail?.mode === "light") {
-        setModeState(detail.mode);
-      } else {
-        syncFromDom();
-      }
-    };
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === "dashboard-mode" || event.key === "dashboard-preset") {
-        setModeState(readThemeMode());
-      }
-    };
-
     const onPageShow = () => {
-      setModeState(readThemeMode());
+      if (!isDashboardPath()) {
+        applyMarketingDarkMode();
+      }
     };
 
-    const observer = new MutationObserver(syncFromDom);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-
-    window.addEventListener("theme-change", onThemeChange);
-    window.addEventListener("storage", onStorage);
     window.addEventListener("pageshow", onPageShow);
-
     return () => {
-      observer.disconnect();
-      window.removeEventListener("theme-change", onThemeChange);
-      window.removeEventListener("storage", onStorage);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, []);
+  }, [pathname]);
 
-  const setMode = useCallback((next: ThemeMode) => {
-    setModeState(next);
-    applyThemeMode(next);
+  // No-ops: marketing light/dark switching is disabled.
+  const setMode = useCallback((_next: ThemeMode) => {
+    applyMarketingDarkMode();
   }, []);
 
   const toggleMode = useCallback(() => {
-    setModeState((current) => {
-      const next: ThemeMode = current === "light" ? "dark" : "light";
-      applyThemeMode(next);
-      return next;
-    });
+    applyMarketingDarkMode();
   }, []);
 
   return {
     mode,
-    isDark: mode === "dark",
-    isLight: mode === "light",
+    isDark: true,
+    isLight: false,
     mounted,
     setMode,
     toggleMode,

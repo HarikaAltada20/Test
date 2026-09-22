@@ -141,7 +141,7 @@ function TestimonialCard({
         "relative w-full max-w-[340px] rounded-[16px] border px-5 pb-6 pt-5 sm:w-[340px] sm:max-w-none sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
         isLight
           ? "border-[#0000000D] bg-[#ECECEC]"
-          : "border-white/[0.08] bg-[#1A1A1A]",
+          : "bg-[#171717] shadow-[8px_8px_50px_0px_#000000,4px_12px_4px_0px_#00000033,inset_0px_0px_4px_0px_#FFFFFF40]",
         className,
       )}
     >

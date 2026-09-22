@@ -38,7 +38,7 @@ import {
   Home,
 } from "lucide-react";
 import logoDark from "@/public/images/Primary_Logo_white.png";
-import logoLight from "@/public/images/Primary Logo white 1 (2).png";
+// import logoLight from "@/public/images/Primary Logo white 1 (2).png";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
 import { useClientAuth } from "@/hooks/use-client-auth";
@@ -46,8 +46,9 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { subscriptionPlans, PRODUCT_IDS } from "@/constants/subscriptionPlans";
 import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
-import { MarketingThemeToggle } from "@/components/marketing-theme-toggle";
-import { useThemeMode } from "@/hooks/use-theme-mode";
+// import { MarketingThemeToggle } from "@/components/marketing-theme-toggle";
+// Light mode disabled on marketing pages — theme hook not needed for nav chrome.
+// import { useThemeMode } from "@/hooks/use-theme-mode";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
@@ -67,7 +68,6 @@ export function Nav({
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useClientAuth();
-  const { isLight } = useThemeMode();
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [creatorsLoading, setCreatorsLoading] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -175,8 +175,9 @@ export function Nav({
   const isBrandsPage = pathname === "/brands";
   const isHomePage = pathname === "/";
   const isDarkMarketingNav = isCreatorsPage || isBrandsPage || isHomePage;
-  const isLightMarketingNav = isDarkMarketingNav && isLight;
-  const marketingLogo = isLightMarketingNav ? logoLight : logoDark;
+  // Light mode disabled on marketing pages — always use dark chrome.
+  const isLightMarketingNav = false;
+  const marketingLogo = logoDark;
 
   const creatorsNavLinks = [
     { label: "Home", href: marketingHomeHref },
@@ -419,12 +420,14 @@ export function Nav({
 
             {/* Right Side Actions */}
             <div className="flex items-center space-x-3 sm:space-x-5">
+              {/* Dark/light mode switch temporarily disabled
               {isDarkMarketingNav ? (
                 <MarketingThemeToggle
                   className="hidden sm:inline-flex"
                   lightChrome={isLightMarketingNav}
                 />
               ) : null}
+              */}
               {user ? (
                 <>
                   {/* Enhanced User Dropdown */}
@@ -752,6 +755,7 @@ export function Nav({
                           />
                         </Link>
 
+                        {/* Dark/light mode switch temporarily disabled
                         {isDarkMarketingNav ? (
                           <div className="mb-6">
                             <MarketingThemeToggle
@@ -759,6 +763,7 @@ export function Nav({
                             />
                           </div>
                         ) : null}
+                        */}
 
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">

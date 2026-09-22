@@ -741,6 +741,26 @@ function DashboardContent({
     setIsHydrated(true);
   }, []);
 
+  // Apply dashboard theme to the document when entering /dashboard
+  // (marketing pages use a separate marketing-mode preference).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      document.documentElement.setAttribute("data-theme", currentMode);
+      if (currentMode === "dark") {
+        document.documentElement.classList.add("dark");
+        document.documentElement.style.backgroundColor = "#07031E";
+        document.documentElement.style.color = "rgb(248, 250, 252)";
+      } else {
+        document.documentElement.classList.remove("dark");
+        document.documentElement.style.backgroundColor = "#F1F1F1";
+        document.documentElement.style.color = "#111827";
+      }
+    } catch {
+      // ignore
+    }
+  }, [currentMode]);
+
   // Preset switching function - memoized for performance
   const switchPreset = useCallback((presetKey: PresetKey) => {
     const preset = presetConfigurations[presetKey];
@@ -754,9 +774,9 @@ function DashboardContent({
       document.cookie = `dashboard-preset=${presetKey}; path=/; max-age=31536000`;
     } catch {}
 
-    // Dispatch custom event for immediate theme change notification
+    // Dashboard-only event — marketing theme listeners ignore this scope.
     const event = new CustomEvent("theme-change", {
-      detail: { mode: preset.mode },
+      detail: { mode: preset.mode, scope: "dashboard" },
     });
     window.dispatchEvent(event);
   }, []);
@@ -779,14 +799,18 @@ function DashboardContent({
       document.documentElement.setAttribute("data-theme", modeKey);
       if (modeKey === "dark") {
         document.documentElement.classList.add("dark");
+        document.documentElement.style.backgroundColor = "#07031E";
+        document.documentElement.style.color = "rgb(248, 250, 252)";
       } else {
         document.documentElement.classList.remove("dark");
+        document.documentElement.style.backgroundColor = "#F1F1F1";
+        document.documentElement.style.color = "#111827";
       }
     } catch {}
 
-    // Dispatch custom event for immediate theme change notification
+    // Dashboard-only event — marketing theme listeners ignore this scope.
     const event = new CustomEvent("theme-change", {
-      detail: { mode: modeKey },
+      detail: { mode: modeKey, scope: "dashboard" },
     });
     window.dispatchEvent(event);
   }, []);

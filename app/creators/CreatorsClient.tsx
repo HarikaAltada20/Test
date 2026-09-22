@@ -860,12 +860,12 @@ export default function CreatorsClient({
               <div className="text-left">
                 <h1
                   className={cn(
-                    "mb-4 text-[2rem] font-semibold leading-[1.1] tracking-tight slide-up sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]",
+                    "mb-4 text-[2rem] font-semibold leading-[1.1] tracking-tight sm:mb-5 sm:text-5xl md:text-[3.35rem] lg:text-[4rem]",
                     isLight
                       ? "text-black"
                       : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent",
                   )}
-                  style={{ animationDelay: "0.15s" }}
+                  // style={{ animationDelay: "0.15s" }}
                 >
                   Big following?
                   <br />
@@ -876,10 +876,10 @@ export default function CreatorsClient({
 
                 <p
                   className={cn(
-                    "mb-6 max-w-xl text-base leading-relaxed slide-left sm:mb-8 sm:text-lg md:text-xl",
+                    "mb-6 max-w-xl text-base leading-relaxed sm:mb-8 sm:text-lg md:text-xl",
                     isLight ? "text-black/50" : "text-zinc-400",
                   )}
-                  style={{ animationDelay: "0.35s" }}
+                  // style={{ animationDelay: "0.35s" }}
                 >
                   Anyone can join. What you earn depends on how your content
                   performs — not your follower count.
@@ -894,7 +894,7 @@ export default function CreatorsClient({
                       "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "bg-[#FF6A1A] text-white hover:bg-[#ff7a33] shadow-lg shadow-orange-500/25"
-                        : "border border-white/20 bg-[#1a1a1a] text-white hover:border-white/35 hover:bg-[#242424]",
+                        : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:border-white/35 hover:bg-[#242424]",
                     )}
                   >
                     {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
@@ -909,7 +909,7 @@ export default function CreatorsClient({
                       "inline-flex items-center justify-center gap-2 rounded-xl px-6 py-6 text-base font-medium transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70",
                       isLight
                         ? "border border-black/15 bg-white text-black hover:bg-[#f7f7f7]"
-                        : "bg-[#e8e8e8] text-black hover:bg-white",
+                        : "bg-[#DEDEDE] text-black hover:bg-white",
                     )}
                   >
                     {isNavigatingViewMore ? <ButtonLoadingSpinner /> : null}
@@ -1012,6 +1012,23 @@ export default function CreatorsClient({
                         sizes="(max-width: 1024px) 90vw, 480px"
                       />
                     </div>
+                  </div>
+
+                  {/* Bottom blur → black fade (over image, under notification) */}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 top-[94%] z-[15] h-[22%] sm:h-[14%]"
+                  >
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        WebkitMaskImage:
+                          "linear-gradient(to top, black 0%, black 45%, transparent 100%)",
+                        maskImage:
+                          "linear-gradient(to top, black 0%, black 45%, transparent 100%)",
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
                   </div>
 
                   {/* $600 credited notification — in front of girl */}
@@ -1222,14 +1239,11 @@ export default function CreatorsClient({
           <div className="mx-auto max-w-[1200px] px-4 md:px-8 xl:px-4">
             <h2
               className={cn(
-                "mb-8 text-center text-[28px] font-semibold tracking-tight sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl",
+                "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
                 isAnimated ? "slide-up" : "hide-before-animate",
-                isLight ? "text-black" : "text-white",
+                isLight ? "text-black" : "text-[#EFEFEF]",
               )}
-              style={{
-                fontFamily: "Montserrat, sans-serif",
-                animationDelay: "0.15s",
-              }}
+            
             >
               As easy as you think
             </h2>
@@ -1454,15 +1468,12 @@ export default function CreatorsClient({
         >
           <div className="container mx-auto max-w-[1150px]">
             <h2
-              className={cn(
-                "mb-8 text-center text-[28px] font-semibold tracking-tight sm:mb-10 sm:text-4xl md:mb-14 md:text-5xl",
-                howItWorksAnimated ? "slide-up" : "hide-before-animate",
-                isLight ? "text-black" : "text-white",
-              )}
-              style={{
-                fontFamily: "Montserrat, sans-serif",
-                animationDelay: "0.1s",
-              }}
+             className={cn(
+              "mb-8 sm:mb-10 sm:text-4xl md:mb-14 font-['Inter'] md:text-[52px] font-bold leading-[110%] tracking-[-3%] text-center",
+              isAnimated ? "slide-up" : "hide-before-animate",
+              isLight ? "text-black" : "text-[#EFEFEF]",
+            )}
+              
             >
               Why Creators Choose GoC
             </h2>
@@ -1532,8 +1543,8 @@ export default function CreatorsClient({
                     {/* Dashed connector — desktop only */}
                     <div
                       className={cn(
-                        "hidden h-px flex-1 border-t border-dashed sm:block",
-                        isLight ? "border-black/20" : "border-[#454545]",
+                        "hidden h-px flex-1 border border-transparent sm:block",
+                        isLight ? "border-black/20" : "[border-image:linear-gradient(90deg,#000000_0%,#969696_17.31%,#000000_35.1%)_1]",
                       )}
                     />
 
