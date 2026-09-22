@@ -61,6 +61,7 @@ import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibili
 import { getPlatformIcon } from "@/lib/platform-icons";
 import {
   parseVideoContestPlatforms,
+  resolveMaxEarningsCentsForSubmission,
   VIDEO_PLATFORM_LABELS,
   type VideoContestPlatform,
 } from "@/lib/video-platform-campaigns";
@@ -3304,6 +3305,11 @@ export default function SubmitContentPage({
     );
   }
 
+  const earningsCapCents = resolveMaxEarningsCentsForSubmission(
+    contest,
+    contestPlatform,
+  );
+
   return (
     <div className="container mx-auto py-8 md:px-4 max-w-[1200px]">
       <div className="flex items-baseline gap-2 mb-6">
@@ -6383,8 +6389,7 @@ export default function SubmitContentPage({
                         )}
 
                       {/* Earnings Cap Warning */}
-                      {contest.contest_based_details?.cpm_contest
-                        ?.max_earnings_per_creator && (
+                      {earningsCapCents != null && earningsCapCents > 0 && (
                           <Alert
                             className={cn(
                               isDark
@@ -6403,10 +6408,7 @@ export default function SubmitContentPage({
                               )}
                             >
                               <strong>Earnings Cap:</strong> You can earn up to $
-                              {(
-                                contest.contest_based_details.cpm_contest
-                                  .max_earnings_per_creator / 100
-                              ).toFixed(2)}{" "}
+                              {(earningsCapCents / 100).toFixed(2)}{" "}
                               total from this contest.
                             </AlertDescription>
                           </Alert>

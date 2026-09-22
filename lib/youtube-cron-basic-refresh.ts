@@ -5,10 +5,7 @@ import {
   fetchYouTubeBasicStatsByVideoId,
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
-import {
-  buildOtherStatsWithYoutube,
-  getExistingYouTubeStats,
-} from "@/lib/youtube-other-stats";
+import { patchYouTubeMetrics } from "@/lib/youtube-metrics-patch";
 
 const SUBMISSION_PAGE_SIZE = 500;
 const PROCESS_CHUNK_SIZE = 25;
@@ -145,33 +142,25 @@ async function markCreatorSubsAuthFailure(
   message: string
 ): Promise<void> {
   await mapLimit(subs, 8, async (sub) => {
-    const { data: fresh } = await supabaseAdmin
-      .from("submissions")
-      .select("id, creator_id, content_link, views, other_stats")
-      .eq("id", sub.id)
-      .maybeSingle();
-    const row = (fresh ?? sub) as SubmissionRow;
-    const existingYoutube = getExistingYouTubeStats(row.other_stats);
-    await supabaseAdmin
-      .from("submissions")
-      .update({
+    const { error } = await patchYouTubeMetrics(
+      supabaseAdmin, sub.id,
+      { analytics_needs_reauth: true, insights_error: message },
+      {
         insights_status: "temporary_failure",
         last_insights_update: now,
         updated_at: now,
-        other_stats: buildOtherStatsWithYoutube(row.other_stats, {
-          ...existingYoutube,
-          analytics_needs_reauth: true,
-          insights_error: message,
-        }),
-      })
-      .eq("id", sub.id);
+      },
+    );
+    if (error) {
+      console.error(`[youtube-cron] Failure status write failed ${sub.id}:`, error.message);
+    }
   });
 }
 
 /**
  * Nightly / contest-scoped YouTube basic refresh — same per-submission logic as
- * manual "Refresh Basic Metrics" (updateYouTubeSubmissionForScope), with fresh
- * other_stats read before each write and paginated submission loading.
+ * manual "Refresh Basic Metrics" (updateYouTubeSubmissionForScope), with atomic
+ * database patches and paginated submission loading.
  */
 export async function runYouTubeCronBasicRefresh(
   supabaseAdmin: SupabaseClient,
@@ -260,18 +249,11 @@ export async function runYouTubeCronBasicRefresh(
           };
         }
 
-        const { data: fresh } = await supabaseAdmin
-          .from("submissions")
-          .select("id, creator_id, content_link, views, other_stats")
-          .eq("id", sub.id)
-          .maybeSingle();
-
-        const row = (fresh ?? sub) as SubmissionRow;
         const prefetched = basicByCreator.get(sub.creator_id)?.get(sub.video_id) ?? null;
 
         const res = await updateYouTubeSubmissionForScope(
           supabaseAdmin,
-          row,
+          sub,
           token,
           "basic",
           now,

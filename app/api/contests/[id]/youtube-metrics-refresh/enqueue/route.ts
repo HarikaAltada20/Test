@@ -49,7 +49,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const cronAuth = request.headers.get("Authorization") === `Bearer ${process.env.CRON_SECRET}`;
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const cronAuth =
+      !!cronSecret &&
+      request.headers.get("Authorization") === `Bearer ${cronSecret}`;
     let user: { id: string } | null = null;
     let isAdmin = false;
     if (!cronAuth) {

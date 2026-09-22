@@ -2895,13 +2895,15 @@ export function sumSnapshotChargeableCents(
     return dollarsToCents(primary.totalBudget);
   }
 
-  // Leaderboard: sum per-platform prize pools and per-platform bonus budgets.
-  let total = 0;
+  const campaigns: PlatformCampaignsMap = {};
   for (const platform of platforms) {
     const snap = snapshots[platform] ?? createDefaultPlatformCampaignSnapshot();
-    total += getSnapshotChargeableCents(snap);
+    campaigns[platform] = snapshotToPersistedPlatformCampaign(snap);
   }
-  return total;
+  return (
+    sumPersistedPlatformCampaignsChargeableCents(campaigns) ??
+    getSnapshotChargeableCents(primary)
+  );
 }
 
 /** Prize pool cents from a leaderboard block (total_prize, else sum of prize rows). */
@@ -3087,9 +3089,10 @@ export function sumPersistedPlatformCampaignsChargeableCents(
   details: Record<string, unknown> | null | undefined,
 ): number | null {
   const campaigns = readPersistedPlatformCampaigns(details);
-  const entries = VIDEO_CONTEST_PLATFORMS.map(
-    (platform) => campaigns[platform],
-  ).filter((c): c is PersistedPlatformCampaign => Boolean(c));
+  const platforms = VIDEO_CONTEST_PLATFORMS.filter((platform) =>
+    Boolean(campaigns[platform]),
+  );
+  const entries = platforms.map((platform) => campaigns[platform]!);
   if (entries.length < 2) return null;
 
   const primary = entries[0]!;
@@ -3097,11 +3100,21 @@ export function sumPersistedPlatformCampaignsChargeableCents(
     return getPersistedPlatformChargeableCents(primary);
   }
 
-  let total = 0;
-  for (const campaign of entries) {
-    total += getPersistedPlatformChargeableCents(campaign);
-  }
-  return total;
+  // Matching prize structures use one contest-wide leaderboard, while
+  // different structures have independent per-platform prize pools.
+  const prizePool = resolveLeaderboardPrizePoolCents(
+    details,
+    serializeVideoContestPlatforms(platforms),
+  );
+
+  // Leaderboard flat-fee bonus budgets remain independent platform caps.
+  const bonusPools = entries.reduce((sum, campaign) => {
+    const leaderboard = campaign.leaderboard_contest;
+    if (!leaderboard || !(Number(leaderboard.flat_fee_bonus) > 0)) return sum;
+    return sum + Math.max(0, Number(leaderboard.total_budget) || 0);
+  }, 0);
+
+  return prizePool + bonusPools;
 }
 
 /**
@@ -3113,15 +3126,15 @@ export function resolveContestPoolBudgetCents(
   details: Record<string, unknown> | null | undefined,
   platformCsv?: string | null,
 ): number {
+  const multi = sumPersistedPlatformCampaignsChargeableCents(details);
+  if (multi != null && multi > 0) return multi;
+
   const projected = withProjectedTopLevelPayout(details, platformCsv);
   const fromProjected = getPoolBudgetCentsFromDetails(
     contestType,
     projected as ContestBasedDetailsForPool,
   );
   if (fromProjected > 0) return fromProjected;
-
-  const multi = sumPersistedPlatformCampaignsChargeableCents(details);
-  if (multi != null && multi > 0) return multi;
 
   return getPoolBudgetCentsFromDetails(
     contestType,

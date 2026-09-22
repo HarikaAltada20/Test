@@ -20,10 +20,10 @@ import {
 import {
   metricsRunTableForPlatform,
   resolvePostCampaignRefreshPlatforms,
-  type PostCampaignVideoPlatform,
 } from "@/lib/post-campaign-platforms";
 import {
   parseRequestedRefreshPlatforms,
+  partitionRefreshPlatformsByQueueAvailability,
   resolveMetricsRefreshPlatformQueue,
 } from "@/lib/multi-platform-metrics-refresh";
 import { startMultiPlatformMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
@@ -47,17 +47,6 @@ function resolveBaseUrl(request: Request): string {
       : `https://${process.env.NEXT_PUBLIC_APP_URL}`;
   }
   return "http://localhost:3000";
-}
-
-function isQueueEnabledForPlatform(platform: PostCampaignVideoPlatform): boolean {
-  switch (platform) {
-    case "instagram":
-      return isInstagramInsightsQueueEnabled();
-    case "youtube":
-      return isYouTubeMetricsQueueEnabled();
-    case "tiktok":
-      return isTikTokMetricsQueueEnabled();
-  }
 }
 
 export async function POST(
@@ -216,7 +205,23 @@ export async function POST(
     const baseUrl = resolveBaseUrl(request);
     const cookieHeader = request.headers.get("cookie");
 
-    const queueTargets = platforms.filter((p) => isQueueEnabledForPlatform(p));
+    const {
+      available: queueTargets,
+      unavailable: unavailableQueueTargets,
+    } = partitionRefreshPlatformsByQueueAvailability(platforms, {
+      youtube: isYouTubeMetricsQueueEnabled(),
+      instagram: isInstagramInsightsQueueEnabled(),
+      tiktok: isTikTokMetricsQueueEnabled(),
+    });
+
+    if (queueTargets.length > 0 && unavailableQueueTargets.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Multi-platform post-campaign refresh is not fully configured. Missing queues: ${unavailableQueueTargets.join(", ")}.`,
+        },
+        { status: 503 },
+      );
+    }
 
     if (queueTargets.length > 0) {
       // Sequential Redis chain: YouTube → Instagram → TikTok (subset only).

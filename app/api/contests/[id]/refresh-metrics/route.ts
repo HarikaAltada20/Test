@@ -32,13 +32,13 @@ import {
 import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue";
 import {
   parseRequestedRefreshPlatforms,
+  partitionRefreshPlatformsByQueueAvailability,
   resolveLiveContestVideoPlatforms,
   resolveMetricsRefreshPlatformQueue,
   youtubeScopeForMetricsRefresh,
 } from "@/lib/multi-platform-metrics-refresh";
 import { startMultiPlatformMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
 import { filterPlatformsWithEligibleLiveSubmissions } from "@/lib/eligible-live-submissions-for-refresh";
-import type { PostCampaignVideoPlatform } from "@/lib/post-campaign-platforms";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 
 export async function POST(
@@ -253,22 +253,23 @@ export async function POST(
     const youtubeQueueEnabled = isYouTubeMetricsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
 
-    const isQueueEnabledForPlatform = (
-      p: PostCampaignVideoPlatform,
-    ): boolean => {
-      switch (p) {
-        case "instagram":
-          return instagramQueueEnabled;
-        case "youtube":
-          return youtubeQueueEnabled;
-        case "tiktok":
-          return tiktokQueueEnabled;
-      }
-    };
+    const {
+      available: queuedVideoPlatforms,
+      unavailable: unqueuedVideoPlatforms,
+    } = partitionRefreshPlatformsByQueueAvailability(videoQueueTargets, {
+      youtube: youtubeQueueEnabled,
+      instagram: instagramQueueEnabled,
+      tiktok: tiktokQueueEnabled,
+    });
 
-    const queuedVideoPlatforms = videoQueueTargets.filter((p) =>
-      isQueueEnabledForPlatform(p),
-    );
+    if (videoQueueTargets.length > 1 && unqueuedVideoPlatforms.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Multi-platform metrics refresh is not fully configured. Missing queues: ${unqueuedVideoPlatforms.join(", ")}.`,
+        },
+        { status: 503 },
+      );
+    }
 
     if (isTwitter) {
       const why = queueEnabled
@@ -370,17 +371,6 @@ export async function POST(
           now.getTime() + cooldownMs,
         ).toISOString(),
       });
-    }
-
-    // Hybrid contest without Redis queues configured
-    if (!isTwitter && videoQueueTargets.length > 1) {
-      return NextResponse.json(
-        {
-          error:
-            "Multi-platform metrics refresh requires Redis queues (UPSTASH_REDIS_REST_URL / TOKEN).",
-        },
-        { status: 503 },
-      );
     }
 
     if (useQueue) {

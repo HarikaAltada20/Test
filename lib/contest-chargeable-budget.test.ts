@@ -98,6 +98,32 @@ describe("getChargeableBudgetCents", () => {
     assert.equal(cents, 20_500);
   });
 
+  it("charges a matching multi-platform prize ladder once", () => {
+    const sharedLadder = {
+      total_prize: 10_000,
+      winner_count: 2,
+      prizes: [
+        { position: 1, amount: 6_000 },
+        { position: 2, amount: 4_000 },
+      ],
+    };
+    const cents = getChargeableBudgetCents({
+      id: "c1",
+      contest_type: "leaderboard",
+      contest_based_details: {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: sharedLadder,
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { ...sharedLadder },
+        },
+      },
+    });
+    assert.equal(cents, 10_000);
+  });
+
   it("uses shared campaign budget once for multi-platform CPM", () => {
     const cents = getChargeableBudgetCents({
       id: "c1",

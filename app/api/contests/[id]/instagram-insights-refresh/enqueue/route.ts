@@ -47,24 +47,13 @@ export async function POST(
       return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
     }
 
-    // Mid-chain advance may call this without a user cookie (server→server).
+    // Redis chain state coordinates work; it is not an authentication credential.
     const chainContinue = body?.chainContinue === true;
     let chainContinueOk = false;
-    if (chainContinue) {
-      const claim = await claimMultiPlatformChainPlatform({
-        contestId,
-        metricsTarget,
-        platform: "instagram",
-      });
-      chainContinueOk = claim.ok;
-      if (!claim.ok) {
-        return NextResponse.json({ error: claim.error }, { status: 409 });
-      }
-    }
 
     let user: { id: string } | null = null;
     let isAdmin = false;
-    if (!cronAuth && !chainContinueOk) {
+    if (!cronAuth) {
       const supabase = await createClient();
       const { data: { user: u } } = await supabase.auth.getUser();
       user = u;
@@ -126,12 +115,24 @@ export async function POST(
 
     const accessDenied = assertPostCampaignEnqueueAccess(
       isPostCampaignTarget,
-      cronAuth || chainContinueOk,
+      cronAuth,
       user?.id,
       contest.advertiser_id,
       isAdmin,
     );
     if (accessDenied) return accessDenied;
+
+    if (chainContinue) {
+      const claim = await claimMultiPlatformChainPlatform({
+        contestId,
+        metricsTarget,
+        platform: "instagram",
+      });
+      chainContinueOk = claim.ok;
+      if (!claim.ok) {
+        return NextResponse.json({ error: claim.error }, { status: 409 });
+      }
+    }
 
     if (isPostCampaignTarget && !cronAuth && !chainContinueOk) {
       const cooldownDenied = postCampaignCooldownResponse(

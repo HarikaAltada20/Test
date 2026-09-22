@@ -14,10 +14,7 @@ import {
 } from "@/lib/youtube-submission-refresh-by-scope";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
-import {
-  buildOtherStatsWithYoutube,
-  getExistingYouTubeStats,
-} from "@/lib/youtube-other-stats";
+import { patchYouTubeMetrics } from "@/lib/youtube-metrics-patch";
 import {
   isMetricsTargetMismatch,
   type MetricsRefreshTarget,
@@ -262,24 +259,15 @@ export async function POST(
       now: string,
       patch: Record<string, unknown>,
     ) => {
-      const existingYoutube = getExistingYouTubeStats(sub.other_stats);
       const payload = {
         insights_status: "temporary_failure",
         last_insights_update: now,
         updated_at: now,
-        other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
-          ...existingYoutube,
-          ...patch,
-        }),
       };
-      if (isPostCampaignTarget) {
-        await supabaseAdmin
-          .from("post_campaign_submission_metrics")
-          .update(payload)
-          .eq("submission_id", sub.id);
-      } else {
-        await supabaseAdmin.from("submissions").update(payload).eq("id", sub.id);
-      }
+      const { error } = await patchYouTubeMetrics(
+        supabaseAdmin, sub.id, patch, payload, writeTarget,
+      );
+      if (error) console.error(`[youtube-batch] Failure status write failed ${sub.id}:`, error.message);
     };
 
     const creatorIds = [...new Set(batch.map((r) => r.creator_id))];

@@ -86,6 +86,21 @@ export function resolveMetricsRefreshPlatformQueue(options: {
   return METRICS_REFRESH_PLATFORM_ORDER.filter((p) => selected.includes(p));
 }
 
+export function partitionRefreshPlatformsByQueueAvailability(
+  platforms: readonly PostCampaignVideoPlatform[],
+  availability: Readonly<Record<PostCampaignVideoPlatform, boolean>>,
+): {
+  available: PostCampaignVideoPlatform[];
+  unavailable: PostCampaignVideoPlatform[];
+} {
+  const available: PostCampaignVideoPlatform[] = [];
+  const unavailable: PostCampaignVideoPlatform[] = [];
+  for (const platform of platforms) {
+    (availability[platform] ? available : unavailable).push(platform);
+  }
+  return { available, unavailable };
+}
+
 /**
  * Parse contest.platform CSV into ordered video platforms for live refresh.
  * Prefer VIDEO_CONTEST_PLATFORMS order over CSV first-seen order.

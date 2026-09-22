@@ -199,6 +199,25 @@ describe("multi-platform payout persistence", () => {
       }),
       14_000 + 4_000 + 2_500,
     );
+
+    const sharedYtLb = {
+      ...ytLb,
+      winnerCount: 2,
+      winnerAmounts: [6_000, 4_000],
+    };
+    const sharedIgLb = {
+      ...igLb,
+      totalPrizePool: 10_000,
+      winnerCount: 2,
+      winnerAmounts: [6_000, 4_000],
+    };
+    assert.equal(
+      sumSnapshotChargeableCents(["youtube", "instagram"], {
+        youtube: sharedYtLb,
+        instagram: sharedIgLb,
+      }),
+      10_000 + 4_000 + 2_500,
+    );
   });
 
   it("sums persisted platform payout keys for chargeable budget", () => {
@@ -232,6 +251,47 @@ describe("multi-platform payout persistence", () => {
         instagram: igCpm,
       }),
       2_500,
+    );
+
+    const sharedYoutube = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 10_000,
+      winnerCount: 2,
+      winnerAmounts: [6_000, 4_000],
+      flatFeeBonus: "2",
+      totalBudget: "40",
+    });
+    const sharedInstagram = snapshotToPersistedPlatformCampaign({
+      ...createDefaultPlatformCampaignSnapshot(),
+      totalPrizePool: 10_000,
+      winnerCount: 2,
+      winnerAmounts: [6_000, 4_000],
+      flatFeeBonus: "5",
+      totalBudget: "25",
+    });
+    const sharedDetails = {
+      youtube: sharedYoutube,
+      instagram: sharedInstagram,
+    };
+    assert.equal(
+      sumPersistedPlatformCampaignsChargeableCents(sharedDetails),
+      16_500,
+    );
+    assert.equal(
+      resolveContestPoolBudgetCents(
+        "leaderboard",
+        sharedDetails,
+        "youtube,instagram",
+      ),
+      16_500,
+    );
+    assert.equal(
+      resolveContestPoolBudgetCents(
+        "leaderboard",
+        { youtube, tiktok },
+        "youtube,tiktok",
+      ),
+      10_500,
     );
   });
 });

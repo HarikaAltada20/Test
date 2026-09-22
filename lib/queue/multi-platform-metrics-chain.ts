@@ -8,7 +8,7 @@
  *
  * Order is always YouTube → Instagram → TikTok (subset of campaign platforms).
  *
- * Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+ * Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, CRON_SECRET
  */
 
 import { Redis } from "@upstash/redis";
@@ -25,6 +25,7 @@ const REDIS_PREFIX = "multi_platform_metrics_chain";
 const CHAIN_TTL_SECONDS = 60 * 60 * 6; // 6h safety TTL
 
 export type MultiPlatformChainState = {
+  chainId: string;
   contestId: string;
   metricsTarget: MetricsRefreshTarget;
   platforms: PostCampaignVideoPlatform[];
@@ -33,6 +34,28 @@ export type MultiPlatformChainState = {
   scope: YouTubeRefreshScope;
   startedAt: string;
 };
+
+const ADVANCE_CHAIN_LUA = `
+local raw = redis.call("GET", KEYS[1])
+if not raw then return 0 end
+local ok, state = pcall(cjson.decode, raw)
+if not ok then return -1 end
+if tostring(state.chainId or "") ~= ARGV[1] then return 0 end
+if tonumber(state.currentIndex) ~= tonumber(ARGV[2]) then return 0 end
+state.currentIndex = tonumber(ARGV[3])
+redis.call("SET", KEYS[1], cjson.encode(state), "EX", tonumber(ARGV[4]))
+return 1
+`;
+
+const CLEAR_CHAIN_LUA = `
+local raw = redis.call("GET", KEYS[1])
+if not raw then return 0 end
+local ok, state = pcall(cjson.decode, raw)
+if not ok then return -1 end
+if tostring(state.chainId or "") ~= ARGV[1] then return 0 end
+if ARGV[2] ~= "" and tonumber(state.currentIndex) ~= tonumber(ARGV[2]) then return 0 end
+return redis.call("DEL", KEYS[1])
+`;
 
 export type MultiPlatformChainRun = {
   platform: PostCampaignVideoPlatform;
@@ -71,30 +94,40 @@ function getRedis(): Redis | null {
 export function isMultiPlatformMetricsChainEnabled(): boolean {
   return !!(
     process.env.UPSTASH_REDIS_REST_URL?.trim() &&
-    process.env.UPSTASH_REDIS_REST_TOKEN?.trim()
+    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() &&
+    process.env.CRON_SECRET?.trim()
   );
 }
 
-export async function saveMultiPlatformMetricsChain(
+async function createMultiPlatformMetricsChain(
   state: MultiPlatformChainState,
-): Promise<{ error?: string }> {
+): Promise<{ created: boolean; error?: string }> {
   const redis = getRedis();
-  if (!redis) return { error: "Redis not configured" };
+  if (!redis) return { created: false, error: "Redis not configured" };
   try {
-    await redis.set(chainKey(state.contestId, state.metricsTarget), state, {
-      ex: CHAIN_TTL_SECONDS,
-    });
+    const result = await redis.set(
+      chainKey(state.contestId, state.metricsTarget),
+      state,
+      {
+        ex: CHAIN_TTL_SECONDS,
+        nx: true,
+      },
+    );
+    if (result !== "OK") {
+      return { created: false };
+    }
     console.info("[multi-platform-metrics-chain] saved", {
+      chainId: state.chainId,
       contestId: state.contestId,
       metricsTarget: state.metricsTarget,
       platforms: state.platforms,
       currentIndex: state.currentIndex,
     });
-    return {};
+    return { created: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[multi-platform-metrics-chain] save failed:", message);
-    return { error: message };
+    return { created: false, error: message };
   }
 }
 
@@ -119,6 +152,7 @@ export async function getMultiPlatformMetricsChain(
     if (
       raw &&
       typeof raw === "object" &&
+      typeof raw.chainId === "string" &&
       Array.isArray(raw.platforms) &&
       typeof raw.currentIndex === "number"
     ) {
@@ -134,11 +168,21 @@ export async function getMultiPlatformMetricsChain(
 export async function clearMultiPlatformMetricsChain(
   contestId: string,
   metricsTarget: MetricsRefreshTarget,
+  chainId?: string,
+  currentIndex?: number,
 ): Promise<void> {
   const redis = getRedis();
   if (!redis) return;
   try {
-    await redis.del(chainKey(contestId, metricsTarget));
+    if (!chainId) {
+      await redis.del(chainKey(contestId, metricsTarget));
+      return;
+    }
+    await redis.eval(
+      CLEAR_CHAIN_LUA,
+      [chainKey(contestId, metricsTarget)],
+      [chainId, currentIndex == null ? "" : String(currentIndex)],
+    );
   } catch (e) {
     console.error("[multi-platform-metrics-chain] clear failed:", e);
   }
@@ -183,7 +227,15 @@ export async function enqueuePlatformMetricsRefresh(options: {
   if (platform === "youtube") {
     body.scope = scope;
   }
-  // Mid-chain advance: claim + skip cooldown even if cron auth header is missing.
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  if (useCronAuth && !cronSecret) {
+    return {
+      error: "Multi-platform metrics chain requires CRON_SECRET",
+      status: 503,
+    };
+  }
+
+  // Mid-chain advance: claim the already-advanced Redis step and skip cooldown.
   if (useCronAuth) {
     body.chainContinue = true;
   }
@@ -191,8 +243,8 @@ export async function enqueuePlatformMetricsRefresh(options: {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (useCronAuth && process.env.CRON_SECRET) {
-    headers.Authorization = `Bearer ${process.env.CRON_SECRET}`;
+  if (useCronAuth && cronSecret) {
+    headers.Authorization = `Bearer ${cronSecret}`;
   } else if (cookieHeader) {
     headers.Cookie = cookieHeader;
   }
@@ -261,11 +313,22 @@ export async function startMultiPlatformMetricsChain(options: {
     };
   }
 
-  const useChain =
-    platforms.length > 1 && isMultiPlatformMetricsChainEnabled();
+  if (platforms.length > 1 && !isMultiPlatformMetricsChainEnabled()) {
+    return {
+      runs: [],
+      chain: false,
+      error:
+        "Multi-platform metrics refresh requires shared Redis and CRON_SECRET configuration.",
+      status: 503,
+    };
+  }
+
+  const useChain = platforms.length > 1;
+  const chainId = crypto.randomUUID();
 
   if (useChain) {
-    const saveResult = await saveMultiPlatformMetricsChain({
+    const saveResult = await createMultiPlatformMetricsChain({
+      chainId,
       contestId,
       metricsTarget,
       platforms,
@@ -279,6 +342,14 @@ export async function startMultiPlatformMetricsChain(options: {
         chain: false,
         error: saveResult.error,
         status: 503,
+      };
+    }
+    if (!saveResult.created) {
+      return {
+        runs: [],
+        chain: false,
+        error: "A multi-platform metrics refresh is already in progress.",
+        status: 409,
       };
     }
   }
@@ -296,7 +367,7 @@ export async function startMultiPlatformMetricsChain(options: {
 
   if (enqueueResult.error) {
     if (useChain) {
-      await clearMultiPlatformMetricsChain(contestId, metricsTarget);
+      await clearMultiPlatformMetricsChain(contestId, metricsTarget, chainId, 0);
     }
     return {
       runs: [],
@@ -313,11 +384,6 @@ export async function startMultiPlatformMetricsChain(options: {
     alreadyActive: index === 0 ? Boolean(enqueueResult.alreadyActive) : false,
     statusPath: postCampaignStatusPathForPlatform(platform),
   }));
-
-  // Single platform that was already active: no chain to advance.
-  if (useChain && platforms.length === 1) {
-    await clearMultiPlatformMetricsChain(contestId, metricsTarget);
-  }
 
   return { runs, chain: useChain };
 }
@@ -356,7 +422,12 @@ export async function advanceMultiPlatformMetricsChainAfterTerminal(options: {
 
   const nextIndex = chain.currentIndex + 1;
   if (nextIndex >= chain.platforms.length) {
-    await clearMultiPlatformMetricsChain(contestId, metricsTarget);
+    await clearMultiPlatformMetricsChain(
+      contestId,
+      metricsTarget,
+      chain.chainId,
+      chain.currentIndex,
+    );
     console.info("[multi-platform-metrics-chain] completed", {
       contestId,
       metricsTarget,
@@ -366,13 +437,29 @@ export async function advanceMultiPlatformMetricsChainAfterTerminal(options: {
   }
 
   const nextPlatform = chain.platforms[nextIndex]!;
-  const updated: MultiPlatformChainState = {
-    ...chain,
-    currentIndex: nextIndex,
-  };
-  const saveResult = await saveMultiPlatformMetricsChain(updated);
-  if (saveResult.error) {
-    return { advanced: false, error: saveResult.error };
+  const redis = getRedis();
+  if (!redis) {
+    return { advanced: false, error: "Redis not configured" };
+  }
+  let transitionResult: unknown;
+  try {
+    transitionResult = await redis.eval(
+      ADVANCE_CHAIN_LUA,
+      [chainKey(contestId, metricsTarget)],
+      [
+        chain.chainId,
+        String(chain.currentIndex),
+        String(nextIndex),
+        String(CHAIN_TTL_SECONDS),
+      ],
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { advanced: false, error: message };
+  }
+  if (Number(transitionResult) !== 1) {
+    // Another terminal callback or a newer chain already changed this state.
+    return { advanced: false };
   }
 
   const advanceBaseUrl = resolveMetricsChainAdvanceBaseUrl(baseUrl);
@@ -414,10 +501,21 @@ export async function advanceMultiPlatformMetricsChainAfterTerminal(options: {
   return { advanced: true, nextPlatform };
 }
 
+export function isCurrentMultiPlatformChainStep(
+  chain: {
+    platforms: readonly PostCampaignVideoPlatform[];
+    currentIndex: number;
+  },
+  platform: PostCampaignVideoPlatform,
+): boolean {
+  const platformIndex = chain.platforms.indexOf(platform);
+  return platformIndex >= 0 && chain.currentIndex === platformIndex;
+}
+
 /**
- * Client (or processor) claims the next platform in an active chain.
- * Allows index == platformIndex (already claimed) or index == platformIndex - 1
- * (previous finished; advance now). Skips cooldown when enqueue uses chainContinue.
+ * Client (or processor) claims the platform already selected by the server-side
+ * terminal transition. This intentionally cannot advance the index: callers
+ * must not be able to start a later platform before the previous run finishes.
  */
 export async function claimMultiPlatformChainPlatform(options: {
   contestId: string;
@@ -439,25 +537,13 @@ export async function claimMultiPlatformChainPlatform(options: {
     return { ok: false, error: "Platform is not part of this refresh chain" };
   }
 
-  if (chain.currentIndex === platformIndex) {
+  if (isCurrentMultiPlatformChainStep(chain, platform)) {
     return { ok: true, chain };
-  }
-
-  if (chain.currentIndex === platformIndex - 1) {
-    const updated: MultiPlatformChainState = {
-      ...chain,
-      currentIndex: platformIndex,
-    };
-    const saveResult = await saveMultiPlatformMetricsChain(updated);
-    if (saveResult.error) {
-      return { ok: false, error: saveResult.error };
-    }
-    return { ok: true, chain: updated };
   }
 
   return {
     ok: false,
-    error: `Platform ${platform} is not next in chain (currentIndex=${chain.currentIndex})`,
+    error: `Platform ${platform} is not the active chain step (currentIndex=${chain.currentIndex})`,
   };
 }
 

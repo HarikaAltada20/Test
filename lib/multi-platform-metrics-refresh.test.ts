@@ -4,6 +4,7 @@ import {
   METRICS_REFRESH_PLATFORM_ORDER,
   MULTI_PLATFORM_YOUTUBE_REFRESH_SCOPE,
   parseRequestedRefreshPlatforms,
+  partitionRefreshPlatformsByQueueAvailability,
   platformsForRefreshTab,
   resolveLiveContestVideoPlatforms,
   resolveMetricsRefreshPlatformQueue,
@@ -78,6 +79,21 @@ describe("resolveMetricsRefreshPlatformQueue", () => {
         requestedPlatforms: ["instagram", "tiktok"],
       }),
       ["instagram"],
+    );
+  });
+});
+
+describe("partitionRefreshPlatformsByQueueAvailability", () => {
+  it("keeps unavailable platforms visible instead of silently dropping them", () => {
+    assert.deepEqual(
+      partitionRefreshPlatformsByQueueAvailability(
+        ["youtube", "instagram", "tiktok"],
+        { youtube: true, instagram: false, tiktok: true },
+      ),
+      {
+        available: ["youtube", "tiktok"],
+        unavailable: ["instagram"],
+      },
     );
   });
 });
