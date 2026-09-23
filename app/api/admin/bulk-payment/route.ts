@@ -14,14 +14,25 @@ import {
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
-import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
+import { buildMilestoneSubmissionPayoutCentsMapFromDetails } from "@/lib/milestone-contest-expected-spend";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import {
+  isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
+  resolveFlatFeeBonusPlan,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
 import {
   buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
   loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+  getFlatFeeBonusLadderForSubmission,
+} from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
 import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
@@ -295,14 +306,7 @@ export async function POST(request: NextRequest) {
     // Milestone payout — same FCFS + limits + view rules as contest detail / verify-submission
     let milestonePayoutBySubmissionId = new Map<string, number>();
     if (contest.contest_type === "milestone") {
-      const milestoneContest = (contest.contest_based_details as any)
-        ?.milestone_contest;
-      const milestones = Array.isArray(milestoneContest?.milestones)
-        ? milestoneContest.milestones
-        : [];
-
-      if (milestones.length > 0) {
-        const { data: payoutEligibleSubs, error: payoutEligibleErr } =
+      const { data: payoutEligibleSubs, error: payoutEligibleErr } =
           await fetchContestSubmissionsAllPages(
             supabaseAdmin,
             contest_id,
@@ -335,9 +339,13 @@ export async function POST(request: NextRequest) {
             other_stats: sub.other_stats,
           }));
           milestonePayoutBySubmissionId =
-            buildMilestoneSubmissionPayoutCentsMap(records, milestones);
+            buildMilestoneSubmissionPayoutCentsMapFromDetails(
+              records,
+              (contest.contest_based_details as Record<string, unknown>) ||
+                null,
+              contest.platform,
+            );
         }
-      }
     }
 
     // Get flat fee bonus and total budget
@@ -346,14 +354,24 @@ export async function POST(request: NextRequest) {
         ? (contest.contest_based_details as any)?.cpm_contest
         : (contest.contest_based_details as any)?.leaderboard_contest;
 
-    const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
+    const flatFeeBonusPlan = resolveFlatFeeBonusPlan(
+      (contest.contest_based_details as Record<string, unknown>) || null,
+      contest.platform,
+      contest.contest_type,
+    );
+    const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest as any);
     const totalBudget = contestDetails?.total_budget || null;
     const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
+    const maxEarningsKeyed = isKeyedMaxEarningsMap(
+      contest.max_earnings_per_creator,
+    );
     const maxEarnings =
-      contest.max_earnings_per_creator ||
-      contestDetails?.max_earnings_per_creator ||
-      null;
+      maxEarningsKeyed
+        ? null
+        : typeof contest.max_earnings_per_creator === "number"
+          ? contest.max_earnings_per_creator
+          : contestDetails?.max_earnings_per_creator || null;
 
     const payoutAdjustment = parsePayoutAdjustment(
       contest.payout_adjustment_percentage,
@@ -399,7 +417,11 @@ export async function POST(request: NextRequest) {
         unpaidBonusSubmissions.length * flatFeeBonus;
 
       // For leaderboard contests with total_budget, check if budget would be exceeded
-      if (contest.contest_type === "leaderboard" && totalBudget) {
+      if (
+        contest.contest_type === "leaderboard" &&
+        totalBudget &&
+        flatFeeBonusPlan.shareAcrossAllPlatforms
+      ) {
         if (currentBonusSpent + potentialBonusSpending > totalBudget) {
           return NextResponse.json(
             {
@@ -420,7 +442,11 @@ export async function POST(request: NextRequest) {
       }
 
       // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
-      if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+      if (
+        contest.contest_type === "cpm" &&
+        flatFeeBonusCap &&
+        flatFeeBonusPlan.shareAcrossAllPlatforms
+      ) {
         if (currentBonusSpent + potentialBonusSpending > flatFeeBonusCap) {
           return NextResponse.json(
             {
@@ -470,7 +496,7 @@ export async function POST(request: NextRequest) {
       await fetchContestSubmissionsAllPages(
         supabaseAdmin,
         contest_id,
-        "bonus_amount",
+        "bonus_amount, platform",
         { bonusPaid: true, order: { column: "created_at", ascending: true } },
       );
     if (bonusSpendErr2) {
@@ -486,6 +512,19 @@ export async function POST(request: NextRequest) {
       0,
     );
     let runningBonusSpent = currentBonusSpent;
+    const runningBonusSpentByPlatform = new Map<string, number>();
+    if (!flatFeeBonusPlan.shareAcrossAllPlatforms) {
+      for (const row of bonusSpendingData || []) {
+        const key =
+          parseVideoContestPlatforms((row as { platform?: string }).platform)[0] ||
+          "_";
+        runningBonusSpentByPlatform.set(
+          key,
+          (runningBonusSpentByPlatform.get(key) || 0) +
+            (Number((row as { bonus_amount?: number }).bonus_amount) || 0),
+        );
+      }
+    }
     if (payment_type !== "standard" && flatFeeBonus > 0) {
       // Fetch every contest submission and let `buildFlatFeeBonusExpectedCentsBySubmissionId`
       // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
@@ -496,7 +535,7 @@ export async function POST(request: NextRequest) {
         await fetchContestSubmissionsAllPages(
           supabaseAdmin,
           contest_id,
-          "id, created_at, status, paid",
+          "id, created_at, status, paid, platform",
           { order: { column: "created_at", ascending: true } },
         );
       if (contestEligibleErr) {
@@ -514,6 +553,7 @@ export async function POST(request: NextRequest) {
           created_at: s.created_at,
           status: s.status,
           paid: s.paid === true,
+          platform: s.platform,
         })),
       );
     }
@@ -523,7 +563,7 @@ export async function POST(request: NextRequest) {
       await fetchContestSubmissionsAllPages(
         supabaseAdmin,
         contest_id,
-        "earnings, paid",
+        "earnings, paid, platform",
         {
           creatorId: creator_id,
           paid: true,
@@ -546,8 +586,20 @@ export async function POST(request: NextRequest) {
       }>,
     );
     runningTotal = alreadyPaidAmount;
+    const runningByPlatform = new Map<string, number>();
+    if (maxEarningsKeyed) {
+      for (const row of previousSubmissions || []) {
+        const key = String((row as any).platform || "").toLowerCase() || "_";
+        runningByPlatform.set(
+          key,
+          (runningByPlatform.get(key) || 0) +
+            Math.max(0, Number((row as any).earnings) || 0),
+        );
+      }
+    }
 
-    // Non-Twitter leaderboard: per-submission prizes from contest-wide views rank.
+    // Non-Twitter leaderboard: per-submission prizes from All-tab rank when
+    // platform prizes match, or each platform's own ladder when they differ.
     // Ranking is always fetched fresh (no cross-request cache) so concurrent
     // verifies cannot cause two submissions to both receive the same prize rank.
     let leaderboardPrizeBySubmissionId = new Map<string, number>();
@@ -560,6 +612,9 @@ export async function POST(request: NextRequest) {
         supabaseAdmin,
         contestId: contest_id,
         prizes,
+        contestBasedDetails:
+          (contest.contest_based_details as Record<string, unknown>) || null,
+        contestPlatform: contest.platform,
       });
       if (prizeMapResult.error) {
         return NextResponse.json(
@@ -595,51 +650,55 @@ export async function POST(request: NextRequest) {
               ? storedEarnings
               : 0;
 
-          // If earnings not stored, calculate dynamically for CPM contests
+          // If earnings not stored, calculate dynamically for CPM contests.
+          // Multi-platform contests store rates under youtube|instagram|tiktok,
+          // not root cpm_contest — use the submission's platform config.
           if (!submissionEarnings && contest.contest_type === "cpm") {
-            const cpmConfig = (contest.contest_based_details as any)
-              ?.cpm_contest;
-            if (cpmConfig?.cpm_rate_usd) {
-              let effectiveViews = sub.views || 0;
-
-              // Apply min_views threshold
-              if (
-                cpmConfig.min_views != null &&
-                effectiveViews < cpmConfig.min_views
-              ) {
-                effectiveViews = 0;
-              }
-
-              // Apply max_views cap
-              if (
-                cpmConfig.max_views != null &&
-                effectiveViews > cpmConfig.max_views
-              ) {
-                effectiveViews = cpmConfig.max_views;
-              }
-
-              // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-              const calculatedEarnings =
-                (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-              submissionEarnings = Math.round(calculatedEarnings);
-            }
+            submissionEarnings = computeCpmRawCentsForRow(
+              {
+                views: sub.views,
+                platform: sub.platform,
+                other_stats: sub.other_stats,
+              },
+              (contest.contest_based_details as Record<string, unknown>) ||
+                null,
+              contest.platform,
+            );
           }
         }
 
         // Cap applies to CPM, stored-earnings, and leaderboard rank prizes so pay
         // cannot exceed creator-wise Expected Reward (max_earnings_per_creator).
-        if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
-          // Partial payment to reach cap exactly
-          const remainingCap = maxEarnings - runningTotal;
+        const subCap = maxEarningsKeyed
+          ? resolveMaxEarningsCentsForSubmission(
+              contest as any,
+              (sub as any).platform,
+            )
+          : maxEarnings;
+        const runKey = maxEarningsKeyed
+          ? String((sub as any).platform || "").toLowerCase() || "_"
+          : "_";
+        const platformRunning = maxEarningsKeyed
+          ? runningByPlatform.get(runKey) || 0
+          : runningTotal;
+        if (subCap && platformRunning + submissionEarnings > subCap) {
+          const remainingCap = subCap - platformRunning;
           if (remainingCap > 0) {
             submissionEarnings = remainingCap;
-            runningTotal = maxEarnings;
+            if (maxEarningsKeyed) {
+              runningByPlatform.set(runKey, subCap);
+            } else {
+              runningTotal = subCap;
+            }
           } else {
-            // Cap reached, skip this submission for reward payment
             submissionEarnings = 0;
           }
         } else {
-          runningTotal += submissionEarnings;
+          if (maxEarningsKeyed) {
+            runningByPlatform.set(runKey, platformRunning + submissionEarnings);
+          } else {
+            runningTotal += submissionEarnings;
+          }
         }
 
         // Leaderboard prizes are fixed rank amounts — do not apply % payout adjustment.
@@ -663,18 +722,23 @@ export async function POST(request: NextRequest) {
             (bonusReasonCounts.not_expected || 0) + 1;
           submissionBonus = 0;
         } else {
-          const bonusLimit =
-            contest.contest_type === "leaderboard"
-              ? totalBudget
-              : contest.contest_type === "cpm"
-                ? flatFeeBonusCap
-                : null;
+          const ladder = getFlatFeeBonusLadderForSubmission(
+            contest as any,
+            (sub as { platform?: string | null }).platform,
+          );
+          const platformKey =
+            parseVideoContestPlatforms(
+              (sub as { platform?: string | null }).platform,
+            )[0] || "_";
+          const spent = flatFeeBonusPlan.shareAcrossAllPlatforms
+            ? runningBonusSpent
+            : runningBonusSpentByPlatform.get(platformKey) || 0;
           const remainingBudget =
-            bonusLimit != null
-              ? Math.max(0, bonusLimit - runningBonusSpent)
+            ladder.budgetCents != null
+              ? Math.max(0, ladder.budgetCents - spent)
               : null;
           const bonusAllocation = allocateFlatFeeBonusCents(
-            flatFeeBonus,
+            expectedBonusForSubmission,
             remainingBudget,
           );
           submissionBonus = bonusAllocation.amount;
@@ -685,7 +749,14 @@ export async function POST(request: NextRequest) {
             expectedBonusForSubmission,
           );
           if (submissionBonus > 0) {
-            runningBonusSpent += submissionBonus;
+            if (flatFeeBonusPlan.shareAcrossAllPlatforms) {
+              runningBonusSpent += submissionBonus;
+            } else {
+              runningBonusSpentByPlatform.set(
+                platformKey,
+                spent + submissionBonus,
+              );
+            }
             totalBonus += submissionBonus;
           }
         }

@@ -10,10 +10,8 @@ import {
   getAdminApprovalPercent,
   type ContestListMetricsContest,
 } from "@/lib/contest-list-card-metrics";
-import {
-  getPoolBudgetCentsFromDetails,
-  isCpmContestType,
-} from "@/lib/contest-type";
+import { isCpmContestType } from "@/lib/contest-type";
+import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
 
 /**
  * CRITICAL: Always sort the full filtered set, then paginate.
@@ -26,6 +24,7 @@ export type CampaignListSortableContest = ContestListMetricsContest & {
   end_date?: string | null;
   created_at?: string;
   contest_type?: string | null;
+  platform?: string | null;
   contest_based_details?: Record<string, unknown> | null;
   post_contest_status?: string | null;
 };
@@ -46,14 +45,19 @@ function getContestValueForSort(contest: CampaignListSortableContest): number {
   if (contest.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
     return details.cpm_contest.total_budget;
   }
-  if (
-    contest.contest_type === "milestone" &&
-    details?.milestone_contest?.total_budget_cents
-  ) {
-    return details.milestone_contest.total_budget_cents;
+  if (contest.contest_type === "milestone") {
+    return resolveContestPoolBudgetCents(
+      contest.contest_type,
+      contest.contest_based_details,
+      contest.platform,
+    );
   }
   if (contest.contest_type === "dual_rewards" && details) {
-    return getPoolBudgetCentsFromDetails(contest.contest_type, details);
+    return resolveContestPoolBudgetCents(
+      contest.contest_type,
+      contest.contest_based_details,
+      contest.platform,
+    );
   }
   return 0;
 }

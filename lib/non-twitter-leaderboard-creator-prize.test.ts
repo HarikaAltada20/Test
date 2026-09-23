@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applyCreatorMaxEarningsCapCents,
   buildLeaderboardPrizeCentsBySubmissionId,
+  buildLeaderboardPrizeCentsBySubmissionIdForContest,
   clearLeaderboardPrizeCacheForTests,
   isLeaderboardRankingEligibleStatus,
   isTwitterTextImageLeaderboardContest,
@@ -168,5 +169,76 @@ describe("non-twitter leaderboard submission ranking", () => {
   it("exposes a test-only cache clear helper (no-op; ranking is always fresh)", () => {
     clearLeaderboardPrizeCacheForTests();
     clearLeaderboardPrizeCacheForTests();
+  });
+
+  it("ranks All-tab contest-wide when every platform has the same prizes", () => {
+    const youtube = {
+      contest_type: "leaderboard" as const,
+      leaderboard_contest: {
+        prizes: [
+          { position: 1, amount: 10000 },
+          { position: 2, amount: 5000 },
+        ],
+        total_prize: 15000,
+        winner_count: 2,
+      },
+    };
+    const instagram = {
+      contest_type: "leaderboard" as const,
+      leaderboard_contest: {
+        prizes: [
+          { position: 1, amount: 10000 },
+          { position: 2, amount: 5000 },
+        ],
+        total_prize: 15000,
+        winner_count: 2,
+      },
+    };
+    const map = buildLeaderboardPrizeCentsBySubmissionIdForContest({
+      rows: [
+        { id: "yt-1", views: 500, status: "verified", platform: "youtube" },
+        { id: "ig-1", views: 400, status: "verified", platform: "instagram" },
+        { id: "yt-2", views: 100, status: "verified", platform: "youtube" },
+      ],
+      details: { youtube, instagram },
+      contestPlatform: "youtube,instagram",
+    });
+    assert.equal(map.get("yt-1"), 10000);
+    assert.equal(map.get("ig-1"), 5000);
+    assert.equal(map.get("yt-2"), 0);
+  });
+
+  it("ranks each platform against its own prizes when ladders differ", () => {
+    const youtube = {
+      contest_type: "leaderboard" as const,
+      leaderboard_contest: {
+        prizes: [
+          { position: 1, amount: 20000 },
+          { position: 2, amount: 10000 },
+        ],
+        total_prize: 30000,
+        winner_count: 2,
+      },
+    };
+    const instagram = {
+      contest_type: "leaderboard" as const,
+      leaderboard_contest: {
+        prizes: [{ position: 1, amount: 7000 }],
+        total_prize: 7000,
+        winner_count: 1,
+      },
+    };
+    const map = buildLeaderboardPrizeCentsBySubmissionIdForContest({
+      rows: [
+        { id: "yt-1", views: 500, status: "verified", platform: "youtube" },
+        { id: "ig-1", views: 400, status: "verified", platform: "instagram" },
+        { id: "yt-2", views: 100, status: "verified", platform: "youtube" },
+      ],
+      details: { youtube, instagram },
+      contestPlatform: "youtube,instagram",
+    });
+    assert.equal(map.get("yt-1"), 20000);
+    assert.equal(map.get("yt-2"), 10000);
+    assert.equal(map.get("ig-1"), 7000);
   });
 });

@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
-import { SubmissionWithContest, CpmContestDetails } from "@/types/supabase";
+import { SubmissionWithContest } from "@/types/supabase";
 import {
   Card,
   CardContent,
@@ -41,6 +41,13 @@ import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/cu
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
 import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { getMilestoneEligibleViewsFromRow } from "@/lib/milestone-contest-expected-spend";
+import {
+  contestTypeForPlatform,
+  resolveCpmContestConfigForPlatform,
+  resolveMilestoneContestForPlatform,
+} from "@/lib/video-platform-campaigns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
@@ -123,6 +130,42 @@ type SubmissionQualityFields = SubmissionWithContest & {
   quality_score?: number | null;
   quality_score_backfilled?: boolean | null;
 };
+
+function asContestDetails(
+  value: unknown,
+): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function submissionCampaignType(
+  submission: SubmissionWithContest,
+  contest: {
+    contest_type?: string | null;
+    contest_based_details?: unknown;
+  } | null | undefined,
+): string | null | undefined {
+  return (
+    contestTypeForPlatform(
+      (contest?.contest_based_details as Record<string, unknown> | null) ?? null,
+      submission.platform,
+      contest?.contest_type,
+    ) ?? contest?.contest_type
+  );
+}
+
+function campaignTypeBadgeLabel(type: string | null | undefined): string {
+  if (type === "leaderboard") return "Leaderboard";
+  if (type === "cpm") return "CPM";
+  if (type === "milestone") return "Milestone";
+  if (type === "dual_rewards") return "Dual Rewards";
+  return type || "—";
+}
+
+function isPoolPayoutCampaignType(type: string | null | undefined): boolean {
+  return type === "cpm" || type === "milestone" || type === "dual_rewards";
+}
 
 function formatTrustNumberDisplay(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -465,19 +508,22 @@ export default function SubmissionsClient({
     submission: SubmissionWithContest,
     contest: any,
   ) => {
-    const contestDetails = contest?.contest_based_details as any;
-    const milestoneContest = contestDetails?.milestone_contest;
+    const milestoneContest = resolveMilestoneContestForPlatform(
+      contest?.contest_based_details,
+      submission.platform,
+      contest?.platform,
+    );
     const milestones = Array.isArray(milestoneContest?.milestones)
       ? milestoneContest.milestones
       : [];
     if (milestones.length === 0) return null;
 
-    const submissionViews = Number(submission.views ?? 0);
+    const submissionViews = getMilestoneEligibleViewsFromRow(submission);
     const sortedMilestones = [...milestones].sort(
-      (a: any, b: any) => Number(b?.target_views || 0) - Number(a?.target_views || 0),
+      (a, b) => Number(b?.target_views || 0) - Number(a?.target_views || 0),
     );
 
-    const matched = sortedMilestones.find((milestone: any) => {
+    const matched = sortedMilestones.find((milestone) => {
       const targetViews = Number(milestone?.target_views || 0);
       return submissionViews >= targetViews;
     });
@@ -498,44 +544,27 @@ export default function SubmissionsClient({
     return Number(matchedMilestone?.payoutCents || 0);
   };
 
-  const getPlatformEffectiveViews = (submission: SubmissionWithContest) => {
-    const platform = String(submission.platform || "").toLowerCase();
-    if (platform.includes("tiktok")) {
-      return Number(
-        (submission.other_stats as any)?.tiktok?.view_count ??
-          (submission.other_stats as any)?.tiktok?.views ??
-          submission.views ??
-          0,
-      );
-    }
-    return Number(submission.views ?? 0);
-  };
-
-  /** CPM-only portion of dual_rewards (cents), before contest-level payout adjustment. */
+  /** CPM-only portion (cents), using the submission platform's rate. */
   const getDualRewardsCpmEstimatedCents = (
     submission: SubmissionWithContest,
     contest: any,
   ) => {
-    const cpmConfig =
-      contest.contest_based_details &&
-        typeof contest.contest_based_details === "object" &&
-        "cpm_contest" in (contest.contest_based_details as any)
-        ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
-        : null;
-    const views = getPlatformEffectiveViews(submission);
-    let effectiveViews = views;
-    if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
-    else if (cpmConfig?.max_views != null && views > cpmConfig.max_views)
-      effectiveViews = cpmConfig.max_views;
-    const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-    return Math.round((effectiveViews * rateUsd) / 10);
+    return computeCpmRawCentsForRow(
+      submission,
+      contest?.contest_based_details,
+      contest?.platform,
+    );
   };
 
-  const applyContestRewardAdjustment = (amountCents: number, contest: any) => {
+  const applyContestRewardAdjustment = (
+    amountCents: number,
+    contest: any,
+    contestType?: string | null,
+  ) => {
     const adjustment = parsePayoutAdjustment(
       contest?.payout_adjustment_percentage,
       contest?.payout_adjustment_mode,
-      { contestType: contest?.contest_type ?? null },
+      { contestType: contestType ?? contest?.contest_type ?? null },
     );
     return adjustRewardCents(amountCents, {
       shouldAdjustReward: adjustment.shouldAdjustReward,
@@ -547,6 +576,7 @@ export default function SubmissionsClient({
     const contest = submission.contests;
     const subStatus = (submission.status as string || "").toLowerCase();
     const paid = isSubmissionPaid(submission);
+    const campaignType = submissionCampaignType(submission, contest);
 
     // Paid: always use DB values (all contests, all platforms)
     if (paid) {
@@ -554,46 +584,37 @@ export default function SubmissionsClient({
     }
     if (isPayoutsProcessed(contest)) return 0;
 
-    if (contest?.contest_type === "cpm") {
-      // For CPM, treat all non-rejected submissions as having estimated earnings
-      // while the contest is still in review. Once payouts are processed, we
-      // already short-circuit to 0 above.
+    if (campaignType === "cpm") {
       if (subStatus === "rejected") return 0;
-
-      const cpmConfig =
-        contest.contest_based_details &&
-          typeof contest.contest_based_details === "object" &&
-          "cpm_contest" in (contest.contest_based_details as any)
-          ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
-          : null;
-      const views = getPlatformEffectiveViews(submission);
-      let effectiveViews = views;
-      if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
-      else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
-      const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-      const rawAmount = Math.round((effectiveViews * rateUsd) / 10);
-      return applyContestRewardAdjustment(rawAmount, contest);
+      const rawAmount = computeCpmRawCentsForRow(
+        submission,
+        asContestDetails(contest?.contest_based_details),
+        contest?.platform,
+      );
+      return applyContestRewardAdjustment(rawAmount, contest, campaignType);
     }
 
-    if (contest?.contest_type === "milestone") {
+    if (campaignType === "milestone") {
       if (subStatus === "rejected") return 0;
       return applyContestRewardAdjustment(
         getMilestoneEstimatedEarningsCents(submission, contest),
         contest,
+        campaignType,
       );
     }
 
-    if (contest?.contest_type === "dual_rewards") {
+    if (campaignType === "dual_rewards") {
       if (subStatus === "rejected") return 0;
       return applyContestRewardAdjustment(
         getDualRewardsCpmEstimatedCents(submission, contest) +
           getMilestoneEstimatedEarningsCents(submission, contest),
         contest,
+        campaignType,
       );
     }
 
     const data = calculateLeaderboardEarnings(submission, contest);
-    return applyContestRewardAdjustment(data.amount, contest);
+    return applyContestRewardAdjustment(data.amount, contest, campaignType);
   };
 
   // For UI display only (cards/modals). This can show CPM estimates for
@@ -602,6 +623,7 @@ export default function SubmissionsClient({
     const contest = submission.contests;
     const subStatus = (submission.status as string || "").toLowerCase();
     const paid = isSubmissionPaid(submission);
+    const campaignType = submissionCampaignType(submission, contest);
 
     // Paid: always use DB values (all contests, all platforms)
     if (paid) {
@@ -614,11 +636,7 @@ export default function SubmissionsClient({
     // there's nothing more to earn.
     if (isPayoutsProcessed(contest)) return 0;
 
-    if (contest?.contest_type === "cpm") {
-      // For display, show estimates for any non-rejected CPM submission
-      // while the contest is still in review. Once verification is complete,
-      // only verified/paid submissions should show earnings; pending ones
-      // should be treated as 0.
+    if (campaignType === "cpm") {
       if (subStatus === "rejected") return 0;
 
       const isVerificationComplete = postContestStatus === "verification_complete";
@@ -630,25 +648,17 @@ export default function SubmissionsClient({
         if (!isConfirmed) return 0;
       }
 
-      const cpmConfig =
-        contest.contest_based_details &&
-          typeof contest.contest_based_details === "object" &&
-          "cpm_contest" in (contest.contest_based_details as any)
-          ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
-          : null;
-      const views = getPlatformEffectiveViews(submission);
-      let effectiveViews = views;
-      if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
-      else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
-      const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-      const rawAmount = Math.round((effectiveViews * rateUsd) / 10);
-      return applyContestRewardAdjustment(rawAmount, contest);
+      const rawAmount = computeCpmRawCentsForRow(
+        submission,
+        asContestDetails(contest?.contest_based_details),
+        contest?.platform,
+      );
+      return applyContestRewardAdjustment(rawAmount, contest, campaignType);
     }
 
-    if (contest?.contest_type === "milestone") {
+    if (campaignType === "milestone") {
       if (subStatus === "rejected") return 0;
 
-      // After verification completes, only verified/paid submissions should keep estimated value.
       const isVerificationComplete = postContestStatus === "verification_complete";
       if (isVerificationComplete) {
         const isConfirmed =
@@ -661,10 +671,11 @@ export default function SubmissionsClient({
       return applyContestRewardAdjustment(
         getMilestoneEstimatedEarningsCents(submission, contest),
         contest,
+        campaignType,
       );
     }
 
-    if (contest?.contest_type === "dual_rewards") {
+    if (campaignType === "dual_rewards") {
       if (subStatus === "rejected") return 0;
 
       const isVerificationComplete =
@@ -681,12 +692,12 @@ export default function SubmissionsClient({
         getDualRewardsCpmEstimatedCents(submission, contest) +
           getMilestoneEstimatedEarningsCents(submission, contest),
         contest,
+        campaignType,
       );
     }
 
-    // Non-CPM: share the same logic as stats helper.
     const data = calculateLeaderboardEarnings(submission, contest);
-    return applyContestRewardAdjustment(data.amount, contest);
+    return applyContestRewardAdjustment(data.amount, contest, campaignType);
   };
 
   const getSubmissionBonusAmount = (submission: SubmissionWithContest) => {
@@ -725,7 +736,13 @@ export default function SubmissionsClient({
 
     const contestDetails = contest?.contest_based_details as any;
     const bonusDetails = contest?.bonus_details as any;
+    const platformCpmConfig = resolveCpmContestConfigForPlatform(
+      contestDetails,
+      submission.platform,
+      contest?.platform,
+    );
     const flatFeeBonus =
+      platformCpmConfig?.flat_fee_bonus ||
       contestDetails?.cpm_contest?.flat_fee_bonus ||
       contestDetails?.leaderboard_contest?.flat_fee_bonus ||
       bonusDetails?.flat_fee_bonus || 0;
@@ -1432,9 +1449,9 @@ export default function SubmissionsClient({
 
     const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
     const earningsInDollars = centsToDollars(totalEarningsCents);
+    const campaignType = submissionCampaignType(submission, contest);
     const milestoneMatch =
-      contest?.contest_type === "milestone" ||
-      contest?.contest_type === "dual_rewards"
+      campaignType === "milestone" || campaignType === "dual_rewards"
         ? getMilestoneMatchForSubmission(submission, contest)
         : null;
 
@@ -1449,11 +1466,7 @@ export default function SubmissionsClient({
         // Finalized, fully earned amount in dark green
         color: "text-green-700",
       };
-    } else if (
-      contest?.contest_type === "cpm" ||
-      contest?.contest_type === "milestone" ||
-      contest?.contest_type === "dual_rewards"
-    ) {
+    } else if (isPoolPayoutCampaignType(campaignType)) {
       const label = isPayoutsProcessedVal
         ? "Amount Earned"
         : "Estimated Earnings";
@@ -1483,9 +1496,7 @@ export default function SubmissionsClient({
     // Status-based color overrides for CPM submissions
     if (
       earningsDisplay &&
-      (contest?.contest_type === "cpm" ||
-        contest?.contest_type === "milestone" ||
-        contest?.contest_type === "dual_rewards")
+      isPoolPayoutCampaignType(campaignType)
     ) {
       if (isPaidCard && isPayoutsProcessedVal) {
         // Fully finalized
@@ -1501,7 +1512,13 @@ export default function SubmissionsClient({
 
     const contestDetailsForBonus = contest?.contest_based_details as any;
     const bonusDetailsForCard = contest?.bonus_details as any;
+    const platformCpmConfig = resolveCpmContestConfigForPlatform(
+      contestDetailsForBonus,
+      submission.platform,
+      contest?.platform,
+    );
     const flatFeeBonusForCard =
+      platformCpmConfig?.flat_fee_bonus ||
       contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
       contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
       bonusDetailsForCard?.flat_fee_bonus ||
@@ -1510,7 +1527,7 @@ export default function SubmissionsClient({
     const bonusAmountCents = getSubmissionBonusAmount(submission);
     const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
     const isVerifiedForBonus = submission.status === "verified";
-    const isMilestoneContest = contest?.contest_type === "milestone";
+    const isMilestoneContest = campaignType === "milestone";
     const showEstimatedBonus = !isMilestoneContest && !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
 
     let bonusLabel = "Estimated Bonus";
@@ -1531,11 +1548,6 @@ export default function SubmissionsClient({
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
-
-    // Log keys for the first submission to help diagnose field mismatches if any
-    if (submission === filteredSubmissions[0]) {
-      console.log("DEBUG: First submission fields:", Object.keys(submission));
-    }
 
     // Capture the primary DB column and every possible variation from metadata (IG/TikTok/YT)
     const bestThumbnail = submission.video_thumbnail_url ||
@@ -1716,17 +1728,9 @@ export default function SubmissionsClient({
             </span>
             <span className="opacity-40 flex-shrink-0">•</span>
             <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2 py-0 rounded-full border-slate-300 dark:border-slate-600">
-              {contest?.contest_type === "leaderboard"
-                ? "Leaderboard"
-                : contest?.contest_type === "cpm"
-                  ? "CPM"
-                  : contest?.contest_type === "milestone"
-                    ? "Milestone"
-                    : contest?.contest_type === "dual_rewards"
-                      ? "Dual Rewards"
-                      : contest?.contest_type || "—"}
+              {campaignTypeBadgeLabel(campaignType)}
             </Badge>
-            {contest?.contest_type === "leaderboard" && null}
+            {campaignType === "leaderboard" && null}
           </div>
 
           <div className="flex flex-col gap-1 mt-1">
@@ -1748,7 +1752,7 @@ export default function SubmissionsClient({
                     `$${earningsDisplay.amount} USD`
                   )}
                 </p>
-                {contest?.contest_type === "milestone" &&
+                {campaignType === "milestone" &&
                   totalEarningsCents > 0 &&
                   milestoneMatch && (
                     <p className={cn("text-[12px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
@@ -1758,7 +1762,7 @@ export default function SubmissionsClient({
                       • Required Views: {milestoneMatch.targetViews.toLocaleString()}
                     </p>
                   )}
-                {contest?.contest_type === "dual_rewards" && milestoneMatch && (
+                {campaignType === "dual_rewards" && milestoneMatch && (
                     <p className={cn("text-[12px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
                       {milestoneMatch.order > 0
                         ? `Milestone ${milestoneMatch.order}`
@@ -1889,14 +1893,22 @@ export default function SubmissionsClient({
 
     const contestDetailsForBonus = contest?.contest_based_details as any;
     const bonusDetailsForContest = contest?.bonus_details as any;
+    const groupCpmConfig = resolveCpmContestConfigForPlatform(
+      contestDetailsForBonus,
+      group.submissions[0]?.platform,
+      contest?.platform,
+    );
     const flatFeeBonusForContest =
+      groupCpmConfig?.flat_fee_bonus ||
       contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
       contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
       bonusDetailsForContest?.flat_fee_bonus ||
       0;
     const hasFlatFeeBonus = flatFeeBonusForContest > 0;
     const cpmRateUsd =
-      contest?.contest_based_details?.cpm_contest?.cpm_rate_usd ?? null;
+      groupCpmConfig?.cpm_rate_usd ??
+      contest?.contest_based_details?.cpm_contest?.cpm_rate_usd ??
+      null;
     const maxSubmissions = contest?.max_submissions_per_creator ?? 1;
 
     return (
@@ -1992,9 +2004,7 @@ export default function SubmissionsClient({
 
             {/* Contest meta: CPM rate, bonus availability, submissions allowed */}
             <div className="mt-2 flex flex-wrap gap-2">
-              {(contest?.contest_type === "cpm" ||
-                contest?.contest_type === "dual_rewards") &&
-                cpmRateUsd != null &&
+              {cpmRateUsd != null &&
                 !Number.isNaN(cpmRateUsd) &&
                 cpmRateUsd > 0 && (
                   <Badge
@@ -3030,9 +3040,10 @@ export default function SubmissionsClient({
 
               const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
               const earningsInDollars = centsToDollars(totalEarningsCents);
+              const campaignTypeModal = submissionCampaignType(submission, contest);
               const milestoneMatchModal =
-                contest?.contest_type === "milestone" ||
-                contest?.contest_type === "dual_rewards"
+                campaignTypeModal === "milestone" ||
+                campaignTypeModal === "dual_rewards"
                   ? getMilestoneMatchForSubmission(submission, contest)
                   : null;
 
@@ -3040,12 +3051,18 @@ export default function SubmissionsClient({
               const bonusAmountDollarsModal = centsToDollars(bonusAmountCentsModal).toFixed(2);
               const contestDetailsModal = contest?.contest_based_details as any;
               const bonusDetailsModal = contest?.bonus_details as any;
+              const platformCpmConfigModal = resolveCpmContestConfigForPlatform(
+                contestDetailsModal,
+                submission.platform,
+                contest?.platform,
+              );
               const flatFeeBonusModal =
+                platformCpmConfigModal?.flat_fee_bonus ||
                 contestDetailsModal?.cpm_contest?.flat_fee_bonus ||
                 contestDetailsModal?.leaderboard_contest?.flat_fee_bonus ||
                 bonusDetailsModal?.flat_fee_bonus ||
                 0;
-              const isMilestoneContestModal = contest?.contest_type === "milestone";
+              const isMilestoneContestModal = campaignTypeModal === "milestone";
               const showEstimatedBonusModal = !isMilestoneContestModal && !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
               let bonusLabelModal = "Estimated Bonus";
               if (isRejectedModal) bonusLabelModal = "Bonus Won";
@@ -3066,11 +3083,7 @@ export default function SubmissionsClient({
                   amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
                   color: "text-green-700",
                 };
-              } else if (
-                contest?.contest_type === "cpm" ||
-                contest?.contest_type === "milestone" ||
-                contest?.contest_type === "dual_rewards"
-              ) {
+              } else if (isPoolPayoutCampaignType(campaignTypeModal)) {
                 const label = isPayoutsProcessed
                   ? "Amount Earned"
                   : "Estimated Earnings";
@@ -3100,9 +3113,7 @@ export default function SubmissionsClient({
               // Status-based color overrides for CPM / milestone / dual in modal
               if (
                 earningsDisplay &&
-                (contest?.contest_type === "cpm" ||
-                  contest?.contest_type === "milestone" ||
-                  contest?.contest_type === "dual_rewards")
+                isPoolPayoutCampaignType(campaignTypeModal)
               ) {
                 if (isPaidModal && isPayoutsProcessed) {
                   earningsDisplay.color = "text-green-700";
@@ -3210,17 +3221,9 @@ export default function SubmissionsClient({
                       <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()}
                     </span>
                     <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-slate-800 text-slate-300 border-slate-600" : "bg-slate-100 text-slate-600 border-slate-200")}>
-                      {contest?.contest_type === "leaderboard"
-                        ? "Leaderboard"
-                        : contest?.contest_type === "cpm"
-                          ? "CPM"
-                          : contest?.contest_type === "milestone"
-                            ? "Milestone"
-                            : contest?.contest_type === "dual_rewards"
-                              ? "Dual Rewards"
-                              : contest?.contest_type || "—"}
+                      {campaignTypeBadgeLabel(campaignTypeModal)}
                     </span>
-                    {contest?.contest_type === "leaderboard" && null}
+                    {campaignTypeModal === "leaderboard" && null}
                   </div>
 
                   {/* ── SECTION 4: Earnings grid ── */}
@@ -3251,7 +3254,7 @@ export default function SubmissionsClient({
                           "Not Eligible"
                         ) : `$${earningsDisplay?.amount || "0.00"} USD`}
                       </p>
-                      {contest?.contest_type === "milestone" &&
+                      {campaignTypeModal === "milestone" &&
                         totalEarningsCents > 0 &&
                         milestoneMatchModal && (
                           <p className={cn("text-[11px] font-semibold mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
@@ -3261,7 +3264,7 @@ export default function SubmissionsClient({
                             • Required Views: {milestoneMatchModal.targetViews.toLocaleString()}
                           </p>
                         )}
-                      {contest?.contest_type === "dual_rewards" && milestoneMatchModal && (
+                      {campaignTypeModal === "dual_rewards" && milestoneMatchModal && (
                           <p className={cn("text-[11px] font-semibold mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
                             {milestoneMatchModal.order > 0
                               ? `Milestone ${milestoneMatchModal.order}`

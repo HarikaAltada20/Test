@@ -1,5 +1,6 @@
 import type { CreatorExportColumnId } from "@/lib/creator-leaderboard-export-columns";
 import { CREATOR_EXPORT_COLUMN_LABELS } from "@/lib/creator-leaderboard-export-columns";
+import { creatorGroupHasMetric } from "@/lib/platform-metric-availability";
 import {
   isDualRewardsContestType,
   isMilestoneContestType,
@@ -192,6 +193,14 @@ export function buildCreatorExportCellValue(
   rank: number,
   ctx: CreatorExportContext,
 ): string {
+  if (
+    !creatorGroupHasMetric(
+      group.submissions as Array<{ platform?: string | null }> | undefined,
+      columnId,
+    )
+  ) {
+    return EMPTY_CELL;
+  }
   const metrics = (group.metrics || {}) as Record<string, unknown>;
   const earnings = (group.earnings || {}) as {
     expected?: number;

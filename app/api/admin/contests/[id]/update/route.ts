@@ -11,6 +11,10 @@ import {
 import { invalidateCampaignListCachesAfterMutation } from "@/lib/campaign-list-cache";
 import { preserveExistingBudgetSpentFields } from "@/lib/contest-budget-spent-fields";
 import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
+import {
+  clearTopLevelPayoutKeys,
+  readPersistedPlatformCampaigns,
+} from "@/lib/video-platform-campaigns";
 
 export async function POST(
   request: Request,
@@ -229,10 +233,17 @@ export async function POST(
         .select("contest_based_details")
         .eq("id", contestId)
         .maybeSingle();
-      updateData.contest_based_details = preserveExistingBudgetSpentFields(
+      let nextDetails = preserveExistingBudgetSpentFields(
         updateData.contest_based_details,
         existingForSpend?.contest_based_details,
       );
+      // Multi-platform payouts live under youtube|instagram|tiktok only.
+      if (
+        Object.keys(readPersistedPlatformCampaigns(nextDetails)).length >= 2
+      ) {
+        nextDetails = clearTopLevelPayoutKeys(nextDetails);
+      }
+      updateData.contest_based_details = nextDetails;
     }
 
     const { data, error } = await admin

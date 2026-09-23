@@ -64,8 +64,14 @@ function csvEscape(value: string): string {
   return value;
 }
 
-function safeFilenameBase(contestTitle: string): string {
-  return `${contestTitle}_full_campaign_report`
+function safeFilenameBase(contestTitle: string, platform?: string): string {
+  const singlePlatform =
+    platform &&
+    !platform.includes(",") &&
+    platform.trim().toLowerCase() !== "all"
+      ? `_${platform.trim().toLowerCase()}`
+      : "";
+  return `${contestTitle}_full_campaign_report${singlePlatform}`
     .replace(/[^\w\-]+/g, "_")
     .slice(0, 80);
 }
@@ -75,7 +81,10 @@ export async function downloadFullCampaignReport(
   input: FullCampaignReportInput,
 ): Promise<void> {
   const date = new Date().toISOString().slice(0, 10);
-  const safeBase = safeFilenameBase(input.branding.contestTitle);
+  const safeBase = safeFilenameBase(
+    input.branding.contestTitle,
+    input.platform,
+  );
 
   if (format === "csv") {
     const lines: string[] = [

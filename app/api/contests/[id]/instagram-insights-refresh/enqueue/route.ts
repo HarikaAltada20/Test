@@ -24,6 +24,7 @@ import {
   parseMetricsTarget,
   postCampaignCooldownResponse,
 } from "@/lib/post-campaign-enqueue-guards";
+import { claimMultiPlatformChainPlatform } from "@/lib/queue/multi-platform-metrics-chain";
 
 const BATCH_SIZE = 100;
 
@@ -32,7 +33,24 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const cronAuth = request.headers.get("Authorization") === `Bearer ${process.env.CRON_SECRET}`;
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    const cronAuth =
+      !!cronSecret &&
+      request.headers.get("Authorization") === `Bearer ${cronSecret}`;
+
+    const body = await request.json().catch(() => ({}));
+    const metricsTarget = parseMetricsTarget(body?.metricsTarget);
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
+
+    const { id: contestId } = await params;
+    if (!contestId) {
+      return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
+    }
+
+    // Redis chain state coordinates work; it is not an authentication credential.
+    const chainContinue = body?.chainContinue === true;
+    let chainContinueOk = false;
+
     let user: { id: string } | null = null;
     let isAdmin = false;
     if (!cronAuth) {
@@ -43,15 +61,6 @@ export async function POST(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       ({ isAdmin } = await verifyAdminAccess());
-    }
-
-    const body = await request.json().catch(() => ({}));
-    const metricsTarget = parseMetricsTarget(body?.metricsTarget);
-    const isPostCampaignTarget = metricsTarget === "post_campaign";
-
-    const { id: contestId } = await params;
-    if (!contestId) {
-      return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
     }
 
     const supabaseAdmin = createAdminSupabaseClient(
@@ -68,7 +77,8 @@ export async function POST(
     if (contestError || !contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
-    if ((contest.platform ?? "").toString().toLowerCase() !== "instagram") {
+    const platformLower = (contest.platform ?? "").toString().toLowerCase();
+    if (!platformLower.includes("instagram")) {
       return NextResponse.json(
         { error: "Contest is not an Instagram contest" },
         { status: 400 }
@@ -112,7 +122,19 @@ export async function POST(
     );
     if (accessDenied) return accessDenied;
 
-    if (isPostCampaignTarget && !cronAuth) {
+    if (chainContinue) {
+      const claim = await claimMultiPlatformChainPlatform({
+        contestId,
+        metricsTarget,
+        platform: "instagram",
+      });
+      chainContinueOk = claim.ok;
+      if (!claim.ok) {
+        return NextResponse.json({ error: claim.error }, { status: 409 });
+      }
+    }
+
+    if (isPostCampaignTarget && !cronAuth && !chainContinueOk) {
       const cooldownDenied = postCampaignCooldownResponse(
         contest.post_campaign_last_metrics_updated,
         isAdmin,

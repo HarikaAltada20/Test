@@ -63,7 +63,7 @@ async function downloadDesktopManifest(options: {
   namingPattern: VideoFilenamePattern;
   videosPerZip: number;
   zipFilename?: string;
-}): Promise<void> {
+}): Promise<{ jobId: string | null }> {
   const response = await fetch("/api/admin/bulk-download/desktop-manifest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -83,6 +83,7 @@ async function downloadDesktopManifest(options: {
     throw new Error(data.error || "Failed to create desktop download file");
   }
 
+  const jobId = response.headers.get("X-Goc-Download-Job-Id")?.trim() || null;
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") || "";
   const match = /filename="([^"]+)"/i.exec(disposition);
@@ -96,6 +97,18 @@ async function downloadDesktopManifest(options: {
   anchor.remove();
   // Keep blob URL alive long enough for browsers that download asynchronously.
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+
+  // Fallback: ensure the web job is terminal after the file is saved (in case
+  // an older API left the row queued).
+  if (jobId) {
+    void fetch("/api/admin/bulk-download/session", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: jobId, status: "completed" }),
+    }).catch(() => undefined);
+  }
+
+  return { jobId };
 }
 
 function openDesktopAppNonNavigating() {

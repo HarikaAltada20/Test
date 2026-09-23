@@ -241,7 +241,11 @@ export function enrichContestWithListCardStats<
 }
 
 export async function enrichContestsWithListCardStats<
-  T extends { id: string; last_metrics_updated?: string | null },
+  T extends {
+    id: string;
+    last_metrics_updated?: string | null;
+    live_submission_count?: number | null;
+  },
 >(contests: T[]): Promise<Array<T & ContestListCardStats>> {
   if (contests.length === 0) return [];
 

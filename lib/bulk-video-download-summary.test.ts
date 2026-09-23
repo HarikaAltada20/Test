@@ -6,6 +6,8 @@ import {
   countDownloadRowsByStatusTab,
   defaultBulkDownloadSummaryTab,
   groupBulkDownloadJobsByUserType,
+  isBulkDownloadJobInProgress,
+  isStuckDesktopManifestJob,
   jobMatchesListStatusTab,
   jobRowToDownloadSummary,
   rowMatchesDownloadStatusTab,
@@ -204,5 +206,105 @@ describe("sortDownloadSummaryRows", () => {
       sortDownloadSummaryRows(rows, "downloaded_desc").map((row) => row.id),
       ["b", "c", "a"],
     );
+  });
+});
+
+describe("desktop manifest job status helpers", () => {
+  it("never treats desktop jobs as in-progress in the web summary list", () => {
+    assert.equal(
+      isBulkDownloadJobInProgress({ source: "desktop", status: "queued" }),
+      false,
+    );
+    assert.equal(
+      isBulkDownloadJobInProgress({ source: "desktop", status: "running" }),
+      false,
+    );
+    assert.equal(
+      isBulkDownloadJobInProgress({ source: "desktop", status: "completed" }),
+      false,
+    );
+    assert.equal(
+      isBulkDownloadJobInProgress({ source: "cloud", status: "running" }),
+      true,
+    );
+    assert.equal(
+      isBulkDownloadJobInProgress({ source: "cloud", status: "completed" }),
+      false,
+    );
+  });
+
+  it("detects stuck desktop jobs that never started in the app", () => {
+    assert.equal(
+      isStuckDesktopManifestJob({
+        source: "desktop",
+        status: "queued",
+        started_at: null,
+        success_count: 0,
+        failed_count: 0,
+      }),
+      true,
+    );
+    assert.equal(
+      isStuckDesktopManifestJob({
+        source: "desktop",
+        status: "running",
+        startedAt: null,
+        successCount: 0,
+        failedCount: 0,
+      }),
+      true,
+    );
+    assert.equal(
+      isStuckDesktopManifestJob({
+        source: "desktop",
+        status: "queued",
+        started_at: "2026-09-01T00:00:00Z",
+        success_count: 0,
+        failed_count: 0,
+      }),
+      false,
+    );
+    assert.equal(
+      isStuckDesktopManifestJob({
+        source: "cloud",
+        status: "queued",
+        started_at: null,
+        success_count: 0,
+        failed_count: 0,
+      }),
+      false,
+    );
+    assert.equal(
+      isStuckDesktopManifestJob({
+        source: "desktop",
+        status: "completed",
+        started_at: null,
+        success_count: 0,
+        failed_count: 0,
+      }),
+      false,
+    );
+  });
+
+  it("maps completed desktop rows to Downloaded-at style summaries", () => {
+    const summary = jobRowToDownloadSummary({
+      id: "job-1",
+      contest_id: "c1",
+      user_id: "u1",
+      user_type: "admin",
+      status: "completed",
+      total_count: 33,
+      success_count: 0,
+      failed_count: 0,
+      zip_part_total: 4,
+      created_at: "2026-09-10T10:00:00Z",
+      finished_at: "2026-09-10T10:00:01Z",
+      source: "desktop",
+      delivery_mode: "gocdownload",
+    });
+    assert.equal(summary.source, "desktop");
+    assert.equal(summary.status, "completed");
+    assert.equal(isBulkDownloadJobInProgress(summary), false);
+    assert.equal(summary.finishedAt, "2026-09-10T10:00:01Z");
   });
 });

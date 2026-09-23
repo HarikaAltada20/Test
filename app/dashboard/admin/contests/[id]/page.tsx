@@ -12,6 +12,7 @@ import {
 import { fetchPostCampaignMetricsCount } from "@/lib/post-campaign-metrics";
 import { shouldShowPostCampaignSubmissionsToggle } from "@/lib/contest-metrics-refresh-eligibility";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import { schedulePersistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export default async function AdminContestDetailPage({
   params,
@@ -45,6 +46,8 @@ export default async function AdminContestDetailPage({
     if (!contestData) {
       redirect("/dashboard/admin/contests");
     }
+
+    schedulePersistContestBudgetSpent(contestId);
 
     const isVideoContest = isVideoContestFormat(contestData.contest_format);
 
@@ -101,10 +104,6 @@ export default async function AdminContestDetailPage({
       postCampaignLastMetricsUpdated =
         pcRow?.post_campaign_last_metrics_updated ?? null;
     }
-
-    const finalInspirationLinks = Array.isArray(contestData.inspiration_links)
-      ? contestData.inspiration_links
-      : [];
 
     const isTwitterCampaign =
       (contestData.platform?.toLowerCase() === "twitter" ||
@@ -317,11 +316,13 @@ export default async function AdminContestDetailPage({
       post_contest_status: contestData.post_contest_status,
       thumbnail_url: contestData.thumbnail_url,
       brief_html: contestData.brief_html,
+      brief_json: contestData.brief_json,
       platform: contestData.platform,
       start_date: contestData.start_date,
       end_date: contestData.end_date,
       rules_html: contestData.rules_html,
-      inspiration_links: finalInspirationLinks,
+      rules_json: contestData.rules_json,
+      inspiration_links: contestData.inspiration_links,
       resources: contestData.resources,
       contest_type: contestData.contest_type,
       contest_based_details: contestData.contest_based_details,

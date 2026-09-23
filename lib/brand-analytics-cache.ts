@@ -2,13 +2,17 @@ import { revalidateTag, unstable_cache } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   ADMIN_ANALYTICS_BASE_STATUSES,
+  contestMatchesAnalyticsContestTypes,
   type AdminAnalyticsBaseStatus,
   type AdminAnalyticsDailySqlRow,
   normalizeAnalyticsPlatform,
   normalizeSubmissionStatus,
 } from "@/lib/admin-analytics";
 import type { BrandAnalyticsDataSource } from "@/lib/brand-analytics-query";
-import { normalizeBrandPlatformKey } from "@/lib/brand-analytics-graph";
+import {
+  brandContestMatchesPlatforms,
+  isBrandTwitterContest,
+} from "@/lib/brand-analytics-graph";
 
 export const BRAND_ANALYTICS_CACHE_SECONDS = 5 * 60;
 export const BRAND_ANALYTICS_CACHE_TAG = "brand-analytics";
@@ -219,6 +223,7 @@ async function fetchDailyRowsForContests(
   contestIds: string[],
   fromIso: string,
   toIso: string,
+  platforms?: string[],
 ): Promise<{ dailyRows: AdminAnalyticsDailySqlRow[]; pcContestIds: string[] }> {
   if (contestIds.length === 0) {
     return { dailyRows: [], pcContestIds: [] };
@@ -227,49 +232,107 @@ async function fetchDailyRowsForContests(
   const CONTEST_ID_CHUNK = 500;
   const dailyChunks: AdminAnalyticsDailySqlRow[] = [];
   const pcContestIds = new Set<string>();
+  const videoPlatforms = (platforms ?? []).filter((p) =>
+    ["youtube", "instagram", "tiktok"].includes(p),
+  );
+  const platformFilter =
+    videoPlatforms.length > 0
+      ? videoPlatforms
+      : ["youtube", "instagram", "tiktok"];
+  const fromDay = fromIso.slice(0, 10);
+  const toDay = toIso.slice(0, 10);
 
   for (let i = 0; i < contestIds.length; i += CONTEST_ID_CHUNK) {
     const idChunk = contestIds.slice(i, i + CONTEST_ID_CHUNK);
     if (rpcName === "admin_analytics_daily") {
-      const { data, error } = await supabase.rpc("admin_analytics_daily", {
-        p_from: fromIso,
-        p_to: toIso,
-        p_contest_ids: idChunk,
-      });
+      const { data, error } = await supabase
+        .from("admin_analytics_submission_daily_rollup")
+        .select(
+          "day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+        )
+        .in("contest_id", idChunk)
+        .in("platform", platformFilter)
+        .gte("day_key", fromDay)
+        .lte("day_key", toDay);
       if (error) {
-        throwBrandAnalyticsDependencyError(
-          error,
-          `Failed to aggregate brand analytics: ${error.message}`,
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          "admin_analytics_daily",
+          {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          },
         );
+        if (rpcError) {
+          throwBrandAnalyticsDependencyError(
+            rpcError,
+            `Failed to aggregate brand analytics: ${rpcError.message}`,
+          );
+        }
+        dailyChunks.push(...((rpcData ?? []) as AdminAnalyticsDailySqlRow[]));
+        continue;
       }
       dailyChunks.push(...((data ?? []) as AdminAnalyticsDailySqlRow[]));
     } else {
-      const { data, error } = await supabase.rpc("admin_analytics_pc_overview", {
-        p_from: fromIso,
-        p_to: toIso,
-        p_contest_ids: idChunk,
-      });
+      const { data, error } = await supabase
+        .from("admin_analytics_pc_daily_rollup")
+        .select(
+          "contest_id, day_key, status, submission_count, views_sum, likes_sum, comments_sum, shares_sum, payouts_cents_sum",
+        )
+        .in("contest_id", idChunk)
+        .in("platform", platformFilter)
+        .gte("day_key", fromDay)
+        .lte("day_key", toDay);
       if (error) {
-        throwBrandAnalyticsDependencyError(
-          error,
-          `Failed to aggregate brand PC analytics: ${error.message}`,
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          "admin_analytics_pc_overview",
+          {
+            p_from: fromIso,
+            p_to: toIso,
+            p_contest_ids: idChunk,
+          },
         );
+        if (rpcError) {
+          throwBrandAnalyticsDependencyError(
+            rpcError,
+            `Failed to aggregate brand PC analytics: ${rpcError.message}`,
+          );
+        }
+        const payload =
+          typeof rpcData === "string"
+            ? (JSON.parse(rpcData) as {
+                daily?: (AdminAnalyticsDailySqlRow & {
+                  contest_id?: string;
+                })[];
+                contest_ids?: string[];
+              })
+            : ((rpcData ?? {}) as {
+                daily?: (AdminAnalyticsDailySqlRow & {
+                  contest_id?: string;
+                })[];
+                contest_ids?: string[];
+              });
+        for (const id of payload.contest_ids ?? []) {
+          const normalized = String(id ?? "");
+          if (normalized) pcContestIds.add(normalized);
+        }
+        for (const row of payload.daily ?? []) {
+          const contestId = String(row.contest_id ?? "");
+          if (contestId) pcContestIds.add(contestId);
+          dailyChunks.push({
+            day_key: row.day_key,
+            status: row.status,
+            submission_count: row.submission_count,
+            views_sum: row.views_sum,
+            likes_sum: row.likes_sum,
+            comments_sum: row.comments_sum,
+            shares_sum: row.shares_sum,
+            payouts_cents_sum: row.payouts_cents_sum,
+          });
+        }
+        continue;
       }
-      const payload =
-        typeof data === "string"
-          ? (JSON.parse(data) as {
-              daily?: (AdminAnalyticsDailySqlRow & { contest_id?: string })[];
-              contest_ids?: string[];
-            })
-          : ((data ?? {}) as {
-              daily?: (AdminAnalyticsDailySqlRow & { contest_id?: string })[];
-              contest_ids?: string[];
-            });
-      for (const id of payload.contest_ids ?? []) {
-        const normalized = String(id ?? "");
-        if (normalized) pcContestIds.add(normalized);
-      }
-      for (const row of payload.daily ?? []) {
+      for (const row of data ?? []) {
         const contestId = String(row.contest_id ?? "");
         if (contestId) pcContestIds.add(contestId);
         dailyChunks.push({
@@ -670,7 +733,7 @@ function filterContests(
 
   if (ctx.contestTypeSet !== null) {
     list = list.filter((c) =>
-      ctx.contestTypeSet!.has((c.contest_type ?? "").toString().toLowerCase()),
+      contestMatchesAnalyticsContestTypes(c, ctx.contestTypeSet!),
     );
   }
 
@@ -679,16 +742,14 @@ function filterContests(
   }
 
   const allowed = new Set(resolveAllowedPlatforms(ctx));
-  list = list.filter((c) =>
-    allowed.has(normalizeBrandPlatformKey(c)),
-  );
+  list = list.filter((c) => brandContestMatchesPlatforms(c, allowed));
 
   return list;
 }
 
 function videoContestIdsFromContests(contests: BrandContestRow[]): string[] {
   return contests
-    .filter((c) => normalizeBrandPlatformKey(c) !== "twitter")
+    .filter((c) => !isBrandTwitterContest(c))
     .map((c) => c.id);
 }
 
@@ -696,7 +757,7 @@ function twitterContestIdsFromContests(
   contests: BrandContestRow[],
 ): string[] {
   return contests
-    .filter((c) => normalizeBrandPlatformKey(c) === "twitter")
+    .filter((c) => isBrandTwitterContest(c))
     .map((c) => c.id);
 }
 
@@ -743,6 +804,7 @@ async function loadBrandAnalyticsBundle(
         scopedVideoContestIds,
         fromIso,
         toIso,
+        resolveAllowedPlatforms(ctx),
       ),
       fetchContestRollup(
         supabase,
@@ -1051,6 +1113,7 @@ export function contestTotalsFromRollup(
   saved: number;
   payoutsCents: number;
 } {
+  const allowed = new Set(resolveAllowedPlatforms(ctx));
   let submissions = 0;
   let views = 0;
   let likes = 0;
@@ -1063,6 +1126,8 @@ export function contestTotalsFromRollup(
   for (const row of rollup) {
     if (row.contest_id !== contestId) continue;
     if (!statusMatchesFilter(row.status, ctx)) continue;
+    const platform = String(row.platform ?? "unknown").toLowerCase();
+    if (platform !== "unknown" && !allowed.has(platform)) continue;
     submissions += row.submission_count;
     views += row.views_sum;
     likes += row.likes_sum;

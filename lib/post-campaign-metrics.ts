@@ -24,6 +24,7 @@ import {
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
+import { patchYouTubeMetrics } from "@/lib/youtube-metrics-patch";
 import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
 import { extractTikTokVideoIdFromLink } from "@/lib/tiktok/extract-video-id";
 import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
@@ -951,6 +952,18 @@ async function refreshYouTubePostCampaign(
   const needsBasicPrefetch =
     scope === "basic" || scope === "all" || scope === "all_standard";
 
+  const markYouTubeAuthFailure = async (subs: SubmissionSourceRow[]) => {
+    await mapLimit(subs, 10, async (sub) => {
+      const { error } = await patchYouTubeMetrics(
+        supabaseAdmin, sub.id,
+        { analytics_needs_reauth: true, insights_error: "Account disconnected or token refresh failed" },
+        { insights_status: "temporary_failure", last_insights_update: now, updated_at: now },
+        "post_campaign_submission_metrics",
+      );
+      if (error) throw new Error(error.message);
+    });
+  };
+
   await mapLimit(creatorIds, 2, async (creatorId) => {
     const creator = creatorsById.get(creatorId) as
       | {
@@ -962,16 +975,7 @@ async function refreshYouTubePostCampaign(
     const account = creator?.youtube_account;
     if (!account?.access_token) {
       failed += subs.length;
-      await writeOverlayMetrics(
-        supabaseAdmin,
-        subs.map((sub) => ({
-          submission_id: sub.id,
-          views: sub.views ?? 0,
-          other_stats: parseOtherStats(sub.other_stats),
-          last_insights_update: now,
-          insights_status: "temporary_failure",
-        })),
-      );
+      await markYouTubeAuthFailure(subs);
       return;
     }
 
@@ -981,16 +985,7 @@ async function refreshYouTubePostCampaign(
     if (isExpired) {
       if (!account.refresh_token) {
         failed += subs.length;
-        await writeOverlayMetrics(
-          supabaseAdmin,
-          subs.map((sub) => ({
-            submission_id: sub.id,
-            views: sub.views ?? 0,
-            other_stats: parseOtherStats(sub.other_stats),
-            last_insights_update: now,
-            insights_status: "temporary_failure",
-          })),
-        );
+        await markYouTubeAuthFailure(subs);
         return;
       }
       try {
@@ -1014,16 +1009,7 @@ async function refreshYouTubePostCampaign(
           .eq("id", creatorId);
       } catch {
         failed += subs.length;
-        await writeOverlayMetrics(
-          supabaseAdmin,
-          subs.map((sub) => ({
-            submission_id: sub.id,
-            views: sub.views ?? 0,
-            other_stats: parseOtherStats(sub.other_stats),
-            last_insights_update: now,
-            insights_status: "temporary_failure",
-          })),
-        );
+        await markYouTubeAuthFailure(subs);
         return;
       }
     }

@@ -75,7 +75,7 @@ import {
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
 import {
-  buildDualRewardCreatorCapSplitMaps,
+  buildDualRewardCreatorCapSplitMapsByPlatform,
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
@@ -92,9 +92,15 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import { useBulkPaymentProgress } from "@/components/BulkPaymentProgressProvider";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
-import { parseQualityScore } from "@/lib/quality-score";
-import type { QualityScore } from "@/lib/quality-score";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+} from "@/lib/twitter-cpm-bonus-expected";
+import {
+  parseQualityScore,
+  type QualityScore,
+  type QualityScoreCounts,
+} from "@/lib/quality-score";
 import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
 import {
   computeSubmissionModerationStatusCounts,
@@ -118,6 +124,18 @@ import {
   parseSubmissionMetadata,
   getFullRejectionDetails,
 } from "@/lib/submission-metadata";
+import {
+  ALL_PLATFORM_TAB,
+  isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
+  platformsForTab,
+  resolveMaxEarningsCentsForSubmission,
+  VIDEO_PLATFORM_LABELS,
+  type PlatformTabValue,
+  type VideoContestPlatform,
+} from "@/lib/video-platform-campaigns";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { getPlatformIcon } from "@/lib/platform-icons";
 
 interface Creator {
   id: string;
@@ -174,6 +192,14 @@ function effectiveSubmissionViewsForSort(sub: Submission): number {
   return Number(sub.views ?? 0);
 }
 
+function submissionMatchesVideoPlatform(
+  submission: { platform?: string | null },
+  platform: VideoContestPlatform,
+): boolean {
+  const raw = String(submission.platform || "").toLowerCase();
+  return raw === platform || raw.includes(platform);
+}
+
 interface CreatorSubmissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -207,6 +233,11 @@ interface CreatorSubmissionsModalProps {
   /** Match submission-wise YouTube analytics: demographics when admin or brand allowed */
   canSeeDemographics?: boolean;
   /**
+   * Contest-detail platform tab (All / Instagram / YouTube / TikTok).
+   * Scopes modal columns and rows on multi-platform campaigns.
+   */
+  platformTab?: PlatformTabValue;
+  /**
    * Full contest submission list for flat-fee bonus cap (FCFS by created_at).
    * When omitted, falls back to `submissions` (per-creator only — wrong cap scope).
    */
@@ -236,11 +267,7 @@ interface CreatorSubmissionsModalProps {
     avgQualityScore: number | null;
     bestQualityScore: number | null;
     qualityScoreSum: number | null;
-    qualityScoreCounts?: {
-      score1: number;
-      score2: number;
-      score3: number;
-    };
+    qualityScoreCounts?: QualityScoreCounts;
   }) => void;
 }
 
@@ -264,6 +291,7 @@ export function CreatorSubmissionsModal({
   canSeeCore = true,
   canSeeTraffic = true,
   canSeeDemographics = false,
+  platformTab = ALL_PLATFORM_TAB,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
   bulkModerationJob = null,
@@ -472,9 +500,20 @@ export function CreatorSubmissionsModal({
   const handleBulkDownloadReels = async () => {
     if (selectedSubmissions.size === 0) return;
 
-    if (selectedSubmissions.size === 1) {
-      const singleSubmissionId = orderedSelectedDownloadIds[0] ||
-        Array.from(selectedSubmissions)[0];
+    const downloadableIds = orderedDownloadableSelectedIds;
+
+    if (downloadableIds.length === 0) {
+      toast({
+        title: "No downloadable videos",
+        description:
+          "TikTok videos can't be downloaded. Select Instagram or YouTube submissions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (downloadableIds.length === 1) {
+      const singleSubmissionId = downloadableIds[0];
       const kind = classifyDownloadVideoPlatform({
         platform: submissions.find((s) => s.id === singleSubmissionId)?.platform,
         contestPlatform: contest.platform,
@@ -514,7 +553,7 @@ export function CreatorSubmissionsModal({
         ? options.submissionIds
         : selectedDownloadSplit.instagramIds.length > 0
           ? selectedDownloadSplit.instagramIds
-          : orderedSelectedDownloadIds;
+          : orderedDownloadableSelectedIds;
     if (submissionIds.length < 1) return;
     if (!contest?.id) return;
 
@@ -1028,44 +1067,28 @@ export function CreatorSubmissionsModal({
 
   /** Base expected reward. When useStoredEarnings is false, always compute from formula so Expected column does not equal Granted after payment. */
   const calculateRawSubmissionCpmExpectedReward = (submission: Submission) => {
-    const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-    const cpmRateUsd = cpmConfig?.cpm_rate_usd;
-    if (!cpmRateUsd) return 0;
-
-    const platform = (submission.platform || "").toLowerCase();
-    const isTwitterSubmission =
-      submission.is_twitter_tweet === true ||
-      platform === "twitter" ||
-      platform === "x";
-
-    if (isTwitterSubmission) {
-      const basePoints = submission.other_stats?.base_points || 0;
-      const manualAdjustment = submission.manual_points_adjustment || 0;
-      const totalPoints = Math.max(basePoints + manualAdjustment, 0);
-      return Math.max(Math.round((totalPoints * cpmRateUsd * 100) / 1000), 0);
-    }
-
-    let effectiveViews = submission.views || 0;
-    if (cpmConfig?.min_views != null && effectiveViews < cpmConfig.min_views) {
-      effectiveViews = 0;
-    }
-    if (cpmConfig?.max_views != null && effectiveViews > cpmConfig.max_views) {
-      effectiveViews = cpmConfig.max_views;
-    }
-    return Math.max(Math.round((effectiveViews * cpmRateUsd * 100) / 1000), 0);
+    return computeCpmRawCentsForRow(
+      submission,
+      (contest?.contest_based_details as Record<string, unknown>) || null,
+      contest?.platform,
+    );
   };
 
   const dualAndCpmCapMaps = useMemo(() => {
     const cpmMap = new Map<string, number>();
     const dualMilestoneCappedMap = new Map<string, number>();
     const details = contest?.contest_based_details as any;
-    const maxResolved =
-      contest?.max_earnings_per_creator ??
-      details?.cpm_contest?.max_earnings_per_creator ??
-      (contest?.contest_type === "leaderboard"
-        ? details?.leaderboard_contest?.max_earnings_per_creator
-        : null) ??
-      null;
+    const maxKeyed = isKeyedMaxEarningsMap(
+      (contest as any)?.max_earnings_per_creator,
+    );
+    const maxResolved = maxKeyed
+      ? null
+      : resolveMaxEarningsCentsForSubmission(contest as any, contest?.platform) ??
+        details?.cpm_contest?.max_earnings_per_creator ??
+        (contest?.contest_type === "leaderboard"
+          ? details?.leaderboard_contest?.max_earnings_per_creator
+          : null) ??
+        null;
     const maxEarningsPerCreator = Number(maxResolved);
 
     const fillUncappedMilestoneForAllSubs = () => {
@@ -1089,7 +1112,10 @@ export function CreatorSubmissionsModal({
       return grouped;
     };
 
-    if (!Number.isFinite(maxEarningsPerCreator) || maxEarningsPerCreator <= 0) {
+    if (
+      (!Number.isFinite(maxEarningsPerCreator) || maxEarningsPerCreator <= 0) &&
+      !maxKeyed
+    ) {
       submissions.forEach((sub) => {
         cpmMap.set(sub.id, calculateRawSubmissionCpmExpectedReward(sub));
       });
@@ -1107,13 +1133,19 @@ export function CreatorSubmissionsModal({
         const rows = list.map((sub) => ({
           id: sub.id,
           created_at: String(sub.created_at || ""),
+          platform: sub.platform,
           mRawCents: Number(
             milestoneExpectedPayoutBySubmissionId?.get(sub.id) || 0,
           ),
           cRawCents: calculateRawSubmissionCpmExpectedReward(sub),
         }));
         const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
-          buildDualRewardCreatorCapSplitMaps(rows, maxEarningsPerCreator);
+          buildDualRewardCreatorCapSplitMapsByPlatform(
+            rows,
+            (platform) =>
+              resolveMaxEarningsCentsForSubmission(contest as any, platform),
+            { keyedCaps: maxKeyed },
+          );
         for (const row of rows) {
           cpmMap.set(row.id, cpmCappedBySubmissionId.get(row.id) ?? 0);
           dualMilestoneCappedMap.set(
@@ -1139,15 +1171,25 @@ export function CreatorSubmissionsModal({
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      let runningTotal = 0;
+      const runningByPlatform = new Map<string, number>();
       for (const sub of list) {
         const rawCpm = calculateRawSubmissionCpmExpectedReward(sub);
+        const subMax = maxKeyed
+          ? Number(
+              resolveMaxEarningsCentsForSubmission(contest as any, sub.platform) ||
+                0,
+            )
+          : maxEarningsPerCreator;
+        const runKey = maxKeyed
+          ? String(sub.platform || "").toLowerCase() || "_"
+          : "_";
+        const runningTotal = runningByPlatform.get(runKey) || 0;
         let cappedCpm = rawCpm;
-        if (runningTotal + rawCpm > maxEarningsPerCreator) {
-          cappedCpm = Math.max(0, maxEarningsPerCreator - runningTotal);
+        if (subMax > 0 && runningTotal + rawCpm > subMax) {
+          cappedCpm = Math.max(0, subMax - runningTotal);
         }
         cpmMap.set(sub.id, cappedCpm);
-        runningTotal += cappedCpm;
+        runningByPlatform.set(runKey, runningTotal + cappedCpm);
       }
     }
     submissions.forEach((sub) => {
@@ -1325,64 +1367,18 @@ export function CreatorSubmissionsModal({
     }
 
     if (contest?.contest_type === "cpm" && !baseExpectedReward) {
-      const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-      const cpmRateUsd = cpmConfig?.cpm_rate_usd;
-      if (cpmRateUsd) {
-        const platform = (submission.platform || "").toLowerCase();
-        const isTwitterSubmission =
-          submission.is_twitter_tweet === true ||
-          platform === "twitter" ||
-          platform === "x";
-
-        if (isTwitterSubmission) {
-          const basePoints = submission.other_stats?.base_points || 0;
-          const manualAdjustment = submission.manual_points_adjustment || 0;
-          const totalPoints = Math.max(basePoints + manualAdjustment, 0);
-          const calculatedEarnings = (totalPoints * cpmRateUsd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        } else {
-          let effectiveViews =
-            isTikTokContest && !isTwitterSubmission
-              ? effectiveTikTokSubmissionViews(submission)
-              : (submission.views ?? 0);
-          if (
-            cpmConfig?.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
-          }
-          if (
-            cpmConfig?.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-          const calculatedEarnings = (effectiveViews * cpmRateUsd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        }
-      }
+      baseExpectedReward = computeCpmRawCentsForRow(
+        submission,
+        (contest?.contest_based_details as Record<string, unknown>) || null,
+        contest?.platform,
+      );
     }
 
     return Math.max(baseExpectedReward, 0);
   };
 
   // Get flat_fee_bonus from the correct nested location based on contest type
-  const getFlatFeeBonus = () => {
-    if (contest?.contest_type === "cpm") {
-      return (
-        (contest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus ||
-        0
-      );
-    } else if (contest?.contest_type === "leaderboard") {
-      return (
-        (contest?.contest_based_details as any)?.leaderboard_contest
-          ?.flat_fee_bonus || 0
-      );
-    }
-    return 0;
-  };
-
-  const flatFeeBonus = getFlatFeeBonus();
+  const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest);
   const hasFlatFeeBonus = flatFeeBonus > 0;
 
   const payoutAdjustment = parsePayoutAdjustment(
@@ -1431,15 +1427,20 @@ export function CreatorSubmissionsModal({
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
 
-  const isInstagramContest =
-    contest?.platform?.toLowerCase().includes("instagram") ?? false;
-
-  const isTikTokContest =
-    contest?.platform?.toLowerCase().includes("tiktok") ?? false;
-
-  const isYouTubeContest =
-    contest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const contestVideoPlatforms = parseVideoContestPlatforms(contest?.platform);
+  const modalTablePlatforms = platformsForTab(
+    platformTab,
+    contestVideoPlatforms,
+  );
+  const modalScopedPlatform =
+    platformTab !== ALL_PLATFORM_TAB && modalTablePlatforms.length === 1
+      ? modalTablePlatforms[0]
+      : null;
+  const isInstagramContest = modalTablePlatforms.includes("instagram");
+  const isTikTokContest = modalTablePlatforms.includes("tiktok");
+  const isYouTubeContest = modalTablePlatforms.includes("youtube");
   const isVideoContest = contest?.contest_format !== "text_image";
+  const showModalPlatformColumn = contestVideoPlatforms.length >= 2;
 
   const getSubmissionContentViewHref = (submission: Submission) => {
     const link = submission.content_link || "";
@@ -1514,11 +1515,7 @@ export function CreatorSubmissionsModal({
           avg_quality_score: number | null;
           best_quality_score: number | null;
           quality_score_sum: number | null;
-          quality_score_counts?: {
-            score1: number;
-            score2: number;
-            score3: number;
-          };
+          quality_score_counts?: QualityScoreCounts;
         }
       >;
 
@@ -1722,7 +1719,15 @@ export function CreatorSubmissionsModal({
 
   // Filter submissions based on status
   // For Twitter tweets, use moderation_status; for others, use status
-  const filteredSubmissions = submissions.filter((sub) => {
+  const platformScopedSubmissions = modalScopedPlatform
+    ? submissions.filter((sub) =>
+        submissionMatchesVideoPlatform(sub, modalScopedPlatform),
+      )
+    : submissions;
+
+  // Filter submissions based on status
+  // For Twitter tweets, use moderation_status; for others, use status
+  const filteredSubmissions = platformScopedSubmissions.filter((sub) => {
     const bucket = getSubmissionModerationBucket(sub);
 
     if (statusFilter === "all") return true;
@@ -1768,24 +1773,47 @@ export function CreatorSubmissionsModal({
     return ordered;
   }, [selectedSubmissions, sortedSubmissions]);
 
-  const selectedDownloadSplit = useMemo(
+  const orderedDownloadableSelectedIds = useMemo(
     () =>
-      splitDownloadSubmissionIdsByPlatform(orderedSelectedDownloadIds, (id) => {
+      orderedSelectedDownloadIds.filter((id) => {
         const sub = submissions.find((entry) => entry.id === id);
-        if (!sub) return null;
-        return {
-          platform: sub.platform,
+        return canDownloadSubmissionVideo({
+          platform: sub?.platform,
           contestPlatform: contest.platform,
-          contentLink: sub.content_link,
-        };
+          contentLink: sub?.content_link,
+        });
       }),
     [orderedSelectedDownloadIds, submissions, contest.platform],
   );
 
+  const selectedDownloadSplit = useMemo(
+    () =>
+      splitDownloadSubmissionIdsByPlatform(
+        orderedDownloadableSelectedIds,
+        (id) => {
+          const sub = submissions.find((entry) => entry.id === id);
+          if (!sub) return null;
+          return {
+            platform: sub.platform,
+            contestPlatform: contest.platform,
+            contentLink: sub.content_link,
+          };
+        },
+      ),
+    [orderedDownloadableSelectedIds, submissions, contest.platform],
+  );
+
   // Pre-calculate expected rewards with cap logic (in submission time order)
   const expectedRewardsMap = new Map<string, number>();
-  const maxEarningsPerCreator =
-    (contest as any)?.max_earnings_per_creator || null;
+  const maxEarningsKeyed = isKeyedMaxEarningsMap(
+    (contest as any)?.max_earnings_per_creator,
+  );
+  const maxEarningsPerCreator = maxEarningsKeyed
+    ? 0
+    : Number(
+        resolveMaxEarningsCentsForSubmission(contest as any, contest?.platform) ||
+          0,
+      );
 
   const expectedBonusMap = useMemo(
     () =>
@@ -1798,37 +1826,47 @@ export function CreatorSubmissionsModal({
 
   // Apply creator max-earnings cap for all contest types (including leaderboard)
   // so Expected Reward matches bulk-payment / verify-submission pay amounts.
-  if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
-    // Sort by created_at to apply creator cap in submission order
+  if (maxEarningsKeyed || (maxEarningsPerCreator && maxEarningsPerCreator > 0)) {
     const submissionsByTime = [...submissions].sort((a, b) => {
       return (
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     });
 
-    let runningTotal = 0;
+    const runningByPlatform = new Map<string, number>();
 
     submissionsByTime.forEach((sub) => {
-      // Formula-only so Expected Reward column does not become equal to Reward Granted after payment
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(
         sub,
         false,
       );
-      const remainingCap = maxEarningsPerCreator - runningTotal;
+      const subMax = maxEarningsKeyed
+        ? Number(
+            resolveMaxEarningsCentsForSubmission(contest as any, sub.platform) ||
+              0,
+          )
+        : maxEarningsPerCreator;
+      const runKey = maxEarningsKeyed
+        ? String(sub.platform || "").toLowerCase() || "_"
+        : "_";
+      const runningTotal = runningByPlatform.get(runKey) || 0;
+      const remainingCap = subMax > 0 ? subMax - runningTotal : baseExpectedReward;
       let cappedExpectedReward = baseExpectedReward;
 
-      if (remainingCap <= 0) {
-        cappedExpectedReward = 0;
-      } else if (baseExpectedReward > remainingCap) {
-        cappedExpectedReward = remainingCap;
+      if (subMax > 0) {
+        if (remainingCap <= 0) {
+          cappedExpectedReward = 0;
+        } else if (baseExpectedReward > remainingCap) {
+          cappedExpectedReward = remainingCap;
+        }
       }
 
       expectedRewardsMap.set(sub.id, cappedExpectedReward);
-      const amountApplied = Math.min(
-        baseExpectedReward,
-        Math.max(0, remainingCap),
-      );
-      runningTotal += amountApplied;
+      const amountApplied =
+        subMax > 0
+          ? Math.min(baseExpectedReward, Math.max(0, remainingCap))
+          : baseExpectedReward;
+      runningByPlatform.set(runKey, runningTotal + amountApplied);
     });
   } else {
     // No max_earnings_per_creator configured: use formula-only expected per submission
@@ -1842,7 +1880,7 @@ export function CreatorSubmissionsModal({
   }
 
   const moderationStatusCounts =
-    computeSubmissionModerationStatusCounts(submissions);
+    computeSubmissionModerationStatusCounts(platformScopedSubmissions);
   const statusCounts = {
     all: moderationStatusCounts.all,
     verifiedOrPaid: moderationStatusCounts.verified_or_paid,
@@ -1856,6 +1894,26 @@ export function CreatorSubmissionsModal({
     creator.username?.trim() ||
     creator.full_name?.trim() ||
     "Unknown";
+  const renderPlatformCell = (submission: Submission) => {
+    if (!showModalPlatformColumn) return null;
+    const platformKey = parseVideoContestPlatforms(submission.platform)[0];
+    return (
+      <TableCell className="text-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center justify-center">
+              {getPlatformIcon(submission.platform, "sm")}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {platformKey
+              ? VIDEO_PLATFORM_LABELS[platformKey]
+              : submission.platform || "Unknown"}
+          </TooltipContent>
+        </Tooltip>
+      </TableCell>
+    );
+  };
 
   return (
     <>
@@ -1912,8 +1970,10 @@ export function CreatorSubmissionsModal({
                       isDark ? "text-gray-400" : "text-gray-600",
                     )}
                   >
-                    {submissions.length} total{" "}
-                    {submissions.length === 1 ? "submission" : "submissions"}
+                    {platformScopedSubmissions.length} total{" "}
+                    {platformScopedSubmissions.length === 1
+                      ? "submission"
+                      : "submissions"}
                   </p>
                 </div>
               </div>
@@ -2448,6 +2508,16 @@ export function CreatorSubmissionsModal({
                         Content
                       </TableHead>
                     )}
+                    {showModalPlatformColumn && (
+                      <TableHead
+                        className={cn(
+                          "text-center whitespace-nowrap",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                      >
+                        Platform
+                      </TableHead>
+                    )}
                     {/* For Twitter text_image contests, show detailed metrics; for others, show simplified (with Instagram extras) */}
                     {isTwitterTextImageContest ? (
                       <>
@@ -2687,7 +2757,10 @@ export function CreatorSubmissionsModal({
                             Dislikes
                           </TableHead>
                         )}
-                        {isYouTubeContest && showYtColumn("shares") && (
+                        {isYouTubeContest &&
+                          showYtColumn("shares") &&
+                          !isInstagramContest &&
+                          !isTikTokContest && (
                           <TableHead
                             className={cn(
                               "text-center",
@@ -2798,8 +2871,9 @@ export function CreatorSubmissionsModal({
                             >
                               Shares
                             </TableHead>
-                            {!isTikTokContest && (
-                              <TableHead
+                            {isInstagramContest && (
+                              <>
+                            <TableHead
                                 className={cn(
                                   "text-center",
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
@@ -2817,10 +2891,7 @@ export function CreatorSubmissionsModal({
                                   </TooltipContent>
                                 </Tooltip>
                               </TableHead>
-                            )}
-                            {/* Saves: Instagram only — not in TikTok Display API */}
-                            {!isTikTokContest && (
-                              <TableHead
+                            <TableHead
                                 className={cn(
                                   "text-center",
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
@@ -2828,10 +2899,6 @@ export function CreatorSubmissionsModal({
                               >
                                 Saves
                               </TableHead>
-                            )}
-                            {/* Reach and Interactions commented out for TikTok per user request */}
-                            {!isTikTokContest && (
-                              <>
                                 <TableHead
                                   className={cn(
                                     "text-center",
@@ -2848,29 +2915,6 @@ export function CreatorSubmissionsModal({
                                 >
                                   Interactions
                                 </TableHead>
-                              </>
-                            )}
-                            {isTikTokContest ? (
-                              <>
-                                <TableHead
-                                  className={cn(
-                                    "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                  )}
-                                >
-                                  Total engagement
-                                </TableHead>
-                                <TableHead
-                                  className={cn(
-                                    "text-center",
-                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                  )}
-                                >
-                                  Engagement rate
-                                </TableHead>
-                              </>
-                            ) : (
-                              <>
                                 <TableHead
                                   className={cn(
                                     "text-center",
@@ -2943,6 +2987,26 @@ export function CreatorSubmissionsModal({
                                       for low-view reels.
                                     </TooltipContent>
                                   </Tooltip>
+                                </TableHead>
+                              </>
+                            )}
+                            {isTikTokContest && (
+                              <>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Total engagement
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Engagement rate
                                 </TableHead>
                               </>
                             )}
@@ -3183,6 +3247,7 @@ export function CreatorSubmissionsModal({
                           (showSelectionCheckboxes ? 0 : -1) +
                           (isTwitterTextImageContest
                             ? 18 + // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
+                              (showModalPlatformColumn ? 1 : 0) +
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
                                 : 0) + // Dual: Expected/Granted CPM + Milestone
@@ -3196,12 +3261,11 @@ export function CreatorSubmissionsModal({
                                 ? 1
                                 : 0) // Milestone column
                             : 3 + // Checkbox, #, Content
+                              (showModalPlatformColumn ? 1 : 0) +
                               3 + // Views, Likes, Comments
-                              (isInstagramContest || isTikTokContest
-                                ? isTikTokContest
-                                  ? 3
-                                  : 10
-                                : 0) + // TT: Shares + total engagement + engagement rate; IG: Shares, Reposts, Saves, Reach, Interactions, Avg/Total watch, Reel duration, Avg Watch %, Skip rate
+                              ((isInstagramContest || isTikTokContest) ? 1 : 0) +
+                              (isInstagramContest ? 9 : 0) +
+                              (isTikTokContest ? 2 : 0) +
                               2 + // Expected Reward, Reward Granted
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
@@ -3247,46 +3311,68 @@ export function CreatorSubmissionsModal({
                       const isTikTokRow = (submission.platform || "")
                         .toLowerCase()
                         .includes("tiktok");
+                      const isYouTubeRow = submissionMatchesVideoPlatform(
+                        submission,
+                        "youtube",
+                      );
+                      const isInstagramRow = submissionMatchesVideoPlatform(
+                        submission,
+                        "instagram",
+                      );
 
-                      const likes = isTwitterTweet
-                        ? submission.other_stats?.likes || 0
-                        : submission.other_stats?.youtube?.likes ||
-                          submission.other_stats?.instagram?.likes ||
-                          (isTikTokRow
-                            ? Number(tt?.like_count ?? tt?.likes ?? 0)
-                            : 0);
-                      const comments = isTwitterTweet
-                        ? submission.other_stats?.replies || 0
-                        : submission.other_stats?.youtube?.comments ||
-                          submission.other_stats?.instagram?.comments ||
-                          (isTikTokRow
-                            ? Number(tt?.comment_count ?? tt?.comments ?? 0)
-                            : 0);
-                      const platformStats =
-                        submission.other_stats?.instagram ||
-                        submission.other_stats?.tiktok ||
-                        submission.other_stats ||
-                        {};
                       const youtubeStats =
                         (submission.other_stats as any)?.youtube || {};
+                      const igStats = isInstagramRow
+                        ? ((submission.other_stats as any)?.instagram ||
+                            submission.other_stats ||
+                            {})
+                        : {};
+                      const likes = isTwitterTweet
+                        ? submission.other_stats?.likes || 0
+                        : isYouTubeRow
+                          ? Number(
+                              youtubeStats.likes ??
+                                youtubeStats.like_count ??
+                                0,
+                            )
+                          : isInstagramRow
+                            ? Number(igStats.likes ?? igStats.like_count ?? 0)
+                            : isTikTokRow
+                              ? Number(tt?.like_count ?? tt?.likes ?? 0)
+                              : 0;
+                      const comments = isTwitterTweet
+                        ? submission.other_stats?.replies || 0
+                        : isYouTubeRow
+                          ? Number(
+                              youtubeStats.comments ??
+                                youtubeStats.comment_count ??
+                                0,
+                            )
+                          : isInstagramRow
+                            ? Number(
+                                igStats.comments ?? igStats.comment_count ?? 0,
+                              )
+                            : isTikTokRow
+                              ? Number(tt?.comment_count ?? tt?.comments ?? 0)
+                              : 0;
                       const shares = isTikTokRow
                         ? Number(tt?.share_count ?? tt?.shares ?? 0)
-                        : Number(
-                            (platformStats as any)?.share_count ??
-                              (platformStats as any)?.shares ??
-                              0,
-                          );
-                      const saves =
-                        (platformStats as any)?.saves ||
-                        (platformStats as any)?.saved ||
-                        0;
-                      const reach = (platformStats as any)?.reach || 0;
-                      const totalInteractions =
-                        (platformStats as any)?.total_interactions || 0;
-                      const avgWatchTimeMs =
-                        (platformStats as any)?.avg_watch_time_ms || 0;
-                      const totalWatchTimeMs =
-                        (platformStats as any)?.total_watch_time_ms || 0;
+                        : isInstagramRow
+                          ? Number(igStats.share_count ?? igStats.shares ?? 0)
+                          : isYouTubeRow
+                            ? Number(youtubeStats.shares ?? 0)
+                            : 0;
+                      const saves = Number(igStats.saves ?? igStats.saved ?? 0);
+                      const reach = Number(igStats.reach ?? 0);
+                      const totalInteractions = Number(
+                        igStats.total_interactions ?? 0,
+                      );
+                      const avgWatchTimeMs = Number(
+                        igStats.avg_watch_time_ms ?? 0,
+                      );
+                      const totalWatchTimeMs = Number(
+                        igStats.total_watch_time_ms ?? 0,
+                      );
                       const ytDislikes = Number(youtubeStats.dislikes ?? 0);
                       const ytShares = Number(youtubeStats.shares ?? 0);
                       const ytAvgViewPct = Number(
@@ -3302,17 +3388,17 @@ export function CreatorSubmissionsModal({
                         youtubeStats.duration_seconds ?? 0,
                       );
                       const igReelDurationSeconds = Number(
-                        (platformStats as any)?.duration_seconds ?? 0,
+                        igStats.duration_seconds ?? 0,
                       );
-                      const igRepostsRaw = (platformStats as any)?.reposts;
+                      const igRepostsRaw = igStats.reposts;
                       const igReposts =
                         igRepostsRaw != null &&
                         Number.isFinite(Number(igRepostsRaw))
                           ? Number(igRepostsRaw)
                           : null;
                       const igReelsSkipRate =
-                        (platformStats as any)?.reels_skip_rate != null
-                          ? Number((platformStats as any).reels_skip_rate)
+                        igStats.reels_skip_rate != null
+                          ? Number(igStats.reels_skip_rate)
                           : null;
                       const ytEngagedViews = Number(
                         youtubeStats.engaged_views ?? 0,
@@ -3321,18 +3407,14 @@ export function CreatorSubmissionsModal({
                         youtubeStats.subscribers_gained ?? 0,
                       );
 
-                      const tiktokViewsForRate =
-                        isTikTokContest && !isTwitterTweet
-                          ? effectiveTikTokSubmissionViews(submission)
-                          : 0;
-                      const tiktokTotalEngagement =
-                        isTikTokContest && !isTwitterTweet
-                          ? Number(likes) + Number(comments) + Number(shares)
-                          : 0;
+                      const tiktokViewsForRate = isTikTokRow
+                        ? effectiveTikTokSubmissionViews(submission)
+                        : 0;
+                      const tiktokTotalEngagement = isTikTokRow
+                        ? Number(likes) + Number(comments) + Number(shares)
+                        : 0;
                       const tiktokEngagementRatePct =
-                        isTikTokContest &&
-                        !isTwitterTweet &&
-                        tiktokViewsForRate > 0
+                        isTikTokRow && tiktokViewsForRate > 0
                           ? Math.round(
                               (tiktokTotalEngagement / tiktokViewsForRate) *
                                 10000,
@@ -3429,15 +3511,11 @@ export function CreatorSubmissionsModal({
                               )
                             : rawCpmUncappedForDual
                           : 0;
-                      const detailsForCap = contest?.contest_based_details as any;
                       const activeCreatorCapCents = Number(
-                        (contest as any)?.max_earnings_per_creator ??
-                          detailsForCap?.cpm_contest?.max_earnings_per_creator ??
-                          (contest?.contest_type === "leaderboard"
-                            ? detailsForCap?.leaderboard_contest
-                                ?.max_earnings_per_creator
-                            : 0) ??
-                          0,
+                        resolveMaxEarningsCentsForSubmission(
+                          contest as any,
+                          submission.platform,
+                        ) || 0,
                       );
                       const dualCreatorCapWarning =
                         contest?.contest_type === "dual_rewards" &&
@@ -3726,6 +3804,7 @@ export function CreatorSubmissionsModal({
                                   )}
                                 </div>
                               </TableCell>
+                              {renderPlatformCell(submission)}
                               {/* Total Points */}
                               <TableCell className="text-center">
                                 <div className="flex flex-col items-center">
@@ -4209,10 +4288,11 @@ export function CreatorSubmissionsModal({
                                   </div>
                                 </div>
                               </TableCell>
+                              {renderPlatformCell(submission)}
                               {/* Views, Likes, Comments for non-Twitter submissions */}
                               {(!isYouTubeContest || showYtColumn("views")) && (
                                 <TableCell className="text-center font-mono">
-                                  {(isTikTokContest && !isTwitterTweet
+                                  {(isTikTokRow
                                     ? effectiveTikTokSubmissionViews(submission)
                                     : Number(submission.views ?? 0)
                                   ).toLocaleString()}
@@ -4232,12 +4312,17 @@ export function CreatorSubmissionsModal({
                               {/* YouTube-specific metrics for non-Twitter submissions */}
                               {isYouTubeContest && showYtColumn("dislikes") && (
                                 <TableCell className="text-center font-mono">
-                                  {formatMetricValue(ytDislikes)}
+                                  {isYouTubeRow
+                                    ? formatMetricValue(ytDislikes)
+                                    : "—"}
                                 </TableCell>
                               )}
-                              {isYouTubeContest && showYtColumn("shares") && (
+                              {isYouTubeContest &&
+                                showYtColumn("shares") &&
+                                !isInstagramContest &&
+                                !isTikTokContest && (
                                 <TableCell className="text-center font-mono">
-                                  {ytShares > 0
+                                  {isYouTubeRow && ytShares > 0
                                     ? formatMetricValue(ytShares)
                                     : "—"}
                                 </TableCell>
@@ -4245,7 +4330,7 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("avg_view_pct") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytAvgViewPct > 0
+                                    {isYouTubeRow && ytAvgViewPct > 0
                                       ? `${ytAvgViewPct.toFixed(1)}%`
                                       : "—"}
                                   </TableCell>
@@ -4253,7 +4338,7 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("watch_time") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytWatchTimeMinutes > 0
+                                    {isYouTubeRow && ytWatchTimeMinutes > 0
                                       ? formatWatchTime(
                                           ytWatchTimeMinutes * 60 * 1000,
                                         )
@@ -4263,7 +4348,7 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("avg_duration") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytAvgDurationSeconds > 0
+                                    {isYouTubeRow && ytAvgDurationSeconds > 0
                                       ? `${ytAvgDurationSeconds}s`
                                       : "—"}
                                   </TableCell>
@@ -4271,17 +4356,19 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("clip_duration") && (
                                   <TableCell className="text-center font-mono">
-                                    {formatClipDurationSeconds(
-                                      ytClipDurationSeconds > 0
-                                        ? ytClipDurationSeconds
-                                        : null,
-                                    )}
+                                    {isYouTubeRow
+                                      ? formatClipDurationSeconds(
+                                          ytClipDurationSeconds > 0
+                                            ? ytClipDurationSeconds
+                                            : null,
+                                        )
+                                      : "—"}
                                   </TableCell>
                                 )}
                               {isYouTubeContest &&
                                 showYtColumn("engaged_views") && (
                                   <TableCell className="text-center font-mono">
-                                    {ytEngagedViews > 0
+                                    {isYouTubeRow && ytEngagedViews > 0
                                       ? formatMetricValue(ytEngagedViews)
                                       : "—"}
                                   </TableCell>
@@ -4289,7 +4376,8 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("subs_gained") && (
                                   <TableCell className="text-center font-mono text-sm">
-                                    {youtubeStats.subscribers_gained != null ? (
+                                    {isYouTubeRow &&
+                                    youtubeStats.subscribers_gained != null ? (
                                       <span
                                         className={cn(
                                           "font-bold",
@@ -4326,7 +4414,8 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("bot_score") && (
                                   <TableCell className="text-center">
-                                    {youtubeStats.bot_score !== null &&
+                                    {isYouTubeRow &&
+                                    youtubeStats.bot_score !== null &&
                                     youtubeStats.bot_score !== undefined ? (
                                       <div className="flex flex-col items-center gap-0.5">
                                         <span
@@ -4384,7 +4473,7 @@ export function CreatorSubmissionsModal({
                                             : "text-slate-400",
                                         )}
                                       >
-                                        No data
+                                        {isYouTubeRow ? "No data" : "—"}
                                       </span>
                                     )}
                                   </TableCell>
@@ -4392,6 +4481,10 @@ export function CreatorSubmissionsModal({
                               {isYouTubeContest &&
                                 showYtColumn("analytics") && (
                                   <TableCell className="text-center">
+                                    {submissionMatchesVideoPlatform(
+                                      submission,
+                                      "youtube",
+                                    ) ? (
                                     <YouTubeAnalyticsPanel
                                       metrics={{
                                         views:
@@ -4470,12 +4563,25 @@ export function CreatorSubmissionsModal({
                                         Details
                                       </button>
                                     </YouTubeAnalyticsPanel>
+                                    ) : (
+                                      <span
+                                        className={cn(
+                                          "text-xs",
+                                          isDark
+                                            ? "text-slate-500"
+                                            : "text-slate-400",
+                                        )}
+                                      >
+                                        —
+                                      </span>
+                                    )}
                                   </TableCell>
                                 )}
                               {isYouTubeContest &&
                                 showYtColumn("top_traffic_source") && (
                                   <TableCell className="text-center font-mono text-xs">
                                     {(() => {
+                                      if (!isYouTubeRow) return "—";
                                       const ts =
                                         youtubeStats.traffic_sources as
                                           | Record<string, number>
@@ -4504,45 +4610,36 @@ export function CreatorSubmissionsModal({
                               {(isInstagramContest || isTikTokContest) && (
                                 <>
                                   <TableCell className="text-center font-mono">
-                                    {formatMetricValue(shares)}
+                                    {isYouTubeRow ||
+                                    isInstagramRow ||
+                                    isTikTokRow
+                                      ? formatMetricValue(shares)
+                                      : "—"}
                                   </TableCell>
-                                  {!isTikTokContest && (
-                                    <TableCell className="text-center font-mono">
-                                      {formatMetricValue(igReposts)}
-                                    </TableCell>
-                                  )}
-                                  {!isTikTokContest && (
-                                    <TableCell className="text-center font-mono">
-                                      {formatMetricValue(saves)}
-                                    </TableCell>
-                                  )}
-                                  {/* Reach and Interactions commented out for TikTok per user request */}
-                                  {!isTikTokContest && (
+                                  {isInstagramContest && (
                                     <>
+                                    <TableCell className="text-center font-mono">
+                                      {isInstagramRow
+                                        ? formatMetricValue(igReposts)
+                                        : "—"}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      {isInstagramRow
+                                        ? formatMetricValue(saves)
+                                        : "—"}
+                                    </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatMetricValue(reach)}
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono">
-                                        {formatMetricValue(totalInteractions)}
-                                      </TableCell>
-                                    </>
-                                  )}
-                                  {isTikTokContest ? (
-                                    <>
-                                      <TableCell className="text-center font-mono">
-                                        {formatMetricValue(
-                                          tiktokTotalEngagement,
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono">
-                                        {tiktokViewsForRate > 0
-                                          ? `${formatMetricValue(tiktokEngagementRatePct)}%`
+                                        {isInstagramRow
+                                          ? formatMetricValue(reach)
                                           : "—"}
                                       </TableCell>
-                                    </>
-                                  ) : (
-                                    <>
                                       <TableCell className="text-center font-mono">
+                                        {isInstagramRow
+                                          ? formatMetricValue(totalInteractions)
+                                          : "—"}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {isInstagramRow ? (
                                         <div className="flex flex-col items-center">
                                           <span className="font-bold">
                                             {formatWatchTime(avgWatchTimeMs)}
@@ -4558,8 +4655,12 @@ export function CreatorSubmissionsModal({
                                             avg
                                           </span>
                                         </div>
+                                        ) : (
+                                          "—"
+                                        )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
+                                        {isInstagramRow ? (
                                         <div className="flex flex-col items-center">
                                           <span className="font-bold">
                                             {formatWatchTime(totalWatchTimeMs)}
@@ -4575,24 +4676,49 @@ export function CreatorSubmissionsModal({
                                             total
                                           </span>
                                         </div>
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono">
-                                        {formatClipDurationSeconds(
-                                          igReelDurationSeconds > 0
-                                            ? igReelDurationSeconds
-                                            : null,
+                                        ) : (
+                                          "—"
                                         )}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatAvgWatchPercent(
-                                          avgWatchTimeMs,
-                                          igReelDurationSeconds > 0
-                                            ? igReelDurationSeconds
-                                            : null,
-                                        )}
+                                        {isInstagramRow
+                                          ? formatClipDurationSeconds(
+                                              igReelDurationSeconds > 0
+                                                ? igReelDurationSeconds
+                                                : null,
+                                            )
+                                          : "—"}
                                       </TableCell>
                                       <TableCell className="text-center font-mono">
-                                        {formatReelsSkipRate(igReelsSkipRate)}
+                                        {isInstagramRow
+                                          ? formatAvgWatchPercent(
+                                              avgWatchTimeMs,
+                                              igReelDurationSeconds > 0
+                                                ? igReelDurationSeconds
+                                                : null,
+                                            )
+                                          : "—"}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {isInstagramRow
+                                          ? formatReelsSkipRate(igReelsSkipRate)
+                                          : "—"}
+                                      </TableCell>
+                                    </>
+                                  )}
+                                  {isTikTokContest && (
+                                    <>
+                                      <TableCell className="text-center font-mono">
+                                        {isTikTokRow
+                                          ? formatMetricValue(
+                                              tiktokTotalEngagement,
+                                            )
+                                          : "—"}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {isTikTokRow && tiktokViewsForRate > 0
+                                          ? `${formatMetricValue(tiktokEngagementRatePct)}%`
+                                          : "—"}
                                       </TableCell>
                                     </>
                                   )}
@@ -5410,12 +5536,12 @@ export function CreatorSubmissionsModal({
         open={bulkDownloadDialogOpen}
         onOpenChange={setBulkDownloadDialogOpen}
         isDark={isDark}
-        videoCount={orderedSelectedDownloadIds.length}
+        videoCount={orderedDownloadableSelectedIds.length}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={bulkDownloading}
         onConfirm={runBulkDownloadReels}
         contestId={contest?.id ? String(contest.id) : undefined}
-        submissionIds={orderedSelectedDownloadIds}
+        submissionIds={orderedDownloadableSelectedIds}
         youtubeSubmissionIds={selectedDownloadSplit.youtubeIds}
         instagramSubmissionIds={selectedDownloadSplit.instagramIds}
         hasInstagramSelection={selectedDownloadSplit.instagramIds.length > 0}

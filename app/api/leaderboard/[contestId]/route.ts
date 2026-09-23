@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   const limit = parseInt(url.searchParams.get("limit") || "25", 10);
   const groupBy = url.searchParams.get("groupBy") || "";
+  const platform = url.searchParams.get("platform") || "";
   /** Skip data cache (still recomputes from DB); use after tag revalidation or debugging */
   const bypassCache = url.searchParams.get("fresh") === "1";
 
@@ -27,16 +28,28 @@ export async function GET(request: Request) {
   }
 
   try {
-    const params = { contestId, page, limit, groupBy };
+    const params = { contestId, page, limit, groupBy, platform };
 
     const load = async () => fetchLeaderboardPayload(params);
 
     const data = bypassCache
       ? await load()
-      : await unstable_cache(load, ["leaderboard-api", contestId, String(page), String(limit), groupBy], {
-          revalidate: LEADERBOARD_CACHE_SECONDS,
-          tags: [leaderboardCacheTag(contestId)],
-        })();
+      : await unstable_cache(
+          load,
+          [
+            "leaderboard-api",
+            "status-counts-v3",
+            contestId,
+            String(page),
+            String(limit),
+            groupBy,
+            platform,
+          ],
+          {
+            revalidate: LEADERBOARD_CACHE_SECONDS,
+            tags: [leaderboardCacheTag(contestId)],
+          },
+        )();
 
     return NextResponse.json(data);
   } catch (error: any) {

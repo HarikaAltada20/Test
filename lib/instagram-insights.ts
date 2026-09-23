@@ -1,23 +1,9 @@
 /**
  * Shared Instagram insights helpers: token refresh, fetch insights (with error classification),
- * hasStatsChanged, updateCpmContestBudgets. Used by cron and by the batch worker.
+ * hasStatsChanged. Used by cron, batch worker, and client-safe account analytics helpers.
  */
 
 import dayjs from "dayjs";
-import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
-import {
-  isContestEligibleForScheduledMetricsRefresh,
-  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
-} from "@/lib/contest-metrics-refresh-eligibility";
-
-type CpmBudgetSubmissionRow = {
-  creator_id: string;
-  views?: number | null;
-  paid?: boolean | null;
-  bonus_paid?: boolean | null;
-  earnings?: number | null;
-  bonus_amount?: number | null;
-};
 import {
   coreInsightsMetricsForMediaProductType,
   IG_BASE_INSIGHTS_METRICS,
@@ -533,112 +519,3 @@ export async function fetchInsights(
   }
 }
 
-/** Update CPM contest budgets (same logic as existing cron). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): Promise<void> {
-  try {
-    let query = supabaseAdmin
-      .from("contests")
-      .select("id, contest_based_details, views_locked_at, post_contest_status")
-      .eq("contest_type", "cpm")
-      .not("contest_based_details", "is", null)
-      .is("views_locked_at", null)
-      .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
-    if (contestId) query = query.eq("id", contestId);
-    const { data: contests, error } = await query;
-    if (error || !contests?.length) return;
-
-    const eligibleContests = contests.filter(
-      isContestEligibleForScheduledMetricsRefresh,
-    );
-    if (!eligibleContests.length) return;
-
-    for (const contest of eligibleContests) {
-      const cpmConfig = contest.contest_based_details?.cpm_contest;
-      if (!cpmConfig?.cpm_rate_usd) continue;
-      const { data: contestDetails } = await supabaseAdmin
-        .from("contests")
-        .select("max_earnings_per_creator")
-        .eq("id", contest.id)
-        .single();
-      const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator ?? null;
-      const { data: submissions, error: submissionsError } =
-        await fetchContestSubmissionsAllPages<CpmBudgetSubmissionRow>(
-        supabaseAdmin,
-        contest.id,
-        "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount",
-        {
-          statusIn: ["verified", "paid"],
-          order: { column: "created_at", ascending: true },
-        },
-      );
-      if (submissionsError) {
-        console.error(
-          "[instagram-insights] Failed to load submissions for CPM budget:",
-          contest.id,
-          submissionsError,
-        );
-        continue;
-      }
-      if (!submissions?.length) continue;
-
-      const creatorEarnings = new Map<string, { cpmTotal: number; bonusTotal: number }>();
-      const flatFeeBonus = cpmConfig.flat_fee_bonus || 0;
-      const flatFeeBonusCap = cpmConfig.flat_fee_bonus_cap ?? null;
-      let totalBonusSpentSoFar = 0;
-      const capInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
-
-      for (const sub of submissions) {
-        const creatorId = sub.creator_id;
-        if (!creatorEarnings.has(creatorId)) creatorEarnings.set(creatorId, { cpmTotal: 0, bonusTotal: 0 });
-        const creatorData = creatorEarnings.get(creatorId)!;
-        const earnings = Number(sub.earnings);
-        const bonusAmount = Number(sub.bonus_amount);
-        if (sub.paid && sub.earnings != null) {
-          creatorData.cpmTotal += earnings / 100;
-        } else {
-          let views = Number(sub.views) || 0;
-          if (cpmConfig.min_views && views < cpmConfig.min_views) views = 0;
-          if (cpmConfig.max_views && views > cpmConfig.max_views) views = cpmConfig.max_views;
-          const submissionEarnings = (views * cpmConfig.cpm_rate_usd) / 1000;
-          if (maxEarningsPerCreator) {
-            const remainingCap = maxEarningsPerCreator / 100 - creatorData.cpmTotal;
-            if (remainingCap > 0) creatorData.cpmTotal += Math.min(submissionEarnings, remainingCap);
-          } else {
-            creatorData.cpmTotal += submissionEarnings;
-          }
-        }
-        if (sub.bonus_paid && sub.bonus_amount != null) {
-          creatorData.bonusTotal += bonusAmount / 100;
-          totalBonusSpentSoFar += bonusAmount / 100;
-        } else if (flatFeeBonus > 0) {
-          const bonusAmount = flatFeeBonus / 100;
-          if (capInDollars === null || totalBonusSpentSoFar + bonusAmount <= capInDollars) {
-            creatorData.bonusTotal += bonusAmount;
-            totalBonusSpentSoFar += bonusAmount;
-          }
-        }
-      }
-      let totalCPM = 0, totalBonus = 0;
-      for (const [, e] of creatorEarnings) {
-        totalCPM += e.cpmTotal;
-        totalBonus += e.bonusTotal;
-      }
-      const totalSpent = totalCPM + totalBonus;
-      const now = new Date().toISOString();
-      await supabaseAdmin
-        .from("contests")
-        .update({
-          contest_based_details: {
-            ...contest.contest_based_details,
-            cpm_contest: { ...cpmConfig, budget_spent: Math.round(totalSpent * 100) },
-          },
-          last_metrics_updated: now,
-          updated_at: now,
-        })
-        .eq("id", contest.id);
-    }
-  } catch (error: unknown) {
-    console.error("[instagram-insights] CPM budget update failed:", error instanceof Error ? error.message : error);
-  }
-}

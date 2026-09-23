@@ -1,3 +1,5 @@
+import { getCpmEligibleViewsFromRow } from "@/lib/cpm-eligible-views";
+
 export interface Submission {
   paid: boolean;
   earnings: number | null;
@@ -13,6 +15,12 @@ export interface Submission {
   other_stats?: any;
   manual_points_adjustment?: number;
 }
+
+export type CpmConfigForSubmission = {
+  cpmRate: number;
+  minViews?: number | null;
+  maxViews?: number | null;
+};
 
 export interface MilestoneSubmissionLike {
   creator_id: string | null;
@@ -97,9 +105,16 @@ export function calculateTwitterCpmBudgetSpent(
   maxViews?: number,
   flatFeeBonus?: number,
   flatFeeBonusCap?: number | null,
-  creatorManualAdjustments?: Record<string, number>
+  creatorManualAdjustments?: Record<string, number>,
+  getCpmConfigForSubmission?: (
+    sub: Submission,
+  ) => CpmConfigForSubmission | null,
+  getMaxEarningsCentsForSubmission?: (
+    sub: Submission,
+  ) => number | null | undefined,
 ): number {
-  if (!submissions?.length || cpmRate <= 0) return 0;
+  if (!submissions?.length) return 0;
+  if (!getCpmConfigForSubmission && cpmRate <= 0) return 0;
 
   const flatFeeBonusInDollars =
     flatFeeBonus && flatFeeBonus > 0 ? flatFeeBonus / 100 : 0;
@@ -130,6 +145,7 @@ export function calculateTwitterCpmBudgetSpent(
     string,
     { cpmTotal: number; bonusTotal: number }
   >();
+  const creatorPlatformCpmSpent = new Map<string, number>();
   let totalBonusSpentSoFar = 0;
 
   for (const sub of sortedSubmissions) {
@@ -140,32 +156,48 @@ export function calculateTwitterCpmBudgetSpent(
 
     const creatorData = creatorEarnings.get(creatorId)!;
 
+    const resolved = getCpmConfigForSubmission?.(sub);
+    const rate = resolved?.cpmRate ?? cpmRate;
+    const resolvedMin = resolved?.minViews ?? minViews;
+    const resolvedMax = resolved?.maxViews ?? maxViews;
+
     // Calculate CPM earnings based on platform
     let submissionEarnings = 0;
     const submissionPlatform = sub.platform?.toLowerCase();
 
-    if (submissionPlatform === "twitter") {
+    if (rate <= 0) {
+      submissionEarnings = 0;
+    } else if (submissionPlatform === "twitter") {
       const basePoints = sub.other_stats?.base_points || 0;
       const manualPointsAdjustment = sub.manual_points_adjustment || 0;
       const totalPoints = basePoints + manualPointsAdjustment;
-      submissionEarnings = (totalPoints * cpmRate) / 1000;
+      submissionEarnings = (totalPoints * rate) / 1000;
     } else if (sub.paid && sub.earnings != null) {
       // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
       submissionEarnings = sub.earnings / 100;
     } else {
-      // Calculate expected earnings for verified unpaid (YouTube, Instagram)
-      let views = sub.views || 0;
-      if (minViews != null && views < minViews) views = 0;
-      if (maxViews != null && views > maxViews) views = maxViews;
-      submissionEarnings = (views * cpmRate) / 1000;
+      // Calculate expected earnings for verified unpaid (YouTube, Instagram, TikTok)
+      let views = getCpmEligibleViewsFromRow(sub);
+      if (resolvedMin != null && views < resolvedMin) views = 0;
+      if (resolvedMax != null && views > resolvedMax) views = resolvedMax;
+      submissionEarnings = (views * rate) / 1000;
     }
 
-    // Apply creator cap if configured
-    if (maxEarningsPerCreator) {
-      const maxInDollars = maxEarningsPerCreator / 100;
-      const remainingCap = maxInDollars - creatorData.cpmTotal;
+    // Apply creator cap if configured (per-platform when callback is provided)
+    const capCents = getMaxEarningsCentsForSubmission
+      ? getMaxEarningsCentsForSubmission(sub)
+      : maxEarningsPerCreator;
+    if (capCents && capCents > 0) {
+      const maxInDollars = capCents / 100;
+      const capKey = getMaxEarningsCentsForSubmission
+        ? `${creatorId}:${String(sub.platform || "").toLowerCase()}`
+        : creatorId;
+      const used = creatorPlatformCpmSpent.get(capKey) || 0;
+      const remainingCap = maxInDollars - used;
       if (remainingCap > 0) {
-        creatorData.cpmTotal += Math.min(submissionEarnings, remainingCap);
+        const applied = Math.min(submissionEarnings, remainingCap);
+        creatorPlatformCpmSpent.set(capKey, used + applied);
+        creatorData.cpmTotal += applied;
       }
     } else {
       creatorData.cpmTotal += submissionEarnings;

@@ -32,7 +32,7 @@ type SubmissionLike = {
   bonus_amount?: number | null;
   dual_rewards_payout?: unknown;
   milestone_bonus_paid?: unknown;
-  metadata?: { milestone_bonus_paid?: unknown } | null;
+  metadata?: Record<string, unknown> | null;
   creator_id?: string | null;
   is_twitter_tweet?: boolean | null;
   moderation_status?: string | null;

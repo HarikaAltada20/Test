@@ -8,6 +8,7 @@ import {
   resolveVerifyQualityScore,
   isVerifyQualityScoreOmitted,
   resolveCreatorQualityMetrics,
+  sumQualityScoreCounts,
 } from "./quality-score";
 
 describe("requireVerifyQualityScore", () => {
@@ -17,6 +18,8 @@ describe("requireVerifyQualityScore", () => {
     assert.equal(requireVerifyQualityScore(""), null);
     assert.equal(requireVerifyQualityScore(0), null);
     assert.equal(requireVerifyQualityScore(6), null);
+    assert.equal(requireVerifyQualityScore(1.5), null);
+    assert.equal(requireVerifyQualityScore("4.6"), null);
   });
 
   it("accepts scores 1 through 5", () => {
@@ -109,6 +112,22 @@ describe("computeQualityMetricsFromScores", () => {
     assert.equal(metrics.quality_score_sum, 15);
     assert.equal(metrics.best_quality_score, 5);
     assert.equal(metrics.quality_score_counts.score5, 1);
+  });
+
+  it("does not aggregate fractional quality scores", () => {
+    const metrics = computeQualityMetricsFromScores([1, 2.5, 5]);
+    assert.equal(metrics.quality_score_sum, 6);
+    assert.equal(metrics.scored_verified_reels, 2);
+    assert.equal(metrics.quality_score_counts.score2, 0);
+  });
+});
+
+describe("sumQualityScoreCounts", () => {
+  it("includes all five score tiers and safely fills legacy partial counts", () => {
+    assert.equal(
+      sumQualityScoreCounts({ score1: 1, score3: 2, score4: 3, score5: 4 }),
+      10,
+    );
   });
 });
 

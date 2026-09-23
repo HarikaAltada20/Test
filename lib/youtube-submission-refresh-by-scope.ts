@@ -18,10 +18,10 @@ import {
 } from "@/lib/youtube-analytics";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import {
-  buildOtherStatsWithYoutube,
   getExistingYouTubeStats,
   hasNonEmptyRecord,
 } from "@/lib/youtube-other-stats";
+import { patchYouTubeMetrics } from "@/lib/youtube-metrics-patch";
 
 type SubRow = {
   id: string;
@@ -229,11 +229,10 @@ async function fetchBasicFromDataApi(
   }
 }
 
-function buildYoutubeMetricsFromBasic(
+export function buildYoutubeMetricsFromBasic(
   rawViews: number,
   rawLikes: number,
   rawComments: number,
-  existingYT: Record<string, unknown>,
   now: string,
   durationSeconds?: number | null,
 ): Record<string, unknown> {
@@ -244,29 +243,7 @@ function buildYoutubeMetricsFromBasic(
     duration_seconds:
       typeof durationSeconds === "number" && durationSeconds > 0
         ? durationSeconds
-        : existingYT.duration_seconds || undefined,
-    estimated_minutes_watched: existingYT.estimated_minutes_watched || undefined,
-    avg_view_duration_seconds: existingYT.avg_view_duration_seconds || undefined,
-    avg_view_percentage: existingYT.avg_view_percentage || undefined,
-    engaged_views: existingYT.engaged_views || undefined,
-    dislikes: existingYT.dislikes || undefined,
-    shares: existingYT.shares || undefined,
-    subscribers_gained: existingYT.subscribers_gained || undefined,
-    subscribers_lost: existingYT.subscribers_lost || undefined,
-    videos_added_to_playlists: existingYT.videos_added_to_playlists || undefined,
-    videos_removed_from_playlists: existingYT.videos_removed_from_playlists || undefined,
-    traffic_sources: existingYT.traffic_sources || undefined,
-    traffic_source_details: existingYT.traffic_source_details || undefined,
-    subscribed_status: existingYT.subscribed_status || undefined,
-    last_core_update: existingYT.last_core_update || undefined,
-    last_traffic_update: existingYT.last_traffic_update || undefined,
-    demographics: existingYT.demographics || undefined,
-    devices: existingYT.devices || undefined,
-    audience_retention: existingYT.audience_retention || undefined,
-    last_demographics_update: existingYT.last_demographics_update || undefined,
-    bot_score: existingYT.bot_score ?? undefined,
-    bot_flags: existingYT.bot_flags || undefined,
-    analytics_needs_reauth: existingYT.analytics_needs_reauth || false,
+        : undefined,
     last_basic_update: now,
   };
   return Object.fromEntries(Object.entries(youtubeMetrics).filter(([, v]) => v !== undefined));
@@ -361,9 +338,7 @@ export async function updateYouTubeSubmissionForScope(
     errorMessage?: string,
     markNeedsReconnect?: boolean
   ) => {
-    const existingYoutube = { ...existingStats } as Record<string, unknown>;
     const nextYoutube: Record<string, unknown> = {
-      ...existingYoutube,
       ...(errorMessage ? { insights_error: errorMessage.slice(0, 400) } : {}),
       ...(markNeedsReconnect ? { analytics_needs_reauth: true } : {}),
     };
@@ -371,20 +346,13 @@ export async function updateYouTubeSubmissionForScope(
     const failurePatch = {
       insights_status: failureType,
       last_insights_update: now,
-      other_stats: buildOtherStatsWithYoutube(sub.other_stats, nextYoutube),
       updated_at: now,
     };
-
-    if (metricsTarget === "post_campaign_submission_metrics") {
-      await supabaseAdmin
-        .from("post_campaign_submission_metrics")
-        .update(failurePatch)
-        .eq("submission_id", sub.id);
-    } else {
-      await supabaseAdmin
-        .from("submissions")
-        .update(failurePatch)
-        .eq("id", sub.id);
+    const { error } = await patchYouTubeMetrics(
+      supabaseAdmin, sub.id, nextYoutube, failurePatch, metricsTarget,
+    );
+    if (error) {
+      console.error(`[youtube-refresh] Failure status write failed ${sub.id}:`, error.message);
     }
   };
 
@@ -449,7 +417,6 @@ export async function updateYouTubeSubmissionForScope(
       basic.viewCount,
       basic.likeCount,
       basic.commentCount,
-      existingStats,
       now,
       basic.durationSeconds,
     );
@@ -562,10 +529,7 @@ export async function updateYouTubeSubmissionForScope(
             updates.traffic_sources = trafficSources;
           }
           if (trafficDetails && hasNonEmptyRecord(trafficDetails)) {
-            updates.traffic_source_details = {
-              ...((existingStats.traffic_source_details as Record<string, unknown>) ?? {}),
-              ...trafficDetails,
-            };
+            updates.traffic_source_details = trafficDetails;
           }
           if (hasNonEmptyRecord(subscribedStatus)) {
             updates.subscribed_status = subscribedStatus;
@@ -609,8 +573,7 @@ export async function updateYouTubeSubmissionForScope(
           ]);
 
           if (demographics && hasNonEmptyRecord(demographics)) {
-            const prevDemo = (existingStats.demographics as Record<string, unknown>) ?? {};
-            updates.demographics = { ...prevDemo, ...demographics };
+            updates.demographics = demographics;
           }
           if (devices && hasNonEmptyRecord(devices)) {
             updates.devices = devices;
@@ -703,42 +666,24 @@ export async function updateYouTubeSubmissionForScope(
     isShort,
     botContext
   );
-  updates.bot_score = score;
-  updates.bot_flags = flags;
-  updates.analytics_needs_reauth = false;
+  if (hasDetailedWork) {
+    updates.bot_score = score;
+    updates.bot_flags = flags;
+    updates.analytics_needs_reauth = false;
+  }
 
   const newViews =
     typeof updates.views === "number" ? updates.views : sub.views ?? 0;
 
-  const patch: Record<string, unknown> = {
-    other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
-      ...existingStats,
-      ...updates,
-    }),
+  const patch = {
+    ...(needsBasic && typeof updates.views === "number" ? { views: newViews } : {}),
     insights_status: "ok",
     last_insights_update: now,
     updated_at: now,
   };
-  if (needsBasic && typeof updates.views === "number") {
-    patch.views = newViews;
-  }
-
-  const { error } =
-    metricsTarget === "post_campaign_submission_metrics"
-      ? await supabaseAdmin
-          .from("post_campaign_submission_metrics")
-          .update({
-            ...(typeof patch.views === "number" ? { views: patch.views } : {}),
-            other_stats: patch.other_stats,
-            insights_status: patch.insights_status,
-            last_insights_update: patch.last_insights_update,
-            updated_at: now,
-          })
-          .eq("submission_id", sub.id)
-      : await supabaseAdmin
-          .from("submissions")
-          .update(patch)
-          .eq("id", sub.id);
+  const { error } = await patchYouTubeMetrics(
+    supabaseAdmin, sub.id, updates, patch, metricsTarget,
+  );
   if (error) {
     console.error(`[youtube-refresh] DB update failed ${sub.id}:`, error.message);
     return {

@@ -65,4 +65,76 @@ describe("mergePersistedBudgetSpentFields", () => {
     );
     assert.equal(merged.cpm_contest, undefined);
   });
+
+  it("merges per-platform leaderboard bonus spend", () => {
+    const merged = mergePersistedBudgetSpentFields(
+      {
+        youtube: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_budget: 5_000, flat_fee_bonus: 400 },
+        },
+        instagram: {
+          contest_type: "leaderboard",
+          leaderboard_contest: { total_budget: 5_000, flat_fee_bonus: 400 },
+        },
+        leaderboard_contest: { budget_spent: 12_800 },
+      },
+      {
+        youtube: { leaderboard_contest: { budget_spent: 4_000 } },
+        instagram: { leaderboard_contest: { budget_spent: 8_000 } },
+        leaderboard_contest: { budget_spent: 12_000 },
+      },
+    );
+
+    assert.equal(
+      (
+        (merged.youtube as { leaderboard_contest: { budget_spent: number } })
+          .leaderboard_contest
+      ).budget_spent,
+      4_000,
+    );
+    assert.equal(
+      (
+        (merged.youtube as { leaderboard_contest: { total_budget: number } })
+          .leaderboard_contest
+      ).total_budget,
+      5_000,
+    );
+    assert.equal(
+      (
+        (merged.instagram as { leaderboard_contest: { budget_spent: number } })
+          .leaderboard_contest
+      ).budget_spent,
+      8_000,
+    );
+    assert.equal(
+      (merged.leaderboard_contest as { budget_spent: number }).budget_spent,
+      12_000,
+    );
+  });
+
+  it("does not create a stub root milestone_contest on multi-platform contests", () => {
+    const campaign = {
+      contest_type: "milestone",
+      milestone_contest: {
+        total_budget_cents: 50_000,
+        milestones: [{ target_views: 1000, payout_cents: 1000, winner_limit: null }],
+      },
+    };
+    const merged = mergePersistedBudgetSpentFields(
+      { youtube: campaign, tiktok: campaign },
+      {
+        milestone_contest: { budget_spent: 2_000 },
+        pool_budget_spent_cents: 2_000,
+      },
+    );
+
+    assert.equal(merged.milestone_contest, undefined);
+    assert.equal(merged.pool_budget_spent_cents, 2_000);
+    assert.equal(
+      (merged.youtube as { milestone_contest: { total_budget_cents: number } })
+        .milestone_contest.total_budget_cents,
+      50_000,
+    );
+  });
 });

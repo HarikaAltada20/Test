@@ -25,6 +25,7 @@ import {
   isActiveMetricsRun,
   isTerminalMetricsRunStatus,
   resolveMetricsRefreshPlatform,
+  resolveMetricsRefreshPlatforms,
   startMetricsRunPolling,
   type MetricsRefreshPlatform,
 } from "@/lib/metrics-refresh-polling";
@@ -33,12 +34,19 @@ import {
   type PostCampaignSubmissionSnapshot,
 } from "@/lib/post-campaign-submission-shape";
 import {
-  formatPostCampaignRefreshToastDescription,
   getPostCampaignStatusPath,
   getPostCampaignStatusPaths,
   isTerminalPostCampaignRunStatus,
   isTrackedPostCampaignRun,
+  liveMetricsRefreshToastTitle,
 } from "@/lib/post-campaign-refresh-client";
+import {
+  filterMetricsRefreshToastPlatforms,
+  MetricsRefreshToastDescription,
+  metricsRefreshToastTitleFromResults,
+  metricsRefreshToastVariantFromResults,
+  type MetricsRefreshToastPlatformResult,
+} from "@/components/contest/MetricsRefreshToastDescription";
 import { CONTEST_DETAIL_SUBMISSIONS_PAGE_SIZE } from "@/lib/fetch-contest-submissions";
 import {
   finishContestSubmissionsHydrate,
@@ -126,6 +134,63 @@ import {
 } from "@/lib/video-download-ui";
 import { BulkVideoDownloadDialog } from "@/components/BulkVideoDownloadDialog";
 import {
+  ALL_PLATFORM_TAB,
+  bonusDetailsForPlatform,
+  briefHtmlForPlatform,
+  flattenContestInspirationLinks,
+  flattenContestResources,
+  inspirationLinksForPlatform,
+  isVideoContestPlatform,
+  maxEarningsCentsForPlatform,
+  isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
+  platformsForTab,
+  formatContestListCpmRatesText,
+  readPersistedPlatformCampaigns,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+  resolveLeaderboardPrizePoolCents,
+  resolveLeaderboardWinnerCount,
+  getLeaderboardPrizePoolCents,
+  getLeaderboardWinnerCount,
+  resolveMaxEarningsCentsForSubmission,
+  resourcesForPlatform,
+  rulesHtmlForPlatform,
+  VIDEO_PLATFORM_LABELS,
+  withProjectedTopLevelPayout,
+  leaderboardPrizeStructuresDifferAcrossPlatforms,
+  readLeaderboardBonusBudgetCents,
+  sumLeaderboardBonusBudgetCents,
+  briefsDifferAcrossPlatforms,
+  rulesDifferAcrossPlatforms,
+  bonusDetailsDifferAcrossPlatforms,
+  maxEarningsDifferAcrossPlatforms,
+  groupVideoPayoutPlatformsByConfig,
+  groupPlatformsByBrief,
+  groupPlatformsByRules,
+  groupPlatformsByInspirationLinks,
+  groupPlatformsByResources,
+  preferRichestHtmlAmong,
+  flatFeeBonusesDifferAcrossPlatforms,
+  type PlatformTabValue,
+  type VideoContestPlatform,
+} from "@/lib/video-platform-campaigns";
+import {
+  platformsForRefreshTab,
+  resolveSequentialRefreshPollIndex,
+  youtubeScopeForMetricsRefresh,
+  platformsWithLocalSubmissionsForRefresh,
+} from "@/lib/multi-platform-metrics-refresh";
+import { postCampaignEnqueuePathForPlatform } from "@/lib/post-campaign-platforms";
+import type { PostCampaignVideoPlatform } from "@/lib/post-campaign-platforms";
+import { ContestDetailPlatformTabs } from "@/components/contest/ContestDetailPlatformTabs";
+import {
+  ContestDetailPlatformScopeCard,
+  ContestDetailSharedAcrossPlatformsHint,
+} from "@/components/contest/ContestDetailPlatformScopeCard";
+import { CreatorWisePlatformCounts } from "@/components/contest/CreatorWisePlatformCounts";
+import { ContestDetailVideoPayoutSections } from "@/components/contest/ContestDetailVideoPayoutSections";
+import {
   BulkVideoDownloadContestStatus,
   BulkVideoDownloadSummaryButton,
 } from "@/components/BulkVideoDownloadContestStatus";
@@ -145,7 +210,7 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import {
-  buildLeaderboardPrizeCentsBySubmissionId,
+  buildLeaderboardPrizeCentsBySubmissionIdForContest,
   isTwitterTextImageLeaderboardContest,
 } from "@/lib/non-twitter-leaderboard-creator-prize";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
@@ -165,8 +230,11 @@ import { BudgetProgress } from "@/components/BudgetProgress";
 import { PaidReversalRefundEstimate } from "@/components/PaidReversalRefundEstimate";
 import type { PaidReversalRefundLine } from "@/components/PaidReversalRefundEstimate";
 import {
-  buildMilestoneMostVerifiedBonusByCreatorMap,
+  buildMilestoneMostVerifiedBonusByCreatorMapFromDetails,
+  collectMilestoneBonusConfigs,
   getMilestoneMostVerifiedBonusGrantedByTrackForCreators,
+  buildMilestoneSubmissionPayoutAssignmentsFromDetails,
+  winnerCountsByTargetForPlatform,
 } from "@/lib/milestone-contest-expected-spend";
 import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-contest-expected-spend";
 
@@ -174,8 +242,49 @@ import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-co
 function milestoneMvCreatorIdKey(id: unknown): string {
   return String(id ?? "").trim();
 }
+
+function submissionMatchesVideoPlatform(
+  submission: { platform?: string | null },
+  platform: VideoContestPlatform,
+): boolean {
+  const raw = String(submission.platform || "").toLowerCase();
+  return raw === platform || raw.includes(platform);
+}
+
+function countSubmissionsByVideoPlatform(
+  submissions: Array<{ platform?: string | null }> | undefined,
+  platforms: VideoContestPlatform[],
+): Array<{ platform: VideoContestPlatform; count: number }> {
+  const counts = platforms.map((platform) => ({ platform, count: 0 }));
+  for (const submission of submissions || []) {
+    const match = counts.find((row) =>
+      submissionMatchesVideoPlatform(submission, row.platform),
+    );
+    if (match) match.count += 1;
+  }
+  return counts.filter((row) => row.count > 0);
+}
+
+function creatorGroupHasVideoPlatform(
+  group: { submissions?: Array<{ platform?: string | null }> },
+  platform: VideoContestPlatform,
+): boolean {
+  return (group.submissions || []).some((submission) =>
+    submissionMatchesVideoPlatform(submission, platform),
+  );
+}
+
+function UnavailableMetricDash({ isDark }: { isDark: boolean }) {
+  return (
+    <span
+      className={cn("text-xs", isDark ? "text-slate-500" : "text-slate-400")}
+    >
+      —
+    </span>
+  );
+}
 import {
-  buildDualRewardCreatorCapSplitMaps,
+  buildDualRewardCreatorCapSplitMapsByPlatform,
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
@@ -189,6 +298,7 @@ import {
 import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
+  getFlatFeeBonusLadderForSubmission,
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
   buildContestEligibilityDisplayItems,
@@ -201,7 +311,14 @@ import {
   formatQualitySumDisplay,
 } from "@/lib/creator-profile-stats";
 import { computeTrustScore } from "@/lib/trust-score";
-import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
+import {
+  EMPTY_QUALITY_SCORE_COUNTS,
+  parseQualityScore,
+  parseQualityScoreCounts,
+  sumQualityScoreCounts,
+  type QualityScore,
+  type QualityScoreCounts,
+} from "@/lib/quality-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -221,6 +338,7 @@ import { LazyInlineSubmissionVideoPlayer } from "@/components/LazyInlineSubmissi
 import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
 import { FullCampaignReportExportDialog } from "@/components/contests/FullCampaignReportExportDialog";
 import { getCpmRateFromContest } from "@/lib/report-export-context";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
 import type {
   BrandProfile,
   ReportSubmissionFilter,
@@ -233,6 +351,12 @@ import {
   type ContestAnalyticsSnapshotContext,
 } from "@/lib/contest-analytics-snapshot";
 import { getPlatformCampaignMetricCards } from "@/lib/contest-analytics-campaign-metrics";
+import {
+  getAnalyticsCampaignBudgetCents,
+  getAnalyticsInvestmentNote,
+  resolveAnalyticsExpectedCpmDisplay,
+  resolveAnalyticsRoiContestType,
+} from "@/lib/contest-analytics-roi";
 import {
   getAnalyticsTabCounts,
   type ContestAnalyticsExportSubmission,
@@ -328,7 +452,6 @@ import {
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
   isDualRewardsContestType,
   isMilestoneContestType,
@@ -508,18 +631,26 @@ function CreatorQualityScoreBreakdownTooltip({
   requirementValue,
   creatorValue,
 }: {
-  breakdown: { score1: number; score2: number; score3: number };
+  breakdown: QualityScoreCounts;
   requirementLabel: string;
   belowThreshold: boolean;
   requirementValue: number;
   creatorValue: number | null;
 }) {
-  const total = breakdown.score1 + breakdown.score2 + breakdown.score3;
+  const total = sumQualityScoreCounts(breakdown);
   const creatorDisplay = creatorValue !== null ? String(creatorValue) : "—";
 
   return (
     <div className="space-y-1 text-xs">
       <p className="font-medium">Quality Score</p>
+      <p>
+        Score 5: {breakdown.score5} submission
+        {breakdown.score5 === 1 ? "" : "s"}
+      </p>
+      <p>
+        Score 4: {breakdown.score4} submission
+        {breakdown.score4 === 1 ? "" : "s"}
+      </p>
       <p>
         Score 3: {breakdown.score3} submission
         {breakdown.score3 === 1 ? "" : "s"}
@@ -650,10 +781,12 @@ interface Contest {
   contest_type?: "leaderboard" | "cpm" | "milestone" | "dual_rewards" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
+  brief_json?: unknown;
   platform?: string | null;
   start_date: string | null;
   end_date: string | null;
   rules_html?: string | null;
+  rules_json?: unknown;
   inspiration_links?: { url: string; description: string }[] | null;
   tracking_links?: { url: string; description: string }[] | null;
   resources?: any | null;
@@ -771,6 +904,7 @@ type InstagramInsightsRefreshRunSummary = {
   updated_at?: string | null;
   last_batch_completed_at: string | null;
   finished_at: string | null;
+  error_message?: string | null;
 };
 
 type TwitterMetricsRefreshRunSummary = {
@@ -1225,20 +1359,26 @@ function formatDurationSeconds(sec: number): string {
 
 function metricsRunProgressPercent(run: {
   total_submissions?: number | null;
+  processed_submissions?: number | null;
   reviewed_count?: number | null;
   total_batches?: number | null;
   current_batch_index?: number | null;
+  status?: string | null;
 }): number {
+  if (run.status === "completed") return 100;
   const totalSubs = run.total_submissions ?? 0;
+  const processed = run.processed_submissions ?? 0;
   const reviewed = run.reviewed_count ?? 0;
   const totalBatches = run.total_batches ?? 0;
   const batchIndex = run.current_batch_index ?? 0;
+  const byProcessed =
+    totalSubs > 0 && processed > 0 ? (processed / totalSubs) * 100 : 0;
   const byReviewed =
     totalSubs > 0 && reviewed > 0 ? (reviewed / totalSubs) * 100 : 0;
   const byBatches = totalBatches > 0 ? (batchIndex / totalBatches) * 100 : 0;
   return Math.min(
     100,
-    Math.max(0, Math.round(Math.max(byReviewed, byBatches))),
+    Math.max(0, Math.round(Math.max(byProcessed, byReviewed, byBatches))),
   );
 }
 
@@ -1253,15 +1393,21 @@ function InstagramRefreshProgressCard({
   isAdminView: boolean;
   elapsedSeconds: number | null;
 }) {
-  if (run.status !== "pending" && run.status !== "running") return null;
+  const isActive = run.status === "pending" || run.status === "running";
+  const isTerminalSummary =
+    completed ||
+    run.status === "completed" ||
+    run.status === "failed" ||
+    run.status === "cancelled";
+  if (!isActive && !isTerminalSummary) return null;
   const pct = metricsRunProgressPercent(run);
   return (
     <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-          {completed
-            ? "Insights refresh summary"
-            : "Insights refresh in progress"}
+          {isTerminalSummary && !isActive
+            ? "Instagram refresh summary"
+            : "Instagram refresh in progress"}
         </span>
         <span className="text-[10px] text-slate-500 dark:text-slate-400">
           {isAdminView
@@ -1269,11 +1415,14 @@ function InstagramRefreshProgressCard({
             : `${pct}%`}
         </span>
       </div>
-      {run.status === "running" && (
+      {(isActive || isTerminalSummary) && (
         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
           <div
-            className="h-full bg-emerald-500 transition-all"
-            style={{ width: `${pct}%` }}
+            className={cn(
+              "h-full bg-emerald-500 transition-all duration-500",
+              isActive && pct === 0 && "animate-pulse",
+            )}
+            style={{ width: `${isActive && pct === 0 ? 12 : pct}%` }}
           />
         </div>
       )}
@@ -1333,13 +1482,19 @@ function YoutubeRefreshProgressCard({
   isAdminView: boolean;
   elapsedSeconds: number | null;
 }) {
-  if (run.status !== "pending" && run.status !== "running") return null;
+  const isActive = run.status === "pending" || run.status === "running";
+  const isTerminalSummary =
+    completed ||
+    run.status === "completed" ||
+    run.status === "failed" ||
+    run.status === "cancelled";
+  if (!isActive && !isTerminalSummary) return null;
   const pct = metricsRunProgressPercent(run);
   return (
     <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-          {completed
+          {isTerminalSummary && !isActive
             ? "YouTube refresh summary"
             : "YouTube refresh in progress"}
         </span>
@@ -1357,11 +1512,14 @@ function YoutubeRefreshProgressCard({
           </span>
         </div>
       )}
-      {run.status === "running" && (
+      {(isActive || isTerminalSummary) && (
         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
           <div
-            className="h-full bg-[#6C43D0] transition-all"
-            style={{ width: `${pct}%` }}
+            className={cn(
+              "h-full bg-[#6C43D0] transition-all duration-500",
+              isActive && pct === 0 && "animate-pulse",
+            )}
+            style={{ width: `${isActive && pct === 0 ? 12 : pct}%` }}
           />
         </div>
       )}
@@ -1411,6 +1569,28 @@ function YoutubeRefreshProgressCard({
 function createPendingInstagramRefreshRun(
   runId?: string,
 ): InstagramInsightsRefreshRunSummary {
+  return {
+    id: runId || "pending",
+    status: "pending",
+    total_submissions: 0,
+    processed_submissions: 0,
+    success_count: 0,
+    permanent_failure_count: 0,
+    temporary_failure_count: 0,
+    skipped_recent_count: 0,
+    reviewed_count: 0,
+    current_batch_index: 0,
+    total_batches: 1,
+    started_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    last_batch_completed_at: null,
+    finished_at: null,
+  };
+}
+
+function createPendingTiktokRefreshRun(
+  runId?: string,
+): TikTokMetricsRefreshRunSummary {
   return {
     id: runId || "pending",
     status: "pending",
@@ -1621,7 +1801,394 @@ export default function ContestDetailClient({
     downloading: normalViewBulkDownloading,
     startDownload: startBulkVideoDownload,
   } = useBulkVideoDownloadProgress();
-  const [currentContest, setCurrentContest] = useState<Contest>(contest);
+  const [contestState, setCurrentContest] = useState<Contest>(contest);
+  const currentContest = useMemo(
+    () => ({
+      ...contestState,
+      contest_based_details: withProjectedTopLevelPayout(
+        (contestState.contest_based_details as Record<string, unknown>) || null,
+        contestState.platform,
+      ) as Contest["contest_based_details"],
+    }),
+    [contestState],
+  );
+  const overviewVideoPlatforms = useMemo(
+    () => parseVideoContestPlatforms(contestState.platform),
+    [contestState.platform],
+  );
+  const [overviewPlatformTab, setOverviewPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const [submissionsPlatformTab, setSubmissionsPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  const [analyticsPlatformTab, setAnalyticsPlatformTab] =
+    useState<PlatformTabValue>(ALL_PLATFORM_TAB);
+  useEffect(() => {
+    if (
+      overviewPlatformTab !== ALL_PLATFORM_TAB &&
+      !overviewVideoPlatforms.includes(overviewPlatformTab)
+    ) {
+      setOverviewPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [overviewVideoPlatforms, overviewPlatformTab]);
+  useEffect(() => {
+    if (
+      submissionsPlatformTab !== ALL_PLATFORM_TAB &&
+      !overviewVideoPlatforms.includes(submissionsPlatformTab)
+    ) {
+      setSubmissionsPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [overviewVideoPlatforms, submissionsPlatformTab]);
+  useEffect(() => {
+    if (
+      analyticsPlatformTab !== ALL_PLATFORM_TAB &&
+      !overviewVideoPlatforms.includes(analyticsPlatformTab)
+    ) {
+      setAnalyticsPlatformTab(ALL_PLATFORM_TAB);
+    }
+  }, [overviewVideoPlatforms, analyticsPlatformTab]);
+  const overviewScopedPlatform: VideoContestPlatform | null =
+    overviewPlatformTab !== ALL_PLATFORM_TAB &&
+    isVideoContestPlatform(overviewPlatformTab)
+      ? overviewPlatformTab
+      : null;
+  const submissionsScopedPlatform: VideoContestPlatform | null =
+    submissionsPlatformTab !== ALL_PLATFORM_TAB &&
+    isVideoContestPlatform(submissionsPlatformTab)
+      ? submissionsPlatformTab
+      : null;
+  const analyticsScopedPlatform: VideoContestPlatform | null =
+    analyticsPlatformTab !== ALL_PLATFORM_TAB &&
+    isVideoContestPlatform(analyticsPlatformTab)
+      ? analyticsPlatformTab
+      : null;
+  // Multi-platform tabs: show only that platform's metric columns. All tab keeps every selected platform.
+  const submissionsTablePlatform = platformsForTab(
+    submissionsPlatformTab,
+    overviewVideoPlatforms,
+  ).join(",");
+  const showAllTabPlatformColumn = overviewVideoPlatforms.length >= 2;
+  const overviewPersistedCampaigns = useMemo(
+    () =>
+      readPersistedPlatformCampaigns(
+        (contestState.contest_based_details as Record<string, unknown>) || null,
+      ),
+    [contestState.contest_based_details],
+  );
+  const overviewDetailContest = useMemo(() => {
+    if (!overviewScopedPlatform || overviewVideoPlatforms.length < 2) {
+      return currentContest;
+    }
+    const raw =
+      (contestState.contest_based_details as Record<string, unknown>) || {};
+    const campaign = overviewPersistedCampaigns[overviewScopedPlatform];
+    return {
+      ...currentContest,
+      platform: overviewScopedPlatform,
+      contest_type:
+        (campaign?.contest_type as Contest["contest_type"]) ??
+        currentContest.contest_type,
+      brief_html: briefHtmlForPlatform(
+        contestState as {
+          brief_html?: string | null;
+          brief_json?: unknown;
+          platform?: string | null;
+        },
+        overviewScopedPlatform,
+      ),
+      rules_html: rulesHtmlForPlatform(
+        contestState as {
+          rules_html?: string | null;
+          rules_json?: unknown;
+          platform?: string | null;
+        },
+        overviewScopedPlatform,
+      ),
+      resources: resourcesForPlatform(
+        contestState.resources,
+        overviewScopedPlatform,
+      ),
+      inspiration_links: inspirationLinksForPlatform(
+        contestState.inspiration_links,
+        overviewScopedPlatform,
+      ),
+      contest_based_details: withProjectedTopLevelPayout(
+        raw,
+        contestState.platform,
+        overviewScopedPlatform,
+      ) as Contest["contest_based_details"],
+    };
+  }, [
+    currentContest,
+    contestState,
+    overviewPersistedCampaigns,
+    overviewScopedPlatform,
+    overviewVideoPlatforms.length,
+  ]);
+  const buildOverviewPayoutContest = useCallback(
+    (platform: VideoContestPlatform) => {
+      const raw =
+        (contestState.contest_based_details as Record<string, unknown>) || {};
+      const campaign = overviewPersistedCampaigns[platform];
+      return {
+        ...currentContest,
+        platform,
+        contest_type:
+          (campaign?.contest_type as Contest["contest_type"]) ??
+          currentContest.contest_type,
+        contest_based_details: withProjectedTopLevelPayout(
+          raw,
+          contestState.platform,
+          platform,
+        ) as Contest["contest_based_details"],
+      };
+    },
+    [
+      contestState.contest_based_details,
+      contestState.platform,
+      currentContest,
+      overviewPersistedCampaigns,
+    ],
+  );
+  const overviewBriefsDiffer = useMemo(
+    () => briefsDifferAcrossPlatforms(contestState, overviewVideoPlatforms),
+    [contestState, overviewVideoPlatforms],
+  );
+  const overviewRulesDiffer = useMemo(
+    () => rulesDifferAcrossPlatforms(contestState, overviewVideoPlatforms),
+    [contestState, overviewVideoPlatforms],
+  );
+  const overviewBonusDetailsDiffer = useMemo(
+    () =>
+      bonusDetailsDifferAcrossPlatforms(
+        (currentContest as { bonus_details?: unknown }).bonus_details,
+        overviewVideoPlatforms,
+      ),
+    [currentContest, overviewVideoPlatforms],
+  );
+  const overviewMaxEarningsDiffer = useMemo(
+    () =>
+      maxEarningsDifferAcrossPlatforms(
+        (currentContest as { max_earnings_per_creator?: unknown })
+          .max_earnings_per_creator,
+        (currentContest as { bonus_details?: unknown }).bonus_details,
+        overviewVideoPlatforms,
+      ),
+    [currentContest, overviewVideoPlatforms],
+  );
+  const overviewPayoutGroups = useMemo(() => {
+    if (overviewVideoPlatforms.length < 2) {
+      return [
+        {
+          platforms: [] as VideoContestPlatform[],
+          contestPlatform: null as VideoContestPlatform | null,
+          showLabels: false,
+        },
+      ];
+    }
+    if (overviewPlatformTab !== ALL_PLATFORM_TAB) {
+      const scoped = overviewScopedPlatform
+        ? [overviewScopedPlatform]
+        : overviewVideoPlatforms.slice(0, 1);
+      return [
+        {
+          platforms: scoped,
+          contestPlatform: scoped[0] ?? null,
+          showLabels: false,
+        },
+      ];
+    }
+    const groups = groupVideoPayoutPlatformsByConfig(
+      contestState.contest_based_details as
+        | Record<string, unknown>
+        | null
+        | undefined,
+      overviewVideoPlatforms,
+    );
+    if (groups.length <= 1) {
+      return [
+        {
+          platforms: overviewVideoPlatforms,
+          contestPlatform: null,
+          showLabels: false,
+        },
+      ];
+    }
+    return groups.map((platforms) => ({
+      platforms,
+      contestPlatform: platforms[0] ?? null,
+      showLabels: true,
+    }));
+  }, [
+    contestState.contest_based_details,
+    overviewPlatformTab,
+    overviewScopedPlatform,
+    overviewVideoPlatforms,
+  ]);
+  const overviewLeaderboardPrizesDiffer = useMemo(
+    () =>
+      leaderboardPrizeStructuresDifferAcrossPlatforms(
+        overviewPersistedCampaigns,
+        overviewVideoPlatforms,
+      ),
+    [overviewPersistedCampaigns, overviewVideoPlatforms],
+  );
+  const overviewWinnerCountsDiffer = useMemo(() => {
+    if (!overviewLeaderboardPrizesDiffer) return false;
+    const counts = overviewVideoPlatforms.map(
+      (platform) =>
+        Number(
+          overviewPersistedCampaigns[platform]?.leaderboard_contest
+            ?.winner_count,
+        ) || 0,
+    );
+    return counts.some((count) => count !== counts[0]);
+  }, [
+    overviewLeaderboardPrizesDiffer,
+    overviewPersistedCampaigns,
+    overviewVideoPlatforms,
+  ]);
+  const overviewUniformPayoutContest = useMemo(() => {
+    if (overviewScopedPlatform) return overviewDetailContest;
+    if (
+      overviewVideoPlatforms.length >= 2 &&
+      overviewPersistedCampaigns[overviewVideoPlatforms[0]]
+    ) {
+      return buildOverviewPayoutContest(overviewVideoPlatforms[0]);
+    }
+    return overviewDetailContest;
+  }, [
+    overviewScopedPlatform,
+    overviewDetailContest,
+    overviewVideoPlatforms,
+    overviewPersistedCampaigns,
+    buildOverviewPayoutContest,
+  ]);
+  const overviewLeaderboardPrizePoolCents = useMemo(() => {
+    if (overviewUniformPayoutContest.contest_type !== "leaderboard") return 0;
+    const details =
+      (contestState.contest_based_details as Record<string, unknown>) || null;
+    const resolved = resolveLeaderboardPrizePoolCents(
+      details,
+      contestState.platform,
+      overviewScopedPlatform,
+    );
+    if (resolved > 0) return resolved;
+    return getLeaderboardPrizePoolCents(
+      overviewUniformPayoutContest.contest_based_details?.leaderboard_contest,
+    );
+  }, [
+    overviewUniformPayoutContest,
+    contestState.contest_based_details,
+    contestState.platform,
+    overviewScopedPlatform,
+  ]);
+  const overviewLeaderboardWinnerCountDisplay = useMemo(() => {
+    if (overviewUniformPayoutContest.contest_type !== "leaderboard") return 0;
+    return resolveLeaderboardWinnerCount(
+      (contestState.contest_based_details as Record<string, unknown>) || null,
+      contestState.platform,
+      overviewScopedPlatform,
+    );
+  }, [
+    overviewUniformPayoutContest.contest_type,
+    contestState.contest_based_details,
+    contestState.platform,
+    overviewScopedPlatform,
+  ]);
+  const overviewLeaderboardPrizeSlices = useMemo(() => {
+    const asSlice = (
+      platform: VideoContestPlatform | null,
+      contest: typeof overviewDetailContest,
+      showLabel: boolean,
+    ) => {
+      if (
+        contest.contest_type !== "leaderboard" ||
+        !contest.contest_based_details?.leaderboard_contest
+      ) {
+        return null;
+      }
+      return { platform, contest, showLabel };
+    };
+    if (
+      overviewVideoPlatforms.length >= 2 &&
+      overviewPlatformTab === ALL_PLATFORM_TAB &&
+      overviewLeaderboardPrizesDiffer
+    ) {
+      return overviewVideoPlatforms
+        .map((platform) =>
+          asSlice(platform, buildOverviewPayoutContest(platform), true),
+        )
+        .filter((slice): slice is NonNullable<typeof slice> => slice != null);
+    }
+    const slice = asSlice(null, overviewUniformPayoutContest, false);
+    return slice ? [slice] : [];
+  }, [
+    overviewVideoPlatforms,
+    overviewPlatformTab,
+    overviewLeaderboardPrizesDiffer,
+    buildOverviewPayoutContest,
+    overviewUniformPayoutContest,
+  ]);
+  const overviewFlatFeeBonusesDiffer = useMemo(
+    () =>
+      flatFeeBonusesDifferAcrossPlatforms(
+        overviewPersistedCampaigns,
+        overviewVideoPlatforms,
+      ),
+    [overviewPersistedCampaigns, overviewVideoPlatforms],
+  );
+  const overviewFlatFeeSlices = useMemo(() => {
+    const asSlice = (
+      platform: VideoContestPlatform | null,
+      contest: typeof overviewDetailContest,
+      showLabel: boolean,
+    ) => {
+      if (isDualRewardsContestType(contest.contest_type)) return null;
+      const bonus =
+        Number(
+          (contest.contest_based_details?.cpm_contest as any)?.flat_fee_bonus,
+        ) ||
+        Number(
+          (contest.contest_based_details?.leaderboard_contest as any)
+            ?.flat_fee_bonus,
+        ) ||
+        0;
+      if (bonus <= 0) return null;
+      return { platform, contest, showLabel, bonus };
+    };
+    if (
+      overviewVideoPlatforms.length >= 2 &&
+      overviewPlatformTab === ALL_PLATFORM_TAB &&
+      overviewFlatFeeBonusesDiffer
+    ) {
+      return overviewVideoPlatforms
+        .map((platform) =>
+          asSlice(platform, buildOverviewPayoutContest(platform), true),
+        )
+        .filter((slice): slice is NonNullable<typeof slice> => slice != null);
+    }
+    const slice = asSlice(null, overviewUniformPayoutContest, false);
+    return slice ? [slice] : [];
+  }, [
+    overviewVideoPlatforms,
+    overviewPlatformTab,
+    overviewFlatFeeBonusesDiffer,
+    buildOverviewPayoutContest,
+    overviewUniformPayoutContest,
+  ]);
+  const overviewLeaderboardBonusBudgetCents = overviewScopedPlatform
+    ? readLeaderboardBonusBudgetCents(
+        overviewPersistedCampaigns[overviewScopedPlatform],
+      )
+    : overviewVideoPlatforms.length >= 2
+      ? sumLeaderboardBonusBudgetCents(
+          overviewPersistedCampaigns,
+          overviewVideoPlatforms,
+        )
+      : Number(
+          overviewUniformPayoutContest.contest_based_details
+            ?.leaderboard_contest?.total_budget,
+        ) || 0;
   const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
     percentage: number | null;
     mode:
@@ -2098,33 +2665,36 @@ export default function ContestDetailClient({
         id: string;
         status: string;
       } | null,
+      options?: { skipReload?: boolean },
     ) => {
       if (!run) return;
 
-      const shouldReloadWhenComplete = (() => {
-        switch (metricsPlatform) {
-          case "instagram":
-            return shouldReloadAfterHydratedRun(
-              previousInstagramRunRef.current,
-              run,
-            );
-          case "twitter":
-            return shouldReloadAfterHydratedRun(
-              previousTwitterRunRef.current,
-              run,
-            );
-          case "tiktok":
-            return shouldReloadAfterHydratedRun(
-              previousTiktokRunRef.current,
-              run,
-            );
-          case "youtube":
-            return shouldReloadAfterHydratedRun(
-              previousYoutubeRunRef.current,
-              run,
-            );
-        }
-      })();
+      const shouldReloadWhenComplete =
+        !options?.skipReload &&
+        (() => {
+          switch (metricsPlatform) {
+            case "instagram":
+              return shouldReloadAfterHydratedRun(
+                previousInstagramRunRef.current,
+                run,
+              );
+            case "twitter":
+              return shouldReloadAfterHydratedRun(
+                previousTwitterRunRef.current,
+                run,
+              );
+            case "tiktok":
+              return shouldReloadAfterHydratedRun(
+                previousTiktokRunRef.current,
+                run,
+              );
+            case "youtube":
+              return shouldReloadAfterHydratedRun(
+                previousYoutubeRunRef.current,
+                run,
+              );
+          }
+        })();
 
       switch (metricsPlatform) {
         case "instagram":
@@ -2229,25 +2799,56 @@ export default function ContestDetailClient({
   // Rehydrate metrics refresh run on submissions tab; poll only while run is active.
   // PC mode must poll metrics_target=post_campaign so a finished submissions run
   // cannot clear the in-progress PC progress popup.
+  // Multi-platform: poll every video platform and reload only after ALL in-flight
+  // runs finish (do not reload when YouTube alone completes mid-chain).
   useEffect(() => {
-    const metricsPlatform = resolveMetricsRefreshPlatform(
-      currentContest.platform,
-    );
-    if (activeTab !== "submissions" || !metricsPlatform) return;
+    if (activeTab !== "submissions") return;
+    // Manual multi-platform poll owns progress UI — don't let hydrate re-apply
+    // stale completed IG/TT runs while the chain is in flight.
+    if (isRefreshingMetrics) return;
 
     const metricsTarget = isPostCampaignLeaderboard
       ? "post_campaign"
       : "submissions";
 
-    const stop = startMetricsRunPolling({
-      contestId,
-      platform: metricsPlatform,
-      metricsTarget,
-      onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
-      onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
-    });
+    const platforms = resolveMetricsRefreshPlatforms(currentContest.platform);
+    if (platforms.length === 0) return;
 
-    return stop;
+    if (platforms.length === 1) {
+      const metricsPlatform = platforms[0]!;
+      const stop = startMetricsRunPolling({
+        contestId,
+        platform: metricsPlatform,
+        metricsTarget,
+        onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+        onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+      });
+      return stop;
+    }
+
+    // Multi-platform: hydrate progress UI only. Never schedule a page reload here —
+    // stale completed runs on later platforms (or YouTube finishing mid-chain) would
+    // otherwise reload before Instagram/TikTok of the current chain update. Manual
+    // Refresh Metrics polling owns the final reload for multi-platform contests.
+    const stops = platforms.map((metricsPlatform) =>
+      startMetricsRunPolling({
+        contestId,
+        platform: metricsPlatform,
+        metricsTarget,
+        waitForRun: true,
+        maxMs: 600_000,
+        onRun: (run) => {
+          applyHydratedMetricsRun(metricsPlatform, run, { skipReload: true });
+        },
+        onTerminal: (run) => {
+          applyHydratedMetricsRun(metricsPlatform, run, { skipReload: true });
+        },
+      }),
+    );
+
+    return () => {
+      for (const stop of stops) stop();
+    };
   }, [
     activeTab,
     applyHydratedMetricsRun,
@@ -2255,6 +2856,7 @@ export default function ContestDetailClient({
     currentContest.id,
     currentContest.platform,
     isPostCampaignLeaderboard,
+    isRefreshingMetrics,
   ]);
 
   useEffect(() => {
@@ -2569,6 +3171,9 @@ export default function ContestDetailClient({
     isRefreshingDemographics ||
     isRefreshingAll ||
     isRefreshingAllStandard;
+  /** Lock All/YouTube/IG/TT (and status) tabs while metrics refresh/reload is in flight — admin + brand. */
+  const platformTabsLocked =
+    anyYtRefreshInProgress || hasRecentRunningRun || postRefreshReloadPending;
   // Admin controls modal (YouTube analytics visibility for brand)
   const [adminControlsModalOpen, setAdminControlsModalOpen] = useState(false);
   const [adminControlsSaving, setAdminControlsSaving] = useState(false);
@@ -2864,6 +3469,17 @@ export default function ContestDetailClient({
     setIgAnalyticsLoadingCreatorId(null);
   }, []);
 
+  const openInstagramCreatorAnalytics = useCallback(
+    (creatorId: string | null | undefined, label: string) => {
+      if (!creatorId) return;
+      setIgAnalyticsCreatorId(creatorId);
+      setIgAnalyticsCreatorLabel(label);
+      setIgAnalyticsLoadingCreatorId(creatorId);
+      setIgAnalyticsOpen(true);
+    },
+    [],
+  );
+
   const syncInstagramArchiveForCreator = useCallback(
     (creatorId: string, archive: unknown) => {
       setCurrentSubmissions((prev) =>
@@ -2888,7 +3504,7 @@ export default function ContestDetailClient({
   const dualPayoutAdjustedVisibleColumnCount = useMemo(() => {
     if (!showDualPayoutAdjustedColumns) return 0;
     if (
-      currentContest.platform?.toLowerCase().includes("youtube") &&
+      submissionsTablePlatform.includes("youtube") &&
       !ytVisibleColumns.includes("adjusted_reward")
     )
       return 0;
@@ -2901,9 +3517,25 @@ export default function ContestDetailClient({
     showDualPayoutAdjustedColumns,
     dualAdjustCpmForDisplay,
     dualAdjustMilestoneForDisplay,
-    currentContest.platform,
+    submissionsTablePlatform,
     ytVisibleColumns,
   ]);
+  const showYoutubeTableColumns = submissionsTablePlatform.includes("youtube");
+  const showInstagramTableColumns =
+    submissionsTablePlatform.includes("instagram");
+  const showTiktokTableColumns = submissionsTablePlatform.includes("tiktok");
+  const showSubmissionsSharesColumn =
+    showTiktokTableColumns ||
+    showInstagramTableColumns ||
+    (showYoutubeTableColumns &&
+      canSeeCore &&
+      ytVisibleColumns.includes("shares"));
+  const showSubmissionsInsightsStatusColumn =
+    isAdminView &&
+    (showTiktokTableColumns ||
+      showInstagramTableColumns ||
+      (showYoutubeTableColumns &&
+        ytVisibleColumns.includes("insights_status")));
   const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [fullReportDialogOpen, setFullReportDialogOpen] = useState(false);
@@ -3014,8 +3646,7 @@ export default function ContestDetailClient({
         snapshot.submission_id,
       );
       const base =
-        byId.get(snapshot.submission_id) ??
-        (cached as Submission | undefined);
+        byId.get(snapshot.submission_id) ?? (cached as Submission | undefined);
       const merged = postCampaignSnapshotToSubmission<Submission>(
         snapshot,
         base ??
@@ -3055,12 +3686,15 @@ export default function ContestDetailClient({
         (withCreator as any).creator_display_name ||
         (withCreator as any).creator_username
       ) {
-        postCampaignSubmissionEnrichmentRef.current.set(snapshot.submission_id, {
-          creator_display_name: (withCreator as any).creator_display_name,
-          creator_username: (withCreator as any).creator_username,
-          creator_avatar_url: (withCreator as any).creator_avatar_url,
-          creator: (withCreator as any).creator,
-        });
+        postCampaignSubmissionEnrichmentRef.current.set(
+          snapshot.submission_id,
+          {
+            creator_display_name: (withCreator as any).creator_display_name,
+            creator_username: (withCreator as any).creator_username,
+            creator_avatar_url: (withCreator as any).creator_avatar_url,
+            creator: (withCreator as any).creator,
+          },
+        );
       }
       return withCreator;
     });
@@ -3196,15 +3830,39 @@ export default function ContestDetailClient({
     setSubmissionsHydrateRetry((n) => n + 1);
   }, []);
 
+  const submissionsForStatusCounts = useMemo(() => {
+    if (!submissionsScopedPlatform) return currentSubmissions;
+    return currentSubmissions.filter((submission) =>
+      submissionMatchesVideoPlatform(submission, submissionsScopedPlatform),
+    );
+  }, [currentSubmissions, submissionsScopedPlatform]);
+
+  const submissionsPlatformTabCounts = useMemo(() => {
+    const counts: Partial<Record<PlatformTabValue, number>> = {
+      [ALL_PLATFORM_TAB]: currentSubmissions.length,
+    };
+    for (const platform of overviewVideoPlatforms) {
+      counts[platform] = currentSubmissions.filter((submission) =>
+        submissionMatchesVideoPlatform(submission, platform),
+      ).length;
+    }
+    return counts;
+  }, [currentSubmissions, overviewVideoPlatforms]);
+
   const loadedSubmissionStatusCounts = useMemo(
-    () => computeContestDetailSubmissionStatusCounts(currentSubmissions),
-    [currentSubmissions],
+    () =>
+      computeContestDetailSubmissionStatusCounts(submissionsForStatusCounts),
+    [submissionsForStatusCounts],
   );
 
   const liveSubmissionStatusCounts = useMemo(() => {
-    if (!submissionsLoadComplete) return submissionStatusCounts;
-    return loadedSubmissionStatusCounts;
+    // Platform-scoped counts must come from loaded rows (server totals are all-platform).
+    if (submissionsScopedPlatform || submissionsLoadComplete) {
+      return loadedSubmissionStatusCounts;
+    }
+    return submissionStatusCounts;
   }, [
+    submissionsScopedPlatform,
     submissionsLoadComplete,
     submissionStatusCounts,
     loadedSubmissionStatusCounts,
@@ -3265,6 +3923,25 @@ export default function ContestDetailClient({
     });
   }, [leaderboardSubmissions, analyticsQualityScoreFilters]);
 
+  const analyticsPlatformScopedSubmissions = useMemo(() => {
+    if (!analyticsScopedPlatform) return analyticsQualityFilteredSubmissions;
+    return analyticsQualityFilteredSubmissions.filter((submission) =>
+      submissionMatchesVideoPlatform(submission, analyticsScopedPlatform),
+    );
+  }, [analyticsQualityFilteredSubmissions, analyticsScopedPlatform]);
+
+  const analyticsPlatformTabCounts = useMemo(() => {
+    const counts: Partial<Record<PlatformTabValue, number>> = {
+      [ALL_PLATFORM_TAB]: analyticsQualityFilteredSubmissions.length,
+    };
+    for (const platform of overviewVideoPlatforms) {
+      counts[platform] = analyticsQualityFilteredSubmissions.filter(
+        (submission) => submissionMatchesVideoPlatform(submission, platform),
+      ).length;
+    }
+    return counts;
+  }, [analyticsQualityFilteredSubmissions, overviewVideoPlatforms]);
+
   const analyticsQualityScoreFilterButtonLabel = useMemo(() => {
     if (analyticsQualityScoreFilters.length === 0) return "All Quality Scores";
     const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
@@ -3302,6 +3979,14 @@ export default function ContestDetailClient({
       const status = getStatus(submission);
       const isTwitterTweet = (submission as any).is_twitter_tweet === true;
 
+      if (submissionsScopedPlatform) {
+        if (
+          !submissionMatchesVideoPlatform(submission, submissionsScopedPlatform)
+        ) {
+          return false;
+        }
+      }
+
       if (activeStatusTab !== "all") {
         if (activeStatusTab === "not_rejected") {
           if (status === "rejected") return false;
@@ -3323,7 +4008,12 @@ export default function ContestDetailClient({
 
       return true;
     });
-  }, [qualityFilteredSubmissions, activeStatusTab, activeEligibilityTab]);
+  }, [
+    qualityFilteredSubmissions,
+    activeStatusTab,
+    activeEligibilityTab,
+    submissionsScopedPlatform,
+  ]);
 
   const sortedSubmissions = useMemo(() => {
     return [...filteredSubmissions].sort((a, b) => {
@@ -3426,7 +4116,9 @@ export default function ContestDetailClient({
 
   const canNormalViewBulkDownload =
     !isPostCampaignLeaderboard &&
-    canBulkDownloadContestVideos(currentContest?.platform);
+    canBulkDownloadContestVideos(
+      submissionsTablePlatform || currentContest?.platform,
+    );
 
   const showNormalViewSelectionUi =
     showNormalViewBulkModeration || canNormalViewBulkDownload;
@@ -3506,11 +4198,7 @@ export default function ContestDetailClient({
       {
         avg_quality_score: number | null;
         best_quality_score: number | null;
-        quality_score_counts?: {
-          score1: number;
-          score2: number;
-          score3: number;
-        };
+        quality_score_counts?: QualityScoreCounts;
       }
     >;
 
@@ -3537,9 +4225,7 @@ export default function ContestDetailClient({
                     null,
                   quality_score_counts: creatorQuality.quality_score_counts ??
                     existingCreator.quality_score_counts ?? {
-                      score1: 0,
-                      score2: 0,
-                      score3: 0,
+                      ...EMPTY_QUALITY_SCORE_COUNTS,
                     },
                 }
               : existingCreator,
@@ -3561,9 +4247,7 @@ export default function ContestDetailClient({
                 null,
               quality_score_counts: creatorQuality.quality_score_counts ??
                 existingCreator.quality_score_counts ?? {
-                  score1: 0,
-                  score2: 0,
-                  score3: 0,
+                  ...EMPTY_QUALITY_SCORE_COUNTS,
                 },
             },
           };
@@ -3698,10 +4382,30 @@ export default function ContestDetailClient({
     return ordered;
   }, [normalViewSelectedSubmissions, sortedSubmissions]);
 
+  const orderedNormalViewDownloadableIds = useMemo(
+    () =>
+      orderedNormalViewDownloadIds.filter((id) => {
+        const sub =
+          currentSubmissions.find((entry) => entry.id === id) ||
+          sortedSubmissions.find((entry) => entry.id === id);
+        return canDownloadSubmissionVideo({
+          platform: sub?.platform,
+          contestPlatform: currentContest?.platform,
+          contentLink: sub?.content_link,
+        });
+      }),
+    [
+      orderedNormalViewDownloadIds,
+      currentSubmissions,
+      sortedSubmissions,
+      currentContest?.platform,
+    ],
+  );
+
   const normalViewDownloadSplit = useMemo(
     () =>
       splitDownloadSubmissionIdsByPlatform(
-        orderedNormalViewDownloadIds,
+        orderedNormalViewDownloadableIds,
         (id) => {
           const sub = currentSubmissions.find((entry) => entry.id === id);
           if (!sub) return null;
@@ -3713,7 +4417,7 @@ export default function ContestDetailClient({
         },
       ),
     [
-      orderedNormalViewDownloadIds,
+      orderedNormalViewDownloadableIds,
       currentSubmissions,
       currentContest?.platform,
     ],
@@ -3722,13 +4426,23 @@ export default function ContestDetailClient({
   const handleNormalViewBulkDownload = async () => {
     if (normalViewSelectedSubmissions.size === 0) return;
 
-    if (normalViewSelectedSubmissions.size === 1) {
-      const singleSubmissionId =
-        orderedNormalViewDownloadIds[0] ||
-        Array.from(normalViewSelectedSubmissions)[0];
-      const submission = currentSubmissions.find(
-        (s) => s.id === singleSubmissionId,
-      );
+    const downloadableIds = orderedNormalViewDownloadableIds;
+
+    if (downloadableIds.length === 0) {
+      toast({
+        title: "No downloadable videos",
+        description:
+          "TikTok videos can't be downloaded. Select Instagram or YouTube submissions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (downloadableIds.length === 1) {
+      const singleSubmissionId = downloadableIds[0];
+      const submission =
+        currentSubmissions.find((s) => s.id === singleSubmissionId) ||
+        sortedSubmissions.find((s) => s.id === singleSubmissionId);
       const kind = classifyDownloadVideoPlatform({
         platform: submission?.platform,
         contestPlatform: currentContest?.platform,
@@ -3771,7 +4485,7 @@ export default function ContestDetailClient({
         ? options.submissionIds
         : normalViewDownloadSplit.instagramIds.length > 0
           ? normalViewDownloadSplit.instagramIds
-          : orderedNormalViewDownloadIds;
+          : orderedNormalViewDownloadableIds;
     if (submissionIds.length < 1) return;
     if (!currentContest?.id) return;
 
@@ -3830,8 +4544,6 @@ export default function ContestDetailClient({
       const rawStatus = (submission.status || "pending").toLowerCase();
       const normalizedStatus =
         rawStatus === "approved" ? "verified" : rawStatus;
-      const metrics = extractPlatformMetrics(submission);
-      const views = Number(metrics?.views ?? submission.views ?? 0);
 
       return {
         id: submission.id,
@@ -3839,7 +4551,9 @@ export default function ContestDetailClient({
         created_at: submission.created_at,
         status: normalizedStatus,
         deleted_at: submission.deleted_at,
-        views: Number.isFinite(views) ? views : 0,
+        views: submission.views,
+        platform: submission.platform ?? null,
+        other_stats: submission.other_stats,
       };
     });
   }, [leaderboardSubmissions]);
@@ -3847,89 +4561,27 @@ export default function ContestDetailClient({
   const milestoneSubmissionAssignments = useMemo<{
     payoutMap: Map<string, number>;
     labelMap: Map<string, string>;
-    winnerCountsByMilestone: Map<number, number>;
+    winnerCountsByKey: Map<string, number>;
   }>(() => {
+    const empty = {
+      payoutMap: new Map<string, number>(),
+      labelMap: new Map<string, string>(),
+      winnerCountsByKey: new Map<string, number>(),
+    };
     const isMilestoneLike =
       isMilestoneContestType(currentContest?.contest_type) ||
       isDualRewardsContestType(currentContest?.contest_type);
-    if (!isMilestoneLike) {
-      return {
-        payoutMap: new Map<string, number>(),
-        labelMap: new Map<string, string>(),
-        winnerCountsByMilestone: new Map<number, number>(),
-      };
-    }
-    const milestones =
-      currentContest?.contest_based_details?.milestone_contest?.milestones;
-    if (!Array.isArray(milestones) || milestones.length === 0) {
-      return {
-        payoutMap: new Map<string, number>(),
-        labelMap: new Map<string, string>(),
-        winnerCountsByMilestone: new Map<number, number>(),
-      };
-    }
-    const sortedMilestones = [...milestones].sort(
-      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
+    if (!isMilestoneLike) return empty;
+    return buildMilestoneSubmissionPayoutAssignmentsFromDetails(
+      milestonePayoutEligibleSubmissions,
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
     );
-    const winnerCountsByMilestone = new Map<number, number>();
-    const submissionPayoutMap = new Map<string, number>();
-    const submissionMilestoneLabelMap = new Map<string, string>();
-
-    const eligible = milestonePayoutEligibleSubmissions
-      .filter(
-        (submission: any) =>
-          (submission.status === "pending" ||
-            submission.status === "verified" ||
-            submission.status === "paid") &&
-          submission.deleted_at == null,
-      )
-      .sort((a: any, b: any) => {
-        const at = new Date(a.created_at || 0).getTime();
-        const bt = new Date(b.created_at || 0).getTime();
-        return at - bt;
-      });
-
-    eligible.forEach((submission: any) => {
-      let payoutCents = 0;
-      let milestoneLabel = "—";
-      const submissionViews = Number(submission.views || 0);
-
-      for (const milestone of sortedMilestones) {
-        const targetViews = Number(milestone.target_views || 0);
-        if (submissionViews < targetViews) continue;
-
-        if (milestone.winner_limit != null) {
-          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
-          if (currentWinners >= milestone.winner_limit) {
-            continue;
-          }
-          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
-        }
-
-        payoutCents = Number(milestone.payout_cents || 0);
-        const milestoneOrder = Number(milestone.order);
-        const hasMilestoneOrder =
-          Number.isFinite(milestoneOrder) && milestoneOrder > 0;
-        const targetLabel = `${targetViews.toLocaleString()} views`;
-        const payoutLabel = `$${(payoutCents / 100).toFixed(2)}`;
-        milestoneLabel = hasMilestoneOrder
-          ? `Milestone ${milestoneOrder} • ${targetLabel} • ${payoutLabel}`
-          : `Milestone • ${targetLabel} • ${payoutLabel}`;
-        break;
-      }
-
-      submissionPayoutMap.set(submission.id, payoutCents);
-      submissionMilestoneLabelMap.set(submission.id, milestoneLabel);
-    });
-
-    return {
-      payoutMap: submissionPayoutMap,
-      labelMap: submissionMilestoneLabelMap,
-      winnerCountsByMilestone,
-    };
   }, [
     currentContest?.contest_type,
     currentContest?.contest_based_details,
+    currentContest?.platform,
     milestonePayoutEligibleSubmissions,
   ]);
   const milestoneSubmissionExpectedPayoutCents =
@@ -3940,7 +4592,7 @@ export default function ContestDetailClient({
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
   const filteredAnalyticsSubmissions =
-    analyticsQualityFilteredSubmissions.filter((submission) => {
+    analyticsPlatformScopedSubmissions.filter((submission) => {
       const status = getStatus(submission);
 
       if (activeAnalyticsTab === "all") return true;
@@ -3971,18 +4623,22 @@ export default function ContestDetailClient({
     () =>
       getPlatformCampaignMetricCards(
         filteredAnalyticsSubmissions as ContestAnalyticsExportSubmission[],
-        currentContest?.platform,
+        analyticsScopedPlatform ?? currentContest?.platform,
       ),
-    [filteredAnalyticsSubmissions, currentContest?.platform],
+    [
+      filteredAnalyticsSubmissions,
+      analyticsScopedPlatform,
+      currentContest?.platform,
+    ],
   );
 
   const analyticsTabCounts = useMemo(
     () =>
       getAnalyticsTabCounts(
-        analyticsQualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
+        analyticsPlatformScopedSubmissions as ContestAnalyticsExportSubmission[],
         (submission) => getStatus(submission as Submission),
       ),
-    [analyticsQualityFilteredSubmissions],
+    [analyticsPlatformScopedSubmissions],
   );
 
   const showsAnalyticsExpectedRewardMetrics =
@@ -4009,11 +4665,19 @@ export default function ContestDetailClient({
     }
 
     const cpmCfg = currentContest?.contest_based_details?.cpm_contest;
+    const maxKeyed = isKeyedMaxEarningsMap(
+      (currentContest as any)?.max_earnings_per_creator,
+    );
     const maxEarningsPerCreator = Number(
-      (currentContest as any)?.max_earnings_per_creator ??
+      resolveMaxEarningsCentsForSubmission(
+        currentContest as any,
+        currentContest?.platform,
+      ) ??
         (cpmCfg as any)?.max_earnings_per_creator ??
         0,
     );
+    const getMaxForSub = (platform?: string | null) =>
+      resolveMaxEarningsCentsForSubmission(currentContest as any, platform);
 
     const grouped = new Map<string, Submission[]>();
     for (const sub of leaderboardSubmissions || []) {
@@ -4032,11 +4696,12 @@ export default function ContestDetailClient({
 
       if (
         isDualRewardsContestType(currentContest?.contest_type) &&
-        maxEarningsPerCreator > 0
+        (maxKeyed || maxEarningsPerCreator > 0)
       ) {
         const rows = list.map((sub) => ({
           id: sub.id,
           created_at: sub.created_at,
+          platform: sub.platform,
           mRawCents: Number(
             milestoneSubmissionExpectedPayoutCents.get(sub.id) || 0,
           ),
@@ -4046,7 +4711,9 @@ export default function ContestDetailClient({
           ),
         }));
         const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
-          buildDualRewardCreatorCapSplitMaps(rows, maxEarningsPerCreator);
+          buildDualRewardCreatorCapSplitMapsByPlatform(rows, getMaxForSub, {
+            keyedCaps: maxKeyed,
+          });
         for (const r of rows) {
           preAdjustmentUncappedMap.set(r.id, r.cRawCents);
           preAdjustmentCappedMap.set(
@@ -4061,7 +4728,7 @@ export default function ContestDetailClient({
         continue;
       }
 
-      let runningTotal = 0;
+      const runningByPlatform = new Map<string, number>();
       for (const sub of list) {
         const baseExpectedReward = Math.max(
           0,
@@ -4076,12 +4743,19 @@ export default function ContestDetailClient({
           );
         }
 
-        if (!maxEarningsPerCreator || maxEarningsPerCreator <= 0) {
+        const subMax = maxKeyed
+          ? Number(getMaxForSub(sub.platform) || 0)
+          : maxEarningsPerCreator;
+        if (!subMax || subMax <= 0) {
           preAdjustmentCappedMap.set(sub.id, baseExpectedReward);
           continue;
         }
 
-        const remainingCap = maxEarningsPerCreator - runningTotal;
+        const runKey = maxKeyed
+          ? String(sub.platform || "").toLowerCase() || "_"
+          : "_";
+        const runningTotal = runningByPlatform.get(runKey) || 0;
+        const remainingCap = subMax - runningTotal;
         let cappedExpectedReward = baseExpectedReward;
         if (remainingCap <= 0) {
           cappedExpectedReward = 0;
@@ -4093,7 +4767,7 @@ export default function ContestDetailClient({
           baseExpectedReward,
           Math.max(0, remainingCap),
         );
-        runningTotal += amountApplied;
+        runningByPlatform.set(runKey, runningTotal + amountApplied);
       }
     }
     return {
@@ -4108,8 +4782,9 @@ export default function ContestDetailClient({
   ]);
 
   // Non-Twitter leaderboard: prize per eligible submission (verified/approved/paid by views).
-  // Always rank from live currentSubmissions (not post-campaign overlay) so Expected
-  // Reward matches bulk-payment / verify-submission. Requires the full contest set.
+  // Same prizes across platforms → All-tab contest-wide rank. Different prizes →
+  // each platform's own ladder. Always rank from live currentSubmissions so Expected
+  // Reward matches bulk-payment / verify-submission.
   const leaderboardPrizeCentsBySubmissionId = useMemo(() => {
     if (
       currentContest?.contest_type !== "leaderboard" ||
@@ -4117,16 +4792,12 @@ export default function ContestDetailClient({
     ) {
       return new Map<string, number>();
     }
-    const prizes =
-      currentContest?.contest_based_details?.leaderboard_contest?.prizes || [];
-    if (!Array.isArray(prizes) || prizes.length === 0) {
-      return new Map<string, number>();
-    }
     const eligibleSubs: Array<{
       id: string;
       views?: number | null;
       status?: string | null;
       paid?: boolean | null;
+      platform?: string | null;
     }> = [];
     for (const s of currentSubmissions || []) {
       const id = String((s as any)?.id || "");
@@ -4136,10 +4807,21 @@ export default function ContestDetailClient({
         views: (s as any)?.views,
         status: (s as any)?.status,
         paid: (s as any)?.paid,
+        platform: (s as any)?.platform,
       });
     }
-    return buildLeaderboardPrizeCentsBySubmissionId(eligibleSubs, prizes);
-  }, [currentContest, currentSubmissions]);
+    return buildLeaderboardPrizeCentsBySubmissionIdForContest({
+      rows: eligibleSubs,
+      details:
+        (contestState.contest_based_details as Record<string, unknown>) ||
+        (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      contestPlatform: currentContest?.platform,
+      fallbackPrizes:
+        currentContest?.contest_based_details?.leaderboard_contest?.prizes ||
+        [],
+    });
+  }, [contestState.contest_based_details, currentContest, currentSubmissions]);
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
@@ -4563,9 +5245,7 @@ export default function ContestDetailClient({
             avg_quality_score: submission.creator?.avg_quality_score ?? null,
             best_quality_score: submission.creator?.best_quality_score ?? null,
             quality_score_counts: submission.creator?.quality_score_counts ?? {
-              score1: 0,
-              score2: 0,
-              score3: 0,
+              ...EMPTY_QUALITY_SCORE_COUNTS,
             },
             total_money_won: submission.creator?.total_money_won ?? 0,
             total_views: submission.creator?.total_views ?? 0,
@@ -4678,15 +5358,9 @@ export default function ContestDetailClient({
         group.creator.quality_score_sum = submission.creator.quality_score_sum;
       }
       const existingCounts = group.creator?.quality_score_counts;
-      const existingCountsTotal =
-        (existingCounts?.score1 ?? 0) +
-        (existingCounts?.score2 ?? 0) +
-        (existingCounts?.score3 ?? 0);
+      const existingCountsTotal = sumQualityScoreCounts(existingCounts);
       const submissionCounts = submission.creator?.quality_score_counts;
-      const submissionCountsTotal =
-        (submissionCounts?.score1 ?? 0) +
-        (submissionCounts?.score2 ?? 0) +
-        (submissionCounts?.score3 ?? 0);
+      const submissionCountsTotal = sumQualityScoreCounts(submissionCounts);
       if (
         submissionCounts &&
         submissionCountsTotal > 0 &&
@@ -4736,15 +5410,11 @@ export default function ContestDetailClient({
 
       const isPaidSubmission = moderationBucket === "paid";
 
-      if (
-        moderationBucket === "verified" ||
-        moderationBucket === "paid"
-      ) {
-        const flatFeeBonus = isCpmContestType(currentContest?.contest_type)
-          ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-          : (currentContest?.contest_based_details as any)?.leaderboard_contest
-              ?.flat_fee_bonus || 0;
+      if (moderationBucket === "verified" || moderationBucket === "paid") {
+        const flatFeeBonus = getFlatFeeBonusLadderForSubmission(
+          currentContest as any,
+          submission.platform,
+        ).amountCents;
 
         // Calculate bonus with budget constraints (include paid so Bonus Expected is not 0 after grant)
         // Dual rewards: pool covers CPM + milestones; no per-submission flat fee bonus here.
@@ -4792,11 +5462,10 @@ export default function ContestDetailClient({
         )
       ) {
         // Use actual bonus_amount from database if available
-        const flatFeeBonus = isCpmContestType(currentContest?.contest_type)
-          ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-          : (currentContest?.contest_based_details as any)?.leaderboard_contest
-              ?.flat_fee_bonus || 0;
+        const flatFeeBonus = getFlatFeeBonusLadderForSubmission(
+          currentContest as any,
+          submission.platform,
+        ).amountCents;
         const actualBonus = isDualRewardsContestType(
           currentContest?.contest_type,
         )
@@ -4899,11 +5568,9 @@ export default function ContestDetailClient({
             ? (milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0)
             : 0;
         const cpmCents = isCpmContestType(currentContest?.contest_type)
-          ? isDualRew
-            ? (cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                submission.id,
-              ) ?? 0)
-            : calculateSubmissionExpectedEarnings(submission, false)
+          ? (cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              submission.id,
+            ) ?? calculateSubmissionExpectedEarnings(submission, false))
           : 0;
         const submissionEarnings = milestoneCents + cpmCents;
         group.earnings.expected += submissionEarnings;
@@ -4971,6 +5638,12 @@ export default function ContestDetailClient({
         group.metrics.manual_points_reason;
     });
 
+    const isTwitterCpmContest =
+      (currentContest?.platform?.toLowerCase() === "twitter" ||
+        currentContest?.platform?.toLowerCase() === "x") &&
+      currentContest?.contest_format === "text_image" &&
+      isCpmContestType(currentContest?.contest_type);
+
     if (isDualRewardsContestType(currentContest?.contest_type)) {
       Object.values(grouped).forEach((group: any) => {
         let rawTotal = 0;
@@ -4993,6 +5666,30 @@ export default function ContestDetailClient({
               sub.id,
             ) ?? rawM;
           cappedTotal += capC + capM;
+        }
+        if (rawTotal > cappedTotal + 1) {
+          group.isCapped = true;
+          group.earningsBeforeCap = rawTotal;
+        }
+      });
+    } else if (
+      isCpmContestType(currentContest?.contest_type) &&
+      !isTwitterCpmContest
+    ) {
+      Object.values(grouped).forEach((group: any) => {
+        let rawTotal = 0;
+        let cappedTotal = 0;
+        for (const sub of group.submissions || []) {
+          const tw =
+            sub.is_twitter_tweet ||
+            String(sub.platform || "").toLowerCase() === "twitter";
+          if (tw) continue;
+          const rawC = calculateSubmissionExpectedEarnings(sub, false);
+          rawTotal += rawC;
+          cappedTotal +=
+            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              sub.id,
+            ) ?? rawC;
         }
         if (rawTotal > cappedTotal + 1) {
           group.isCapped = true;
@@ -5081,12 +5778,6 @@ export default function ContestDetailClient({
     }
 
     // Calculate earnings for Twitter CPM campaigns based on CPM rate and points
-    const isTwitterCpmContest =
-      (currentContest?.platform?.toLowerCase() === "twitter" ||
-        currentContest?.platform?.toLowerCase() === "x") &&
-      currentContest?.contest_format === "text_image" &&
-      isCpmContestType(currentContest?.contest_type);
-
     if (isTwitterCpmContest) {
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
@@ -5235,47 +5926,38 @@ export default function ContestDetailClient({
     }
 
     // For non-Twitter leaderboard campaigns (e.g. Instagram / YouTube),
-    // Expected Reward = sum of each eligible submission's contest-wide rank prize
-    // (same helper as bulk-payment / verify-submission — avoid UI/pay drift).
+    // Expected Reward = sum of each eligible submission's rank prize
+    // (All-tab rank when prizes match; per-platform rank when they differ).
     const isNonTwitterLeaderboard =
       currentContest?.contest_type === "leaderboard" &&
       !isTwitterTextImageLeaderboardContest(currentContest);
 
     if (isNonTwitterLeaderboard) {
-      const prizes =
-        currentContest?.contest_based_details?.leaderboard_contest?.prizes ||
-        [];
-      if (Array.isArray(prizes) && prizes.length > 0) {
-        const allCreators = Object.values(grouped) as any[];
-        allCreators.forEach((group: any) => {
-          group.earnings.expected = (group.submissions || []).reduce(
-            (sum: number, s: any) =>
-              sum +
-              (leaderboardPrizeCentsBySubmissionId.get(String(s.id)) || 0),
-            0,
-          );
+      const allCreators = Object.values(grouped) as any[];
+      allCreators.forEach((group: any) => {
+        group.earnings.expected = (group.submissions || []).reduce(
+          (sum: number, s: any) =>
+            sum + (leaderboardPrizeCentsBySubmissionId.get(String(s.id)) || 0),
+          0,
+        );
 
-          const grantedFromSubs = (group.submissions || []).reduce(
-            (sum: number, s: any) => {
-              if (!isSubmissionPaidForGrantedReward(s)) return sum;
-              return sum + Math.max(0, Number(s?.earnings) || 0);
-            },
-            0,
-          );
-          group.earnings.granted = grantedFromSubs;
-        });
-      }
+        const grantedFromSubs = (group.submissions || []).reduce(
+          (sum: number, s: any) => {
+            if (!isSubmissionPaidForGrantedReward(s)) return sum;
+            return sum + Math.max(0, Number(s?.earnings) || 0);
+          },
+          0,
+        );
+        group.earnings.granted = grantedFromSubs;
+      });
     }
 
     if (
       isMilestoneContestType(currentContest?.contest_type) &&
       !isCpmContestType(currentContest?.contest_type)
     ) {
-      const milestoneDetails =
-        currentContest?.contest_based_details?.milestone_contest;
-      const milestones = milestoneDetails?.milestones || [];
-      if (milestones.length > 0) {
-        const payoutMap = milestoneSubmissionExpectedPayoutCents;
+      const payoutMap = milestoneSubmissionExpectedPayoutCents;
+      if (payoutMap.size > 0) {
         Object.values(grouped).forEach((group: any) => {
           const submissions = group.submissions || [];
           group.earnings.expected = submissions.reduce(
@@ -5306,13 +5988,20 @@ export default function ContestDetailClient({
     }
 
     // Apply earnings cap per creator for expected earnings display (for non-CPM campaigns)
-    const maxEarnings =
-      currentContest?.max_earnings_per_creator ??
-      (currentContest?.contest_based_details as any)?.cpm_contest
-        ?.max_earnings_per_creator ??
-      (currentContest?.contest_based_details as any)?.leaderboard_contest
-        ?.max_earnings_per_creator ??
-      null;
+    const maxKeyedForGroup = isKeyedMaxEarningsMap(
+      currentContest?.max_earnings_per_creator,
+    );
+    const maxEarnings = maxKeyedForGroup
+      ? null
+      : (resolveMaxEarningsCentsForSubmission(
+          currentContest as any,
+          currentContest?.platform,
+        ) ??
+        (currentContest?.contest_based_details as any)?.cpm_contest
+          ?.max_earnings_per_creator ??
+        (currentContest?.contest_based_details as any)?.leaderboard_contest
+          ?.max_earnings_per_creator ??
+        null);
     if (
       maxEarnings &&
       maxEarnings > 0 &&
@@ -5327,6 +6016,48 @@ export default function ContestDetailClient({
           group.earnings.expected = maxEarnings;
         }
         // Do NOT cap granted earnings - it already reflects actual paid amounts from database
+      });
+    } else if (
+      maxKeyedForGroup &&
+      !isTwitterCpmContest &&
+      !isDualRewardsContestType(currentContest?.contest_type) &&
+      !isCpmContestType(currentContest?.contest_type)
+    ) {
+      Object.values(grouped).forEach((group: any) => {
+        const running = new Map<string, number>();
+        let cappedTotal = 0;
+        const subs = [...(group.submissions || [])].sort(
+          (a: any, b: any) =>
+            new Date(a.created_at || 0).getTime() -
+            new Date(b.created_at || 0).getTime(),
+        );
+        for (const sub of subs) {
+          const raw = String(getStatus(sub) || "").toLowerCase();
+          const st = raw === "approved" ? "verified" : raw;
+          if (st === "rejected") continue;
+          const base = Number(
+            milestoneSubmissionExpectedPayoutCents.get(sub.id) ?? 0,
+          );
+          const max =
+            resolveMaxEarningsCentsForSubmission(
+              currentContest as any,
+              sub.platform,
+            ) || 0;
+          const key = String(sub.platform || "").toLowerCase() || "_";
+          const used = running.get(key) || 0;
+          let capped = base;
+          if (max > 0) {
+            const remaining = max - used;
+            capped = remaining <= 0 ? 0 : Math.min(base, remaining);
+            running.set(key, used + capped);
+          }
+          cappedTotal += capped;
+        }
+        if (cappedTotal < group.earnings.expected) {
+          group.isCapped = true;
+          group.earningsBeforeCap = group.earnings.expected;
+          group.earnings.expected = cappedTotal;
+        }
       });
     }
 
@@ -5488,9 +6219,17 @@ export default function ContestDetailClient({
     return false;
   }, [isTwitterTextImageContest, currentContest.contest_type]);
 
+  const overviewExportPlatform = useMemo(
+    () =>
+      platformsForTab(overviewPlatformTab, overviewVideoPlatforms).join(",") ||
+      currentContest.platform ||
+      "",
+    [overviewPlatformTab, overviewVideoPlatforms, currentContest.platform],
+  );
+
   const submissionExportColumnOptions = useMemo(
     () => ({
-      platform: currentContest.platform || "",
+      platform: submissionsTablePlatform || currentContest.platform || "",
       contestFormat: currentContest.contest_format,
       contestType: currentContest.contest_type,
       isTwitterTextImage: isTwitterTextImageContest,
@@ -5509,6 +6248,7 @@ export default function ContestDetailClient({
       ytVisibleColumnIds: ytVisibleColumns,
     }),
     [
+      submissionsTablePlatform,
       currentContest.platform,
       currentContest.contest_format,
       currentContest.contest_type,
@@ -5527,9 +6267,23 @@ export default function ContestDetailClient({
     ],
   );
 
+  const fullReportSubmissionColumnOptions = useMemo(
+    () => ({
+      ...submissionExportColumnOptions,
+      platform: overviewExportPlatform,
+    }),
+    [submissionExportColumnOptions, overviewExportPlatform],
+  );
+
   const submissionExportDefaultColumnIds = useMemo(
     () => getSubmissionExportDefaultColumnIds(submissionExportColumnOptions),
     [submissionExportColumnOptions],
+  );
+
+  const fullReportSubmissionDefaultColumnIds = useMemo(
+    () =>
+      getSubmissionExportDefaultColumnIds(fullReportSubmissionColumnOptions),
+    [fullReportSubmissionColumnOptions],
   );
 
   const submissionExportRewardContext = useMemo<RewardExportContext>(
@@ -5701,29 +6455,36 @@ export default function ContestDetailClient({
     return !isInstagramOrYoutube;
   }, [showRejectionReasonColumn, currentContest?.platform]);
 
-  const milestoneMostVerifiedReelsConfig = isMilestoneContestType(
-    currentContest?.contest_type,
-  )
-    ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-        ?.most_verified_reels
-    : null;
-  const milestoneMostVerifiedViewsConfig = isMilestoneContestType(
-    currentContest?.contest_type,
-  )
-    ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-        ?.most_verified_views
-    : null;
+  const milestoneBonusConfigs = useMemo(
+    () =>
+      isMilestoneContestType(currentContest?.contest_type)
+        ? collectMilestoneBonusConfigs(
+            (currentContest?.contest_based_details as Record<
+              string,
+              unknown
+            >) || null,
+            currentContest?.platform,
+          )
+        : [],
+    [
+      currentContest?.contest_type,
+      currentContest?.contest_based_details,
+      currentContest?.platform,
+    ],
+  );
+  const milestoneMostVerifiedReelsConfig = milestoneBonusConfigs.find(
+    (bonus) => bonus.most_verified_reels,
+  )?.most_verified_reels;
+  const milestoneMostVerifiedViewsConfig = milestoneBonusConfigs.find(
+    (bonus) => bonus.most_verified_views,
+  )?.most_verified_views;
   const showMostVerifiedViewsBonusColumns = Boolean(
     isMilestoneContestType(currentContest?.contest_type) &&
-    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-      ?.enabled &&
-    milestoneMostVerifiedViewsConfig,
+    milestoneBonusConfigs.some((bonus) => bonus.most_verified_views),
   );
   const showMostVerifiedReelsCreatorColumn = Boolean(
     isMilestoneContestType(currentContest?.contest_type) &&
-    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
-      ?.enabled &&
-    milestoneMostVerifiedReelsConfig,
+    milestoneBonusConfigs.some((bonus) => bonus.most_verified_reels),
   );
   const showCreatorMilestoneVerifiedBonusActions =
     Boolean(isAdminView) &&
@@ -5782,10 +6543,7 @@ export default function ContestDetailClient({
     )
       return empty;
 
-    const bonusConfig = (currentContest?.contest_based_details as any)
-      ?.milestone_contest?.bonus;
-
-    return buildMilestoneMostVerifiedBonusByCreatorMap(
+    return buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
       (leaderboardSubmissions || []).map((sub: any) => ({
         id: sub.id,
         creator_id: milestoneMvCreatorIdKey(sub.creator_id),
@@ -5793,12 +6551,16 @@ export default function ContestDetailClient({
         status: getStatus(sub),
         deleted_at: sub.deleted_at,
         views: sub.views,
+        platform: sub.platform,
+        other_stats: sub.other_stats,
         bonus_paid: sub.bonus_paid,
         bonus_amount: sub.bonus_amount,
         milestone_bonus_paid: sub.milestone_bonus_paid,
         metadata: sub.metadata,
       })),
-      bonusConfig,
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
       milestoneLedgerNormalized,
       {
         shouldAdjustMostVerifiedMilestoneBonus:
@@ -5867,64 +6629,31 @@ export default function ContestDetailClient({
       isMilestoneContestType(currentContest?.contest_type) ||
       isDualRewardsContestType(currentContest?.contest_type);
     if (!isMilestoneLike) return empty;
-    const milestones =
-      currentContest?.contest_based_details?.milestone_contest?.milestones;
-    if (!Array.isArray(milestones) || milestones.length === 0) return empty;
 
-    const sortedMilestones = [...milestones].sort(
-      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
-    );
-    const winnerCountsByMilestone = new Map<number, number>();
-    const payoutMap = new Map<string, number>();
-
-    const eligible = (currentSubmissions || [])
-      .map((submission) => {
+    return buildMilestoneSubmissionPayoutAssignmentsFromDetails(
+      (currentSubmissions || []).map((submission) => {
         const rawStatus = (submission.status || "pending").toLowerCase();
         const normalizedStatus =
           rawStatus === "approved" ? "verified" : rawStatus;
-        const metrics = extractPlatformMetrics(submission);
-        const views = Number(metrics?.views ?? submission.views ?? 0);
         return {
           id: submission.id,
+          creator_id: submission.creator_id || null,
           created_at: submission.created_at,
           status: normalizedStatus,
           deleted_at: submission.deleted_at,
-          views: Number.isFinite(views) ? views : 0,
+          views: submission.views,
+          platform: submission.platform ?? null,
+          other_stats: submission.other_stats,
         };
-      })
-      .filter(
-        (submission) =>
-          (submission.status === "pending" ||
-            submission.status === "verified" ||
-            submission.status === "paid") &&
-          submission.deleted_at == null,
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.created_at || 0).getTime() -
-          new Date(b.created_at || 0).getTime(),
-      );
-
-    for (const submission of eligible) {
-      let payoutCents = 0;
-      const submissionViews = Number(submission.views || 0);
-      for (const milestone of sortedMilestones) {
-        const targetViews = Number(milestone.target_views || 0);
-        if (submissionViews < targetViews) continue;
-        if (milestone.winner_limit != null) {
-          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
-          if (currentWinners >= milestone.winner_limit) continue;
-          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
-        }
-        payoutCents = Number(milestone.payout_cents || 0);
-        break;
-      }
-      payoutMap.set(submission.id, payoutCents);
-    }
-    return payoutMap;
+      }),
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
+    ).payoutMap;
   }, [
     currentContest?.contest_type,
     currentContest?.contest_based_details,
+    currentContest?.platform,
     currentSubmissions,
   ]);
 
@@ -5963,11 +6692,8 @@ export default function ContestDetailClient({
     ) {
       return empty;
     }
-    const bonusConfig = (currentContest?.contest_based_details as any)
-      ?.milestone_contest?.bonus;
-    if (!bonusConfig?.enabled) return empty;
 
-    return buildMilestoneMostVerifiedBonusByCreatorMap(
+    return buildMilestoneMostVerifiedBonusByCreatorMapFromDetails(
       (currentSubmissions || []).map((sub: any) => ({
         id: sub.id,
         creator_id: milestoneMvCreatorIdKey(sub.creator_id),
@@ -5975,12 +6701,16 @@ export default function ContestDetailClient({
         status: getStatus(sub),
         deleted_at: sub.deleted_at,
         views: sub.views,
+        platform: sub.platform,
+        other_stats: sub.other_stats,
         bonus_paid: sub.bonus_paid,
         bonus_amount: sub.bonus_amount,
         milestone_bonus_paid: sub.milestone_bonus_paid,
         metadata: sub.metadata,
       })),
-      bonusConfig,
+      (currentContest?.contest_based_details as Record<string, unknown>) ||
+        null,
+      currentContest?.platform,
       milestoneLedgerNormalized,
       {
         shouldAdjustMostVerifiedMilestoneBonus:
@@ -6147,7 +6877,7 @@ export default function ContestDetailClient({
 
   const creatorExportColumnOptions = useMemo(
     () => ({
-      platform: currentContest.platform || "",
+      platform: submissionsTablePlatform || currentContest.platform || "",
       contestFormat: currentContest.contest_format,
       contestType: currentContest.contest_type,
       isTwitterTextImage: isTwitterTextImageContest,
@@ -6170,6 +6900,7 @@ export default function ContestDetailClient({
       showRejectionReasonColumn: showRejectionReasonInCreatorView,
     }),
     [
+      submissionsTablePlatform,
       currentContest.platform,
       currentContest.contest_format,
       currentContest.contest_type,
@@ -6191,9 +6922,22 @@ export default function ContestDetailClient({
     ],
   );
 
+  const fullReportCreatorColumnOptions = useMemo(
+    () => ({
+      ...creatorExportColumnOptions,
+      platform: overviewExportPlatform,
+    }),
+    [creatorExportColumnOptions, overviewExportPlatform],
+  );
+
   const creatorExportDefaultColumnIds = useMemo(
     () => getCreatorExportDefaultColumnIds(creatorExportColumnOptions),
     [creatorExportColumnOptions],
+  );
+
+  const fullReportCreatorDefaultColumnIds = useMemo(
+    () => getCreatorExportDefaultColumnIds(fullReportCreatorColumnOptions),
+    [fullReportCreatorColumnOptions],
   );
 
   const creatorExportContext = useMemo<CreatorExportContext>(
@@ -6281,7 +7025,13 @@ export default function ContestDetailClient({
     setCurrentPage(1);
     setCreatorWisePage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on filter/sort changes
-  }, [activeStatusTab, viewMode, sortOption, submissionQualityScoreFilters]);
+  }, [
+    activeStatusTab,
+    submissionsPlatformTab,
+    viewMode,
+    sortOption,
+    submissionQualityScoreFilters,
+  ]);
 
   // Keep the table in view when changing page or page size (skip first mount)
   const submissionsPageScrollReadyRef = useRef(false);
@@ -6575,7 +7325,12 @@ export default function ContestDetailClient({
     };
     // Only re-run when contest / SSR seed / retry changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contestId, initialSubmissions, initialSubmissionTotal, submissionsHydrateRetry]);
+  }, [
+    contestId,
+    initialSubmissions,
+    initialSubmissionTotal,
+    submissionsHydrateRetry,
+  ]);
 
   useEffect(() => {
     setCurrentContest(contest);
@@ -9550,12 +10305,25 @@ export default function ContestDetailClient({
       }
       setIsRefreshingMetrics(true);
       try {
+        const refreshPlatforms = platformsForRefreshTab(
+          submissionsPlatformTab,
+          overviewVideoPlatforms,
+        );
+        const youtubeScope = youtubeScopeForMetricsRefresh({
+          campaignPlatformCount: overviewVideoPlatforms.length,
+          forceBasic: !isAdminView,
+        });
         const response = await fetch(
           `/api/contests/${contestId}/post-campaign-submissions/refresh-metrics`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scope: "basic" }),
+            body: JSON.stringify({
+              scope: youtubeScope,
+              ...(refreshPlatforms.length > 0
+                ? { platforms: refreshPlatforms }
+                : {}),
+            }),
           },
         );
         const result = await response.json().catch(() => ({}));
@@ -9604,33 +10372,39 @@ export default function ContestDetailClient({
           }
 
           for (const run of queuedRuns) {
-            if (run.platform === "youtube") {
-              setYoutubeRun(createPendingYoutubeRefreshRun(run.runId));
-              setShowYoutubeRunPopup(true);
-              setYoutubeRunCompleted(false);
-            } else if (run.platform === "tiktok") {
-              setShowTiktokRunPopup(true);
-              setTiktokRunCompleted(false);
-            } else {
-              setInstagramRun(createPendingInstagramRefreshRun(run.runId));
-              setShowInstagramRunPopup(true);
-              setInstagramRunCompleted(false);
-            }
+            if (run.platform === "youtube") setYoutubeRunCompleted(false);
+            else if (run.platform === "tiktok") setTiktokRunCompleted(false);
+            else setInstagramRunCompleted(false);
+          }
+          setShowYoutubeRunPopup(false);
+          setShowInstagramRunPopup(false);
+          setShowTiktokRunPopup(false);
+          const firstPostQueued = queuedRuns[0];
+          if (firstPostQueued?.platform === "youtube") {
+            setYoutubeRun(
+              createPendingYoutubeRefreshRun(
+                firstPostQueued.runId,
+                youtubeScope,
+              ),
+            );
+            setShowYoutubeRunPopup(true);
+          } else if (firstPostQueued?.platform === "tiktok") {
+            setShowTiktokRunPopup(true);
+          } else if (firstPostQueued) {
+            setInstagramRun(
+              createPendingInstagramRefreshRun(firstPostQueued.runId),
+            );
+            setShowInstagramRunPopup(true);
           }
 
           const previousUpdated = postCampaignLastMetricsUpdated;
           const refreshStartedMs = Date.now();
           const started = Date.now();
           const maxMs = 600000;
-          const pendingRunIds = new Set(
-            queuedRuns
-              .map((r) => r.runId)
-              .filter((id): id is string => typeof id === "string"),
-          );
-          // If enqueue didn't return runIds, wait until every status path is terminal.
-          const pendingStatusPaths = new Set(
-            queuedRuns.map((r) => r.statusPath),
-          );
+          const isChain = Boolean(result.chain) || queuedRuns.length > 1;
+          const STUCK_AFTER_TERMINAL_MS = 45_000;
+          let continueInFlight = false;
+          let waitingForNextSinceMs: number | null = null;
 
           const clearPlatformPopups = () => {
             for (const run of queuedRuns) {
@@ -9648,49 +10422,133 @@ export default function ContestDetailClient({
           };
 
           const finishPostCampaignRefresh = async (
-            run:
-              | InstagramInsightsRefreshRunSummary
-              | YouTubeMetricsRefreshRunSummary
-              | TikTokMetricsRefreshRunSummary
-              | null,
-            terminalStatus: string,
+            states: Array<{
+              platform: string;
+              run:
+                | InstagramInsightsRefreshRunSummary
+                | YouTubeMetricsRefreshRunSummary
+                | TikTokMetricsRefreshRunSummary
+                | null;
+            }>,
+            options?: { partial?: boolean },
           ) => {
             clearPlatformPopups();
             await loadPostCampaignMetrics({ force: true });
             setIsRefreshingMetrics(false);
-            if (terminalStatus === "completed" && run) {
+
+            const toastPlatforms = filterMetricsRefreshToastPlatforms(
+              states.flatMap((s): MetricsRefreshToastPlatformResult[] => {
+                if (
+                  !s.run ||
+                  (s.platform !== "youtube" &&
+                    s.platform !== "instagram" &&
+                    s.platform !== "tiktok")
+                ) {
+                  return [];
+                }
+                return [
+                  {
+                    platform: s.platform,
+                    status: s.run.status,
+                    run: s.run,
+                    mode: "post_campaign",
+                    includeReviewed: s.platform === "instagram",
+                  },
+                ];
+              }),
+            );
+
+            if (options?.partial) {
               toast({
-                title: `Post-campaign ${platformLabels || "metrics"} refresh completed`,
-                description: formatPostCampaignRefreshToastDescription(run),
+                title: "Post-campaign refresh finished (partial)",
+                description:
+                  "One or more later platforms did not start. Try Refresh Metrics again if needed.",
                 duration: 10000,
-                variant: "success",
+                variant: "destructive",
+              });
+            } else if (toastPlatforms.length > 0) {
+              toast({
+                title: metricsRefreshToastTitleFromResults(toastPlatforms, {
+                  prefix: "Post-campaign",
+                }),
+                description: (
+                  <MetricsRefreshToastDescription platforms={toastPlatforms} />
+                ),
+                duration: 16000,
+                variant: metricsRefreshToastVariantFromResults(toastPlatforms),
               });
             }
             schedulePostRefreshReload();
           };
 
+          const tryContinueChain = async (next: QueuedRun) => {
+            if (!isChain || continueInFlight) return;
+            if (
+              next.platform !== "youtube" &&
+              next.platform !== "instagram" &&
+              next.platform !== "tiktok"
+            ) {
+              return;
+            }
+            continueInFlight = true;
+            try {
+              const enqueueUrl = postCampaignEnqueuePathForPlatform(
+                contestId,
+                next.platform as PostCampaignVideoPlatform,
+              );
+              const body: Record<string, unknown> = {
+                metricsTarget: "post_campaign",
+                chainContinue: true,
+              };
+              if (next.platform === "youtube") body.scope = youtubeScope;
+              const eres = await fetch(enqueueUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(body),
+              });
+              const edata = await eres.json().catch(() => ({}));
+              if (eres.ok && typeof edata.runId === "string") {
+                next.runId = edata.runId;
+              }
+            } catch {
+              // server advance may still succeed
+            } finally {
+              continueInFlight = false;
+            }
+          };
+
           let pollTimer: ReturnType<typeof setInterval>;
+          const stopPolling = () => {
+            clearInterval(pollTimer);
+            metricsRefreshManualPollStopRef.current = null;
+          };
+
           const pollOnce = async () => {
             if (Date.now() - started > maxMs) {
-              clearInterval(pollTimer);
+              stopPolling();
               setIsRefreshingMetrics(false);
               return;
             }
             try {
-              let allTerminal = true;
-              let lastCompletedRun:
-                | InstagramInsightsRefreshRunSummary
-                | YouTubeMetricsRefreshRunSummary
-                | TikTokMetricsRefreshRunSummary
-                | null = null;
-              let lastTerminalStatus = "completed";
+              const states: Array<{
+                tracked: boolean;
+                terminal: boolean;
+                run:
+                  | InstagramInsightsRefreshRunSummary
+                  | YouTubeMetricsRefreshRunSummary
+                  | TikTokMetricsRefreshRunSummary
+                  | null;
+              }> = [];
 
-              for (const queued of queuedRuns) {
+              // Sequential: only poll through the first non-terminal platform.
+              for (let i = 0; i < queuedRuns.length; i++) {
+                const queued = queuedRuns[i]!;
                 const statusUrl = `/api/contests/${contestId}/${queued.statusPath}?metricsTarget=post_campaign`;
                 const sres = await fetch(statusUrl);
                 if (!sres.ok) {
-                  allTerminal = false;
-                  continue;
+                  states.push({ tracked: false, terminal: false, run: null });
+                  break;
                 }
                 const sj = await sres.json();
                 const run = sj?.run as
@@ -9698,65 +10556,123 @@ export default function ContestDetailClient({
                   | YouTubeMetricsRefreshRunSummary
                   | TikTokMetricsRefreshRunSummary
                   | null;
-                if (
-                  !run ||
-                  !isTrackedPostCampaignRun(run, {
+                const tracked = Boolean(
+                  run &&
+                  isTrackedPostCampaignRun(run, {
                     activeRunId: queued.runId,
                     refreshStartedMs,
-                  })
-                ) {
-                  allTerminal = false;
-                  continue;
+                  }),
+                );
+                const terminal =
+                  tracked && isTerminalPostCampaignRunStatus(run?.status);
+
+                if (tracked && run) {
+                  if (queued.platform === "youtube") {
+                    setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                  } else if (queued.platform === "tiktok") {
+                    setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                  } else {
+                    setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                  }
+                  if (!queued.runId && run.id) queued.runId = run.id;
                 }
 
-                if (queued.platform === "youtube") {
-                  setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
-                } else if (queued.platform === "tiktok") {
-                  setTiktokRun(run as TikTokMetricsRefreshRunSummary);
-                } else {
-                  setInstagramRun(run as InstagramInsightsRefreshRunSummary);
-                }
+                states.push({ tracked, terminal, run: tracked ? run : null });
 
-                const st = run.status;
-                if (!isTerminalPostCampaignRunStatus(st)) {
-                  allTerminal = false;
-                  continue;
+                if (!tracked || !terminal) {
+                  break;
                 }
-
-                lastCompletedRun = run;
-                lastTerminalStatus = st;
-                if (queued.runId) pendingRunIds.delete(queued.runId);
-                pendingStatusPaths.delete(queued.statusPath);
               }
 
-              const trackedDone =
-                pendingRunIds.size === 0 &&
-                (queuedRuns.every((r) => r.runId) ||
-                  pendingStatusPaths.size === 0);
+              // Pad remaining as not-yet-started (do not poll them)
+              while (states.length < queuedRuns.length) {
+                states.push({ tracked: false, terminal: false, run: null });
+              }
 
-              if (allTerminal && trackedDone) {
-                clearInterval(pollTimer);
+              const pollIndex = resolveSequentialRefreshPollIndex(states);
+
+              if (pollIndex < queuedRuns.length) {
+                const curQueued = queuedRuns[pollIndex]!;
+                const cur = curQueued.platform;
+                if (!states[pollIndex]?.tracked) {
+                  if (cur === "youtube") {
+                    setYoutubeRunCompleted(false);
+                    setYoutubeRun(
+                      createPendingYoutubeRefreshRun(
+                        curQueued.runId,
+                        youtubeScope,
+                      ),
+                    );
+                  } else if (cur === "tiktok") {
+                    setTiktokRunCompleted(false);
+                    setTiktokRun(
+                      createPendingTiktokRefreshRun(curQueued.runId),
+                    );
+                  } else if (cur === "instagram") {
+                    setInstagramRunCompleted(false);
+                    setInstagramRun(
+                      createPendingInstagramRefreshRun(curQueued.runId),
+                    );
+                  }
+                }
+                setShowYoutubeRunPopup(cur === "youtube");
+                setShowInstagramRunPopup(cur === "instagram");
+                setShowTiktokRunPopup(cur === "tiktok");
+              }
+
+              if (pollIndex >= queuedRuns.length) {
+                stopPolling();
                 await finishPostCampaignRefresh(
-                  lastCompletedRun,
-                  lastTerminalStatus,
+                  states.map((s, i) => ({
+                    platform: queuedRuns[i]?.platform ?? "",
+                    run: s.run,
+                  })),
                 );
                 return;
               }
 
-              // Fallback: detect overlay timestamp bump
-              const mres = await fetch(
-                `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
-              );
-              if (mres.ok) {
-                const md = await mres.json();
-                const updated = md.post_campaign_last_metrics_updated ?? null;
-                if (updated && updated !== previousUpdated) {
-                  // Only finish early when every queued platform looks terminal.
-                  if (allTerminal) {
-                    clearInterval(pollTimer);
+              const current = states[pollIndex];
+              if (current && !current.tracked && pollIndex > 0) {
+                const prev = states[pollIndex - 1];
+                if (prev?.terminal) {
+                  if (waitingForNextSinceMs == null) {
+                    waitingForNextSinceMs = Date.now();
+                  }
+                  await tryContinueChain(queuedRuns[pollIndex]!);
+                  if (
+                    Date.now() - (waitingForNextSinceMs ?? Date.now()) >
+                    STUCK_AFTER_TERMINAL_MS
+                  ) {
+                    stopPolling();
                     await finishPostCampaignRefresh(
-                      lastCompletedRun,
-                      lastTerminalStatus,
+                      states.map((s, i) => ({
+                        platform: queuedRuns[i]?.platform ?? "",
+                        run: s.run,
+                      })),
+                      { partial: true },
+                    );
+                    return;
+                  }
+                }
+              } else {
+                waitingForNextSinceMs = null;
+              }
+
+              // Fallback: overlay timestamp bump when last platform is terminal
+              if (pollIndex >= queuedRuns.length - 1 && current?.terminal) {
+                const mres = await fetch(
+                  `/api/contests/${contestId}/post-campaign-submissions?probe=1`,
+                );
+                if (mres.ok) {
+                  const md = await mres.json();
+                  const updated = md.post_campaign_last_metrics_updated ?? null;
+                  if (updated && updated !== previousUpdated) {
+                    stopPolling();
+                    await finishPostCampaignRefresh(
+                      states.map((s, i) => ({
+                        platform: queuedRuns[i]?.platform ?? "",
+                        run: s.run,
+                      })),
                     );
                     return;
                   }
@@ -9769,6 +10685,7 @@ export default function ContestDetailClient({
 
           void pollOnce();
           pollTimer = setInterval(() => void pollOnce(), 3000);
+          metricsRefreshManualPollStopRef.current = stopPolling;
           return;
         }
 
@@ -9834,6 +10751,24 @@ export default function ContestDetailClient({
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify(
+            (() => {
+              const refreshPlatforms = platformsForRefreshTab(
+                submissionsPlatformTab,
+                overviewVideoPlatforms,
+              );
+              const youtubeScope = youtubeScopeForMetricsRefresh({
+                campaignPlatformCount: overviewVideoPlatforms.length,
+                forceBasic: !isAdminView,
+              });
+              return {
+                ...(refreshPlatforms.length > 0
+                  ? { platforms: refreshPlatforms }
+                  : {}),
+                ...(youtubeScope !== "basic" ? { scope: youtubeScope } : {}),
+              };
+            })(),
+          ),
           signal: controller.signal,
         },
       );
@@ -9846,11 +10781,40 @@ export default function ContestDetailClient({
       }
 
       if (result?.queued) {
-        const metricsPlatform = resolveMetricsRefreshPlatform(
-          currentContest.platform,
+        type QueuedLiveRun = {
+          platform: string;
+          platformLabel?: string;
+          runId?: string;
+          statusPath?: string;
+        };
+        const rawQueuedRuns: QueuedLiveRun[] = Array.isArray(
+          (result as { runs?: QueuedLiveRun[] }).runs,
+        )
+          ? (result as { runs: QueuedLiveRun[] }).runs.filter(
+              (r) => r && typeof r.platform === "string",
+            )
+          : [];
+        // Hide platforms with no local submissions (server also filters eligible).
+        const localWithSubs = new Set(
+          platformsWithLocalSubmissionsForRefresh(
+            overviewVideoPlatforms as PostCampaignVideoPlatform[],
+            currentSubmissions,
+          ),
         );
+        let queuedRunsFromApi: QueuedLiveRun[] =
+          submissionsFullyHydrated && localWithSubs.size > 0
+            ? rawQueuedRuns.filter((r) =>
+                localWithSubs.has(r.platform as PostCampaignVideoPlatform),
+              )
+            : rawQueuedRuns;
+
+        if (queuedRunsFromApi.length === 0 && rawQueuedRuns.length > 0) {
+          // Local filter emptied everything — fall back to server list.
+          queuedRunsFromApi = rawQueuedRuns;
+        }
+
         const previousUpdated = currentContest.last_metrics_updated ?? null;
-        const pollMaxMs = metricsPlatform ? 600000 : 120000;
+        const pollMaxMs = 600000;
 
         metricsRefreshManualPollStopRef.current?.();
 
@@ -9888,30 +10852,54 @@ export default function ContestDetailClient({
         const handleManualRefreshTerminal = (
           platform: MetricsRefreshPlatform,
           run: { id: string; status: string } | null,
+          options?: { skipToast?: boolean; skipReload?: boolean },
         ) => {
           finishManualRefreshPoll();
           setIsRefreshingMetrics(false);
           if (!run) {
-            window.location.reload();
+            if (!options?.skipReload) window.location.reload();
             return;
           }
 
           const status = run.status;
+          const skipToast = options?.skipToast === true;
           switch (platform) {
             case "instagram": {
               const igRun = run as InstagramInsightsRefreshRunSummary;
               setInstagramRun(igRun);
               setInstagramRunCompleted(true);
               setShowInstagramRunPopup(false);
-              if (status === "completed") {
+              if (!skipToast && status === "completed") {
+                const platforms = filterMetricsRefreshToastPlatforms([
+                  {
+                    platform: "instagram",
+                    status,
+                    run: igRun,
+                    mode: "live",
+                    includeReviewed: true,
+                  },
+                ]);
+                if (platforms.length > 0) {
+                  toast({
+                    title: metricsRefreshToastTitleFromResults(platforms),
+                    description: (
+                      <MetricsRefreshToastDescription platforms={platforms} />
+                    ),
+                    duration: 12000,
+                    variant: "success",
+                  });
+                }
+              } else if (!skipToast && status === "failed") {
                 toast({
-                  title: "Instagram insights refresh completed",
-                  description: `Reviewed ${igRun.reviewed_count ?? 0}, Processed ${igRun.processed_submissions ?? 0}. Success: ${igRun.success_count ?? 0}, Permanent failure: ${igRun.permanent_failure_count ?? 0}, Temporary failure: ${igRun.temporary_failure_count ?? 0}, Skipped: ${igRun.skipped_recent_count ?? 0}.`,
-                  duration: 10000,
-                  variant: "success",
+                  title: liveMetricsRefreshToastTitle("instagram", status),
+                  description:
+                    igRun.error_message?.slice(0, 500) ??
+                    "The refresh run ended with an error.",
+                  duration: 12000,
+                  variant: "destructive",
                 });
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
             case "twitter": {
@@ -9919,14 +10907,14 @@ export default function ContestDetailClient({
               setTwitterRun(twRun);
               setTwitterRunCompleted(true);
               setShowTwitterRunPopup(false);
-              if (status === "completed") {
+              if (!skipToast && status === "completed") {
                 toast({
                   title: "Twitter metrics refresh completed",
                   description: `${twRun.is_raid ? "Raid" : "Awareness"} · Participants ${twRun.processed_participants ?? 0}/${twRun.total_participants ?? 0} · Rows touched ${twRun.tweets_upserted ?? 0}`,
                   duration: 10000,
                   variant: "success",
                 });
-              } else if (status === "failed") {
+              } else if (!skipToast && status === "failed") {
                 toast({
                   title: "Twitter metrics refresh failed",
                   description:
@@ -9936,7 +10924,7 @@ export default function ContestDetailClient({
                   variant: "destructive",
                 });
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
             case "tiktok": {
@@ -9944,15 +10932,36 @@ export default function ContestDetailClient({
               setTiktokRun(ttRun);
               setTiktokRunCompleted(true);
               setShowTiktokRunPopup(false);
-              if (status === "completed") {
+              if (!skipToast && status === "completed") {
+                const platforms = filterMetricsRefreshToastPlatforms([
+                  {
+                    platform: "tiktok",
+                    status,
+                    run: ttRun,
+                    mode: "live",
+                  },
+                ]);
+                if (platforms.length > 0) {
+                  toast({
+                    title: metricsRefreshToastTitleFromResults(platforms),
+                    description: (
+                      <MetricsRefreshToastDescription platforms={platforms} />
+                    ),
+                    duration: 12000,
+                    variant: "success",
+                  });
+                }
+              } else if (!skipToast && status === "failed") {
                 toast({
-                  title: "TikTok metrics refresh completed",
-                  description: `Processed ${ttRun.processed_submissions ?? 0} submissions. Success: ${ttRun.success_count ?? 0}, Permanent failure: ${ttRun.permanent_failure_count ?? 0}, Temporary failure: ${ttRun.temporary_failure_count ?? 0}.`,
-                  duration: 10000,
-                  variant: "success",
+                  title: liveMetricsRefreshToastTitle("tiktok", status),
+                  description:
+                    ttRun.error_message?.slice(0, 500) ??
+                    "The refresh run ended with an error.",
+                  duration: 12000,
+                  variant: "destructive",
                 });
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
             case "youtube": {
@@ -9960,18 +10969,34 @@ export default function ContestDetailClient({
               setYoutubeRun(ytRun);
               setYoutubeRunCompleted(true);
               setShowYoutubeRunPopup(false);
-              if (ytRun.id && !notifiedYoutubeRunIds.current.has(ytRun.id)) {
+              if (
+                !skipToast &&
+                ytRun.id &&
+                !notifiedYoutubeRunIds.current.has(ytRun.id)
+              ) {
                 notifiedYoutubeRunIds.current.add(ytRun.id);
                 if (status === "completed") {
+                  const platforms = filterMetricsRefreshToastPlatforms([
+                    {
+                      platform: "youtube",
+                      status,
+                      run: ytRun,
+                      mode: "live",
+                    },
+                  ]);
+                  if (platforms.length > 0) {
+                    toast({
+                      title: metricsRefreshToastTitleFromResults(platforms),
+                      description: (
+                        <MetricsRefreshToastDescription platforms={platforms} />
+                      ),
+                      duration: 12000,
+                      variant: "success",
+                    });
+                  }
+                } else if (status === "failed" || status === "cancelled") {
                   toast({
-                    title: "YouTube refresh completed",
-                    description: `Scope: ${ytRun.scope} · Success ${ytRun.success_count ?? 0} · Temporary Failure ${ytRun.temporary_failure_count ?? 0} · Permanent Failure ${ytRun.permanent_failure_count ?? 0} · Skipped ${ytRun.skipped_recent_count ?? 0}`,
-                    duration: 10000,
-                    variant: "success",
-                  });
-                } else if (status === "failed") {
-                  toast({
-                    title: "YouTube refresh failed",
+                    title: liveMetricsRefreshToastTitle("youtube", status),
                     description:
                       ytRun.error_message?.slice(0, 500) ??
                       "The refresh run ended with an error.",
@@ -9980,54 +11005,574 @@ export default function ContestDetailClient({
                   });
                 }
               }
-              schedulePostRefreshReload();
+              if (!options?.skipReload) schedulePostRefreshReload();
               break;
             }
           }
         };
 
-        if (metricsPlatform) {
-          metricsRefreshManualPollStopRef.current = startMetricsRunPolling({
-            contestId,
-            platform: metricsPlatform,
-            maxMs: pollMaxMs,
-            onRun: (run) => handleManualRefreshRunUpdate(metricsPlatform, run),
-            onTerminal: (run) =>
-              handleManualRefreshTerminal(metricsPlatform, run),
-            onTimeout: () => {
-              finishManualRefreshPoll();
-              setIsRefreshingMetrics(false);
-            },
+        const toastMultiPlatformRefreshSummaries = (
+          states: Array<{
+            platform: MetricsRefreshPlatform | null;
+            run: { id: string; status: string } | null;
+          }>,
+        ) => {
+          const order: Array<"youtube" | "instagram" | "tiktok"> = [
+            "youtube",
+            "instagram",
+            "tiktok",
+          ];
+          const platforms: MetricsRefreshToastPlatformResult[] = [];
+
+          for (const platform of order) {
+            const state = states.find((s) => s.platform === platform);
+            const run = state?.run;
+            if (!run) continue;
+            const countsRun = run as InstagramInsightsRefreshRunSummary &
+              YouTubeMetricsRefreshRunSummary &
+              TikTokMetricsRefreshRunSummary;
+
+            if (platform === "youtube") {
+              notifiedYoutubeRunIds.current.add(run.id);
+            }
+
+            platforms.push({
+              platform,
+              status: run.status,
+              run: countsRun,
+              mode: "live",
+              includeReviewed: platform === "instagram",
+            });
+          }
+
+          const visible = filterMetricsRefreshToastPlatforms(platforms);
+          if (visible.length === 0) return;
+
+          toast({
+            title: metricsRefreshToastTitleFromResults(visible),
+            description: <MetricsRefreshToastDescription platforms={visible} />,
+            duration: 16000,
+            variant: metricsRefreshToastVariantFromResults(visible),
           });
-        } else {
-          const startedAt = Date.now();
-          const pollTimer = setInterval(async () => {
-            if (Date.now() - startedAt > pollMaxMs) {
-              clearInterval(pollTimer);
-              finishManualRefreshPoll();
-              setIsRefreshingMetrics(false);
+        };
+
+        // Multi-platform chain: poll sequentially (YouTube → Instagram → TikTok).
+        if (queuedRunsFromApi.length > 1) {
+          const refreshStartedMs = Date.now();
+          const platformLabels = queuedRunsFromApi
+            .map((r) => r.platformLabel || r.platform)
+            .join(" → ");
+          const STUCK_AFTER_TERMINAL_MS = 45_000;
+          let continueInFlight = false;
+          let waitingForNextSinceMs: number | null = null;
+          const youtubeScope = youtubeScopeForMetricsRefresh({
+            campaignPlatformCount: overviewVideoPlatforms.length,
+            forceBasic: !isAdminView,
+          });
+
+          // One card at a time: YouTube → Instagram → TikTok.
+          // Brand uses YouTube basic; admin multi uses `all` unless forced basic.
+          setShowYoutubeRunPopup(false);
+          setShowInstagramRunPopup(false);
+          setShowTiktokRunPopup(false);
+          // Clear stale completed runs so the next platform never flashes COMPLETED.
+          for (const run of queuedRunsFromApi) {
+            if (run.platform === "youtube") {
+              setYoutubeRunCompleted(false);
+              setYoutubeRun(
+                createPendingYoutubeRefreshRun(run.runId, youtubeScope),
+              );
+            } else if (run.platform === "tiktok") {
+              setTiktokRunCompleted(false);
+              setTiktokRun(createPendingTiktokRefreshRun(run.runId));
+            } else if (run.platform === "instagram") {
+              setInstagramRunCompleted(false);
+              setInstagramRun(createPendingInstagramRefreshRun(run.runId));
+            }
+          }
+          const firstQueued = queuedRunsFromApi[0]!;
+          if (firstQueued.platform === "youtube") {
+            setShowYoutubeRunPopup(true);
+          } else if (firstQueued.platform === "instagram") {
+            setShowInstagramRunPopup(true);
+          } else if (firstQueued.platform === "tiktok") {
+            setShowTiktokRunPopup(true);
+          }
+
+          toast({
+            title: "Multi-platform refresh started",
+            description:
+              (result as { message?: string }).message ||
+              `Refreshing ${platformLabels} in order…`,
+            variant: "success",
+            duration: 6000,
+          });
+
+          const seedPendingPlatformUi = (
+            platform: MetricsRefreshPlatform | null,
+            runId?: string,
+          ) => {
+            if (platform === "youtube") {
+              setYoutubeRunCompleted(false);
+              setYoutubeRun(
+                createPendingYoutubeRefreshRun(runId, youtubeScope),
+              );
+            } else if (platform === "instagram") {
+              setInstagramRunCompleted(false);
+              setInstagramRun(createPendingInstagramRefreshRun(runId));
+            } else if (platform === "tiktok") {
+              setTiktokRunCompleted(false);
+              setTiktokRun(createPendingTiktokRefreshRun(runId));
+            }
+          };
+
+          const focusPlatformCard = (
+            platform: MetricsRefreshPlatform | null,
+            run?: object | null,
+          ) => {
+            const totalSubmissions = (
+              run as { total_submissions?: number | null } | null | undefined
+            )?.total_submissions;
+            // Don't show progress UI for platforms with no submissions.
+            if (
+              typeof totalSubmissions === "number" &&
+              totalSubmissions <= 0
+            ) {
+              setShowYoutubeRunPopup(false);
+              setShowInstagramRunPopup(false);
+              setShowTiktokRunPopup(false);
               return;
             }
+            setShowYoutubeRunPopup(platform === "youtube");
+            setShowInstagramRunPopup(platform === "instagram");
+            setShowTiktokRunPopup(platform === "tiktok");
+          };
+
+          const applyTrackedRunToUi = (
+            platform: MetricsRefreshPlatform,
+            run: {
+              id: string;
+              status: string;
+              total_submissions?: number | null;
+            },
+            focus: boolean,
+          ) => {
+            const active = run.status === "pending" || run.status === "running";
+            switch (platform) {
+              case "instagram":
+                setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+                setInstagramRunCompleted(!active);
+                break;
+              case "tiktok":
+                setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+                setTiktokRunCompleted(!active);
+                break;
+              case "youtube":
+                setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+                setYoutubeRunCompleted(!active);
+                break;
+              default:
+                break;
+            }
+            if (focus) focusPlatformCard(platform, run);
+          };
+
+          const tryContinueChain = async (next: QueuedLiveRun) => {
+            if (continueInFlight) return;
+            if (
+              next.platform !== "youtube" &&
+              next.platform !== "instagram" &&
+              next.platform !== "tiktok"
+            ) {
+              return;
+            }
+            continueInFlight = true;
             try {
-              const res = await fetch(
-                `/api/contests/${contestId}/last-metrics-updated`,
+              const enqueueUrl = postCampaignEnqueuePathForPlatform(
+                contestId,
+                next.platform as PostCampaignVideoPlatform,
               );
-              if (!res.ok) return;
-              const data = await res.json();
-              const newUpdated = data.last_metrics_updated ?? null;
-              if (newUpdated && newUpdated !== previousUpdated) {
-                clearInterval(pollTimer);
-                finishManualRefreshPoll();
-                setIsRefreshingMetrics(false);
-                window.location.reload();
+              const body: Record<string, unknown> = {
+                metricsTarget: "submissions",
+                chainContinue: true,
+              };
+              if (next.platform === "youtube") body.scope = youtubeScope;
+              const eres = await fetch(enqueueUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(body),
+              });
+              const edata = await eres.json().catch(() => ({}));
+              if (eres.ok && typeof edata.runId === "string") {
+                next.runId = edata.runId;
               }
             } catch {
               // ignore
+            } finally {
+              continueInFlight = false;
             }
-          }, 3000);
-          metricsRefreshManualPollStopRef.current = () => {
-            clearInterval(pollTimer);
           };
+
+          const started = Date.now();
+          let pollTimer: ReturnType<typeof setInterval> | null = null;
+          let finishing = false;
+          let pollInFlight = false;
+
+          const clearPollTimer = () => {
+            if (pollTimer != null) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+            }
+          };
+
+          const finishMultiPlatformChain = (
+            states: Array<{
+              platform: MetricsRefreshPlatform | null;
+              run: { id: string; status: string } | null;
+              terminal?: boolean;
+            }>,
+            options?: { partial?: boolean },
+          ) => {
+            if (finishing) return;
+            finishing = true;
+            clearPollTimer();
+            // Do not call finishManualRefreshPoll() here — it invokes this same
+            // stop ref and used to recurse until the finish path never completed.
+            metricsRefreshManualPollStopRef.current = null;
+            setIsRefreshingMetrics(false);
+
+            const last =
+              [...states].reverse().find((s) => s.run) ??
+              states[states.length - 1] ??
+              null;
+            if (last?.platform && last.run) {
+              switch (last.platform) {
+                case "instagram":
+                  setInstagramRun(
+                    last.run as InstagramInsightsRefreshRunSummary,
+                  );
+                  setInstagramRunCompleted(true);
+                  setShowInstagramRunPopup(true);
+                  setShowYoutubeRunPopup(false);
+                  setShowTiktokRunPopup(false);
+                  break;
+                case "tiktok":
+                  setTiktokRun(last.run as TikTokMetricsRefreshRunSummary);
+                  setTiktokRunCompleted(true);
+                  setShowTiktokRunPopup(true);
+                  setShowYoutubeRunPopup(false);
+                  setShowInstagramRunPopup(false);
+                  break;
+                case "youtube":
+                  setYoutubeRun(last.run as YouTubeMetricsRefreshRunSummary);
+                  setYoutubeRunCompleted(true);
+                  setShowYoutubeRunPopup(true);
+                  setShowInstagramRunPopup(false);
+                  setShowTiktokRunPopup(false);
+                  break;
+              }
+            }
+
+            try {
+              toastMultiPlatformRefreshSummaries(states);
+              if (options?.partial) {
+                toast({
+                  title: "Refresh finished (partial)",
+                  description:
+                    "A later platform did not start. Try Refresh Metrics again if needed.",
+                  variant: "destructive",
+                  duration: 10000,
+                });
+              }
+            } catch {
+              // still reload below
+            }
+
+            // Keep final progress visible briefly so Processed N/N can paint.
+            window.setTimeout(() => {
+              setShowYoutubeRunPopup(false);
+              setShowInstagramRunPopup(false);
+              setShowTiktokRunPopup(false);
+              schedulePostRefreshReload();
+            }, 2200);
+          };
+
+          const fetchPlatformStatus = async (queued: QueuedLiveRun) => {
+            const platform = resolveMetricsRefreshPlatform(queued.platform);
+            if (!platform || platform === "twitter") {
+              return {
+                tracked: false,
+                terminal: false,
+                platform: null as MetricsRefreshPlatform | null,
+                run: null as {
+                  id: string;
+                  status: string;
+                  started_at?: string;
+                  finished_at?: string | null;
+                } | null,
+              };
+            }
+            const statusPath =
+              queued.statusPath ||
+              `${platform === "youtube" ? "youtube-metrics-refresh" : platform === "tiktok" ? "tiktok-metrics-refresh" : "instagram-insights-refresh"}/status`;
+            try {
+              const sres = await fetch(
+                `/api/contests/${contestId}/${statusPath}`,
+              );
+              if (!sres.ok) {
+                return {
+                  tracked: false,
+                  terminal: false,
+                  platform,
+                  run: null,
+                };
+              }
+              const sj = await sres.json();
+              const run =
+                (sj?.run as {
+                  id: string;
+                  status: string;
+                  started_at?: string;
+                  finished_at?: string | null;
+                  total_submissions?: number | null;
+                } | null) ?? null;
+              const tracked = Boolean(
+                run &&
+                isTrackedPostCampaignRun(run, {
+                  activeRunId: queued.runId,
+                  refreshStartedMs,
+                }),
+              );
+              const emptyEligible =
+                tracked &&
+                run != null &&
+                typeof run.total_submissions === "number" &&
+                run.total_submissions <= 0;
+              const terminal =
+                tracked &&
+                Boolean(
+                  emptyEligible ||
+                  (run && isTerminalPostCampaignRunStatus(run.status)),
+                );
+              if (run && tracked && !queued.runId) queued.runId = run.id;
+              return { tracked, terminal, platform, run: tracked ? run : null };
+            } catch {
+              return {
+                tracked: false,
+                terminal: false,
+                platform,
+                run: null,
+              };
+            }
+          };
+
+          const pollOnce = async () => {
+            if (finishing || pollInFlight) return;
+            if (Date.now() - started > pollMaxMs) {
+              finishMultiPlatformChain([]);
+              return;
+            }
+            pollInFlight = true;
+            try {
+              // Sequential: only walk through platforms until the first incomplete one
+              // (YouTube → Instagram → TikTok). Later platforms stay un-polled until prior is done.
+              const settled: Array<{
+                tracked: boolean;
+                terminal: boolean;
+                platform: MetricsRefreshPlatform | null;
+                run: {
+                  id: string;
+                  status: string;
+                  started_at?: string;
+                  finished_at?: string | null;
+                } | null;
+              }> = [];
+
+              for (let i = 0; i < queuedRunsFromApi.length; i++) {
+                const queued = queuedRunsFromApi[i]!;
+                const state = await fetchPlatformStatus(queued);
+                settled.push(state);
+                if (state.tracked && state.run && state.platform) {
+                  applyTrackedRunToUi(state.platform, state.run, false);
+                }
+                if (!state.tracked || !state.terminal) {
+                  break;
+                }
+              }
+              while (settled.length < queuedRunsFromApi.length) {
+                const queued = queuedRunsFromApi[settled.length]!;
+                const platform = resolveMetricsRefreshPlatform(queued.platform);
+                settled.push({
+                  tracked: false,
+                  terminal: false,
+                  platform:
+                    platform && platform !== "twitter" ? platform : null,
+                  run: null,
+                });
+              }
+
+              if (finishing) return;
+
+              const pollIndex = resolveSequentialRefreshPollIndex(
+                settled.map((s) => ({
+                  tracked: s.tracked,
+                  terminal: s.terminal,
+                })),
+              );
+
+              if (pollIndex < queuedRunsFromApi.length) {
+                const curPlat = settled[pollIndex]?.platform ?? null;
+                const curRun = settled[pollIndex]?.run ?? null;
+                const curQueued = queuedRunsFromApi[pollIndex];
+                // Before showing the next platform, wipe any stale COMPLETED card
+                // from a prior refresh (esp. TikTok which had no pending seed).
+                if (!settled[pollIndex]?.tracked) {
+                  seedPendingPlatformUi(curPlat, curQueued?.runId);
+                }
+                focusPlatformCard(curPlat, curRun);
+              }
+
+              // Finish only when every queued platform has a tracked terminal run
+              // for THIS refresh (do not treat missing TikTok as done).
+              if (pollIndex >= queuedRunsFromApi.length) {
+                finishMultiPlatformChain(
+                  settled.map((s) => ({
+                    platform: s.platform,
+                    run: s.run,
+                    terminal: s.terminal,
+                  })),
+                );
+                return;
+              }
+
+              // Timestamp bump mid-chain (YouTube) must not finish early.
+              try {
+                const mres = await fetch(
+                  `/api/contests/${contestId}/last-metrics-updated`,
+                );
+                if (mres.ok) {
+                  const md = await mres.json();
+                  const updated = md.last_metrics_updated ?? null;
+                  if (
+                    updated &&
+                    updated !== previousUpdated &&
+                    pollIndex >= queuedRunsFromApi.length - 1 &&
+                    settled[pollIndex]?.terminal
+                  ) {
+                    const lastStates = await Promise.all(
+                      queuedRunsFromApi.map((q) => fetchPlatformStatus(q)),
+                    );
+                    if (lastStates.every((s) => s.tracked && s.terminal)) {
+                      finishMultiPlatformChain(
+                        lastStates.map((s) => ({
+                          platform: s.platform,
+                          run: s.run,
+                          terminal: s.terminal,
+                        })),
+                      );
+                      return;
+                    }
+                  }
+                }
+              } catch {
+                // ignore timestamp probe errors
+              }
+
+              const current = settled[pollIndex];
+              if (current && !current.tracked && pollIndex > 0) {
+                const prev = settled[pollIndex - 1];
+                if (prev?.terminal) {
+                  if (waitingForNextSinceMs == null) {
+                    waitingForNextSinceMs = Date.now();
+                  }
+                  await tryContinueChain(queuedRunsFromApi[pollIndex]!);
+                  if (
+                    Date.now() - (waitingForNextSinceMs ?? Date.now()) >
+                    STUCK_AFTER_TERMINAL_MS
+                  ) {
+                    finishMultiPlatformChain(
+                      settled
+                        .filter((s) => s.terminal)
+                        .map((s) => ({
+                          platform: s.platform,
+                          run: s.run,
+                          terminal: true,
+                        })),
+                      { partial: true },
+                    );
+                    return;
+                  }
+                }
+              } else {
+                waitingForNextSinceMs = null;
+              }
+            } catch {
+              // ignore poll errors
+            } finally {
+              pollInFlight = false;
+            }
+          };
+
+          void pollOnce();
+          // Poll faster so mid-batch Processed X/N updates are visible.
+          pollTimer = setInterval(() => void pollOnce(), 1500);
+          metricsRefreshManualPollStopRef.current = () => {
+            finishing = true;
+            clearPollTimer();
+            metricsRefreshManualPollStopRef.current = null;
+            setIsRefreshingMetrics(false);
+          };
+        } else {
+          const metricsPlatform =
+            queuedRunsFromApi.length === 1
+              ? resolveMetricsRefreshPlatform(queuedRunsFromApi[0]!.platform)
+              : resolveMetricsRefreshPlatform(currentContest.platform);
+
+          if (metricsPlatform) {
+            metricsRefreshManualPollStopRef.current = startMetricsRunPolling({
+              contestId,
+              platform: metricsPlatform,
+              maxMs: pollMaxMs,
+              onRun: (run) =>
+                handleManualRefreshRunUpdate(metricsPlatform, run),
+              onTerminal: (run) =>
+                handleManualRefreshTerminal(metricsPlatform, run),
+              onTimeout: () => {
+                finishManualRefreshPoll();
+                setIsRefreshingMetrics(false);
+              },
+            });
+          } else {
+            const startedAt = Date.now();
+            const pollTimer = setInterval(async () => {
+              if (Date.now() - startedAt > pollMaxMs) {
+                clearInterval(pollTimer);
+                finishManualRefreshPoll();
+                setIsRefreshingMetrics(false);
+                return;
+              }
+              try {
+                const res = await fetch(
+                  `/api/contests/${contestId}/last-metrics-updated`,
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                const newUpdated = data.last_metrics_updated ?? null;
+                if (newUpdated && newUpdated !== previousUpdated) {
+                  clearInterval(pollTimer);
+                  finishManualRefreshPoll();
+                  setIsRefreshingMetrics(false);
+                  window.location.reload();
+                }
+              } catch {
+                // ignore
+              }
+            }, 3000);
+            metricsRefreshManualPollStopRef.current = () => {
+              clearInterval(pollTimer);
+            };
+          }
         }
       } else {
         toast({
@@ -10142,7 +11687,17 @@ export default function ContestDetailClient({
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope }),
+        body: JSON.stringify({
+          scope,
+          ...(overviewVideoPlatforms.length > 0
+            ? {
+                platforms: platformsForRefreshTab(
+                  submissionsPlatformTab,
+                  overviewVideoPlatforms,
+                ),
+              }
+            : {}),
+        }),
       },
     );
     const result = await response.json().catch(() => ({}));
@@ -10186,14 +11741,26 @@ export default function ContestDetailClient({
             scope,
             new Date().toISOString(),
           );
-          toast({
-            title: "Post-campaign YouTube refresh completed",
-            description: formatPostCampaignRefreshToastDescription(run, {
-              scope,
-            }),
-            duration: 10000,
-            variant: "success",
-          });
+          const platforms = filterMetricsRefreshToastPlatforms([
+            {
+              platform: "youtube",
+              status: terminalStatus,
+              run: { ...run, scope: run.scope ?? scope },
+              mode: "post_campaign",
+            },
+          ]);
+          if (platforms.length > 0) {
+            toast({
+              title: metricsRefreshToastTitleFromResults(platforms, {
+                prefix: "Post-campaign",
+              }),
+              description: (
+                <MetricsRefreshToastDescription platforms={platforms} />
+              ),
+              duration: 12000,
+              variant: "success",
+            });
+          }
         }
         schedulePostRefreshReload();
       };
@@ -10501,17 +12068,31 @@ export default function ContestDetailClient({
         const ej = await eres.json().catch(() => ({}));
         if (eres.ok) {
           queuedYoutubeContest = true;
+          const refreshStartedMs = Date.now();
+          const activeRunId =
+            typeof ej.runId === "string" ? ej.runId : undefined;
+          setYoutubeRunCompleted(false);
+          setYoutubeRun(createPendingYoutubeRefreshRun(activeRunId, type));
           setShowYoutubeRunPopup(true);
-          const pollMs = 3000;
+          const pollMs = 1500;
           const maxMs = 600000;
           const started = Date.now();
+          const applyIfCurrentRun = (run: YouTubeMetricsRefreshRunSummary) => {
+            const tracked = isTrackedPostCampaignRun(run, {
+              activeRunId,
+              refreshStartedMs,
+            });
+            if (!tracked) return false;
+            setYoutubeRun(run);
+            return true;
+          };
           void fetch(
             `/api/contests/${contestId}/youtube-metrics-refresh/status`,
           )
             .then((r) => r.json())
             .then((sj) => {
               const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
-              if (run) setYoutubeRun(run);
+              if (run) applyIfCurrentRun(run);
             })
             .catch(() => {});
           const pollTimer = setInterval(async () => {
@@ -10535,21 +12116,20 @@ export default function ContestDetailClient({
               if (!sres.ok) return;
               const sj = await sres.json();
               const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
-              if (run) setYoutubeRun(run);
-              const st = run?.status;
+              if (!run || !applyIfCurrentRun(run)) return;
+              const st = run.status;
               if (st === "completed" || st === "failed" || st === "cancelled") {
                 clearInterval(pollTimer);
-                if (run) setYoutubeRun(run);
                 setYoutubeRunCompleted(true);
                 setIsRefreshingCore(false);
                 setIsRefreshingTraffic(false);
                 setIsRefreshingDemographics(false);
-                if (run?.id && !notifiedYoutubeRunIds.current.has(run.id)) {
+                if (run.id && !notifiedYoutubeRunIds.current.has(run.id)) {
                   notifiedYoutubeRunIds.current.add(run.id);
                   if (st === "completed") {
                     toast({
                       title: "YouTube analytics completed",
-                      description: `Scope: ${run?.scope ?? type} · Success ${run?.success_count ?? 0} · Temporary Failure ${run?.temporary_failure_count ?? 0} · Permanent Failure ${run?.permanent_failure_count ?? 0} · Skipped ${run?.skipped_recent_count ?? 0}`,
+                      description: `Scope: ${run.scope ?? type} · Success ${run.success_count ?? 0} · Temporary Failure ${run.temporary_failure_count ?? 0} · Permanent Failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}`,
                       duration: 10000,
                       variant: "success",
                     });
@@ -10557,7 +12137,7 @@ export default function ContestDetailClient({
                     toast({
                       title: "YouTube analytics failed",
                       description:
-                        run?.error_message?.slice(0, 400) ??
+                        run.error_message?.slice(0, 400) ??
                         "Run ended with an error.",
                       variant: "destructive",
                     });
@@ -10759,15 +12339,28 @@ export default function ContestDetailClient({
       const ej = await eres.json().catch(() => ({}));
       if (eres.ok) {
         queuedYoutubeFull = true;
+        const refreshStartedMs = Date.now();
+        const activeRunId = typeof ej.runId === "string" ? ej.runId : undefined;
+        setYoutubeRunCompleted(false);
+        setYoutubeRun(createPendingYoutubeRefreshRun(activeRunId, scope));
         setShowYoutubeRunPopup(true);
-        const pollMs = 3000;
+        const pollMs = 1500;
         const maxMs = 600000;
         const started = Date.now();
+        const applyIfCurrentRun = (run: YouTubeMetricsRefreshRunSummary) => {
+          const tracked = isTrackedPostCampaignRun(run, {
+            activeRunId,
+            refreshStartedMs,
+          });
+          if (!tracked) return false;
+          setYoutubeRun(run);
+          return true;
+        };
         void fetch(`/api/contests/${contestId}/youtube-metrics-refresh/status`)
           .then((r) => r.json())
           .then((sj) => {
             const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
-            if (run) setYoutubeRun(run);
+            if (run) applyIfCurrentRun(run);
           })
           .catch(() => {});
         const pollTimer = setInterval(async () => {
@@ -10783,21 +12376,20 @@ export default function ContestDetailClient({
             if (!sres.ok) return;
             const sj = await sres.json();
             const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
-            if (run) setYoutubeRun(run);
-            const st = run?.status;
+            if (!run || !applyIfCurrentRun(run)) return;
+            const st = run.status;
             if (st === "completed" || st === "failed" || st === "cancelled") {
               clearInterval(pollTimer);
-              if (run) setYoutubeRun(run);
               setYoutubeRunCompleted(true);
               setRefreshing(false);
-              if (run?.id && !notifiedYoutubeRunIds.current.has(run.id)) {
+              if (run.id && !notifiedYoutubeRunIds.current.has(run.id)) {
                 notifiedYoutubeRunIds.current.add(run.id);
                 if (st === "completed") {
                   toast({
                     title: isStandard
                       ? "Standard metrics updated"
                       : "All metrics updated",
-                    description: `Scope: ${run?.scope ?? scope} · Success ${run?.success_count ?? 0} · Temporary Failure ${run?.temporary_failure_count ?? 0} · Permanent Failure ${run?.permanent_failure_count ?? 0} · Skipped ${run?.skipped_recent_count ?? 0}`,
+                    description: `Scope: ${run.scope ?? scope} · Success ${run.success_count ?? 0} · Temporary Failure ${run.temporary_failure_count ?? 0} · Permanent Failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}`,
                     duration: 10000,
                     variant: "success",
                   });
@@ -10807,7 +12399,7 @@ export default function ContestDetailClient({
                       ? "Standard refresh failed"
                       : "Full refresh failed",
                     description:
-                      run?.error_message?.slice(0, 400) ??
+                      run.error_message?.slice(0, 400) ??
                       "The refresh run ended with an error.",
                     variant: "destructive",
                   });
@@ -10970,6 +12562,7 @@ export default function ContestDetailClient({
   const renderMilestoneVerifiedBonusMenuItems = (
     creatorId: string,
     extraDisabled?: boolean,
+    options?: { omitLeadingSeparator?: boolean },
   ) => {
     if (!showCreatorMilestoneVerifiedBonusActions || isPostCampaignLeaderboard)
       return null;
@@ -11008,7 +12601,7 @@ export default function ContestDetailClient({
 
     return (
       <>
-        <DropdownMenuSeparator />
+        {!options?.omitLeadingSeparator && <DropdownMenuSeparator />}
         <DropdownMenuLabel className="text-amber-600 dark:text-amber-400">
           Milestone bonus
         </DropdownMenuLabel>
@@ -11122,18 +12715,18 @@ export default function ContestDetailClient({
     const lowerPlatform = platform?.toLowerCase();
     if (lowerPlatform?.includes("youtube"))
       return (
-        <div className="flex items-center justify-center w-6 h-6">
+        <span className="inline-flex items-center justify-center w-6 h-6">
           <svg viewBox="0 0 24 24" className="w-6 h-6">
             <path
               fill="#FF0000"
               d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
             />
           </svg>
-        </div>
+        </span>
       );
     if (lowerPlatform?.includes("instagram"))
       return (
-        <div className="flex items-center justify-center w-6 h-6">
+        <span className="inline-flex items-center justify-center w-6 h-6">
           <svg viewBox="0 0 24 24" className="w-6 h-6">
             <defs>
               <linearGradient
@@ -11153,26 +12746,26 @@ export default function ContestDetailClient({
               d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"
             />
           </svg>
-        </div>
+        </span>
       );
     if (lowerPlatform?.includes("tiktok"))
       return (
-        <div className="flex items-center justify-center w-6 h-6">
+        <span className="inline-flex items-center justify-center w-6 h-6">
           <svg viewBox="0 0 24 24" className="w-6 h-6">
             <path
               d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.71a8.21 8.21 0 0 0 4.76 1.52V6.69h-1z"
               fill="#000000"
             />
           </svg>
-        </div>
+        </span>
       );
     if (lowerPlatform?.includes("twitter") || lowerPlatform?.includes("x.com"))
       return (
-        <div className="flex items-center justify-center w-6 h-6">
+        <span className="inline-flex items-center justify-center w-6 h-6">
           <svg viewBox="0 0 24 24" className="w-6 h-6" fill="#1DA1F2">
             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
           </svg>
-        </div>
+        </span>
       );
     return <Share2 className="h-6 w-6 text-gray-600 flex-shrink-0" />;
   };
@@ -11382,31 +12975,8 @@ export default function ContestDetailClient({
   );
 
   /**
-   * View count used for CPM math (matches instagram-insights: prefer views, else reach for IG).
+   * Expected earnings for a submission. When useStoredEarnings is false, always compute from CPM formula so "Expected" column stays correct after payment.
    */
-  function getCpmBasisViewCountForSubmission(submission: Submission): number {
-    const platform = String(submission.platform || "").toLowerCase();
-    const tiktokViews =
-      Number((submission as any)?.other_stats?.tiktok?.view_count) || 0;
-    if (platform.includes("tiktok") && tiktokViews > 0) {
-      return tiktokViews;
-    }
-    let raw = Number(submission.views ?? 0);
-    if (platform.includes("instagram")) {
-      const stats = submission.other_stats || {};
-      const ig =
-        (stats as any).instagram && typeof (stats as any).instagram === "object"
-          ? ((stats as any).instagram as Record<string, unknown>)
-          : (stats as Record<string, unknown>);
-      const igViews = Number(ig.views ?? 0);
-      raw = Math.max(raw, igViews);
-      const reach = Number(ig.reach ?? 0);
-      if (raw === 0 && reach > 0) raw = reach;
-    }
-    return raw;
-  }
-
-  /** Expected earnings for a submission. When useStoredEarnings is false, always compute from CPM formula so "Expected" column stays correct after payment. */
   function calculateSubmissionExpectedEarnings(
     submission: Submission,
     useStoredEarnings = true,
@@ -11415,27 +12985,12 @@ export default function ContestDetailClient({
       useStoredEarnings && submission.earnings ? submission.earnings : 0;
 
     if (!expectedEarnings && isCpmContestType(currentContest?.contest_type)) {
-      const cpmConfig = (currentContest?.contest_based_details as any)
-        ?.cpm_contest;
-      if (cpmConfig?.cpm_rate_usd) {
-        let effectiveViews = getCpmBasisViewCountForSubmission(submission);
-        if (
-          cpmConfig.min_views != null &&
-          effectiveViews < cpmConfig.min_views
-        ) {
-          effectiveViews = 0;
-        }
-        if (
-          cpmConfig.max_views != null &&
-          effectiveViews > cpmConfig.max_views
-        ) {
-          effectiveViews = cpmConfig.max_views;
-        }
-
-        expectedEarnings = Math.round(
-          (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000,
-        );
-      }
+      expectedEarnings = computeCpmRawCentsForRow(
+        submission,
+        (currentContest?.contest_based_details as Record<string, unknown>) ||
+          null,
+        currentContest?.platform,
+      );
     }
 
     return expectedEarnings;
@@ -11544,12 +13099,19 @@ export default function ContestDetailClient({
         isTwitterPlatform,
         contestFormat: currentContest?.contest_format,
         platform: currentContest?.platform,
+        contestBasedDetails:
+          (currentContest?.contest_based_details as Record<string, unknown>) ||
+          null,
         contentType: (currentContest as { content_type?: string }).content_type,
-        leaderboardTotalPrizeCents:
-          Number(
-            currentContest?.contest_based_details?.leaderboard_contest
-              ?.total_prize,
-          ) || 0,
+        leaderboardTotalPrizeCents: getAnalyticsCampaignBudgetCents({
+          contest_type: currentContest?.contest_type,
+          contest_based_details:
+            (currentContest?.contest_based_details as Record<
+              string,
+              unknown
+            >) || null,
+          platform: currentContest?.platform,
+        }),
         allSubmissions:
           analyticsQualityFilteredSubmissions as ContestAnalyticsExportSubmission[],
         getStatus: (submission) => getStatus(submission as Submission),
@@ -11576,12 +13138,6 @@ export default function ContestDetailClient({
       cappedExpectedRewardBySubmissionId,
       milestoneSubmissionExpectedPayoutCents,
     ]);
-
-  const getAnalyticsSnapshotsForTabs = useCallback(
-    (tabs: ContestAnalyticsTabId[]) =>
-      buildAllContestAnalyticsTabSnapshots(analyticsSnapshotContext, tabs),
-    [analyticsSnapshotContext],
-  );
 
   const reportExportContest = useMemo(
     () => ({
@@ -11619,6 +13175,154 @@ export default function ContestDetailClient({
   const reportExportSubmissions = useMemo(
     () => sortedSubmissions as unknown as ContestAnalyticsExportSubmission[],
     [sortedSubmissions],
+  );
+
+  const filterReportSubmissionsByPlatform = useCallback(
+    (
+      submissions: ContestAnalyticsExportSubmission[],
+      scopedPlatform: VideoContestPlatform | null,
+    ) => {
+      if (!scopedPlatform) return submissions;
+      return submissions.filter((submission) =>
+        submissionMatchesVideoPlatform(submission, scopedPlatform),
+      );
+    },
+    [],
+  );
+
+  const fullReportScopedSubmissions = useMemo(
+    () =>
+      filterReportSubmissionsByPlatform(
+        reportAllSubmissions,
+        overviewScopedPlatform,
+      ),
+    [
+      filterReportSubmissionsByPlatform,
+      reportAllSubmissions,
+      overviewScopedPlatform,
+    ],
+  );
+
+  const submissionsReportScopedSubmissions = useMemo(
+    () =>
+      filterReportSubmissionsByPlatform(
+        reportAllSubmissions,
+        submissionsScopedPlatform,
+      ),
+    [
+      filterReportSubmissionsByPlatform,
+      reportAllSubmissions,
+      submissionsScopedPlatform,
+    ],
+  );
+
+  const analyticsReportScopedSubmissions = useMemo(
+    () =>
+      analyticsPlatformScopedSubmissions as ContestAnalyticsExportSubmission[],
+    [analyticsPlatformScopedSubmissions],
+  );
+
+  const fullReportExportContest = useMemo(
+    () => ({
+      ...reportExportContest,
+      platform: overviewScopedPlatform ?? reportExportContest.platform,
+    }),
+    [reportExportContest, overviewScopedPlatform],
+  );
+
+  const submissionsReportExportContest = useMemo(
+    () => ({
+      ...reportExportContest,
+      platform: submissionsScopedPlatform ?? reportExportContest.platform,
+    }),
+    [reportExportContest, submissionsScopedPlatform],
+  );
+
+  const analyticsReportExportContest = useMemo(
+    () => ({
+      ...reportExportContest,
+      platform: analyticsScopedPlatform ?? reportExportContest.platform,
+    }),
+    [reportExportContest, analyticsScopedPlatform],
+  );
+
+  const buildPlatformScopedAnalyticsSnapshotContext = useCallback(
+    (
+      scopedSubmissions: ContestAnalyticsExportSubmission[],
+      scopedPlatform: VideoContestPlatform | null,
+    ): ContestAnalyticsSnapshotContext => {
+      if (!scopedPlatform) {
+        return {
+          ...analyticsSnapshotContext,
+          scopedPlatform: null,
+        };
+      }
+      return {
+        ...analyticsSnapshotContext,
+        totalSubmissionCount: scopedSubmissions.length,
+        approvedCount: scopedSubmissions.filter((submission) => {
+          const status = getStatus(submission as unknown as Submission);
+          return status === "verified" || status === "paid";
+        }).length,
+        platform: scopedPlatform,
+        scopedPlatform,
+        allSubmissions: scopedSubmissions,
+        leaderboardTotalPrizeCents: getAnalyticsCampaignBudgetCents(
+          {
+            contest_type: currentContest?.contest_type,
+            contest_based_details:
+              (currentContest?.contest_based_details as Record<
+                string,
+                unknown
+              >) || null,
+            platform: currentContest?.platform,
+          },
+          scopedPlatform,
+        ),
+      };
+    },
+    [
+      analyticsSnapshotContext,
+      getStatus,
+      currentContest?.contest_type,
+      currentContest?.contest_based_details,
+      currentContest?.platform,
+    ],
+  );
+
+  const fullReportAnalyticsSnapshotContext = useMemo(
+    () =>
+      buildPlatformScopedAnalyticsSnapshotContext(
+        fullReportScopedSubmissions,
+        overviewScopedPlatform,
+      ),
+    [
+      buildPlatformScopedAnalyticsSnapshotContext,
+      fullReportScopedSubmissions,
+      overviewScopedPlatform,
+    ],
+  );
+
+  const analyticsExportSnapshotContext = useMemo(
+    () =>
+      buildPlatformScopedAnalyticsSnapshotContext(
+        analyticsReportScopedSubmissions,
+        analyticsScopedPlatform,
+      ),
+    [
+      buildPlatformScopedAnalyticsSnapshotContext,
+      analyticsReportScopedSubmissions,
+      analyticsScopedPlatform,
+    ],
+  );
+
+  const getAnalyticsSnapshotsForTabs = useCallback(
+    (tabs: ContestAnalyticsTabId[]) =>
+      buildAllContestAnalyticsTabSnapshots(
+        analyticsExportSnapshotContext,
+        tabs,
+      ),
+    [analyticsExportSnapshotContext],
   );
 
   const reportExportDialogProps = useMemo(
@@ -13031,18 +14735,32 @@ export default function ContestDetailClient({
             )}
           >
             <div className="p-6 relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <div
-                  className={cn(
-                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
-                    isDark
-                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
-                      : "bg-white border border-gray-200",
-                  )}
-                >
-                  {getPlatformIcon(currentContest.platform)}
-                </div>
-                <div className="text-right">
+              <div className="mb-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div
+                    className={cn(
+                      "h-12 w-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm shrink-0",
+                      isDark
+                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                        : "bg-white border border-gray-200",
+                      overviewVideoPlatforms.length > 1 && "w-auto px-2.5",
+                    )}
+                  >
+                    {overviewVideoPlatforms.length > 0 ? (
+                      <div className="flex items-center gap-2">
+                        {overviewVideoPlatforms.map((platform) => (
+                          <span
+                            key={`summary-icon-${platform}`}
+                            className="inline-flex shrink-0"
+                          >
+                            {getPlatformIcon(platform)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      getPlatformIcon(currentContest.platform)
+                    )}
+                  </div>
                   <p
                     className={cn(
                       "text-sm font-medium uppercase tracking-wide",
@@ -13051,17 +14769,32 @@ export default function ContestDetailClient({
                   >
                     Platform
                   </p>
+                </div>
+                {overviewVideoPlatforms.length > 1 ? (
                   <p
                     className={cn(
-                      "capitalize text-2xl font-bold mt-1",
+                      "text-base font-bold leading-snug",
+                      isDark ? "text-white" : "text-gray-900",
+                    )}
+                  >
+                    {overviewVideoPlatforms
+                      .map((platform) => VIDEO_PLATFORM_LABELS[platform])
+                      .join(", ")}
+                  </p>
+                ) : (
+                  <p
+                    className={cn(
+                      "capitalize text-2xl font-bold",
                       isDark
                         ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
                         : "text-gray-900",
                     )}
                   >
-                    {currentContest.platform || "N/A"}
+                    {overviewVideoPlatforms[0]
+                      ? VIDEO_PLATFORM_LABELS[overviewVideoPlatforms[0]]
+                      : currentContest.platform || "N/A"}
                   </p>
-                </div>
+                )}
               </div>
               <div
                 className={cn(
@@ -13186,9 +14919,9 @@ export default function ContestDetailClient({
                     </Card> */}
 
           {/* Prize Pool Card */}
-          {currentContest.contest_type === "leaderboard" &&
-            currentContest.contest_based_details?.leaderboard_contest
-              ?.total_prize != null && (
+          {overviewUniformPayoutContest.contest_type === "leaderboard" &&
+            (overviewLeaderboardPrizePoolCents > 0 ||
+              overviewLeaderboardPrizeSlices.length > 0) && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -13201,7 +14934,7 @@ export default function ContestDetailClient({
                   <div className="flex items-center justify-between mb-4">
                     <div
                       className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm shrink-0",
                         isDark
                           ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
                           : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white",
@@ -13214,7 +14947,7 @@ export default function ContestDetailClient({
                         )}
                       />
                     </div>
-                    <div className="text-right">
+                    <div className="text-right min-w-0 pl-3">
                       <p
                         className={cn(
                           "text-sm font-medium uppercase tracking-wide",
@@ -13225,51 +14958,101 @@ export default function ContestDetailClient({
                       >
                         Prize Pool
                       </p>
-                      <p
-                        className={cn(
-                          "text-2xl font-bold mt-1",
-                          isDark
-                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
-                            : "text-gray-900",
-                        )}
-                      >
-                        {formatMoney(
-                          currentContest.contest_based_details
-                            .leaderboard_contest.total_prize,
-                        )}
-                      </p>
+                      {overviewLeaderboardPrizesDiffer ? (
+                        <div className="mt-1 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1">
+                          {overviewVideoPlatforms.map((platform) => {
+                            const prize = getLeaderboardPrizePoolCents(
+                              overviewPersistedCampaigns[platform]
+                                ?.leaderboard_contest,
+                            );
+                            if (prize <= 0) return null;
+                            return (
+                              <span
+                                key={`summary-prize-${platform}`}
+                                className="inline-flex items-center gap-1"
+                              >
+                                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
+                                  {getPlatformIcon(platform)}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-base font-bold leading-none",
+                                    isDark ? "text-white" : "text-gray-900",
+                                  )}
+                                >
+                                  {formatMoney(prize)}
+                                </span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p
+                          className={cn(
+                            "text-2xl font-bold mt-1",
+                            isDark
+                              ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
+                              : "text-gray-900",
+                          )}
+                        >
+                          {formatMoney(overviewLeaderboardPrizePoolCents)}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="mb-4">
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark
-                          ? "text-white/80 drop-shadow-sm"
-                          : "text-gray-600",
-                      )}
-                    >
-                      {
-                        currentContest.contest_based_details.leaderboard_contest
-                          .winner_count
-                      }{" "}
-                      winners
-                    </p>
+                  <div className="mb-3">
+                    {overviewWinnerCountsDiffer ? (
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        {overviewVideoPlatforms.map((platform) => {
+                          const winners = getLeaderboardWinnerCount(
+                            overviewPersistedCampaigns[platform]
+                              ?.leaderboard_contest,
+                          );
+                          if (winners <= 0) return null;
+                          return (
+                            <span
+                              key={`summary-winners-${platform}`}
+                              className={cn(
+                                "inline-flex items-center gap-1 text-sm font-medium",
+                                isDark
+                                  ? "text-white/80 drop-shadow-sm"
+                                  : "text-gray-600",
+                              )}
+                            >
+                              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
+                                {getPlatformIcon(platform)}
+                              </span>
+                              {winners} winners
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : overviewLeaderboardWinnerCountDisplay > 0 ? (
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          isDark
+                            ? "text-white/80 drop-shadow-sm"
+                            : "text-gray-600",
+                        )}
+                      >
+                        {overviewLeaderboardWinnerCountDisplay} winners
+                      </p>
+                    ) : null}
                   </div>
 
                   {/* Total Budget (if set) */}
-                  {currentContest.contest_based_details?.leaderboard_contest
-                    ?.total_budget && (
+                  {overviewLeaderboardBonusBudgetCents > 0 && (
                     <div
                       className={cn(
-                        "pt-4 mb-4",
+                        "pt-3 mb-3",
                         isDark
                           ? "border-t border-white/30"
                           : "border-t border-yellow-200",
                       )}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
                           <p
                             className={cn(
                               "text-sm font-medium uppercase tracking-wide",
@@ -13280,19 +15063,47 @@ export default function ContestDetailClient({
                           >
                             Total Budget
                           </p>
-                          <p
-                            className={cn(
-                              "text-xl font-bold mt-1",
-                              isDark
-                                ? "text-cyan-300 drop-shadow-sm"
-                                : "text-blue-600",
-                            )}
-                          >
-                            {formatMoney(
-                              currentContest.contest_based_details
-                                .leaderboard_contest.total_budget,
-                            )}
-                          </p>
+                          {overviewVideoPlatforms.length >= 2 ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                              {overviewVideoPlatforms.map((platform) => {
+                                const budget =
+                                  overviewPersistedCampaigns[platform]
+                                    ?.leaderboard_contest?.total_budget;
+                                if (!budget) return null;
+                                return (
+                                  <span
+                                    key={`summary-bonus-budget-${platform}`}
+                                    className="inline-flex items-center gap-1"
+                                  >
+                                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden [&_div]:!h-4 [&_div]:!w-4 [&_svg]:!h-4 [&_svg]:!w-4">
+                                      {getPlatformIcon(platform)}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "text-sm font-bold",
+                                        isDark
+                                          ? "text-cyan-300 drop-shadow-sm"
+                                          : "text-blue-600",
+                                      )}
+                                    >
+                                      {formatMoney(budget)}
+                                    </span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p
+                              className={cn(
+                                "text-xl font-bold mt-1",
+                                isDark
+                                  ? "text-cyan-300 drop-shadow-sm"
+                                  : "text-blue-600",
+                              )}
+                            >
+                              {formatMoney(overviewLeaderboardBonusBudgetCents)}
+                            </p>
+                          )}
                           <p
                             className={cn(
                               "text-xs mt-1",
@@ -13306,7 +15117,7 @@ export default function ContestDetailClient({
                         </div>
                         <div
                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-lg",
+                            "w-10 h-10 flex items-center justify-center rounded-lg shrink-0",
                             isDark
                               ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
                               : "bg-blue-100 text-blue-600",
@@ -13555,9 +15366,10 @@ export default function ContestDetailClient({
           })()}
 
           {isCpmContestType(currentContest.contest_type) &&
-            getPoolBudgetCentsFromDetails(
+            resolveContestPoolBudgetCents(
               currentContest.contest_type,
               currentContest.contest_based_details,
+              currentContest.platform,
             ) > 0 && (
               <div
                 className={cn(
@@ -13604,9 +15416,10 @@ export default function ContestDetailClient({
                         )}
                       >
                         {formatMoney(
-                          getPoolBudgetCentsFromDetails(
+                          resolveContestPoolBudgetCents(
                             currentContest.contest_type,
                             currentContest.contest_based_details,
+                            currentContest.platform,
                           ),
                         )}
                       </p>
@@ -13621,25 +15434,24 @@ export default function ContestDetailClient({
                           : "text-gray-600",
                       )}
                     >
-                      {isDualRewardsContestType(currentContest.contest_type) ? (
-                        <>
-                          $
-                          {
-                            currentContest.contest_based_details.cpm_contest
-                              .cpm_rate_usd
-                          }{" "}
-                          CPM
-                        </>
-                      ) : (
-                        <>
-                          $
-                          {
-                            currentContest.contest_based_details.cpm_contest
-                              .cpm_rate_usd
-                          }{" "}
-                          CPM
-                        </>
-                      )}
+                      {(() => {
+                        const platformCpmText = formatContestListCpmRatesText(
+                          resolveContestPlatformCpmRates(
+                            currentContest.contest_based_details as
+                              | Record<string, unknown>
+                              | null
+                              | undefined,
+                            currentContest.platform,
+                          ),
+                          formatMoney,
+                        );
+                        if (platformCpmText) return platformCpmText;
+                        const rootRate =
+                          currentContest.contest_based_details?.cpm_contest
+                            ?.cpm_rate_usd;
+                        if (rootRate == null || rootRate === "") return null;
+                        return `$${rootRate} CPM`;
+                      })()}
                     </p>
                   </div>
                   <div
@@ -13682,11 +15494,12 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
-          {isMilestoneContestType(currentContest.contest_type) &&
-            currentContest.contest_based_details?.milestone_contest
-              ?.total_budget_cents != null &&
-            currentContest.contest_based_details.milestone_contest
-              .total_budget_cents > 0 && (
+          {currentContest.contest_type === "milestone" &&
+            resolveContestPoolBudgetCents(
+              currentContest.contest_type,
+              currentContest.contest_based_details,
+              currentContest.platform,
+            ) > 0 && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -13732,8 +15545,11 @@ export default function ContestDetailClient({
                         )}
                       >
                         {formatMoney(
-                          currentContest.contest_based_details.milestone_contest
-                            .total_budget_cents,
+                          resolveContestPoolBudgetCents(
+                            currentContest.contest_type,
+                            currentContest.contest_based_details,
+                            currentContest.platform,
+                          ),
                         )}
                       </p>
                     </div>
@@ -13833,9 +15649,10 @@ export default function ContestDetailClient({
 
         {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
         {isCpmContestType(currentContest.contest_type) &&
-          getPoolBudgetCentsFromDetails(
+          resolveContestPoolBudgetCents(
             currentContest.contest_type,
             currentContest.contest_based_details,
+            currentContest.platform,
           ) > 0 && (
             <div
               className={cn(
@@ -13898,14 +15715,17 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget: getPoolBudgetCentsFromDetails(
+                    total_budget: resolveContestPoolBudgetCents(
                       currentContest.contest_type,
                       currentContest.contest_based_details,
+                      currentContest.platform,
                     ),
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
+                    platform: currentContest.platform,
+                    bonus_details: (currentContest as any).bonus_details,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -13934,11 +15754,8 @@ export default function ContestDetailClient({
           )}
 
         {/* Budget Progress Tracker - For Leaderboard with total_budget */}
-        {currentContest.contest_type === "leaderboard" &&
-          currentContest.contest_based_details?.leaderboard_contest
-            ?.total_budget != null &&
-          currentContest.contest_based_details.leaderboard_contest
-            .total_budget > 0 && (
+        {overviewUniformPayoutContest.contest_type === "leaderboard" &&
+          overviewLeaderboardBonusBudgetCents > 0 && (
             <div
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -13995,13 +15812,17 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget:
-                      currentContest.contest_based_details.leaderboard_contest
-                        .total_budget,
-                    contest_based_details: currentContest.contest_based_details,
-                    contest_type: currentContest.contest_type ?? "",
+                    total_budget: overviewLeaderboardBonusBudgetCents,
+                    contest_based_details:
+                      currentContest.contest_based_details ||
+                      overviewUniformPayoutContest.contest_based_details,
+                    contest_type:
+                      overviewUniformPayoutContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
+                    platform: overviewScopedPlatform
+                      ? overviewScopedPlatform
+                      : currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -14014,10 +15835,11 @@ export default function ContestDetailClient({
         {/* Budget Progress Tracker - For Milestone campaigns (not dual — dual uses CPM tracker above) */}
         {isMilestoneContestType(currentContest.contest_type) &&
           !isDualRewardsContestType(currentContest.contest_type) &&
-          currentContest.contest_based_details?.milestone_contest
-            ?.total_budget_cents != null &&
-          currentContest.contest_based_details.milestone_contest
-            .total_budget_cents > 0 && (
+          resolveContestPoolBudgetCents(
+            currentContest.contest_type,
+            currentContest.contest_based_details,
+            currentContest.platform,
+          ) > 0 && (
             <div
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -14074,13 +15896,16 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget:
-                      currentContest.contest_based_details.milestone_contest
-                        .total_budget_cents,
+                    total_budget: resolveContestPoolBudgetCents(
+                      currentContest.contest_type,
+                      currentContest.contest_based_details,
+                      currentContest.platform,
+                    ),
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
+                    platform: currentContest.platform,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -14152,7 +15977,7 @@ export default function ContestDetailClient({
           <TabPanel value="overview" activeTab={activeTab}>
             <div
               className={cn(
-                "px-4 pt-5 pb-4 border-b rounded-t-xl font-semibold shadow-xl flex items-center justify-between gap-3",
+                "px-4 pt-5 pb-4 border-b rounded-t-xl font-semibold shadow-xl flex flex-wrap items-center justify-between gap-3",
                 isDark
                   ? "bg-[#170337] border-gray-600 text-white"
                   : "bg-white text-purple-500 ",
@@ -14161,30 +15986,41 @@ export default function ContestDetailClient({
               <h1 className="text-xl flex items-center gap-2">
                 Campaign Details
               </h1>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={
-                  isHydratingSubmissions || currentSubmissions.length === 0
-                }
-                className={cn(
-                  "gap-2 shrink-0 disabled:opacity-100",
-                  isDark
-                    ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                    : "border-slate-300 text-slate-700 hover:bg-slate-50",
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {overviewVideoPlatforms.length >= 2 && (
+                  <ContestDetailPlatformTabs
+                    platforms={overviewVideoPlatforms}
+                    active={overviewPlatformTab}
+                    onChange={setOverviewPlatformTab}
+                    isDark={isDark}
+                    disabled={platformTabsLocked}
+                  />
                 )}
-                onClick={() => {
-                  if (isHydratingSubmissions) return;
-                  setFullReportDialogOpen(true);
-                }}
-              >
-                {isHydratingSubmissions ? (
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
-                ) : (
-                  <Download className="h-4 w-4 shrink-0" />
-                )}
-                Download full report
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    isHydratingSubmissions || currentSubmissions.length === 0
+                  }
+                  className={cn(
+                    "gap-2 shrink-0 disabled:opacity-100",
+                    isDark
+                      ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                      : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                  )}
+                  onClick={() => {
+                    if (isHydratingSubmissions) return;
+                    setFullReportDialogOpen(true);
+                  }}
+                >
+                  {isHydratingSubmissions ? (
+                    <Loader2 className="h-4 w-4 animate-spin shrink-0 text-[#7F39EC]" />
+                  ) : (
+                    <Download className="h-4 w-4 shrink-0" />
+                  )}
+                  Download full report
+                </Button>
+              </div>
             </div>
             <div
               className={cn(
@@ -14209,24 +16045,103 @@ export default function ContestDetailClient({
                 )}
 
                 <div className="space-y-3">
-                  <h3 className="font-semibold text-lg">Brief</h3>
-                  {currentContest.brief_html ? (
-                    <div
-                      className={cn(
-                        "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
-                        isDark
-                          ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
-                          : "bg-white text-foreground",
-                      )}
-                      style={isDark ? { color: "white" } : undefined}
-                      dangerouslySetInnerHTML={{
-                        __html: currentContest.brief_html,
-                      }}
-                    />
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    Brief
+                    {overviewVideoPlatforms.length >= 2 &&
+                    overviewPlatformTab === ALL_PLATFORM_TAB &&
+                    !overviewBriefsDiffer ? (
+                      <ContestDetailSharedAcrossPlatformsHint
+                        platforms={overviewVideoPlatforms}
+                      />
+                    ) : null}
+                  </h3>
+                  {overviewVideoPlatforms.length >= 2 &&
+                  overviewPlatformTab === ALL_PLATFORM_TAB &&
+                  overviewBriefsDiffer ? (
+                    <div className="space-y-3">
+                      {groupPlatformsByBrief(
+                        contestState as {
+                          brief_html?: string | null;
+                          brief_json?: unknown;
+                          platform?: string | null;
+                        },
+                        overviewVideoPlatforms,
+                      ).map((platforms) => {
+                        const html = preferRichestHtmlAmong(
+                          platforms.map((platform) =>
+                            briefHtmlForPlatform(
+                              contestState as {
+                                brief_html?: string | null;
+                                brief_json?: unknown;
+                                platform?: string | null;
+                              },
+                              platform,
+                            ),
+                          ),
+                        );
+                        return (
+                          <ContestDetailPlatformScopeCard
+                            key={`brief-${platforms.join("-")}`}
+                            platforms={platforms}
+                            isDark={isDark}
+                          >
+                            {html ? (
+                              <div
+                                className={cn(
+                                  "prose prose-md max-w-none [&_a]:break-words [&_a]:hover:underline",
+                                  isDark
+                                    ? "text-white [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
+                                    : "text-foreground",
+                                )}
+                                style={isDark ? { color: "white" } : undefined}
+                                dangerouslySetInnerHTML={{ __html: html }}
+                              />
+                            ) : (
+                              <p className="text-muted-foreground">
+                                No brief provided
+                              </p>
+                            )}
+                          </ContestDetailPlatformScopeCard>
+                        );
+                      })}
+                    </div>
                   ) : (
-                    <p className="text-muted-foreground bg-muted/30 p-4 rounded-lg border">
-                      No brief provided
-                    </p>
+                    (() => {
+                      const sharedBriefHtml =
+                        overviewVideoPlatforms.length >= 2 &&
+                        overviewPlatformTab === ALL_PLATFORM_TAB
+                          ? preferRichestHtmlAmong(
+                              overviewVideoPlatforms.map((platform) =>
+                                briefHtmlForPlatform(
+                                  contestState as {
+                                    brief_html?: string | null;
+                                    brief_json?: unknown;
+                                    platform?: string | null;
+                                  },
+                                  platform,
+                                ),
+                              ),
+                            )
+                          : overviewDetailContest.brief_html;
+                      return sharedBriefHtml ? (
+                        <div
+                          className={cn(
+                            "prose prose-md max-w-none p-4 rounded-lg border [&_a]:break-words [&_a]:hover:underline",
+                            isDark
+                              ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
+                              : "bg-white text-foreground",
+                          )}
+                          style={isDark ? { color: "white" } : undefined}
+                          dangerouslySetInnerHTML={{
+                            __html: sharedBriefHtml,
+                          }}
+                        />
+                      ) : (
+                        <p className="text-muted-foreground bg-muted/30 p-4 rounded-lg border">
+                          No brief provided
+                        </p>
+                      );
+                    })()
                   )}
                 </div>
 
@@ -14255,7 +16170,7 @@ export default function ContestDetailClient({
                           >
                             <Monitor className="h-5 w-5" />
                           </div>
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <p
                               className={cn(
                                 "text-md font-medium tracking-wide",
@@ -14270,7 +16185,22 @@ export default function ContestDetailClient({
                                 isDark ? "text-white" : "text-black",
                               )}
                             >
-                              {currentContest.platform}
+                              {(overviewScopedPlatform
+                                ? [overviewScopedPlatform]
+                                : overviewVideoPlatforms.length > 0
+                                  ? overviewVideoPlatforms
+                                  : []
+                              ).length > 0
+                                ? (overviewScopedPlatform
+                                    ? [overviewScopedPlatform]
+                                    : overviewVideoPlatforms
+                                  )
+                                    .map(
+                                      (platform) =>
+                                        VIDEO_PLATFORM_LABELS[platform],
+                                    )
+                                    .join(", ")
+                                : currentContest.platform}
                             </p>
                           </div>
                         </div>
@@ -14480,674 +16410,213 @@ export default function ContestDetailClient({
                   )}
 
                 {/* Conditional Prize Structure / CPM Details */}
-                {currentContest.contest_type === "leaderboard" &&
-                  currentContest.contest_based_details?.leaderboard_contest && (
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        Prize Structure
-                      </h3>
-
-                      {/* Prize Pool Summary */}
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Start Date Card */}
-                        <div
-                          className={cn(
-                            "border rounded-xl transition-all duration-300",
-                            isDark ? "border-gray-600" : "border-gray-300",
-                          )}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "w-10 h-10 flex items-center justify-center rounded-full ",
-                                  isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]",
-                                )}
-                              >
-                                <Trophy className="h-5 w-5" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-md font-medium tracking-wide">
-                                  Total Prize Pool
-                                </p>
-                                <p className="text-lg md:text-xl font-bold ">
-                                  {formatMoney(
-                                    currentContest.contest_based_details
-                                      .leaderboard_contest.total_prize,
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </div>
-
-                        {/* End Date Card */}
-                        <div
-                          className={cn(
-                            "border rounded-xl transition-all duration-300",
-                            isDark ? "border-gray-600" : "border-gray-300",
-                          )}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "w-10 h-10 flex items-center justify-center rounded-full ",
-                                  isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-[#4A00BE]",
-                                )}
-                              >
-                                <Users className="h-5 w-5" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-md font-medium tracking-wide">
-                                  Total Winners
-                                </p>
-                                <p className=" text-lg md:text-xl font-bold">
-                                  {
-                                    currentContest.contest_based_details
-                                      .leaderboard_contest.winner_count
-                                  }
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </div>
-                      </div>
-                      {/* <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
-                              <Trophy className="h-5 w-5 text-green-600 dark:text-green-400" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">
-                                Total Prize Pool
-                              </p>
-                              <p className="text-xl font-bold text-green-900 dark:text-green-100">
-                                {formatMoney(
-                                  currentContest.contest_based_details
-                                    .leaderboard_contest.total_prize
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
-                              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">
-                                Total Winners
-                              </p>
-                              <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                                {
-                                  currentContest.contest_based_details
-                                    .leaderboard_contest.winner_count
-                                }
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div> */}
-
-                      {/* Prize Distribution */}
-                      <div className="py-4">
-                        <h4 className="font-medium text-lg text-foreground mb-3 flex items-center gap-2">
-                          {/* <ListOrdered className="h-4 w-4" /> */}
-                          Prize Distribution
-                        </h4>
+                {overviewLeaderboardPrizeSlices.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                      Prize Structure
+                      {overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB &&
+                      !overviewLeaderboardPrizeSlices.some(
+                        (s) => s.showLabel,
+                      ) ? (
+                        <ContestDetailSharedAcrossPlatformsHint
+                          platforms={overviewVideoPlatforms}
+                        />
+                      ) : null}
+                    </h3>
+                    {overviewLeaderboardPrizeSlices.map((slice) => {
+                      const leaderboard =
+                        slice.contest.contest_based_details
+                          ?.leaderboard_contest;
+                      if (!leaderboard) return null;
+                      const prizeBody = (
                         <div className="space-y-4">
-                          {Array.isArray(
-                            currentContest.contest_based_details
-                              .leaderboard_contest.prizes,
-                          ) &&
-                            currentContest.contest_based_details.leaderboard_contest.prizes
-                              .sort((a: any, b: any) => a.position - b.position)
-                              .map((prize: any, index: number) => (
-                                <div
-                                  key={index}
-                                  className={cn(
-                                    "flex items-center justify-between py-3 px-3 rounded-lg border",
-                                    isDark
-                                      ? "border-gray-600"
-                                      : "border-gray-400",
-                                  )}
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={cn(
-                                        "w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm",
-                                        isDark
-                                          ? "border-gray-500 text-gray-300"
-                                          : "border-gray-500 text-gray-500",
-                                      )}
-                                    >
-                                      {prize.position}
-                                    </div>
-                                    <span className="font-medium text-foreground">
-                                      Position {prize.position}
-                                    </span>
-                                  </div>
-                                  <span
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div
+                              className={cn(
+                                "border rounded-xl transition-all duration-300",
+                                isDark ? "border-gray-600" : "border-gray-300",
+                              )}
+                            >
+                              <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div
                                     className={cn(
-                                      "font-bold text-lg",
+                                      "w-10 h-10 flex items-center justify-center rounded-full ",
                                       isDark
-                                        ? "text-gray-300"
-                                        : "text-gray-600",
+                                        ? "bg-[#FFFFFF42] text-white"
+                                        : "bg-purple-100 text-[#4A00BE]",
                                     )}
                                   >
-                                    {formatMoney(prize.amount)}
-                                  </span>
+                                    <Trophy className="h-5 w-5" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-md font-medium tracking-wide">
+                                      Total Prize Pool
+                                    </p>
+                                    <p className="text-lg md:text-xl font-bold ">
+                                      {formatMoney(
+                                        getLeaderboardPrizePoolCents(
+                                          leaderboard,
+                                        ),
+                                      )}
+                                    </p>
+                                  </div>
                                 </div>
-                              ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                              </CardContent>
+                            </div>
 
-                {isCpmContestType(currentContest.contest_type) &&
-                  currentContest.contest_based_details?.cpm_contest && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        CPM Configuration
-                      </h3>
-                      <div className="grid grid-col-1 md:grid-cols-2 gap-4">
-                        <div
-                          className={cn(
-                            "flex justify-between items-center p-3 rounded-md border",
-                            isDark ? "border-gray-600" : "border-gray-400",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black",
-                            )}
-                          >
-                            CPM Rate:
-                          </span>
-                          <span className="font-semibold text-md text-foreground">
-                            $
-                            {parseFloat(
-                              currentContest.contest_based_details.cpm_contest
-                                .cpm_rate_usd,
-                            ).toFixed(2)}{" "}
-                            per 1000 {isTwitterCpmCampaign ? "points" : "views"}
-                          </span>
-                        </div>
-                        {!isDualRewardsContestType(
-                          currentContest.contest_type,
-                        ) && (
-                          <div
-                            className={cn(
-                              "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400",
-                            )}
-                          >
-                            <span
+                            <div
                               className={cn(
-                                "text-md font-medium tracking-wide",
-                                isDark ? "text-white" : "text-black",
+                                "border rounded-xl transition-all duration-300",
+                                isDark ? "border-gray-600" : "border-gray-300",
                               )}
                             >
-                              Total Budget:
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              {formatMoney(
-                                currentContest.contest_based_details.cpm_contest
-                                  .total_budget,
-                              )}
-                            </span>
+                              <CardContent className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={cn(
+                                      "w-10 h-10 flex items-center justify-center rounded-full ",
+                                      isDark
+                                        ? "bg-[#FFFFFF42] text-white"
+                                        : "bg-purple-100 text-[#4A00BE]",
+                                    )}
+                                  >
+                                    <Users className="h-5 w-5" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-md font-medium tracking-wide">
+                                      Total Winners
+                                    </p>
+                                    <p className=" text-lg md:text-xl font-bold">
+                                      {leaderboard.winner_count}
+                                    </p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </div>
                           </div>
-                        )}
-                        {currentContest.contest_based_details.cpm_contest
-                          .min_views != null && (
-                          <div
-                            className={cn(
-                              "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "text-md font-medium",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              Min Views:
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                        {currentContest.contest_based_details.cpm_contest
-                          .max_views != null && (
-                          <div
-                            className={cn(
-                              "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "text-md font-medium",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              Max Views (Cap):
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
-                          Terms & Conditions
-                        </h4>
-                        <div
-                          className={cn(
-                            "p-3 border rounded-lg text-[13px] text-black",
-                            isDark
-                              ? "border-gray-600 text-white"
-                              : "border-gray-400 text-black",
-                          )}
-                        >
-                          <div className="whitespace-pre-wrap break-words">
-                            {currentContest.contest_based_details.cpm_contest
-                              .terms_conditions ||
-                              "No specific terms provided."}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
-                {isMilestoneContestType(currentContest.contest_type) &&
-                  currentContest.contest_based_details?.milestone_contest && (
-                    <div className="space-y-6">
-                      {/* Milestone Ladder */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                            <Trophy className="h-5 w-5 text-yellow-500" />
-                            Milestone Rewards Ladder
-                          </h3>
-                          {/* <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs font-medium",
-                              isDark
-                                ? "bg-purple-900/30 text-purple-300 border-purple-500/30"
-                                : "bg-purple-50 text-purple-700 border-purple-200",
-                            )}
-                          >
-                            Non-Cumulative
-                          </Badge> */}
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-4 min-w-0">
-                          {(
-                            currentContest.contest_based_details
-                              .milestone_contest.milestones || []
-                          )
-                            .sort((a: any, b: any) => a.order - b.order)
-                            .map((milestone: any, index: number) => (
-                              <div
-                                key={index}
-                                className={cn(
-                                  "relative overflow-hidden rounded-xl border transition-all duration-300 group min-w-0",
-                                  isDark
-                                    ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
-                                    : "bg-white border-gray-200 hover:border-purple-400 font-bold",
-                                )}
-                              >
-                                {/* Glassmorphism background effect */}
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                                <CardContent className="p-4 sm:p-5 relative z-10">
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
-                                    <div className="flex items-start gap-3 sm:gap-5 min-w-0 flex-1">
-                                      <div
-                                        className={cn(
-                                          "w-10 h-10 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center rounded-2xl shadow-inner",
-                                          isDark
-                                            ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
-                                            : "bg-purple-50 text-purple-600 border border-purple-100",
-                                        )}
-                                      >
-                                        <Zap className="h-5 w-5 sm:h-6 sm:w-6" />
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-                                          <p
-                                            className={cn(
-                                              "text-xs sm:text-sm font-semibold uppercase tracking-wider",
-                                              isDark
-                                                ? "text-purple-400"
-                                                : "text-purple-600",
-                                            )}
-                                          >
-                                            Milestone {index + 1}
-                                          </p>
-                                          {milestone.winner_limit &&
-                                            (() => {
-                                              const reachedCount =
-                                                milestoneSubmissionAssignments.winnerCountsByMilestone?.get(
-                                                  Number(
-                                                    milestone.target_views,
-                                                  ),
-                                                ) || 0;
-                                              const isFull =
-                                                reachedCount >=
-                                                milestone.winner_limit;
-                                              return (
-                                                <Badge
-                                                  variant="secondary"
-                                                  className={cn(
-                                                    "text-[10px] h-4 px-1.5 shrink-0",
-                                                    isFull
-                                                      ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-500/30"
-                                                      : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30",
-                                                  )}
-                                                >
-                                                  Limit: {reachedCount} /{" "}
-                                                  {milestone.winner_limit}
-                                                </Badge>
-                                              );
-                                            })()}
-                                        </div>
-                                        <p
-                                          className={cn(
-                                            "text-xl sm:text-2xl font-black break-words",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-gray-900",
-                                          )}
-                                        >
-                                          {milestone.target_views.toLocaleString()}{" "}
-                                          <span className="text-sm font-medium opacity-70">
-                                            Views
-                                          </span>
-                                        </p>
-                                      </div>
-                                    </div>
-
+                          <div className="py-1">
+                            <h4 className="font-medium text-lg text-foreground mb-3 flex items-center gap-2">
+                              Prize Distribution
+                            </h4>
+                            <div className="space-y-4">
+                              {Array.isArray(leaderboard.prizes) &&
+                                [...leaderboard.prizes]
+                                  .sort(
+                                    (a: any, b: any) => a.position - b.position,
+                                  )
+                                  .map((prize: any, index: number) => (
                                     <div
+                                      key={`${slice.platform ?? "contest"}-${prize.position}-${index}`}
                                       className={cn(
-                                        "flex items-center justify-between sm:block sm:text-right shrink-0 w-full sm:w-auto border-t pt-3 sm:border-t-0 sm:pt-0",
+                                        "flex items-center justify-between py-3 px-3 rounded-lg border",
                                         isDark
                                           ? "border-gray-600"
-                                          : "border-gray-200",
+                                          : "border-gray-400",
                                       )}
                                     >
-                                      <p
+                                      <div className="flex items-center gap-3">
+                                        <div
+                                          className={cn(
+                                            "w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm",
+                                            isDark
+                                              ? "border-gray-500 text-gray-300"
+                                              : "border-gray-500 text-gray-500",
+                                          )}
+                                        >
+                                          {prize.position}
+                                        </div>
+                                        <span className="font-medium text-foreground">
+                                          Position {prize.position}
+                                        </span>
+                                      </div>
+                                      <span
                                         className={cn(
-                                          "text-xs font-medium sm:mb-1",
+                                          "font-bold text-lg",
                                           isDark
-                                            ? "text-gray-400"
-                                            : "text-gray-500",
+                                            ? "text-gray-300"
+                                            : "text-gray-600",
                                         )}
                                       >
-                                        Payout
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-xl sm:text-2xl font-bold",
-                                          isDark
-                                            ? "text-green-400"
-                                            : "text-green-600",
-                                        )}
-                                      >
-                                        {formatMoney(milestone.payout_cents)}
-                                      </p>
+                                        {formatMoney(prize.amount)}
+                                      </span>
                                     </div>
-                                  </div>
-                                </CardContent>
-                              </div>
-                            ))}
-                        </div>
-
-                        <Alert
-                          className={cn(
-                            "mt-4 border-purple-600 shadow-sm",
-                            isDark
-                              ? "bg-purple-900/20 text-purple-200"
-                              : "bg-purple-50 text-purple-800",
-                          )}
-                        >
-                          <Info className="h-4 w-4" />
-                          <AlertDescription className="text-sm font-medium mt-0.5">
-                            Once a submission reaches the target view threshold,
-                            the corresponding milestone reward will be granted.
-                          </AlertDescription>
-                        </Alert>
-                      </div>
-
-                      {/* Bonus Tracks */}
-                      {currentContest.contest_based_details.milestone_contest
-                        .bonus?.enabled && (
-                        <div className="space-y-4 pt-4">
-                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                            <Gift className="h-5 w-5 text-pink-500" />
-                            Competitive Bonus Tracks
-                          </h3>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {currentContest.contest_based_details
-                              .milestone_contest.bonus.most_verified_views && (
-                              <div
-                                className={cn(
-                                  "rounded-xl border p-5 relative overflow-hidden",
-                                  isDark
-                                    ? "bg-gradient-to-br from-blue-900/20 to-purple-900/20 border-blue-500/30"
-                                    : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200",
-                                )}
-                              >
-                                <div className="flex items-start justify-between mb-4">
-                                  <div
-                                    className={cn(
-                                      "p-2 rounded-lg",
-                                      isDark ? "bg-blue-900/40" : "bg-blue-100",
-                                    )}
-                                  >
-                                    <Eye className="h-5 w-5 text-blue-500" />
-                                  </div>
-                                  <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
-                                    {formatMoney(
-                                      currentContest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_views.payout_cents,
-                                    )}
-                                  </Badge>
-                                </div>
-                                <h4
-                                  className={cn(
-                                    "font-bold text-lg mb-1",
-                                    isDark ? "text-white" : "text-blue-900",
-                                  )}
-                                >
-                                  Most Verified Views
-                                </h4>
-                                <p
-                                  className={cn(
-                                    "text-sm",
-                                    isDark
-                                      ? "text-blue-200/70"
-                                      : "text-blue-700",
-                                  )}
-                                >
-                                  Awarded to the creator with the highest total
-                                  verified views.
-                                </p>
-                                <div className="mt-4 pt-4 border-t border-blue-500/20">
-                                  <div className="flex items-start justify-between gap-3 text-xs font-semibold">
-                                    <span className="opacity-70 uppercase tracking-tighter">
-                                      Eligibility Condition
-                                    </span>
-                                    <div className="text-blue-500 text-right space-y-1">
-                                      {typeof currentContest
-                                        .contest_based_details.milestone_contest
-                                        .bonus.most_verified_views
-                                        .min_total_views === "number" && (
-                                        <div>
-                                          Min.{" "}
-                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
-                                          Views
-                                        </div>
-                                      )}
-                                      {typeof currentContest
-                                        .contest_based_details.milestone_contest
-                                        .bonus.most_verified_views
-                                        .min_verified_reels === "number" && (
-                                        <div>
-                                          Min.{" "}
-                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
-                                          Reels
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-
-                            {currentContest.contest_based_details
-                              .milestone_contest.bonus.most_verified_reels && (
-                              <div
-                                className={cn(
-                                  "rounded-xl border p-5 relative overflow-hidden",
-                                  isDark
-                                    ? "bg-gradient-to-br from-pink-900/20 to-purple-900/20 border-pink-500/30"
-                                    : "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200",
-                                )}
-                              >
-                                <div className="flex items-start justify-between mb-4">
-                                  <div
-                                    className={cn(
-                                      "p-2 rounded-lg",
-                                      isDark ? "bg-pink-900/40" : "bg-pink-100",
-                                    )}
-                                  >
-                                    <Play className="h-5 w-5 text-pink-500" />
-                                  </div>
-                                  <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
-                                    {formatMoney(
-                                      currentContest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_reels.payout_cents,
-                                    )}
-                                  </Badge>
-                                </div>
-                                <h4
-                                  className={cn(
-                                    "font-bold text-lg mb-1",
-                                    isDark ? "text-white" : "text-pink-900",
-                                  )}
-                                >
-                                  Most Verified Reels
-                                </h4>
-                                <p
-                                  className={cn(
-                                    "text-sm",
-                                    isDark
-                                      ? "text-pink-200/70"
-                                      : "text-pink-700 font-bold",
-                                  )}
-                                >
-                                  Awarded to the creator with the most reels
-                                  hitting target views.
-                                </p>
-                                <div className="mt-4 pt-4 border-t border-pink-500/20">
-                                  <div className="flex items-start justify-between gap-3 text-xs font-semibold">
-                                    <span className="opacity-70 uppercase tracking-tighter">
-                                      Eligibility Condition
-                                    </span>
-                                    <div className="text-pink-500 text-right space-y-1">
-                                      {typeof currentContest
-                                        .contest_based_details.milestone_contest
-                                        .bonus.most_verified_reels
-                                        .min_verified_reels === "number" && (
-                                        <div>
-                                          Min.{" "}
-                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
-                                          Reels
-                                        </div>
-                                      )}
-                                      {typeof currentContest
-                                        .contest_based_details.milestone_contest
-                                        .bonus.most_verified_reels
-                                        .min_total_views === "number" && (
-                                        <div>
-                                          Min.{" "}
-                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
-                                          Views
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                                  ))}
+                            </div>
                           </div>
                         </div>
-                      )}
-
-                      {/* Budget Status — hidden for dual rewards (single pool shown in overview) */}
-                      {!isDualRewardsContestType(
-                        currentContest.contest_type,
-                      ) && (
-                        <div
-                          className={cn(
-                            "mt-6 p-4 rounded-xl border flex items-center justify-between",
-                            isDark
-                              ? "bg-gray-900/30 border-gray-600"
-                              : "bg-gray-50 border-gray-200",
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Wallet className="h-5 w-5 text-emerald-500" />
-                            <span
-                              className={cn(
-                                "text-sm font-medium",
-                                isDark ? "text-gray-300" : "text-gray-600",
-                              )}
-                            >
-                              Total Budget
-                            </span>
-                          </div>
-                          <span
-                            className={cn(
-                              "text-lg font-bold",
-                              isDark ? "text-white" : "text-gray-900",
-                            )}
+                      );
+                      if (slice.showLabel && slice.platform) {
+                        return (
+                          <ContestDetailPlatformScopeCard
+                            key={`prize-structure-${slice.platform}`}
+                            platforms={[slice.platform]}
+                            isDark={isDark}
                           >
-                            {formatMoney(
-                              currentContest.contest_based_details
-                                .milestone_contest.total_budget_cents,
-                            )}
-                          </span>
+                            {prizeBody}
+                          </ContestDetailPlatformScopeCard>
+                        );
+                      }
+                      return (
+                        <div
+                          key={`prize-structure-${slice.platform ?? "contest"}`}
+                          className="space-y-4"
+                        >
+                          {prizeBody}
                         </div>
-                      )}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {overviewPayoutGroups.map((group) => {
+                  const payoutContest =
+                    group.contestPlatform == null
+                      ? overviewUniformPayoutContest
+                      : buildOverviewPayoutContest(group.contestPlatform);
+                  return (
+                    <div
+                      key={`payout-sections-${group.platforms.join("-") || "single"}`}
+                      className="space-y-3"
+                    >
+                      <ContestDetailVideoPayoutSections
+                        contest={payoutContest}
+                        isDark={isDark}
+                        platform={group.contestPlatform}
+                        platforms={group.platforms}
+                        showPlatformLabel={group.showLabels}
+                        sharedPlatformIcons={
+                          overviewVideoPlatforms.length >= 2 &&
+                          overviewPlatformTab === ALL_PLATFORM_TAB &&
+                          !group.showLabels
+                            ? overviewVideoPlatforms
+                            : undefined
+                        }
+                        isTwitterCpmCampaign={isTwitterCpmCampaign}
+                        winnerCountsByMilestone={winnerCountsByTargetForPlatform(
+                          milestoneSubmissionAssignments.winnerCountsByKey,
+                          group.platforms.length > 0
+                            ? group.platforms.join(",")
+                            : (parseVideoContestPlatforms(
+                                currentContest.platform,
+                              )[0] ?? null),
+                        )}
+                      />
                     </div>
-                  )}
+                  );
+                })}
 
                 {/* Points Configuration */}
                 {(() => {
                   // Check for Twitter CPM points config
                   const twitterPointsConfig =
-                    currentContest.contest_based_details?.twitter_campaign
-                      ?.points_config;
+                    overviewDetailContest.contest_based_details
+                      ?.twitter_campaign?.points_config;
                   // Check for CPM contest points config
                   const cpmPointsConfig =
-                    currentContest.contest_based_details?.cpm_contest
+                    overviewDetailContest.contest_based_details?.cpm_contest
                       ?.points_config;
 
                   const hasPointsConfig =
@@ -16834,10 +18303,11 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
-                {isDualRewardsContestType(currentContest.contest_type) &&
-                  getPoolBudgetCentsFromDetails(
-                    currentContest.contest_type,
-                    currentContest.contest_based_details,
+                {isDualRewardsContestType(overviewDetailContest.contest_type) &&
+                  resolveContestPoolBudgetCents(
+                    overviewDetailContest.contest_type,
+                    overviewDetailContest.contest_based_details,
+                    overviewDetailContest.platform,
                   ) > 0 && (
                     <div className="space-y-3">
                       <div
@@ -16863,9 +18333,10 @@ export default function ContestDetailClient({
                           )}
                         >
                           {formatMoney(
-                            getPoolBudgetCentsFromDetails(
-                              currentContest.contest_type,
-                              currentContest.contest_based_details,
+                            resolveContestPoolBudgetCents(
+                              overviewDetailContest.contest_type,
+                              overviewDetailContest.contest_based_details,
+                              overviewDetailContest.platform,
                             ),
                           )}
                         </span>
@@ -16873,30 +18344,108 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
-                {(currentContest as any).rules_html && (
+                {overviewVideoPlatforms.length >= 2 &&
+                overviewPlatformTab === ALL_PLATFORM_TAB &&
+                overviewRulesDiffer ? (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-lg text-foreground">
                       Rules
                     </h3>
-                    <div
-                      className={cn(
-                        "border rounded-lg p-4",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
-                          isDark
-                            ? "bg-[#170337] text-white prose-invert border-gray-600"
-                            : "bg-white text-foreground",
-                        )}
-                        dangerouslySetInnerHTML={{
-                          __html: (currentContest as any).rules_html,
-                        }}
-                      />
+                    <div className="space-y-3">
+                      {groupPlatformsByRules(
+                        contestState as {
+                          rules_html?: string | null;
+                          rules_json?: unknown;
+                          platform?: string | null;
+                        },
+                        overviewVideoPlatforms,
+                      ).map((platforms) => {
+                        const html = preferRichestHtmlAmong(
+                          platforms.map((platform) =>
+                            rulesHtmlForPlatform(
+                              contestState as {
+                                rules_html?: string | null;
+                                rules_json?: unknown;
+                                platform?: string | null;
+                              },
+                              platform,
+                            ),
+                          ),
+                        );
+                        if (!html) return null;
+                        return (
+                          <ContestDetailPlatformScopeCard
+                            key={`rules-${platforms.join("-")}`}
+                            platforms={platforms}
+                            isDark={isDark}
+                          >
+                            <div
+                              className={cn(
+                                "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
+                                isDark
+                                  ? "text-white prose-invert"
+                                  : "text-foreground",
+                              )}
+                              dangerouslySetInnerHTML={{ __html: html }}
+                            />
+                          </ContestDetailPlatformScopeCard>
+                        );
+                      })}
                     </div>
                   </div>
+                ) : (
+                  (() => {
+                    const sharedRulesHtml =
+                      overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB
+                        ? preferRichestHtmlAmong(
+                            overviewVideoPlatforms.map((platform) =>
+                              rulesHtmlForPlatform(
+                                contestState as {
+                                  rules_html?: string | null;
+                                  rules_json?: unknown;
+                                  platform?: string | null;
+                                },
+                                platform,
+                              ),
+                            ),
+                          )
+                        : overviewDetailContest.rules_html;
+                    if (!sharedRulesHtml) return null;
+                    const showSharedHint =
+                      overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB;
+                    return (
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                          Rules
+                          {showSharedHint ? (
+                            <ContestDetailSharedAcrossPlatformsHint
+                              platforms={overviewVideoPlatforms}
+                            />
+                          ) : null}
+                        </h3>
+                        <div
+                          className={cn(
+                            "border rounded-lg p-4",
+                            isDark ? "border-gray-600" : "border-gray-300",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "prose prose-md max-w-none [&_a]:break-words [&_a]:overflow-wrap-anywhere [&_a]:hover:underline",
+                              isDark
+                                ? "bg-[#170337] text-white prose-invert border-gray-600"
+                                : "bg-white text-foreground",
+                            )}
+                            dangerouslySetInnerHTML={{
+                              __html: sharedRulesHtml || "",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()
                 )}
 
                 {hasTwitterRequirements && (
@@ -17181,60 +18730,50 @@ export default function ContestDetailClient({
                   )}
 
                 {/* Flat Fee Bonus Section */}
-                {!isDualRewardsContestType(currentContest.contest_type) &&
-                  (currentContest.contest_based_details?.cpm_contest
-                    ?.flat_fee_bonus ||
-                    currentContest.contest_based_details?.leaderboard_contest
-                      ?.flat_fee_bonus) && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                        <Gift className="h-5 w-5 text-green-600" />
-                        Guaranteed Flat Bonus
-                      </h3>
-                      <div
-                        className={cn(
-                          "border p-4 rounded-lg",
-                          isDark
-                            ? "bg-green-950/40 border-green-800"
-                            : "border-green-300 bg-green-50/50 rounded-xl p-4",
-                        )}
-                      >
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mb-2",
-                            isDark ? "text-green-300" : "text-green-900",
-                          )}
-                        >
-                          {formatMoney(
+                {overviewFlatFeeSlices.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-green-600" />
+                      Guaranteed Flat Bonus
+                      {overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB &&
+                      !overviewFlatFeeSlices.some((s) => s.showLabel) ? (
+                        <ContestDetailSharedAcrossPlatformsHint
+                          platforms={overviewVideoPlatforms}
+                        />
+                      ) : null}
+                    </h3>
+                    {overviewFlatFeeSlices.map((slice) => {
+                      const cap = isCpmContestType(slice.contest.contest_type)
+                        ? Number(
                             (
-                              currentContest.contest_based_details
+                              slice.contest.contest_based_details
                                 ?.cpm_contest as any
-                            )?.flat_fee_bonus ||
-                              (
-                                currentContest.contest_based_details
-                                  ?.leaderboard_contest as any
-                              )?.flat_fee_bonus ||
-                              0,
-                          )}{" "}
-                          per verified submission
-                        </p>
-                        <p
-                          className={cn(
-                            "text-sm",
-                            isDark ? "text-green-400" : "text-green-700",
-                          )}
-                        >
-                          🎁 Each creator earns this guaranteed amount for EVERY
-                          verified submission, regardless of views or ranking!
-                          Paid after the campaign ends along with other
-                          earnings.
-                        </p>
-                        {/* Flat Fee Bonus Cap (for CPM campaigns) */}
-                        {isCpmContestType(currentContest.contest_type) &&
-                          (
-                            currentContest.contest_based_details
-                              ?.cpm_contest as any
-                          )?.flat_fee_bonus_cap && (
+                            )?.flat_fee_bonus_cap,
+                          ) || 0
+                        : 0;
+                      const cardBody = (
+                        <>
+                          <p
+                            className={cn(
+                              "text-2xl font-bold mb-2",
+                              isDark ? "text-green-300" : "text-green-900",
+                            )}
+                          >
+                            {formatMoney(slice.bonus)} per verified submission
+                          </p>
+                          <p
+                            className={cn(
+                              "text-sm",
+                              isDark ? "text-green-400" : "text-green-700",
+                            )}
+                          >
+                            🎁 Each creator earns this guaranteed amount for
+                            EVERY verified submission, regardless of views or
+                            ranking! Paid after the campaign ends along with
+                            other earnings.
+                          </p>
+                          {cap > 0 && (
                             <div
                               className={cn(
                                 "mt-3 pt-3 border-t",
@@ -17249,13 +18788,7 @@ export default function ContestDetailClient({
                                   isDark ? "text-green-200" : "text-green-800",
                                 )}
                               >
-                                💰 Flat Fee Bonus Cap:{" "}
-                                {formatMoney(
-                                  (
-                                    currentContest.contest_based_details
-                                      ?.cpm_contest as any
-                                  )?.flat_fee_bonus_cap,
-                                )}
+                                💰 Flat Fee Bonus Cap: {formatMoney(cap)}
                               </p>
                               <p
                                 className={cn(
@@ -17269,9 +18802,42 @@ export default function ContestDetailClient({
                               </p>
                             </div>
                           )}
-                      </div>
-                    </div>
-                  )}
+                        </>
+                      );
+                      if (slice.showLabel && slice.platform) {
+                        return (
+                          <ContestDetailPlatformScopeCard
+                            key={`flat-fee-${slice.platform}`}
+                            platforms={[slice.platform]}
+                            isDark={isDark}
+                          >
+                            <div
+                              className={cn(
+                                "rounded-lg p-1",
+                                isDark ? "" : "",
+                              )}
+                            >
+                              {cardBody}
+                            </div>
+                          </ContestDetailPlatformScopeCard>
+                        );
+                      }
+                      return (
+                        <div
+                          key={`flat-fee-${slice.platform ?? "contest"}`}
+                          className={cn(
+                            "border p-4 rounded-lg",
+                            isDark
+                              ? "bg-green-950/40 border-green-800"
+                              : "border-green-300 bg-green-50/50 rounded-xl p-4",
+                          )}
+                        >
+                          {cardBody}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Multiple Submissions Section */}
                 {(currentContest as any).multiple_submissions_enabled && (
@@ -17314,31 +18880,85 @@ export default function ContestDetailClient({
                         ALL submissions.
                       </p>
                       {(() => {
-                        const contestMaxEarnings =
-                          (currentContest as any)?.max_earnings_per_creator ??
-                          (currentContest as any)?.contest_based_details
-                            ?.cpm_contest?.max_earnings_per_creator ??
-                          (currentContest as any)?.contest_based_details
-                            ?.leaderboard_contest?.max_earnings_per_creator;
+                        const showAllCapsSplit =
+                          overviewVideoPlatforms.length >= 2 &&
+                          overviewPlatformTab === ALL_PLATFORM_TAB &&
+                          overviewMaxEarningsDiffer;
+                        const platformsForCap = showAllCapsSplit
+                          ? overviewVideoPlatforms
+                          : [
+                              overviewScopedPlatform ??
+                                overviewVideoPlatforms[0] ??
+                                parseVideoContestPlatforms(
+                                  currentContest?.platform,
+                                )[0],
+                            ].filter(Boolean);
+                        const caps = (platformsForCap as VideoContestPlatform[])
+                          .map((platform) => ({
+                            platform: showAllCapsSplit ? platform : null,
+                            cents: maxEarningsCentsForPlatform(
+                              (currentContest as any)?.max_earnings_per_creator,
+                              (currentContest as any)?.bonus_details,
+                              platform,
+                            ),
+                          }))
+                          .filter((row) => row.cents);
+                        // Deduplicate identical caps when not splitting
+                        const displayCaps = showAllCapsSplit
+                          ? caps
+                          : caps.slice(0, 1);
 
-                        return contestMaxEarnings ? (
+                        return displayCaps.length > 0 ? (
                           <div
                             className={cn(
-                              "mt-3 pt-3 border-t",
+                              "mt-3 pt-3 border-t space-y-3",
                               isDark
                                 ? "border-purple-700/50"
                                 : "border-purple-200",
                             )}
                           >
-                            <p
-                              className={cn(
-                                "text-sm font-medium",
-                                isDark ? "text-purple-200" : "text-purple-800",
-                              )}
-                            >
-                              💡 Earnings Cap for This Contest:{" "}
-                              {formatMoney(contestMaxEarnings)}
-                            </p>
+                            {showAllCapsSplit
+                              ? displayCaps.map(({ platform, cents }, idx) =>
+                                  platform ? (
+                                    <ContestDetailPlatformScopeCard
+                                      key={`cap-${platform}-${idx}`}
+                                      platforms={[platform]}
+                                      isDark={isDark}
+                                      variant="subtle"
+                                    >
+                                      <p
+                                        className={cn(
+                                          "text-sm font-medium",
+                                          isDark
+                                            ? "text-purple-200"
+                                            : "text-purple-800",
+                                        )}
+                                      >
+                                        💡 Earnings Cap: {formatMoney(cents!)}
+                                      </p>
+                                    </ContestDetailPlatformScopeCard>
+                                  ) : null,
+                                )
+                              : displayCaps.map(({ cents }, idx) => (
+                                  <p
+                                    key={`cap-shared-${idx}`}
+                                    className={cn(
+                                      "text-sm font-medium flex items-center gap-2",
+                                      isDark
+                                        ? "text-purple-200"
+                                        : "text-purple-800",
+                                    )}
+                                  >
+                                    💡 Earnings Cap: {formatMoney(cents!)}
+                                    {!showAllCapsSplit &&
+                                    overviewVideoPlatforms.length >= 2 &&
+                                    overviewPlatformTab === ALL_PLATFORM_TAB ? (
+                                      <ContestDetailSharedAcrossPlatformsHint
+                                        platforms={overviewVideoPlatforms}
+                                      />
+                                    ) : null}
+                                  </p>
+                                ))}
                             <p
                               className={cn(
                                 "text-xs mt-1",
@@ -17358,51 +18978,104 @@ export default function ContestDetailClient({
                 )}
 
                 {/* Additional Bonus Opportunities Section */}
-                {(currentContest as any).bonus_details?.description_html && (
-                  <div className="space-y-3">
-                    <h3
-                      className={cn(
-                        "font-semibold text-lg flex items-center gap-2",
-                        isDark ? "text-white" : "text-foreground",
-                      )}
-                    >
-                      <Star className="h-5 w-5 text-amber-600" />
-                      Additional Bonus Opportunities
-                    </h3>
-                    <div
-                      className={cn(
-                        "border rounded-xl p-4",
-                        isDark
-                          ? "border-amber-500"
-                          : "border-amber-300 bg-amber-50/50",
-                      )}
-                    >
-                      <div
+                {(() => {
+                  const showAllBonusSplit =
+                    overviewVideoPlatforms.length >= 2 &&
+                    overviewPlatformTab === ALL_PLATFORM_TAB &&
+                    overviewBonusDetailsDiffer;
+                  const bonusPlatforms = showAllBonusSplit
+                    ? overviewVideoPlatforms
+                    : ([
+                        overviewScopedPlatform ??
+                          overviewVideoPlatforms[0] ??
+                          parseVideoContestPlatforms(
+                            currentContest?.platform,
+                          )[0],
+                      ].filter(Boolean) as VideoContestPlatform[]);
+                  const bonusRows = bonusPlatforms
+                    .map((platform) => ({
+                      platform: showAllBonusSplit ? platform : null,
+                      html: bonusDetailsForPlatform(
+                        (currentContest as any).bonus_details,
+                        platform,
+                      )?.description_html,
+                    }))
+                    .filter((row) => row.html);
+                  const displayBonusRows = showAllBonusSplit
+                    ? bonusRows
+                    : bonusRows.slice(0, 1);
+                  if (displayBonusRows.length === 0) return null;
+                  return (
+                    <div className="space-y-3">
+                      <h3
                         className={cn(
-                          "prose prose-md max-w-none",
-                          isDark
-                            ? "text-white [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
-                            : "text-foreground",
-                        )}
-                        style={isDark ? { color: "white" } : undefined}
-                        dangerouslySetInnerHTML={{
-                          __html: (currentContest as any).bonus_details
-                            .description_html,
-                        }}
-                      />
-                      <p
-                        className={cn(
-                          "text-xs mt-3 italic",
-                          isDark ? "text-amber-300" : "text-amber-700",
+                          "font-semibold text-lg flex items-center gap-2",
+                          isDark ? "text-white" : "text-foreground",
                         )}
                       >
-                        ℹ️ These bonuses are handled manually by you. Make sure
-                        to follow through on these commitments to maintain
-                        creator trust!
-                      </p>
+                        <Star className="h-5 w-5 text-amber-600" />
+                        Additional Bonus Opportunities
+                        {!showAllBonusSplit &&
+                        overviewVideoPlatforms.length >= 2 &&
+                        overviewPlatformTab === ALL_PLATFORM_TAB ? (
+                          <ContestDetailSharedAcrossPlatformsHint
+                            platforms={overviewVideoPlatforms}
+                          />
+                        ) : null}
+                      </h3>
+                      {displayBonusRows.map(({ platform, html }, idx) => {
+                        const body = (
+                          <>
+                            <div
+                              className={cn(
+                                "prose prose-md max-w-none",
+                                isDark
+                                  ? "text-white [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
+                                  : "text-foreground",
+                              )}
+                              style={isDark ? { color: "white" } : undefined}
+                              dangerouslySetInnerHTML={{ __html: html || "" }}
+                            />
+                            <p
+                              className={cn(
+                                "text-xs mt-3 italic",
+                                isDark ? "text-amber-300" : "text-amber-700",
+                              )}
+                            >
+                              ℹ️ These bonuses are handled manually by you. Make
+                              sure to follow through on these commitments to
+                              maintain creator trust!
+                            </p>
+                          </>
+                        );
+                        if (platform) {
+                          return (
+                            <ContestDetailPlatformScopeCard
+                              key={`bonus-${platform}-${idx}`}
+                              platforms={[platform]}
+                              isDark={isDark}
+                            >
+                              {body}
+                            </ContestDetailPlatformScopeCard>
+                          );
+                        }
+                        return (
+                          <div
+                            key={`bonus-shared-${idx}`}
+                            className={cn(
+                              "border rounded-xl p-4",
+                              isDark
+                                ? "border-amber-500"
+                                : "border-amber-300 bg-amber-50/50",
+                            )}
+                          >
+                            {body}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Twitter raid: show target tweet + metrics from contest_based_details.twitter_campaign */}
                 {currentContest.platform?.toLowerCase() === "twitter" &&
@@ -17604,71 +19277,162 @@ export default function ContestDetailClient({
 
                 {/* Render inspiration links for non-Twitter contests */}
                 {currentContest.platform?.toLowerCase() !== "twitter" &&
-                  Array.isArray(currentContest.inspiration_links) &&
-                  currentContest.inspiration_links.length > 0 && (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3">
-                        <h3
-                          className={cn(
-                            "text-xl font-semibold",
-                            isDark ? "text-white" : "text-gray-900",
-                          )}
-                        >
-                          Inspiration Links
-                        </h3>
-                      </div>
-
-                      <div className="grid gap-4">
-                        {currentContest.inspiration_links.map((item, idx) => (
-                          <div
-                            key={idx}
+                  (() => {
+                    type InspirationGroup = {
+                      platforms: VideoContestPlatform[] | null;
+                      items: Array<{
+                        url: string;
+                        description: string;
+                      }>;
+                      key: string;
+                    };
+                    let inspirationGroups: InspirationGroup[] = [];
+                    if (overviewVideoPlatforms.length >= 2) {
+                      if (overviewPlatformTab === ALL_PLATFORM_TAB) {
+                        const groups = groupPlatformsByInspirationLinks(
+                          contestState.inspiration_links,
+                          overviewVideoPlatforms,
+                        );
+                        const showLabels = groups.length > 1;
+                        inspirationGroups = groups
+                          .map((platforms, groupIdx) => ({
+                            platforms: showLabels ? platforms : null,
+                            items: inspirationLinksForPlatform(
+                              contestState.inspiration_links,
+                              platforms[0],
+                            ),
+                            key: showLabels
+                              ? platforms.join("-")
+                              : `shared-${groupIdx}`,
+                          }))
+                          .filter((group) => group.items.length > 0);
+                      } else {
+                        const platform =
+                          overviewScopedPlatform ?? overviewVideoPlatforms[0]!;
+                        const items = inspirationLinksForPlatform(
+                          contestState.inspiration_links,
+                          platform,
+                        );
+                        if (items.length > 0) {
+                          inspirationGroups = [
+                            {
+                              platforms: null,
+                              items,
+                              key: platform,
+                            },
+                          ];
+                        }
+                      }
+                    } else {
+                      const items = flattenContestInspirationLinks(
+                        currentContest.inspiration_links,
+                      );
+                      if (items.length > 0) {
+                        inspirationGroups = [
+                          {
+                            platforms: null,
+                            items,
+                            key: "single",
+                          },
+                        ];
+                      }
+                    }
+                    if (inspirationGroups.length === 0) return null;
+                    const showSharedHint =
+                      overviewVideoPlatforms.length >= 2 &&
+                      overviewPlatformTab === ALL_PLATFORM_TAB &&
+                      inspirationGroups.length === 1 &&
+                      inspirationGroups[0]?.platforms == null;
+                    return (
+                      <div className="space-y-6">
+                        <div className="flex items-center gap-3">
+                          <h3
                             className={cn(
-                              "border rounded-xl p-6 transition-all duration-200",
-                              isDark ? "border-gray-600" : "border-gray-300",
+                              "text-xl font-semibold flex items-center gap-2",
+                              isDark ? "text-white" : "text-gray-900",
                             )}
                           >
-                            <div className="flex items-start gap-4">
-                              <div
-                                className={cn(
-                                  "p-3 rounded-full flex-shrink-0",
-                                  isDark
-                                    ? "bg-[#FFFFFF42] text-white"
-                                    : "bg-purple-100 text-purple-600",
-                                )}
-                              >
-                                <ExternalLink className="h-5 w-5 " />
+                            Inspiration Links
+                            {showSharedHint ? (
+                              <ContestDetailSharedAcrossPlatformsHint
+                                platforms={overviewVideoPlatforms}
+                              />
+                            ) : null}
+                          </h3>
+                        </div>
+
+                        <div className="space-y-4">
+                          {inspirationGroups.map((group) => {
+                            const linksGrid = (
+                              <div className="grid gap-4">
+                                {group.items.map((item, idx) => (
+                                  <div
+                                    key={`${group.key}-${idx}`}
+                                    className={cn(
+                                      "border rounded-xl p-6 transition-all duration-200",
+                                      isDark
+                                        ? "border-gray-600"
+                                        : "border-gray-300",
+                                    )}
+                                  >
+                                    <div className="flex items-start gap-4">
+                                      <div
+                                        className={cn(
+                                          "p-3 rounded-full flex-shrink-0",
+                                          isDark
+                                            ? "bg-[#FFFFFF42] text-white"
+                                            : "bg-purple-100 text-purple-600",
+                                        )}
+                                      >
+                                        <ExternalLink className="h-5 w-5 " />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <a
+                                          href={item.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className={cn(
+                                            "block text-base font-medium hover:underline mb-2 break-all",
+                                            isDark
+                                              ? "text-purple-300"
+                                              : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
+                                          )}
+                                        >
+                                          {item.url}
+                                        </a>
+                                        <div
+                                          className={cn(
+                                            "text-sm leading-relaxed",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-700 dark:text-gray-300",
+                                          )}
+                                        >
+                                          {item.description}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <a
-                                  href={item.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={cn(
-                                    "block text-base font-medium hover:underline mb-2 break-all",
-                                    isDark
-                                      ? "text-purple-300"
-                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
-                                  )}
+                            );
+                            if (group.platforms && group.platforms.length > 0) {
+                              return (
+                                <ContestDetailPlatformScopeCard
+                                  key={group.key}
+                                  platforms={group.platforms}
+                                  isDark={isDark}
                                 >
-                                  {item.url}
-                                </a>
-                                <div
-                                  className={cn(
-                                    "text-sm leading-relaxed",
-                                    isDark
-                                      ? "text-white"
-                                      : "text-gray-700 dark:text-gray-300",
-                                  )}
-                                >
-                                  {item.description}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                                  {linksGrid}
+                                </ContestDetailPlatformScopeCard>
+                              );
+                            }
+                            return <div key={group.key}>{linksGrid}</div>;
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                 {/* Render tracking links if present */}
                 {Array.isArray(currentContest.tracking_links) &&
@@ -17780,168 +19544,240 @@ export default function ContestDetailClient({
                       </div>
                     </div>
                   )}
-                {currentContest.resources &&
-                  ((Array.isArray(currentContest.resources) &&
-                    currentContest.resources.length > 0) ||
-                    (typeof currentContest.resources === "object" &&
-                      Object.keys(currentContest.resources).length > 0)) && (
+                {(() => {
+                  type ResourceGroup = {
+                    platforms: VideoContestPlatform[] | null;
+                    items: Array<{
+                      url: string;
+                      description: string;
+                      type: "internal" | "external";
+                    }>;
+                    key: string;
+                  };
+                  let resourceGroups: ResourceGroup[] = [];
+                  if (overviewVideoPlatforms.length >= 2) {
+                    if (overviewPlatformTab === ALL_PLATFORM_TAB) {
+                      const groups = groupPlatformsByResources(
+                        contestState.resources,
+                        overviewVideoPlatforms,
+                      );
+                      const showLabels = groups.length > 1;
+                      resourceGroups = groups
+                        .map((platforms, groupIdx) => ({
+                          platforms: showLabels ? platforms : null,
+                          items: resourcesForPlatform(
+                            contestState.resources,
+                            platforms[0],
+                          ),
+                          key: showLabels
+                            ? platforms.join("-")
+                            : `shared-${groupIdx}`,
+                        }))
+                        .filter((group) => group.items.length > 0);
+                    } else {
+                      const platform =
+                        overviewScopedPlatform ?? overviewVideoPlatforms[0]!;
+                      const items = resourcesForPlatform(
+                        contestState.resources,
+                        platform,
+                      );
+                      if (items.length > 0) {
+                        resourceGroups = [
+                          { platforms: null, items, key: platform },
+                        ];
+                      }
+                    }
+                  } else {
+                    const items = flattenContestResources(
+                      currentContest.resources,
+                    );
+                    if (items.length > 0) {
+                      resourceGroups = [
+                        { platforms: null, items, key: "single" },
+                      ];
+                    }
+                  }
+                  if (resourceGroups.length === 0) return null;
+                  const showSharedHint =
+                    overviewVideoPlatforms.length >= 2 &&
+                    overviewPlatformTab === ALL_PLATFORM_TAB &&
+                    resourceGroups.length === 1 &&
+                    resourceGroups[0]?.platforms == null;
+
+                  const renderResourceItem = (
+                    resource: ResourceGroup["items"][number],
+                    idx: string,
+                  ) => {
+                    const isImage =
+                      resource.url.startsWith("data:image") ||
+                      /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(resource.url);
+                    const isPdf = /\.pdf$/i.test(resource.url);
+                    const isVideo = /\.(mp4|mov|avi|webm)$/i.test(resource.url);
+                    const isInternal = resource.type === "internal";
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "border rounded-xl p-6 transition-all duration-200",
+                          isDark ? "border-gray-600" : "border-gray-300",
+                        )}
+                      >
+                        <div className="flex flex-col md:flex-row justify-between">
+                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                            {isInternal && isImage && !isPdf ? (
+                              <img
+                                src={resource.url}
+                                alt={resource.description}
+                                className="w-12 h-12 object-cover rounded-lg"
+                              />
+                            ) : isInternal && isPdf ? (
+                              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center border border-red-200 dark:border-red-700">
+                                <svg
+                                  className="w-6 h-6 text-red-600 dark:text-red-400"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </div>
+                            ) : isInternal && isVideo ? (
+                              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center border border-blue-200 dark:border-blue-700">
+                                <svg
+                                  className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                                </svg>
+                              </div>
+                            ) : isInternal &&
+                              !isImage &&
+                              !isPdf &&
+                              !isVideo ? (
+                              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center border border-green-200 dark:border-green-700">
+                                <svg
+                                  className="w-6 h-6 text-green-600 dark:text-green-400"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </div>
+                            ) : (
+                              <div
+                                className={cn(
+                                  "p-3 rounded-full flex-shrink-0",
+                                  isDark
+                                    ? "bg-[#FFFFFF42] text-white"
+                                    : "bg-purple-100 text-purple-600",
+                                )}
+                              >
+                                <ExternalLink className="h-5 w-5" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <h4
+                                className={cn(
+                                  "text-base font-semibold mb-1",
+                                  isDark ? "text-white" : "text-gray-900 ",
+                                )}
+                              >
+                                {resource.description}
+                              </h4>
+                              <p
+                                className={cn(
+                                  "text-sm",
+                                  isDark ? "text-white" : "text-gray-600",
+                                )}
+                              >
+                                {resource.type === "external"
+                                  ? "External Link"
+                                  : "Uploaded File"}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
+                          >
+                            <a
+                              href={resource.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              {isPdf
+                                ? "Open PDF"
+                                : isVideo
+                                  ? "Play Video"
+                                  : isImage
+                                    ? "View Image"
+                                    : "View Resource"}
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  return (
                     <div className="space-y-6">
                       <div className="flex items-center gap-3">
-                        {/* <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                          <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        </div> */}
                         <h3
                           className={cn(
-                            "text-xl font-semibold",
+                            "text-xl font-semibold flex items-center gap-2",
                             isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           Resources
+                          {showSharedHint ? (
+                            <ContestDetailSharedAcrossPlatformsHint
+                              platforms={overviewVideoPlatforms}
+                            />
+                          ) : null}
                         </h3>
                       </div>
 
-                      <div className="grid gap-4">
-                        {(Array.isArray(currentContest.resources)
-                          ? currentContest.resources
-                          : Object.entries(currentContest.resources).map(
-                              ([description, url]) => ({
-                                url,
-                                description,
-                                type: "external",
-                              }),
-                            )
-                        ).map((resource, idx) => {
-                          const isImage =
-                            resource.url.startsWith("data:image") ||
-                            /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(
-                              resource.url,
-                            );
-                          const isPdf = /\.pdf$/i.test(resource.url);
-                          const isVideo = /\.(mp4|mov|avi|webm)$/i.test(
-                            resource.url,
-                          );
-                          const isInternal = resource.type === "internal";
-                          return (
-                            <div
-                              key={idx}
-                              className={cn(
-                                "border rounded-xl p-6 transition-all duration-200",
-                                isDark ? "border-gray-600" : "border-gray-300",
+                      <div className="space-y-4">
+                        {resourceGroups.map((group) => {
+                          const items = (
+                            <div className="grid gap-4">
+                              {group.items.map((resource, idx) =>
+                                renderResourceItem(
+                                  resource,
+                                  `${group.key}-res-${idx}`,
+                                ),
                               )}
-                            >
-                              <div className="flex flex-col md:flex-row justify-between">
-                                <div className="flex items-center gap-4 flex-1 min-w-0">
-                                  {isInternal && isImage && !isPdf ? (
-                                    <img
-                                      src={resource.url}
-                                      alt={resource.description}
-                                      className="w-12 h-12 object-cover rounded-lg"
-                                    />
-                                  ) : isInternal && isPdf ? (
-                                    <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center border border-red-200 dark:border-red-700">
-                                      <svg
-                                        className="w-6 h-6 text-red-600 dark:text-red-400"
-                                        fill="currentColor"
-                                        viewBox="0 0 20 20"
-                                      >
-                                        <path
-                                          fillRule="evenodd"
-                                          d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
-                                          clipRule="evenodd"
-                                        />
-                                      </svg>
-                                    </div>
-                                  ) : isInternal && isVideo ? (
-                                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center border border-blue-200 dark:border-blue-700">
-                                      <svg
-                                        className="w-6 h-6 text-blue-600 dark:text-blue-400"
-                                        fill="currentColor"
-                                        viewBox="0 0 20 20"
-                                      >
-                                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
-                                      </svg>
-                                    </div>
-                                  ) : isInternal &&
-                                    !isImage &&
-                                    !isPdf &&
-                                    !isVideo ? (
-                                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center border border-green-200 dark:border-green-700">
-                                      <svg
-                                        className="w-6 h-6 text-green-600 dark:text-green-400"
-                                        fill="currentColor"
-                                        viewBox="0 0 20 20"
-                                      >
-                                        <path
-                                          fillRule="evenodd"
-                                          d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
-                                          clipRule="evenodd"
-                                        />
-                                      </svg>
-                                    </div>
-                                  ) : (
-                                    <div
-                                      className={cn(
-                                        "p-3 rounded-full flex-shrink-0",
-                                        isDark
-                                          ? "bg-[#FFFFFF42] text-white"
-                                          : "bg-purple-100 text-purple-600",
-                                      )}
-                                    >
-                                      <ExternalLink className="h-5 w-5" />
-                                    </div>
-                                  )}
-                                  <div className="min-w-0">
-                                    <h4
-                                      className={cn(
-                                        "text-base font-semibold mb-1",
-                                        isDark
-                                          ? "text-white"
-                                          : "text-gray-900 ",
-                                      )}
-                                    >
-                                      {resource.description}
-                                    </h4>
-                                    <p
-                                      className={cn(
-                                        "text-sm",
-                                        isDark ? "text-white" : "text-gray-600",
-                                      )}
-                                    >
-                                      {resource.type === "external"
-                                        ? "External Link"
-                                        : "Uploaded File"}
-                                    </p>
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                  className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
-                                >
-                                  <a
-                                    href={resource.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center"
-                                  >
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    {isPdf
-                                      ? "Open PDF"
-                                      : isVideo
-                                        ? "Play Video"
-                                        : isImage
-                                          ? "View Image"
-                                          : "View Resource"}
-                                  </a>
-                                </Button>
-                              </div>
                             </div>
                           );
+                          if (group.platforms && group.platforms.length > 0) {
+                            return (
+                              <ContestDetailPlatformScopeCard
+                                key={group.key}
+                                platforms={group.platforms}
+                                isDark={isDark}
+                              >
+                                {items}
+                              </ContestDetailPlatformScopeCard>
+                            );
+                          }
+                          return <div key={group.key}>{items}</div>;
                         })}
                       </div>
                     </div>
-                  )}
+                  );
+                })()}
               </CardContent>
             </div>
             <FullCampaignReportExportDialog
@@ -17956,15 +19792,33 @@ export default function ContestDetailClient({
                 >[]
               }
               getMetrics={getSubmissionExportMetrics}
-              rewardContext={submissionExportRewardContext}
-              creatorExportContext={creatorExportContext}
-              submissionColumnOptions={submissionExportColumnOptions}
-              creatorColumnOptions={creatorExportColumnOptions}
-              submissionDefaultColumnIds={submissionExportDefaultColumnIds}
-              creatorDefaultColumnIds={creatorExportDefaultColumnIds}
-              analyticsSnapshotContext={analyticsSnapshotContext}
+              rewardContext={{
+                ...submissionExportRewardContext,
+                platform:
+                  overviewScopedPlatform ??
+                  submissionExportRewardContext.platform,
+              }}
+              creatorExportContext={{
+                ...creatorExportContext,
+                platform:
+                  overviewScopedPlatform ?? creatorExportContext.platform,
+              }}
+              submissionColumnOptions={fullReportSubmissionColumnOptions}
+              creatorColumnOptions={fullReportCreatorColumnOptions}
+              submissionDefaultColumnIds={fullReportSubmissionDefaultColumnIds}
+              creatorDefaultColumnIds={fullReportCreatorDefaultColumnIds}
+              analyticsSnapshotContext={fullReportAnalyticsSnapshotContext}
               isTwitterTextImage={isTwitterTextImageContest}
+              platformScopeLabel={
+                overviewScopedPlatform
+                  ? VIDEO_PLATFORM_LABELS[overviewScopedPlatform]
+                  : overviewVideoPlatforms.length >= 2
+                    ? "All platforms"
+                    : undefined
+              }
               {...reportExportDialogProps}
+              reportAllSubmissions={fullReportScopedSubmissions}
+              reportContest={fullReportExportContest}
             />
           </TabPanel>
 
@@ -18467,12 +20321,43 @@ export default function ContestDetailClient({
                         {(() => {
                           const { isDisabled, disabledReason } =
                             getRefreshButtonState();
-                          const isYoutubeAdmin =
+                          // Full YouTube admin suite (basic / all / detailed) for:
+                          // - single-platform YouTube, or
+                          // - multi-platform only when the YouTube tab is selected.
+                          // All tab keeps the single Refresh Metrics button (full chain).
+                          const showYoutubeDetailedRefreshSuite =
                             isAdminView &&
-                            currentContest.platform?.toLowerCase() ===
-                              "youtube";
+                            overviewVideoPlatforms.includes("youtube") &&
+                            (overviewVideoPlatforms.length === 1 ||
+                              submissionsPlatformTab === "youtube");
+                          const showYoutubeAdminControls =
+                            showYoutubeDetailedRefreshSuite;
+                          const youtubeAdminControlsDisabled =
+                            anyYtRefreshInProgress ||
+                            hasRecentRunningRun ||
+                            postRefreshReloadPending;
+                          const youtubeAdminControlsButton =
+                            showYoutubeAdminControls ? (
+                              <button
+                                type="button"
+                                onClick={() => setAdminControlsModalOpen(true)}
+                                disabled={youtubeAdminControlsDisabled}
+                                className={cn(
+                                  "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
+                                  "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
+                                  isDark &&
+                                    "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
+                                  youtubeAdminControlsDisabled &&
+                                    "opacity-60 cursor-not-allowed",
+                                )}
+                                title="Choose what the brand sees for this campaign"
+                              >
+                                <Settings className="h-3.5 w-3.5" />
+                                Admin controls
+                              </button>
+                            ) : null;
 
-                          if (!isYoutubeAdmin) {
+                          if (!showYoutubeDetailedRefreshSuite) {
                             if (!isAdminView) {
                               return null;
                             }
@@ -18538,10 +20423,11 @@ export default function ContestDetailClient({
                                       ? `Wait ${cooldownInfo.remainingMinutes}m`
                                       : "Refresh Metrics"}
                                 </button>
-                                <div className="ml-auto">
+                                <div className="ml-auto flex flex-col items-end gap-2 shrink-0">
                                   <BulkVideoDownloadSummaryButton
                                     isDark={isDark}
                                   />
+                                  {youtubeAdminControlsButton}
                                 </div>
                               </>
                             );
@@ -18683,9 +20569,15 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         disabledReason ||
-                                        (isPostCampaignLeaderboard
-                                          ? "Refresh post-campaign basic metrics only (does not sync from Submissions)"
-                                          : "Views, likes, comments from YouTube Data API")
+                                        (overviewVideoPlatforms.length > 1 &&
+                                        submissionsPlatformTab ===
+                                          ALL_PLATFORM_TAB
+                                          ? isPostCampaignLeaderboard
+                                            ? "Refresh all platforms in order (YouTube full analytics → Instagram → TikTok)"
+                                            : "Refresh all platforms in order (YouTube full analytics → Instagram → TikTok)"
+                                          : isPostCampaignLeaderboard
+                                            ? "Refresh post-campaign basic metrics only (does not sync from Submissions)"
+                                            : "Views, likes, comments from YouTube Data API")
                                       }
                                     >
                                       {isRefreshingMetrics ? (
@@ -18697,7 +20589,11 @@ export default function ContestDetailClient({
                                         ? "Updating..."
                                         : !cooldownInfo.canRefresh
                                           ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                          : "Refresh Basic Metrics"}
+                                          : overviewVideoPlatforms.length > 1 &&
+                                              submissionsPlatformTab ===
+                                                ALL_PLATFORM_TAB
+                                            ? "Refresh Metrics"
+                                            : "Refresh Basic Metrics"}
                                     </button>
                                     <span className={muteClass}>
                                       Basic:{" "}
@@ -18818,25 +20714,7 @@ export default function ContestDetailClient({
                                   <BulkVideoDownloadSummaryButton
                                     isDark={isDark}
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setAdminControlsModalOpen(true)
-                                    }
-                                    disabled={anyRefreshInProgress}
-                                    className={cn(
-                                      "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
-                                      "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
-                                      isDark &&
-                                        "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
-                                      anyRefreshInProgress &&
-                                        "opacity-60 cursor-not-allowed",
-                                    )}
-                                    title="Choose what the brand sees for this campaign"
-                                  >
-                                    <Settings className="h-3.5 w-3.5" />
-                                    Admin controls
-                                  </button>
+                                  {youtubeAdminControlsButton}
                                 </div>
                               </div>
                               {/* Section B — Detailed analytics */}
@@ -19187,82 +21065,47 @@ export default function ContestDetailClient({
                         showTiktokRunPopup &&
                         tiktokRun &&
                         (tiktokRun.status === "pending" ||
-                          tiktokRun.status === "running") && (
+                          tiktokRun.status === "running" ||
+                          tiktokRunCompleted ||
+                          tiktokRun.status === "completed" ||
+                          tiktokRun.status === "failed" ||
+                          tiktokRun.status === "cancelled") && (
                           <div className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-sm flex flex-col gap-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                                {tiktokRunCompleted
+                                {tiktokRunCompleted ||
+                                tiktokRun.status === "completed" ||
+                                tiktokRun.status === "failed" ||
+                                tiktokRun.status === "cancelled"
                                   ? "TikTok refresh summary"
                                   : "TikTok refresh in progress"}
                               </span>
                               <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {isAdminView
                                   ? `Batch ${tiktokRun.current_batch_index ?? 0}/${tiktokRun.total_batches ?? 1}`
-                                  : `${(() => {
-                                      const totalSubs =
-                                        tiktokRun.total_submissions ?? 0;
-                                      const reviewed =
-                                        tiktokRun.reviewed_count ?? 0;
-                                      const totalBatches =
-                                        tiktokRun.total_batches ?? 1;
-                                      const batchIndex =
-                                        tiktokRun.current_batch_index ?? 0;
-                                      const byReviewed =
-                                        totalSubs > 0 && reviewed > 0
-                                          ? (reviewed / totalSubs) * 100
-                                          : 0;
-                                      const byBatches =
-                                        totalBatches > 0
-                                          ? (batchIndex / totalBatches) * 100
-                                          : 0;
-                                      return Math.min(
-                                        100,
-                                        Math.max(
-                                          0,
-                                          Math.round(
-                                            Math.max(byReviewed, byBatches),
-                                          ),
-                                        ),
-                                      );
-                                    })()}%`}
+                                  : `${metricsRunProgressPercent(tiktokRun)}%`}
                               </span>
                             </div>
-                            {tiktokRun.status === "running" && (
-                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                                {(() => {
-                                  const totalSubs =
-                                    tiktokRun.total_submissions ?? 0;
-                                  const reviewed =
-                                    tiktokRun.reviewed_count ?? 0;
-                                  const totalBatches =
-                                    tiktokRun.total_batches ?? 1;
-                                  const batchIndex =
-                                    tiktokRun.current_batch_index ?? 0;
-
-                                  const byReviewed =
-                                    totalSubs > 0 && reviewed > 0
-                                      ? (reviewed / totalSubs) * 100
-                                      : 0;
-                                  const byBatches =
-                                    totalBatches > 0
-                                      ? (batchIndex / totalBatches) * 100
-                                      : 0;
-                                  const pct = Math.max(byReviewed, byBatches);
-
-                                  return (
-                                    <div
-                                      className="h-full bg-emerald-500 transition-all"
-                                      style={{
-                                        width: `${Math.min(
-                                          100,
-                                          Math.max(0, Math.round(pct)),
-                                        )}%`,
-                                      }}
-                                    />
-                                  );
-                                })()}
-                              </div>
-                            )}
+                            <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                              {(() => {
+                                const pct =
+                                  metricsRunProgressPercent(tiktokRun);
+                                const isActive =
+                                  tiktokRun.status === "pending" ||
+                                  tiktokRun.status === "running";
+                                return (
+                                  <div
+                                    className={cn(
+                                      "h-full bg-emerald-500 transition-all duration-500",
+                                      isActive && pct === 0 && "animate-pulse",
+                                    )}
+                                    style={{
+                                      width: `${isActive && pct === 0 ? 12 : pct}%`,
+                                    }}
+                                  />
+                                );
+                              })()}
+                            </div>
                             <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
                               <span>
                                 Processed{" "}
@@ -19471,7 +21314,8 @@ export default function ContestDetailClient({
                       <Tabs
                         value={activeStatusTab}
                         onValueChange={(value) => {
-                          if (isHydratingSubmissions) return;
+                          if (isHydratingSubmissions || platformTabsLocked)
+                            return;
                           setActiveStatusTab(value as any);
                         }}
                         className="w-full"
@@ -19479,7 +21323,9 @@ export default function ContestDetailClient({
                         <TabsList className="flex flex-wrap gap-2 w-full h-auto p-1">
                           <TabsTrigger
                             value="all"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19507,7 +21353,9 @@ export default function ContestDetailClient({
                           </TabsTrigger>
                           <TabsTrigger
                             value="not_rejected"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19535,7 +21383,9 @@ export default function ContestDetailClient({
                           </TabsTrigger>
                           <TabsTrigger
                             value="verified_or_paid"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19568,7 +21418,9 @@ export default function ContestDetailClient({
                           </TabsTrigger>
                           <TabsTrigger
                             value="pending"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19596,7 +21448,9 @@ export default function ContestDetailClient({
                           </TabsTrigger>
                           <TabsTrigger
                             value="verified"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19624,7 +21478,9 @@ export default function ContestDetailClient({
                           </TabsTrigger>
                           <TabsTrigger
                             value="rejected"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19652,7 +21508,9 @@ export default function ContestDetailClient({
                           </TabsTrigger>
                           <TabsTrigger
                             value="paid"
-                            disabled={isHydratingSubmissions}
+                            disabled={
+                              isHydratingSubmissions || platformTabsLocked
+                            }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
                               isDark
@@ -19684,18 +21542,28 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
+                {/* Platform filter (multi-platform video contests) — above reward totals */}
+                {overviewVideoPlatforms.length >= 2 && (
+                  <div className="py-2">
+                    <ContestDetailPlatformTabs
+                      platforms={overviewVideoPlatforms}
+                      active={submissionsPlatformTab}
+                      onChange={setSubmissionsPlatformTab}
+                      isDark={isDark}
+                      fullWidth
+                      counts={submissionsPlatformTabCounts}
+                      disabled={platformTabsLocked}
+                    />
+                  </div>
+                )}
+
                 {/* Financial totals for selected status tab (leaderboard/CPM/milestone only) */}
                 {(currentContest?.contest_type === "leaderboard" ||
                   isCpmContestType(currentContest?.contest_type) ||
                   isMilestoneContestType(currentContest?.contest_type)) &&
                   (() => {
-                    const flatFeeBonus = isCpmContestType(
-                      currentContest?.contest_type,
-                    )
-                      ? ((currentContest?.contest_based_details as any)
-                          ?.cpm_contest?.flat_fee_bonus ?? 0)
-                      : ((currentContest?.contest_based_details as any)
-                          ?.leaderboard_contest?.flat_fee_bonus ?? 0);
+                    const flatFeeBonus =
+                      getFlatFeeBonusCentsFromContest(currentContest);
                     const tot = statusFilterFinancialTotals;
                     const hasBonus =
                       flatFeeBonus > 0 ||
@@ -20221,9 +22089,7 @@ export default function ContestDetailClient({
                             </Popover>
                           )}
                           {/* YouTube only: customize table columns */}
-                          {currentContest.platform
-                            ?.toLowerCase()
-                            .includes("youtube") && (
+                          {submissionsTablePlatform.includes("youtube") && (
                             <Dialog
                               open={ytColumnsModalOpen}
                               onOpenChange={setYtColumnsModalOpen}
@@ -20422,7 +22288,12 @@ export default function ContestDetailClient({
                             >[]
                           }
                           getMetrics={getSubmissionExportMetrics}
-                          rewardContext={submissionExportRewardContext}
+                          rewardContext={{
+                            ...submissionExportRewardContext,
+                            platform:
+                              submissionsScopedPlatform ??
+                              submissionExportRewardContext.platform,
+                          }}
                           columnOptions={submissionExportColumnOptions}
                           defaultSelectedColumnIds={
                             submissionExportDefaultColumnIds
@@ -20438,6 +22309,10 @@ export default function ContestDetailClient({
                             activeStatusTab as ReportSubmissionFilter
                           }
                           {...reportExportDialogProps}
+                          reportAllSubmissions={
+                            submissionsReportScopedSubmissions
+                          }
+                          reportContest={submissionsReportExportContest}
                         />
                       ) : (
                         <SubmissionLeaderboardExportDialog
@@ -20455,7 +22330,12 @@ export default function ContestDetailClient({
                               unknown
                             >[]
                           }
-                          creatorExportContext={creatorExportContext}
+                          creatorExportContext={{
+                            ...creatorExportContext,
+                            platform:
+                              submissionsScopedPlatform ??
+                              creatorExportContext.platform,
+                          }}
                           columnOptions={creatorExportColumnOptions}
                           defaultSelectedColumnIds={
                             creatorExportDefaultColumnIds
@@ -20468,6 +22348,10 @@ export default function ContestDetailClient({
                             activeStatusTab as ReportSubmissionFilter
                           }
                           {...reportExportDialogProps}
+                          reportAllSubmissions={
+                            submissionsReportScopedSubmissions
+                          }
+                          reportContest={submissionsReportExportContest}
                         />
                       )}
                       {isTwitterTextImageContest && isSubmissionTableView && (
@@ -20654,6 +22538,11 @@ export default function ContestDetailClient({
                                   </TableHead>
                                 )}
                                 <TableHead>Creator</TableHead>
+                                {showAllTabPlatformColumn && (
+                                  <TableHead className="text-center whitespace-nowrap">
+                                    Platform
+                                  </TableHead>
+                                )}
                                 {/* For Twitter campaigns, show tweet content column */}
                                 {(currentContest.platform?.toLowerCase() ===
                                   "twitter" ||
@@ -20703,36 +22592,36 @@ export default function ContestDetailClient({
                                   </>
                                 ) : (
                                   <>
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes(
+                                      "youtube",
+                                    )
                                       ? ytVisibleColumns.includes("views")
                                       : true) && (
                                       <TableHead className="text-center">
                                         Views
                                       </TableHead>
                                     )}
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes(
+                                      "youtube",
+                                    )
                                       ? ytVisibleColumns.includes("likes")
                                       : true) && (
                                       <TableHead className="text-center">
                                         Likes
                                       </TableHead>
                                     )}
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes(
+                                      "youtube",
+                                    )
                                       ? ytVisibleColumns.includes("comments")
                                       : true) && (
                                       <TableHead className="text-center">
                                         Comments
                                       </TableHead>
                                     )}
-                                    {currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube") &&
+                                    {submissionsTablePlatform.includes(
+                                      "youtube",
+                                    ) &&
                                       canSeeCore &&
                                       ytVisibleColumns.includes("dislikes") && (
                                         <TableHead className="text-center">
@@ -20741,34 +22630,28 @@ export default function ContestDetailClient({
                                       )}
                                   </>
                                 )}
+                                {showSubmissionsSharesColumn && (
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                )}
                                 {/* Dynamic headers based on campaign platform */}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("tiktok") && (
+                                {submissionsTablePlatform.includes(
+                                  "tiktok",
+                                ) && (
                                   <>
-                                    <TableHead className="text-center">
-                                      Shares
-                                    </TableHead>
                                     <TableHead className="text-center">
                                       Total engagement
                                     </TableHead>
                                     <TableHead className="text-center">
                                       Engagement rate
                                     </TableHead>
-                                    {isAdminView && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
                                   </>
                                 )}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("instagram") && (
+                                {submissionsTablePlatform.includes(
+                                  "instagram",
+                                ) && (
                                   <>
-                                    <TableHead className="text-center">
-                                      Shares
-                                    </TableHead>
                                     <TableHead className="text-center">
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -20842,23 +22725,12 @@ export default function ContestDetailClient({
                                         </TooltipContent>
                                       </Tooltip>
                                     </TableHead>
-                                    {isAdminView && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
                                   </>
                                 )}
-                                {currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube") && (
+                                {submissionsTablePlatform.includes(
+                                  "youtube",
+                                ) && (
                                   <>
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes("shares") && (
-                                        <TableHead className="text-center">
-                                          Shares
-                                        </TableHead>
-                                      )}
                                     {canSeeCore &&
                                       ytVisibleColumns.includes(
                                         "avg_view_pct",
@@ -20930,15 +22802,12 @@ export default function ContestDetailClient({
                                           Top Traffic Source
                                         </TableHead>
                                       )}
-                                    {isAdminView &&
-                                      ytVisibleColumns.includes(
-                                        "insights_status",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Insights status
-                                        </TableHead>
-                                      )}
                                   </>
+                                )}
+                                {showSubmissionsInsightsStatusColumn && (
+                                  <TableHead className="text-center">
+                                    Insights status
+                                  </TableHead>
                                 )}
                                 {/* Show reward columns for leaderboard and CPM campaigns, hide for Twitter CPM campaigns */}
                                 {!(
@@ -20961,9 +22830,9 @@ export default function ContestDetailClient({
                                   currentContest.contest_type,
                                 ) ? (
                                   <>
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes(
+                                      "youtube",
+                                    )
                                       ? ytVisibleColumns.includes(
                                           "expected_reward",
                                         )
@@ -20983,9 +22852,9 @@ export default function ContestDetailClient({
                                               Expected Reward (Milestone)
                                             </TableHead>
                                             {showDualPayoutAdjustedColumns &&
-                                              (currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
+                                              (submissionsTablePlatform.includes(
+                                                "youtube",
+                                              )
                                                 ? ytVisibleColumns.includes(
                                                     "adjusted_reward",
                                                   )
@@ -21017,9 +22886,9 @@ export default function ContestDetailClient({
                                           !isDualRewardsContestType(
                                             currentContest.contest_type,
                                           ) &&
-                                          (currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          (submissionsTablePlatform.includes(
+                                            "youtube",
+                                          )
                                             ? ytVisibleColumns.includes(
                                                 "adjusted_reward",
                                               )
@@ -21037,9 +22906,9 @@ export default function ContestDetailClient({
                                         Milestone
                                       </TableHead>
                                     )}
-                                    {(currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube")
+                                    {(submissionsTablePlatform.includes(
+                                      "youtube",
+                                    )
                                       ? ytVisibleColumns.includes(
                                           "reward_granted",
                                         )
@@ -21067,9 +22936,9 @@ export default function ContestDetailClient({
                                       </>
                                     )}
                                     {showNormalViewFlatFeeBonusColumns &&
-                                      (currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      (submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes(
                                             "bonus_expected",
                                           ) &&
@@ -21093,27 +22962,21 @@ export default function ContestDetailClient({
                                     Quality Score
                                   </TableHead>
                                 )}
-                                {(currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube")
+                                {(submissionsTablePlatform.includes("youtube")
                                   ? ytVisibleColumns.includes("status")
                                   : true) && (
                                   <TableHead className="text-center">
                                     Status
                                   </TableHead>
                                 )}
-                                {(currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube")
+                                {(submissionsTablePlatform.includes("youtube")
                                   ? ytVisibleColumns.includes("status")
                                   : true) && (
                                   <TableHead className="text-center min-w-[140px]">
                                     Rejection reason
                                   </TableHead>
                                 )}
-                                {(currentContest.platform
-                                  ?.toLowerCase()
-                                  .includes("youtube")
+                                {(submissionsTablePlatform.includes("youtube")
                                   ? ytVisibleColumns.includes("submitted")
                                   : true) && (
                                   <TableHead className="text-center">
@@ -21149,6 +23012,21 @@ export default function ContestDetailClient({
                                     virtualIndex;
                                   const metrics =
                                     extractPlatformMetrics(submission);
+                                  const isYoutubeRow =
+                                    submissionMatchesVideoPlatform(
+                                      submission,
+                                      "youtube",
+                                    );
+                                  const isInstagramRow =
+                                    submissionMatchesVideoPlatform(
+                                      submission,
+                                      "instagram",
+                                    );
+                                  const isTiktokRow =
+                                    submissionMatchesVideoPlatform(
+                                      submission,
+                                      "tiktok",
+                                    );
                                   const isTwitterTweet =
                                     (submission as any).is_twitter_tweet ===
                                     true;
@@ -21303,8 +23181,8 @@ export default function ContestDetailClient({
                                           };
                                         }
 
-                                        // Non-Twitter: contest-wide views rank among
-                                        // verified/approved/paid only (not table display rank).
+                                        // Non-Twitter: views rank among verified/approved/paid
+                                        // (All-tab when prizes match; per-platform when they differ).
                                         // Do not apply % payout adjustment — server pays fixed rank prizes.
                                         const preCents =
                                           leaderboardPrizeCentsBySubmissionId.get(
@@ -21455,8 +23333,10 @@ export default function ContestDetailClient({
                                             preCents === 0 &&
                                             uncappedAdjusted > 0;
                                           const activeCreatorCapCents = Number(
-                                            (currentContest as any)
-                                              ?.max_earnings_per_creator ??
+                                            resolveMaxEarningsCentsForSubmission(
+                                              currentContest as any,
+                                              submission.platform,
+                                            ) ??
                                               (currentContest as any)
                                                 ?.contest_based_details
                                                 ?.cpm_contest
@@ -21514,8 +23394,10 @@ export default function ContestDetailClient({
                                         }
                                       }
                                       const activeCreatorCapForDualMs = Number(
-                                        (currentContest as any)
-                                          ?.max_earnings_per_creator ??
+                                        resolveMaxEarningsCentsForSubmission(
+                                          currentContest as any,
+                                          submission.platform,
+                                        ) ??
                                           (currentContest as any)
                                             ?.contest_based_details?.cpm_contest
                                             ?.max_earnings_per_creator ??
@@ -21647,40 +23529,32 @@ export default function ContestDetailClient({
                                         currentContest.contest_type,
                                       )
                                     ) {
-                                      const milestones =
-                                        currentContest.contest_based_details
-                                          ?.milestone_contest?.milestones;
-                                      if (
-                                        Array.isArray(milestones) &&
-                                        milestones.length > 0
-                                      ) {
-                                        const cents =
-                                          milestoneSubmissionExpectedPayoutCents.get(
-                                            submission.id,
-                                          ) ?? 0;
-                                        if (cents > 0) {
-                                          const postCents =
-                                            payoutAdjMilestonePortion
-                                              ? applyPayoutAdjustment(
-                                                  cents,
-                                                  payoutAdjustmentPercentage,
-                                                )
-                                              : cents;
-                                          const preDollars =
-                                            centsToDollars(cents);
-                                          const postDollars =
-                                            centsToDollars(postCents);
-                                          return {
-                                            amount: preDollars,
-                                            label: "Expected",
-                                            className:
-                                              "text-slate-700 font-semibold",
-                                            preAdjustmentAmountDollars:
-                                              preDollars,
-                                            postAdjustmentAmountDollars:
-                                              postDollars,
-                                          };
-                                        }
+                                      const cents =
+                                        milestoneSubmissionExpectedPayoutCents.get(
+                                          submission.id,
+                                        ) ?? 0;
+                                      if (cents > 0) {
+                                        const postCents =
+                                          payoutAdjMilestonePortion
+                                            ? applyPayoutAdjustment(
+                                                cents,
+                                                payoutAdjustmentPercentage,
+                                              )
+                                            : cents;
+                                        const preDollars =
+                                          centsToDollars(cents);
+                                        const postDollars =
+                                          centsToDollars(postCents);
+                                        return {
+                                          amount: preDollars,
+                                          label: "Expected",
+                                          className:
+                                            "text-slate-700 font-semibold",
+                                          preAdjustmentAmountDollars:
+                                            preDollars,
+                                          postAdjustmentAmountDollars:
+                                            postDollars,
+                                        };
                                       }
                                       return {
                                         amount: 0,
@@ -22202,6 +24076,15 @@ export default function ContestDetailClient({
                                           </div>
                                         </div>
                                       </TableCell>
+                                      {showAllTabPlatformColumn && (
+                                        <TableCell className="text-center">
+                                          <div className="flex items-center justify-center">
+                                            {getPlatformIcon(
+                                              submission.platform,
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {/* For Twitter tweets, show tweet text */}
                                       {isTwitterTweet && (
                                         <TableCell className="min-w-[200px] max-w-[300px]">
@@ -22624,9 +24507,9 @@ export default function ContestDetailClient({
                                       ) : (
                                         <>
                                           {/* Regular submissions (YouTube/Instagram) */}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes(
+                                            "youtube",
+                                          )
                                             ? ytVisibleColumns.includes("views")
                                             : true) && (
                                             <TableCell className="text-center">
@@ -22656,9 +24539,9 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes(
+                                            "youtube",
+                                          )
                                             ? ytVisibleColumns.includes("likes")
                                             : true) && (
                                             <TableCell className="text-center">
@@ -22691,9 +24574,9 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes(
+                                            "youtube",
+                                          )
                                             ? ytVisibleColumns.includes(
                                                 "comments",
                                               )
@@ -22728,171 +24611,188 @@ export default function ContestDetailClient({
                                               </div>
                                             </TableCell>
                                           )}
-                                          {currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube") &&
+                                          {submissionsTablePlatform.includes(
+                                            "youtube",
+                                          ) &&
                                             canSeeCore &&
                                             ytVisibleColumns.includes(
                                               "dislikes",
                                             ) && (
                                               <TableCell className="text-center">
-                                                <div className="flex flex-col items-center">
-                                                  <ThumbsDown className="h-3 w-3 text-red-400" />
-                                                  <span
-                                                    className={cn(
-                                                      "font-bold text-sm",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    {formatMetricValue(
-                                                      (metrics as any)
-                                                        .dislikes ?? 0,
-                                                    )}
-                                                  </span>
-                                                </div>
+                                                {isYoutubeRow ? (
+                                                  <div className="flex flex-col items-center">
+                                                    <ThumbsDown className="h-3 w-3 text-red-400" />
+                                                    <span
+                                                      className={cn(
+                                                        "font-bold text-sm",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-900",
+                                                      )}
+                                                    >
+                                                      {formatMetricValue(
+                                                        (metrics as any)
+                                                          .dislikes ?? 0,
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                ) : (
+                                                  <UnavailableMetricDash
+                                                    isDark={isDark}
+                                                  />
+                                                )}
                                               </TableCell>
                                             )}
                                         </>
                                       )}
+                                      {showSubmissionsSharesColumn && (
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <Share2 className="h-3 w-3 text-purple-500" />
+                                            {formatMetricValue(metrics.shares)}
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {/* Dynamic data cells based on campaign platform */}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("tiktok") && (
+                                      {submissionsTablePlatform.includes(
+                                        "tiktok",
+                                      ) && (
                                         <>
                                           <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex items-center justify-center gap-1">
-                                              <Share2 className="h-3 w-3 text-purple-500" />
-                                              {formatMetricValue(
-                                                metrics.shares,
-                                              )}
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              metrics.total_interactions ?? 0,
+                                            {isTiktokRow ? (
+                                              formatMetricValue(
+                                                metrics.total_interactions ?? 0,
+                                              )
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
                                             )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
-                                            {metrics.views > 0
-                                              ? `${formatMetricValue(
-                                                  metrics.engagement_rate ?? 0,
-                                                )}%`
-                                              : "—"}
+                                            {isTiktokRow &&
+                                            metrics.views > 0 ? (
+                                              `${formatMetricValue(
+                                                metrics.engagement_rate ?? 0,
+                                              )}%`
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
+                                            )}
                                           </TableCell>
-                                          {isAdminView && (
-                                            <TableCell className="text-center">
-                                              {(() => {
-                                                const meta =
-                                                  getInsightsStatusMeta(
-                                                    submission.insights_status ??
-                                                      null,
-                                                  );
-                                                return (
-                                                  <div className="flex items-center justify-center">
-                                                    <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                        <span
-                                                          className={cn(
-                                                            "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                            meta.pillClass,
-                                                          )}
-                                                        >
-                                                          <span
-                                                            className={cn(
-                                                              "h-2.5 w-2.5 rounded-full",
-                                                              meta.dotClass,
-                                                            )}
-                                                          />
-                                                        </span>
-                                                      </TooltipTrigger>
-                                                      <TooltipContent className="whitespace-pre-line">
-                                                        {meta.help}
-                                                      </TooltipContent>
-                                                    </Tooltip>
-                                                  </div>
-                                                );
-                                              })()}
-                                            </TableCell>
-                                          )}
                                         </>
                                       )}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("instagram") && (
+                                      {submissionsTablePlatform.includes(
+                                        "instagram",
+                                      ) && (
                                         <>
                                           <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex items-center justify-center gap-1">
-                                              <Share2 className="h-3 w-3 text-purple-500" />
-                                              {formatMetricValue(
-                                                metrics.shares,
-                                              )}
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).reposts,
+                                            {isInstagramRow ? (
+                                              formatMetricValue(
+                                                (metrics as any).reposts,
+                                              )
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
                                             )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).saves,
+                                            {isInstagramRow ? (
+                                              formatMetricValue(
+                                                (metrics as any).saves,
+                                              )
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
                                             )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).reach,
+                                            {isInstagramRow ? (
+                                              formatMetricValue(
+                                                (metrics as any).reach,
+                                              )
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
                                             )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any)
-                                                .total_interactions,
+                                            {isInstagramRow ? (
+                                              formatMetricValue(
+                                                (metrics as any)
+                                                  .total_interactions,
+                                              )
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
                                             )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex flex-col items-center">
-                                              <span className="font-bold">
-                                                {formatWatchTime(
-                                                  (metrics as any)
-                                                    .avg_watch_time_ms,
-                                                )}
-                                              </span>
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-slate-400"
-                                                    : "text-slate-500",
-                                                )}
-                                              >
-                                                avg
-                                              </span>
-                                            </div>
+                                            {isInstagramRow ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className="font-bold">
+                                                  {formatWatchTime(
+                                                    (metrics as any)
+                                                      .avg_watch_time_ms,
+                                                  )}
+                                                </span>
+                                                <span
+                                                  className={cn(
+                                                    "text-xs",
+                                                    isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500",
+                                                  )}
+                                                >
+                                                  avg
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
+                                            )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex flex-col items-center">
-                                              <span className="font-bold">
-                                                {formatWatchTime(
-                                                  (metrics as any)
-                                                    .total_watch_time_ms,
-                                                )}
-                                              </span>
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-slate-400"
-                                                    : "text-slate-500",
-                                                )}
-                                              >
-                                                total
-                                              </span>
-                                            </div>
+                                            {isInstagramRow ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className="font-bold">
+                                                  {formatWatchTime(
+                                                    (metrics as any)
+                                                      .total_watch_time_ms,
+                                                  )}
+                                                </span>
+                                                <span
+                                                  className={cn(
+                                                    "text-xs",
+                                                    isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500",
+                                                  )}
+                                                >
+                                                  total
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <UnavailableMetricDash
+                                                isDark={isDark}
+                                              />
+                                            )}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
                                             {(() => {
+                                              if (!isInstagramRow) {
+                                                return (
+                                                  <UnavailableMetricDash
+                                                    isDark={isDark}
+                                                  />
+                                                );
+                                              }
                                               const reelSec = Number(
                                                 (metrics as any)
                                                   .duration_seconds,
@@ -22906,21 +24806,21 @@ export default function ContestDetailClient({
                                                   {label}
                                                 </span>
                                               ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
+                                                <UnavailableMetricDash
+                                                  isDark={isDark}
+                                                />
                                               );
                                             })()}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
                                             {(() => {
+                                              if (!isInstagramRow) {
+                                                return (
+                                                  <UnavailableMetricDash
+                                                    isDark={isDark}
+                                                  />
+                                                );
+                                              }
                                               const label =
                                                 formatAvgWatchPercent(
                                                   (metrics as any)
@@ -22933,21 +24833,21 @@ export default function ContestDetailClient({
                                                   {label}
                                                 </span>
                                               ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
+                                                <UnavailableMetricDash
+                                                  isDark={isDark}
+                                                />
                                               );
                                             })()}
                                           </TableCell>
                                           <TableCell className="text-center font-mono text-sm">
                                             {(() => {
+                                              if (!isInstagramRow) {
+                                                return (
+                                                  <UnavailableMetricDash
+                                                    isDark={isDark}
+                                                  />
+                                                );
+                                              }
                                               const skip = (metrics as any)
                                                 .reels_skip_rate;
                                               const label = formatReelsSkipRate(
@@ -22960,94 +24860,26 @@ export default function ContestDetailClient({
                                                   {label}
                                                 </span>
                                               ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
+                                                <UnavailableMetricDash
+                                                  isDark={isDark}
+                                                />
                                               );
                                             })()}
                                           </TableCell>
-                                          {isAdminView && (
-                                            <TableCell className="text-center">
-                                              {(() => {
-                                                const meta =
-                                                  getInsightsStatusMeta(
-                                                    submission.insights_status ??
-                                                      null,
-                                                  );
-                                                return (
-                                                  <div className="flex items-center justify-center">
-                                                    <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                        <span
-                                                          className={cn(
-                                                            "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                            meta.pillClass,
-                                                          )}
-                                                        >
-                                                          <span
-                                                            className={cn(
-                                                              "h-2.5 w-2.5 rounded-full",
-                                                              meta.dotClass,
-                                                            )}
-                                                          />
-                                                        </span>
-                                                      </TooltipTrigger>
-                                                      <TooltipContent className="whitespace-pre-line">
-                                                        {meta.help}
-                                                      </TooltipContent>
-                                                    </Tooltip>
-                                                  </div>
-                                                );
-                                              })()}
-                                            </TableCell>
-                                          )}
                                         </>
                                       )}
                                       {/* YouTube-specific metric cells */}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube") && (
+                                      {submissionsTablePlatform.includes(
+                                        "youtube",
+                                      ) && (
                                         <>
-                                          {canSeeCore &&
-                                            ytVisibleColumns.includes(
-                                              "shares",
-                                            ) && (
-                                              <TableCell className="text-center font-mono text-sm">
-                                                <div className="flex items-center justify-center gap-1">
-                                                  <Share2 className="h-3 w-3 text-purple-500" />
-                                                  {(metrics as any).shares >
-                                                  0 ? (
-                                                    formatMetricValue(
-                                                      (metrics as any).shares,
-                                                    )
-                                                  ) : (
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-500"
-                                                          : "text-slate-400",
-                                                      )}
-                                                    >
-                                                      —
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              </TableCell>
-                                            )}
                                           {canSeeCore &&
                                             ytVisibleColumns.includes(
                                               "avg_view_pct",
                                             ) && (
                                               <TableCell className="text-center font-mono text-sm">
-                                                {(metrics as any)
+                                                {isYoutubeRow &&
+                                                (metrics as any)
                                                   .avg_view_percentage > 0 ? (
                                                   <div className="flex flex-col items-center">
                                                     <span
@@ -23100,9 +24932,10 @@ export default function ContestDetailClient({
                                               "watch_time",
                                             ) && (
                                               <TableCell className="text-center font-mono text-sm">
-                                                {(metrics as any)
+                                                {isYoutubeRow &&
+                                                (metrics as any)
                                                   .estimated_minutes_watched >
-                                                0 ? (
+                                                  0 ? (
                                                   <div className="flex flex-col items-center">
                                                     <span className="font-bold">
                                                       {formatWatchTime(
@@ -23142,7 +24975,8 @@ export default function ContestDetailClient({
                                               "avg_duration",
                                             ) && (
                                               <TableCell className="text-center font-mono text-sm">
-                                                {(metrics as any)
+                                                {isYoutubeRow &&
+                                                (metrics as any)
                                                   .avg_view_duration_seconds !=
                                                   null &&
                                                 (metrics as any)
@@ -23174,6 +25008,13 @@ export default function ContestDetailClient({
                                           ) && (
                                             <TableCell className="text-center font-mono text-sm">
                                               {(() => {
+                                                if (!isYoutubeRow) {
+                                                  return (
+                                                    <UnavailableMetricDash
+                                                      isDark={isDark}
+                                                    />
+                                                  );
+                                                }
                                                 const clipSec = Number(
                                                   (metrics as any)
                                                     .duration_seconds,
@@ -23189,16 +25030,9 @@ export default function ContestDetailClient({
                                                     {label}
                                                   </span>
                                                 ) : (
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-500"
-                                                        : "text-slate-400",
-                                                    )}
-                                                  >
-                                                    —
-                                                  </span>
+                                                  <UnavailableMetricDash
+                                                    isDark={isDark}
+                                                  />
                                                 );
                                               })()}
                                             </TableCell>
@@ -23208,7 +25042,8 @@ export default function ContestDetailClient({
                                               "engaged_views",
                                             ) && (
                                               <TableCell className="text-center font-mono text-sm">
-                                                {(metrics as any)
+                                                {isYoutubeRow &&
+                                                (metrics as any)
                                                   .engaged_views != null ? (
                                                   <div className="flex flex-col items-center">
                                                     <span className="font-bold">
@@ -23257,9 +25092,10 @@ export default function ContestDetailClient({
                                               "subs_gained",
                                             ) && (
                                               <TableCell className="text-center font-mono text-sm">
-                                                {(metrics as any)
+                                                {isYoutubeRow &&
+                                                (metrics as any)
                                                   .subscribers_gained !=
-                                                null ? (
+                                                  null ? (
                                                   <span
                                                     className={cn(
                                                       "font-bold",
@@ -23299,7 +25135,8 @@ export default function ContestDetailClient({
                                               "bot_score",
                                             ) && (
                                               <TableCell className="text-center">
-                                                {(metrics as any).bot_score !==
+                                                {isYoutubeRow &&
+                                                (metrics as any).bot_score !==
                                                   null &&
                                                 (metrics as any).bot_score !==
                                                   undefined ? (
@@ -23356,7 +25193,7 @@ export default function ContestDetailClient({
                                                       </span>
                                                     )}
                                                   </div>
-                                                ) : (
+                                                ) : isYoutubeRow ? (
                                                   <span
                                                     className={cn(
                                                       "text-xs",
@@ -23367,6 +25204,10 @@ export default function ContestDetailClient({
                                                   >
                                                     No data
                                                   </span>
+                                                ) : (
+                                                  <UnavailableMetricDash
+                                                    isDark={isDark}
+                                                  />
                                                 )}
                                               </TableCell>
                                             )}
@@ -23375,28 +25216,46 @@ export default function ContestDetailClient({
                                               "analytics",
                                             ) && (
                                               <TableCell className="text-center">
-                                                <YouTubeAnalyticsPanel
-                                                  metrics={
-                                                    metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics
-                                                  }
-                                                  isDark={isDark}
-                                                  showCore={canSeeCore}
-                                                  showTraffic={canSeeTraffic}
-                                                  showDemographics={canSeeDemo}
-                                                >
-                                                  <button
-                                                    className={cn(
-                                                      "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
-                                                      isDark
-                                                        ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                                        : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
-                                                    )}
-                                                    title="View full analytics breakdown"
+                                                {submissionMatchesVideoPlatform(
+                                                  submission,
+                                                  "youtube",
+                                                ) ? (
+                                                  <YouTubeAnalyticsPanel
+                                                    metrics={
+                                                      metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics
+                                                    }
+                                                    isDark={isDark}
+                                                    showCore={canSeeCore}
+                                                    showTraffic={canSeeTraffic}
+                                                    showDemographics={
+                                                      canSeeDemo
+                                                    }
                                                   >
-                                                    <BarChart2 className="h-3 w-3" />
-                                                    Details
-                                                  </button>
-                                                </YouTubeAnalyticsPanel>
+                                                    <button
+                                                      className={cn(
+                                                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                                        isDark
+                                                          ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                                          : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                                      )}
+                                                      title="View full analytics breakdown"
+                                                    >
+                                                      <BarChart2 className="h-3 w-3" />
+                                                      Details
+                                                    </button>
+                                                  </YouTubeAnalyticsPanel>
+                                                ) : (
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs",
+                                                      isDark
+                                                        ? "text-slate-500"
+                                                        : "text-slate-400",
+                                                    )}
+                                                  >
+                                                    —
+                                                  </span>
+                                                )}
                                               </TableCell>
                                             )}
                                           {canSeeTraffic &&
@@ -23404,6 +25263,15 @@ export default function ContestDetailClient({
                                               "top_traffic_source",
                                             ) &&
                                             (() => {
+                                              if (!isYoutubeRow) {
+                                                return (
+                                                  <TableCell className="text-center text-xs font-mono">
+                                                    <UnavailableMetricDash
+                                                      isDark={isDark}
+                                                    />
+                                                  </TableCell>
+                                                );
+                                              }
                                               const ts = (metrics as any)
                                                 .traffic_sources as
                                                 | Record<string, number>
@@ -23462,45 +25330,41 @@ export default function ContestDetailClient({
                                                 </TableCell>
                                               );
                                             })()}
-                                          {isAdminView &&
-                                            ytVisibleColumns.includes(
-                                              "insights_status",
-                                            ) && (
-                                              <TableCell className="text-center">
-                                                {(() => {
-                                                  const meta =
-                                                    getInsightsStatusMeta(
-                                                      submission.insights_status ??
-                                                        null,
-                                                    );
-                                                  return (
-                                                    <div className="flex items-center justify-center">
-                                                      <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                          <span
-                                                            className={cn(
-                                                              "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                              meta.pillClass,
-                                                            )}
-                                                          >
-                                                            <span
-                                                              className={cn(
-                                                                "h-2.5 w-2.5 rounded-full",
-                                                                meta.dotClass,
-                                                              )}
-                                                            />
-                                                          </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="whitespace-pre-line">
-                                                          {meta.help}
-                                                        </TooltipContent>
-                                                      </Tooltip>
-                                                    </div>
-                                                  );
-                                                })()}
-                                              </TableCell>
-                                            )}
                                         </>
+                                      )}
+                                      {showSubmissionsInsightsStatusColumn && (
+                                        <TableCell className="text-center">
+                                          {(() => {
+                                            const meta = getInsightsStatusMeta(
+                                              submission.insights_status ??
+                                                null,
+                                            );
+                                            return (
+                                              <div className="flex items-center justify-center">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <span
+                                                      className={cn(
+                                                        "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
+                                                        meta.pillClass,
+                                                      )}
+                                                    >
+                                                      <span
+                                                        className={cn(
+                                                          "h-2.5 w-2.5 rounded-full",
+                                                          meta.dotClass,
+                                                        )}
+                                                      />
+                                                    </span>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent className="whitespace-pre-line">
+                                                    {meta.help}
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            );
+                                          })()}
+                                        </TableCell>
                                       )}
                                       {/* Show reward cells for leaderboard and CPM campaigns, hide for Twitter CPM campaigns */}
                                       {!(
@@ -23526,9 +25390,9 @@ export default function ContestDetailClient({
                                         currentContest.contest_type,
                                       ) ? (
                                         <>
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes(
+                                            "youtube",
+                                          )
                                             ? ytVisibleColumns.includes(
                                                 "expected_reward",
                                               )
@@ -23731,9 +25595,9 @@ export default function ContestDetailClient({
                                                     </div>
                                                   </TableCell>
                                                   {showDualPayoutAdjustedColumns &&
-                                                    (currentContest.platform
-                                                      ?.toLowerCase()
-                                                      .includes("youtube")
+                                                    (submissionsTablePlatform.includes(
+                                                      "youtube",
+                                                    )
                                                       ? ytVisibleColumns.includes(
                                                           "adjusted_reward",
                                                         )
@@ -24077,9 +25941,9 @@ export default function ContestDetailClient({
                                             !isDualRewardsContestType(
                                               currentContest.contest_type,
                                             ) &&
-                                            (currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("youtube")
+                                            (submissionsTablePlatform.includes(
+                                              "youtube",
+                                            )
                                               ? ytVisibleColumns.includes(
                                                   "adjusted_reward",
                                                 )
@@ -24181,9 +26045,9 @@ export default function ContestDetailClient({
                                               )}
                                             </TableCell>
                                           )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
+                                          {(submissionsTablePlatform.includes(
+                                            "youtube",
+                                          )
                                             ? ytVisibleColumns.includes(
                                                 "reward_granted",
                                               )
@@ -24307,9 +26171,9 @@ export default function ContestDetailClient({
                                             </>
                                           )}
                                           {showNormalViewFlatFeeBonusColumns &&
-                                            (currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("youtube")
+                                            (submissionsTablePlatform.includes(
+                                              "youtube",
+                                            )
                                               ? ytVisibleColumns.includes(
                                                   "bonus_expected",
                                                 ) &&
@@ -24366,9 +26230,9 @@ export default function ContestDetailClient({
                                           />
                                         </TableCell>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes("status")
                                         : true) && (
                                         <TableCell className="text-center">
@@ -24387,9 +26251,9 @@ export default function ContestDetailClient({
                                         </TableCell>
                                       )}
                                       {/* Rejection reason column - show for same visibility as Status */}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes("status")
                                         : true) && (
                                         <TableCell
@@ -24448,9 +26312,9 @@ export default function ContestDetailClient({
                                           )}
                                         </TableCell>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes("submitted")
                                         : true) && (
                                         <TableCell
@@ -24772,11 +26636,13 @@ export default function ContestDetailClient({
                                                 View Content
                                               </a>
                                             </DropdownMenuItem>
-                                            {/* YouTube-only per-submission analytics refresh (admin only) */}
+                                            {/* YouTube per-submission analytics refresh (admin only; single + multi-platform) */}
                                             {isAdminView &&
                                               !isTwitterTweet &&
-                                              currentContest.platform?.toLowerCase() ===
-                                                "youtube" && (
+                                              submissionMatchesVideoPlatform(
+                                                submission,
+                                                "youtube",
+                                              ) && (
                                                 <>
                                                   <DropdownMenuSeparator />
                                                   <DropdownMenuLabel className="text-purple-500">
@@ -25320,6 +27186,11 @@ export default function ContestDetailClient({
                                   )}
                                   <TableHead className="w-12">#</TableHead>
                                   <TableHead>Creator</TableHead>
+                                  {showAllTabPlatformColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[8.5rem]">
+                                      Platform
+                                    </TableHead>
+                                  )}
                                   {showCreatorWiseTrustScoreColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
                                       Trust %
@@ -25358,37 +27229,18 @@ export default function ContestDetailClient({
                                   <TableHead className="text-center">
                                     Total Submissions
                                   </TableHead>
-                                  {(currentContest.platform
-                                    ?.toLowerCase()
-                                    .includes("youtube")
+                                  {(submissionsTablePlatform.includes("youtube")
                                     ? ytVisibleColumns.includes("status")
                                     : true) && (
                                     <TableHead className="text-center">
                                       Status
                                     </TableHead>
                                   )}
-                                  {isAdminView &&
-                                    (currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("instagram") ||
-                                      currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("tiktok")) && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
-                                  {isAdminView &&
-                                    currentContest.platform
-                                      ?.toLowerCase()
-                                      .includes("youtube") &&
-                                    ytVisibleColumns.includes(
-                                      "insights_status",
-                                    ) && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
+                                  {showSubmissionsInsightsStatusColumn && (
+                                    <TableHead className="text-center">
+                                      Insights status
+                                    </TableHead>
+                                  )}
                                   {/* For Twitter campaigns, show Twitter-specific metrics */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
@@ -25424,54 +27276,41 @@ export default function ContestDetailClient({
                                     </>
                                   ) : (
                                     <>
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes("views")
                                         : true) && (
                                         <TableHead className="text-center">
                                           Views
                                         </TableHead>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes("likes")
                                         : true) && (
                                         <TableHead className="text-center">
                                           Likes
                                         </TableHead>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes("comments")
                                         : true) && (
                                         <TableHead className="text-center">
                                           Comments
                                         </TableHead>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("instagram") ||
-                                        currentContest.platform
-                                          ?.toLowerCase()
-                                          .includes("tiktok") ||
-                                        (canSeeCore &&
-                                          (currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
-                                            ? ytVisibleColumns.includes(
-                                                "shares",
-                                              )
-                                            : true))) && (
+                                      {showSubmissionsSharesColumn && (
                                         <TableHead className="text-center">
                                           Shares
                                         </TableHead>
                                       )}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("tiktok") && (
+                                      {submissionsTablePlatform.includes(
+                                        "tiktok",
+                                      ) && (
                                         <>
                                           <TableHead className="text-center">
                                             Total engagement
@@ -25482,9 +27321,9 @@ export default function ContestDetailClient({
                                         </>
                                       )}
                                       {/* Instagram-specific metrics */}
-                                      {currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("instagram") && (
+                                      {submissionsTablePlatform.includes(
+                                        "instagram",
+                                      ) && (
                                         <>
                                           <TableHead className="text-center">
                                             Saves
@@ -25526,9 +27365,9 @@ export default function ContestDetailClient({
                                     currentContest.contest_format ===
                                       "text_image") ? (
                                     <>
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes(
                                             "expected_reward",
                                           )
@@ -25548,9 +27387,9 @@ export default function ContestDetailClient({
                                                 Expected Reward (Milestone)
                                               </TableHead>
                                               {showDualPayoutAdjustedColumns &&
-                                                (currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("youtube")
+                                                (submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
                                                   ? ytVisibleColumns.includes(
                                                       "adjusted_reward",
                                                     )
@@ -25582,9 +27421,9 @@ export default function ContestDetailClient({
                                                 Expected Reward
                                               </TableHead>
                                               {showAdjustedRewardColumn &&
-                                                (currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("youtube")
+                                                (submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
                                                   ? ytVisibleColumns.includes(
                                                       "adjusted_reward",
                                                     )
@@ -25604,9 +27443,9 @@ export default function ContestDetailClient({
                                           )}
                                         </>
                                       )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
+                                      {(submissionsTablePlatform.includes(
+                                        "youtube",
+                                      )
                                         ? ytVisibleColumns.includes(
                                             "reward_granted",
                                           )
@@ -25635,18 +27474,7 @@ export default function ContestDetailClient({
                                       )}
                                     </>
                                   ) : null}
-                                  {(() => {
-                                    const flatFeeBonus = isCpmContestType(
-                                      currentContest.contest_type,
-                                    )
-                                      ? (
-                                          currentContest.contest_based_details as any
-                                        )?.cpm_contest?.flat_fee_bonus
-                                      : (
-                                          currentContest.contest_based_details as any
-                                        )?.leaderboard_contest?.flat_fee_bonus;
-                                    return flatFeeBonus > 0;
-                                  })() && (
+                                  {showNormalViewFlatFeeBonusColumns && (
                                     <>
                                       <TableHead className="text-center">
                                         Bonus Expected
@@ -25713,9 +27541,7 @@ export default function ContestDetailClient({
                                       Rejection Reason
                                     </TableHead>
                                   )}
-                                  {(currentContest.platform
-                                    ?.toLowerCase()
-                                    .includes("youtube")
+                                  {(submissionsTablePlatform.includes("youtube")
                                     ? ytVisibleColumns.includes("submitted")
                                     : true) && (
                                     <TableHead className="text-center">
@@ -25748,11 +27574,12 @@ export default function ContestDetailClient({
                                           ? 2
                                           : 0) +
                                         milestoneMvBonusAdjustedColumnCount +
-                                        (currentContest.platform
-                                          ?.toLowerCase()
-                                          .includes("tiktok")
+                                        (submissionsTablePlatform.includes(
+                                          "tiktok",
+                                        )
                                           ? 2
-                                          : 0)
+                                          : 0) +
+                                        (showAllTabPlatformColumn ? 1 : 0)
                                       }
                                       className="text-center py-8 text-gray-500"
                                     >
@@ -25779,1488 +27606,1301 @@ export default function ContestDetailClient({
                                       </TableRow>
                                     )}
                                     {creatorWiseVirtualTable.visibleRows.map(
-                                    ({ row: group, virtualIndex }) => {
-                                      const globalIndex =
-                                        (safeCreatorWisePage - 1) *
-                                          creatorWiseItemsPerPage +
-                                        virtualIndex;
-                                      const hasVerifiedOrPaidSubmissions =
-                                        (group.statusCounts?.verified || 0) >
-                                          0 ||
-                                        (group.statusCounts?.paid || 0) > 0;
-                                      const bonusExpectedForDisplay =
-                                        hasVerifiedOrPaidSubmissions
-                                          ? group.bonus.expected
-                                          : 0;
-                                      const reelsBonusInfo =
-                                        milestoneReelsBonusByCreator.get(
-                                          milestoneMvCreatorIdKey(
-                                            group.creator.id,
-                                          ),
-                                        ) || {
-                                          expectedCents: 0,
-                                          paidCents: 0,
-                                          viewsExpectedCents: 0,
-                                          viewsPaidCents: 0,
-                                        };
-                                      // Prefer full name / display name from submission or creator object
-                                      const primarySubmission =
-                                        group.submissions?.[0];
-                                      const creatorFullName =
-                                        primarySubmission?.creator_display_name ||
-                                        group.creator?.full_name ||
-                                        null;
-                                      // Username from users table or creator object
-                                      const creatorUsername =
-                                        (primarySubmission as any)
-                                          ?.user_username ||
-                                        group.creator?.username ||
-                                        null;
-                                      const userTableUsername =
-                                        (primarySubmission as any)
-                                          ?.user_username || null;
-                                      // Platform-specific handle (Instagram / YouTube / Twitter etc.)
-                                      const platformUsername =
-                                        primarySubmission?.creator_username ||
-                                        null;
-                                      // Prefer global creator trust metrics (all contests).
-                                      // Fallback to current contest status counts if missing.
-                                      const rawTrustMetrics =
-                                        parseTrustMetricsValue(
-                                          (group.creator as any)
-                                            ?.trust_score_metrics,
-                                        ) ??
-                                        parseTrustMetricsValue(
+                                      ({ row: group, virtualIndex }) => {
+                                        const globalIndex =
+                                          (safeCreatorWisePage - 1) *
+                                            creatorWiseItemsPerPage +
+                                          virtualIndex;
+                                        const hasVerifiedOrPaidSubmissions =
+                                          (group.statusCounts?.verified || 0) >
+                                            0 ||
+                                          (group.statusCounts?.paid || 0) > 0;
+                                        const bonusExpectedForDisplay =
+                                          hasVerifiedOrPaidSubmissions
+                                            ? group.bonus.expected
+                                            : 0;
+                                        const reelsBonusInfo =
+                                          milestoneReelsBonusByCreator.get(
+                                            milestoneMvCreatorIdKey(
+                                              group.creator.id,
+                                            ),
+                                          ) || {
+                                            expectedCents: 0,
+                                            paidCents: 0,
+                                            viewsExpectedCents: 0,
+                                            viewsPaidCents: 0,
+                                          };
+                                        // Prefer full name / display name from submission or creator object
+                                        const primarySubmission =
+                                          group.submissions?.[0];
+                                        const creatorFullName =
+                                          primarySubmission?.creator_display_name ||
+                                          group.creator?.full_name ||
+                                          null;
+                                        // Username from users table or creator object
+                                        const creatorUsername =
                                           (primarySubmission as any)
-                                            ?.trust_score_metrics,
-                                        ) ??
-                                        parseTrustMetricsValue(
-                                          (primarySubmission as any)?.creator
-                                            ?.trust_score_metrics,
-                                        ) ??
-                                        pickCreatorTrustDataFromSubmissions(
-                                          group.submissions || [],
-                                        ).trust_score_metrics;
-                                      const trustMetrics = rawTrustMetrics;
-                                      const totalReelsForTrust =
-                                        trustMetrics?.total_reels !== null &&
-                                        trustMetrics?.total_reels !== undefined
-                                          ? Number(trustMetrics.total_reels)
-                                          : Number(
-                                              group.statusCounts?.all || 0,
-                                            );
-                                      const rejectedReelsForTrust =
-                                        trustMetrics?.rejected_reels !== null &&
-                                        trustMetrics?.rejected_reels !==
-                                          undefined
-                                          ? Number(trustMetrics.rejected_reels)
-                                          : Number(
-                                              group.statusCounts?.rejected || 0,
-                                            );
-                                      const verifiedReelsForTrust =
-                                        trustMetrics?.verified_reels !== null &&
-                                        trustMetrics?.verified_reels !==
-                                          undefined
-                                          ? Number(trustMetrics.verified_reels)
-                                          : Number(
-                                              group.statusCounts?.verified || 0,
-                                            );
-                                      const pendingReelsForTrust =
-                                        trustMetrics?.pending_reels !== null &&
-                                        trustMetrics?.pending_reels !==
-                                          undefined
-                                          ? Number(trustMetrics.pending_reels)
-                                          : Number(
-                                              group.statusCounts?.pending || 0,
-                                            );
-                                      const trustScoreComputed =
-                                        resolveTrustScoreForDisplay(
-                                          trustMetrics,
-                                          {
-                                            total: totalReelsForTrust,
-                                            verified: verifiedReelsForTrust,
-                                            rejected: rejectedReelsForTrust,
-                                            pending: pendingReelsForTrust,
-                                          },
+                                            ?.user_username ||
+                                          group.creator?.username ||
+                                          null;
+                                        const userTableUsername =
+                                          (primarySubmission as any)
+                                            ?.user_username || null;
+                                        // Platform-specific handle (Instagram / YouTube / Twitter etc.)
+                                        const platformUsername =
+                                          primarySubmission?.creator_username ||
+                                          null;
+                                        // Prefer global creator trust metrics (all contests).
+                                        // Fallback to current contest status counts if missing.
+                                        const rawTrustMetrics =
+                                          parseTrustMetricsValue(
+                                            (group.creator as any)
+                                              ?.trust_score_metrics,
+                                          ) ??
+                                          parseTrustMetricsValue(
+                                            (primarySubmission as any)
+                                              ?.trust_score_metrics,
+                                          ) ??
+                                          parseTrustMetricsValue(
+                                            (primarySubmission as any)?.creator
+                                              ?.trust_score_metrics,
+                                          ) ??
+                                          pickCreatorTrustDataFromSubmissions(
+                                            group.submissions || [],
+                                          ).trust_score_metrics;
+                                        const trustMetrics = rawTrustMetrics;
+                                        const totalReelsForTrust =
+                                          trustMetrics?.total_reels !== null &&
+                                          trustMetrics?.total_reels !==
+                                            undefined
+                                            ? Number(trustMetrics.total_reels)
+                                            : Number(
+                                                group.statusCounts?.all || 0,
+                                              );
+                                        const rejectedReelsForTrust =
+                                          trustMetrics?.rejected_reels !==
+                                            null &&
+                                          trustMetrics?.rejected_reels !==
+                                            undefined
+                                            ? Number(
+                                                trustMetrics.rejected_reels,
+                                              )
+                                            : Number(
+                                                group.statusCounts?.rejected ||
+                                                  0,
+                                              );
+                                        const verifiedReelsForTrust =
+                                          trustMetrics?.verified_reels !==
+                                            null &&
+                                          trustMetrics?.verified_reels !==
+                                            undefined
+                                            ? Number(
+                                                trustMetrics.verified_reels,
+                                              )
+                                            : Number(
+                                                group.statusCounts?.verified ||
+                                                  0,
+                                              );
+                                        const pendingReelsForTrust =
+                                          trustMetrics?.pending_reels !==
+                                            null &&
+                                          trustMetrics?.pending_reels !==
+                                            undefined
+                                            ? Number(trustMetrics.pending_reels)
+                                            : Number(
+                                                group.statusCounts?.pending ||
+                                                  0,
+                                              );
+                                        const trustScoreComputed =
+                                          resolveTrustScoreForDisplay(
+                                            trustMetrics,
+                                            {
+                                              total: totalReelsForTrust,
+                                              verified: verifiedReelsForTrust,
+                                              rejected: rejectedReelsForTrust,
+                                              pending: pendingReelsForTrust,
+                                            },
+                                          );
+                                        const trustScoreDisplay =
+                                          formatTrustScoreDisplay(
+                                            trustScoreComputed,
+                                          );
+                                        const trustScoreDisplayShort =
+                                          formatTrustScoreDisplay(
+                                            trustScoreComputed,
+                                          );
+                                        const requiredTrustScore =
+                                          contestMinTrustScore;
+                                        const hasTrustThreshold =
+                                          requiredTrustScore !== null;
+                                        const trustScoreBelowThreshold =
+                                          hasTrustThreshold &&
+                                          trustScoreComputed <
+                                            requiredTrustScore;
+                                        const inferredPaidReelsForTrust =
+                                          Math.max(
+                                            0,
+                                            totalReelsForTrust -
+                                              verifiedReelsForTrust -
+                                              rejectedReelsForTrust -
+                                              pendingReelsForTrust,
+                                          );
+                                        const verifiedIncludingPaidForTrust =
+                                          verifiedReelsForTrust +
+                                          inferredPaidReelsForTrust;
+                                        const trustNumberComputed =
+                                          resolveTrustNumberForDisplay(
+                                            trustMetrics,
+                                            {
+                                              verified:
+                                                verifiedIncludingPaidForTrust,
+                                              rejected: rejectedReelsForTrust,
+                                            },
+                                          );
+                                        const requiredTrustNumber =
+                                          contestMinTrustNumber;
+                                        const hasTrustNumberThreshold =
+                                          requiredTrustNumber !== null;
+                                        const trustNumberBelowThreshold =
+                                          hasTrustNumberThreshold &&
+                                          trustNumberComputed <
+                                            requiredTrustNumber;
+                                        const creatorBestQuality =
+                                          parseCreatorMetricNumber(
+                                            group.creator?.best_quality_score,
+                                          );
+                                        const creatorAvgQuality =
+                                          parseCreatorMetricNumber(
+                                            group.creator?.avg_quality_score,
+                                          );
+                                        const creatorQualityScoreSum =
+                                          parseCreatorMetricNumber(
+                                            group.creator?.quality_score_sum,
+                                          );
+                                        const creatorPlatformEarnings = Number(
+                                          group.creator?.total_money_won ?? 0,
                                         );
-                                      const trustScoreDisplay =
-                                        formatTrustScoreDisplay(
-                                          trustScoreComputed,
+                                        const creatorPlatformViews = Number(
+                                          group.creator?.total_views ?? 0,
                                         );
-                                      const trustScoreDisplayShort =
-                                        formatTrustScoreDisplay(
-                                          trustScoreComputed,
-                                        );
-                                      const requiredTrustScore =
-                                        contestMinTrustScore;
-                                      const hasTrustThreshold =
-                                        requiredTrustScore !== null;
-                                      const trustScoreBelowThreshold =
-                                        hasTrustThreshold &&
-                                        trustScoreComputed < requiredTrustScore;
-                                      const inferredPaidReelsForTrust =
-                                        Math.max(
-                                          0,
-                                          totalReelsForTrust -
-                                            verifiedReelsForTrust -
-                                            rejectedReelsForTrust -
-                                            pendingReelsForTrust,
-                                        );
-                                      const verifiedIncludingPaidForTrust =
-                                        verifiedReelsForTrust +
-                                        inferredPaidReelsForTrust;
-                                      const trustNumberComputed =
-                                        resolveTrustNumberForDisplay(
-                                          trustMetrics,
-                                          {
-                                            verified:
-                                              verifiedIncludingPaidForTrust,
-                                            rejected: rejectedReelsForTrust,
-                                          },
-                                        );
-                                      const requiredTrustNumber =
-                                        contestMinTrustNumber;
-                                      const hasTrustNumberThreshold =
-                                        requiredTrustNumber !== null;
-                                      const trustNumberBelowThreshold =
-                                        hasTrustNumberThreshold &&
-                                        trustNumberComputed <
-                                          requiredTrustNumber;
-                                      const creatorBestQuality =
-                                        parseCreatorMetricNumber(
-                                          group.creator?.best_quality_score,
-                                        );
-                                      const creatorAvgQuality =
-                                        parseCreatorMetricNumber(
-                                          group.creator?.avg_quality_score,
-                                        );
-                                      const creatorQualityScoreSum =
-                                        parseCreatorMetricNumber(
-                                          group.creator?.quality_score_sum,
-                                        );
-                                      const creatorPlatformEarnings = Number(
-                                        group.creator?.total_money_won ?? 0,
-                                      );
-                                      const creatorPlatformViews = Number(
-                                        group.creator?.total_views ?? 0,
-                                      );
-                                      const bestQualityBelowThreshold =
-                                        contestMinBestQuality !== null &&
-                                        (creatorBestQuality === null ||
-                                          creatorBestQuality <
-                                            contestMinBestQuality);
-                                      const minQualityBelowThreshold =
-                                        contestMinQuality !== null &&
-                                        (creatorQualityScoreSum === null ||
-                                          creatorQualityScoreSum <
-                                            contestMinQuality);
-                                      const avgQualityBelowThreshold =
-                                        contestMinAvgQuality !== null &&
-                                        (creatorAvgQuality === null ||
-                                          creatorAvgQuality <
-                                            contestMinAvgQuality);
-                                      const platformEarningsBelowThreshold =
-                                        contestMinPlatformEarnings !== null &&
-                                        creatorPlatformEarnings <
-                                          contestMinPlatformEarnings;
-                                      const platformViewsBelowThreshold =
-                                        contestMinPlatformViews !== null &&
-                                        creatorPlatformViews <
-                                          contestMinPlatformViews;
-                                      const creatorQualityScoreBreakdown = group
-                                        .creator?.quality_score_counts ?? {
-                                        score1: 0,
-                                        score2: 0,
-                                        score3: 0,
-                                      };
-                                      return (
-                                        <TableRow
-                                          key={group.creator.id}
-                                          ref={
-                                            creatorWiseVirtualTable.measureElement
-                                          }
-                                          data-index={virtualIndex}
-                                        >
-                                          {showCreatorWiseSelectionUi && (
-                                            <TableCell className="text-center">
-                                              <Checkbox
-                                                checked={creatorWiseSelectedCreators.has(
-                                                  String(group.creator.id),
-                                                )}
-                                                disabled={
-                                                  isHydratingSubmissions
-                                                }
-                                                className="disabled:opacity-100"
-                                                onCheckedChange={(checked) =>
-                                                  handleCreatorWiseCheckboxChange(
+                                        const bestQualityBelowThreshold =
+                                          contestMinBestQuality !== null &&
+                                          (creatorBestQuality === null ||
+                                            creatorBestQuality <
+                                              contestMinBestQuality);
+                                        const minQualityBelowThreshold =
+                                          contestMinQuality !== null &&
+                                          (creatorQualityScoreSum === null ||
+                                            creatorQualityScoreSum <
+                                              contestMinQuality);
+                                        const avgQualityBelowThreshold =
+                                          contestMinAvgQuality !== null &&
+                                          (creatorAvgQuality === null ||
+                                            creatorAvgQuality <
+                                              contestMinAvgQuality);
+                                        const platformEarningsBelowThreshold =
+                                          contestMinPlatformEarnings !== null &&
+                                          creatorPlatformEarnings <
+                                            contestMinPlatformEarnings;
+                                        const platformViewsBelowThreshold =
+                                          contestMinPlatformViews !== null &&
+                                          creatorPlatformViews <
+                                            contestMinPlatformViews;
+                                        const creatorQualityScoreBreakdown =
+                                          parseQualityScoreCounts(
+                                            group.creator?.quality_score_counts,
+                                          );
+                                        const groupHasInstagram =
+                                          creatorGroupHasVideoPlatform(
+                                            group,
+                                            "instagram",
+                                          );
+                                        const groupHasTiktok =
+                                          creatorGroupHasVideoPlatform(
+                                            group,
+                                            "tiktok",
+                                          );
+                                        const instagramSubmissionCount = (
+                                          group.submissions || []
+                                        ).filter(
+                                          (sub: {
+                                            platform?: string | null;
+                                          }) =>
+                                            submissionMatchesVideoPlatform(
+                                              sub,
+                                              "instagram",
+                                            ),
+                                        ).length;
+                                        return (
+                                          <TableRow
+                                            key={group.creator.id}
+                                            ref={
+                                              creatorWiseVirtualTable.measureElement
+                                            }
+                                            data-index={virtualIndex}
+                                          >
+                                            {showCreatorWiseSelectionUi && (
+                                              <TableCell className="text-center">
+                                                <Checkbox
+                                                  checked={creatorWiseSelectedCreators.has(
                                                     String(group.creator.id),
-                                                    checked,
-                                                  )
-                                                }
-                                                aria-label={`Select creator ${creatorUsername || creatorFullName || group.creator.id}`}
-                                              />
+                                                  )}
+                                                  disabled={
+                                                    isHydratingSubmissions
+                                                  }
+                                                  className="disabled:opacity-100"
+                                                  onCheckedChange={(checked) =>
+                                                    handleCreatorWiseCheckboxChange(
+                                                      String(group.creator.id),
+                                                      checked,
+                                                    )
+                                                  }
+                                                  aria-label={`Select creator ${creatorUsername || creatorFullName || group.creator.id}`}
+                                                />
+                                              </TableCell>
+                                            )}
+                                            <TableCell className="font-medium">
+                                              {globalIndex + 1}
                                             </TableCell>
-                                          )}
-                                          <TableCell className="font-medium">
-                                            {globalIndex + 1}
-                                          </TableCell>
-                                          <TableCell>
-                                            <div className="flex items-center gap-2">
-                                              <Avatar className="h-8 w-8">
-                                                <AvatarImage
-                                                  src={
-                                                    group.creator
-                                                      .profile_picture_url ||
-                                                    undefined
+                                            <TableCell>
+                                              <div className="flex items-center gap-2">
+                                                <Avatar className="h-8 w-8">
+                                                  <AvatarImage
+                                                    src={
+                                                      group.creator
+                                                        .profile_picture_url ||
+                                                      undefined
+                                                    }
+                                                  />
+                                                  <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
+                                                    {(creatorFullName ||
+                                                      creatorUsername)?.[0]?.toUpperCase() ||
+                                                      "U"}
+                                                  </AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex flex-col min-w-0">
+                                                  <span className="font-semibold text-md truncate whitespace-nowrap">
+                                                    {creatorFullName ||
+                                                      creatorUsername ||
+                                                      "Unknown Creator"}
+                                                  </span>
+                                                  {/* Username / platform handle below the full name */}
+                                                  {(creatorUsername ||
+                                                    platformUsername) && (
+                                                    <span
+                                                      className={cn(
+                                                        "text-[11px]",
+                                                        isDark
+                                                          ? "text-gray-300"
+                                                          : "text-slate-500",
+                                                      )}
+                                                    >
+                                                      {creatorUsername ||
+                                                        platformUsername}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </TableCell>
+                                            {showAllTabPlatformColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWisePlatformCounts
+                                                  isDark={isDark}
+                                                  rows={countSubmissionsByVideoPlatform(
+                                                    group.submissions,
+                                                    overviewVideoPlatforms,
+                                                  )}
+                                                />
+                                              </TableCell>
+                                            )}
+                                            {showCreatorWiseTrustScoreColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={trustScoreDisplay}
+                                                  belowThreshold={
+                                                    trustScoreBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <div className="space-y-1 text-xs">
+                                                      {trustScoreBelowThreshold ? (
+                                                        <p>
+                                                          Below required Trust %
+                                                          (
+                                                          {formatTrustScoreMinimum(
+                                                            requiredTrustScore as number,
+                                                          )}
+                                                          ). Creator:{" "}
+                                                          {
+                                                            trustScoreDisplayShort
+                                                          }
+                                                        </p>
+                                                      ) : (
+                                                        <p>
+                                                          Meets required Trust %
+                                                          (
+                                                          {formatTrustScoreMinimum(
+                                                            requiredTrustScore as number,
+                                                          )}
+                                                          ). Creator:{" "}
+                                                          {
+                                                            trustScoreDisplayShort
+                                                          }
+                                                        </p>
+                                                      )}
+                                                      <p>
+                                                        Total reels:{" "}
+                                                        {totalReelsForTrust}
+                                                      </p>
+                                                      <p>
+                                                        Verified reels:{" "}
+                                                        {
+                                                          verifiedIncludingPaidForTrust
+                                                        }
+                                                      </p>
+                                                      <p>
+                                                        Pending reels:{" "}
+                                                        {pendingReelsForTrust}
+                                                      </p>
+                                                      <p>
+                                                        Rejected reels:{" "}
+                                                        {rejectedReelsForTrust}
+                                                      </p>
+                                                    </div>
                                                   }
                                                 />
-                                                <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                                  {(creatorFullName ||
-                                                    creatorUsername)?.[0]?.toUpperCase() ||
-                                                    "U"}
-                                                </AvatarFallback>
-                                              </Avatar>
-                                              <div className="flex flex-col min-w-0">
-                                                <span className="font-semibold text-md truncate whitespace-nowrap">
-                                                  {creatorFullName ||
-                                                    creatorUsername ||
-                                                    "Unknown Creator"}
-                                                </span>
-                                                {/* Username / platform handle below the full name */}
-                                                {(creatorUsername ||
-                                                  platformUsername) && (
-                                                  <span
-                                                    className={cn(
-                                                      "text-[11px]",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-slate-500",
-                                                    )}
-                                                  >
-                                                    {creatorUsername ||
-                                                      platformUsername}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          </TableCell>
-                                          {showCreatorWiseTrustScoreColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={trustScoreDisplay}
-                                                belowThreshold={
-                                                  trustScoreBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    {trustScoreBelowThreshold ? (
-                                                      <p>
-                                                        Below required Trust % (
-                                                        {formatTrustScoreMinimum(
-                                                          requiredTrustScore as number,
-                                                        )}
-                                                        ). Creator:{" "}
-                                                        {trustScoreDisplayShort}
-                                                      </p>
-                                                    ) : (
-                                                      <p>
-                                                        Meets required Trust % (
-                                                        {formatTrustScoreMinimum(
-                                                          requiredTrustScore as number,
-                                                        )}
-                                                        ). Creator:{" "}
-                                                        {trustScoreDisplayShort}
-                                                      </p>
-                                                    )}
-                                                    <p>
-                                                      Total reels:{" "}
-                                                      {totalReelsForTrust}
-                                                    </p>
-                                                    <p>
-                                                      Verified reels:{" "}
-                                                      {
-                                                        verifiedIncludingPaidForTrust
-                                                      }
-                                                    </p>
-                                                    <p>
-                                                      Pending reels:{" "}
-                                                      {pendingReelsForTrust}
-                                                    </p>
-                                                    <p>
-                                                      Rejected reels:{" "}
-                                                      {rejectedReelsForTrust}
-                                                    </p>
-                                                  </div>
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          {showCreatorWiseTrustNumberColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={trustNumberComputed}
-                                                belowThreshold={
-                                                  trustNumberBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    {trustNumberBelowThreshold ? (
-                                                      <p>
-                                                        Below required Trust
-                                                        Score (
-                                                        {requiredTrustNumber}
-                                                        ). Creator:{" "}
-                                                        {trustNumberComputed}
-                                                      </p>
-                                                    ) : (
-                                                      <p>
-                                                        Meets required Trust
-                                                        Score (
-                                                        {requiredTrustNumber}
-                                                        ). Creator:{" "}
-                                                        {trustNumberComputed}
-                                                      </p>
-                                                    )}
-                                                    <p>
-                                                      Verified reels:{" "}
-                                                      {
-                                                        verifiedIncludingPaidForTrust
-                                                      }
-                                                    </p>
-                                                    <p>
-                                                      Rejected reels:{" "}
-                                                      {rejectedReelsForTrust}
-                                                    </p>
-                                                  </div>
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          {showCreatorWiseBestQualityColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={
-                                                  creatorBestQuality !== null
-                                                    ? `${creatorBestQuality} / 3`
-                                                    : "—"
-                                                }
-                                                belowThreshold={
-                                                  bestQualityBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <CreatorQualityScoreBreakdownTooltip
-                                                    breakdown={
-                                                      creatorQualityScoreBreakdown
-                                                    }
-                                                    requirementLabel="best quality"
-                                                    belowThreshold={
-                                                      bestQualityBelowThreshold
-                                                    }
-                                                    requirementValue={
-                                                      contestMinBestQuality!
-                                                    }
-                                                    creatorValue={
-                                                      creatorBestQuality
-                                                    }
-                                                  />
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          {showCreatorWiseMinQualityColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={formatQualitySumDisplay(
-                                                  creatorQualityScoreSum,
-                                                )}
-                                                belowThreshold={
-                                                  minQualityBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    <p className="font-medium">
-                                                      Total Quality Score
-                                                    </p>
-                                                    <p>
-                                                      Score 3:{" "}
-                                                      {
-                                                        creatorQualityScoreBreakdown.score3
-                                                      }{" "}
-                                                      submission
-                                                      {creatorQualityScoreBreakdown.score3 ===
-                                                      1
-                                                        ? ""
-                                                        : "s"}
-                                                    </p>
-                                                    <p>
-                                                      Score 2:{" "}
-                                                      {
-                                                        creatorQualityScoreBreakdown.score2
-                                                      }{" "}
-                                                      submission
-                                                      {creatorQualityScoreBreakdown.score2 ===
-                                                      1
-                                                        ? ""
-                                                        : "s"}
-                                                    </p>
-                                                    <p>
-                                                      Score 1:{" "}
-                                                      {
-                                                        creatorQualityScoreBreakdown.score1
-                                                      }{" "}
-                                                      submission
-                                                      {creatorQualityScoreBreakdown.score1 ===
-                                                      1
-                                                        ? ""
-                                                        : "s"}
-                                                    </p>
-                                                    <p className="pt-1 border-t border-border/50">
-                                                      {minQualityBelowThreshold
-                                                        ? "Below"
-                                                        : "Meets"}{" "}
-                                                      required total quality
-                                                      score (
-                                                      {contestMinQuality!}).
-                                                      Creator:{" "}
-                                                      {formatQualitySumDisplay(
-                                                        creatorQualityScoreSum,
+                                              </TableCell>
+                                            )}
+                                            {showCreatorWiseTrustNumberColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={trustNumberComputed}
+                                                  belowThreshold={
+                                                    trustNumberBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <div className="space-y-1 text-xs">
+                                                      {trustNumberBelowThreshold ? (
+                                                        <p>
+                                                          Below required Trust
+                                                          Score (
+                                                          {requiredTrustNumber}
+                                                          ). Creator:{" "}
+                                                          {trustNumberComputed}
+                                                        </p>
+                                                      ) : (
+                                                        <p>
+                                                          Meets required Trust
+                                                          Score (
+                                                          {requiredTrustNumber}
+                                                          ). Creator:{" "}
+                                                          {trustNumberComputed}
+                                                        </p>
                                                       )}
-                                                    </p>
-                                                  </div>
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          {showCreatorWiseAvgQualityColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={
-                                                  creatorAvgQuality !== null
-                                                    ? `${formatDecimalMetric(creatorAvgQuality)} / 3`
-                                                    : "—"
-                                                }
-                                                belowThreshold={
-                                                  avgQualityBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <CreatorQualityScoreBreakdownTooltip
-                                                    breakdown={
-                                                      creatorQualityScoreBreakdown
-                                                    }
-                                                    requirementLabel="average quality"
-                                                    belowThreshold={
-                                                      avgQualityBelowThreshold
-                                                    }
-                                                    requirementValue={
-                                                      contestMinAvgQuality!
-                                                    }
-                                                    creatorValue={
-                                                      creatorAvgQuality
-                                                    }
-                                                  />
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          {showCreatorWisePlatformEarningsColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={formatMoney(
-                                                  creatorPlatformEarnings,
-                                                )}
-                                                belowThreshold={
-                                                  platformEarningsBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    {platformEarningsBelowThreshold ? (
                                                       <p>
-                                                        Below required platform
-                                                        earnings (
-                                                        {formatMoney(
-                                                          contestMinPlatformEarnings!,
-                                                        )}
-                                                        ). Creator:{" "}
-                                                        {formatMoney(
-                                                          creatorPlatformEarnings,
-                                                        )}
+                                                        Verified reels:{" "}
+                                                        {
+                                                          verifiedIncludingPaidForTrust
+                                                        }
                                                       </p>
-                                                    ) : (
                                                       <p>
-                                                        Meets required platform
-                                                        earnings (
-                                                        {formatMoney(
-                                                          contestMinPlatformEarnings!,
-                                                        )}
-                                                        ). Creator:{" "}
-                                                        {formatMoney(
-                                                          creatorPlatformEarnings,
-                                                        )}
+                                                        Rejected reels:{" "}
+                                                        {rejectedReelsForTrust}
                                                       </p>
-                                                    )}
-                                                  </div>
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          {showCreatorWisePlatformViewsColumn && (
-                                            <TableCell className="text-center whitespace-nowrap">
-                                              <CreatorWiseEligibilityText
-                                                value={creatorPlatformViews.toLocaleString()}
-                                                belowThreshold={
-                                                  platformViewsBelowThreshold
-                                                }
-                                                isDark={isDark}
-                                                tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    {platformViewsBelowThreshold ? (
-                                                      <p>
-                                                        Below required platform
-                                                        views (
-                                                        {contestMinPlatformViews!.toLocaleString()}
-                                                        ). Creator:{" "}
-                                                        {creatorPlatformViews.toLocaleString()}
-                                                      </p>
-                                                    ) : (
-                                                      <p>
-                                                        Meets required platform
-                                                        views (
-                                                        {contestMinPlatformViews!.toLocaleString()}
-                                                        ). Creator:{" "}
-                                                        {creatorPlatformViews.toLocaleString()}
-                                                      </p>
-                                                    )}
-                                                  </div>
-                                                }
-                                              />
-                                            </TableCell>
-                                          )}
-                                          <TableCell className="text-center font-semibold">
-                                            {group.totalCount}
-                                          </TableCell>
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
-                                            ? ytVisibleColumns.includes(
-                                                "status",
-                                              )
-                                            : true) && (
-                                            <TableCell>
-                                              <div className="flex flex-col items-center gap-1">
-                                                {(currentContest.platform?.toLowerCase() ===
-                                                  "twitter" ||
-                                                  currentContest.platform?.toLowerCase() ===
-                                                    "x") &&
-                                                currentContest.contest_format ===
-                                                  "text_image" ? (
-                                                  <>
-                                                    <TwitterCreatorRowStatusPills
-                                                      submissions={
-                                                        group.submissions || []
+                                                    </div>
+                                                  }
+                                                />
+                                              </TableCell>
+                                            )}
+                                            {showCreatorWiseBestQualityColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={
+                                                    creatorBestQuality !== null
+                                                      ? `${creatorBestQuality} / 5`
+                                                      : "—"
+                                                  }
+                                                  belowThreshold={
+                                                    bestQualityBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <CreatorQualityScoreBreakdownTooltip
+                                                      breakdown={
+                                                        creatorQualityScoreBreakdown
                                                       }
-                                                      getStatus={getStatus}
+                                                      requirementLabel="best quality"
+                                                      belowThreshold={
+                                                        bestQualityBelowThreshold
+                                                      }
+                                                      requirementValue={
+                                                        contestMinBestQuality!
+                                                      }
+                                                      creatorValue={
+                                                        creatorBestQuality
+                                                      }
                                                     />
-                                                    {group.creator_rejection_reason && (
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs italic truncate max-w-[150px] text-center",
-                                                          isDark
-                                                            ? "text-red-400"
-                                                            : "text-red-600",
-                                                        )}
-                                                        title={
-                                                          group.creator_rejection_reason
-                                                        }
-                                                      >
-                                                        {group
-                                                          .creator_rejection_reason
-                                                          .length > 20
-                                                          ? group.creator_rejection_reason.substring(
-                                                              0,
-                                                              20,
-                                                            ) + "..."
-                                                          : group.creator_rejection_reason}
-                                                      </span>
-                                                    )}
-                                                  </>
-                                                ) : (
-                                                  <div className="flex flex-col flex-wrap gap-2 justify-center items-center">
-                                                    {group.statusCounts
-                                                      .verified > 0 && (
-                                                      <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs whitespace-nowrap">
-                                                        Verified:{" "}
-                                                        {
-                                                          group.statusCounts
-                                                            .verified
-                                                        }
-                                                      </Badge>
-                                                    )}
-                                                    {group.statusCounts.paid >
-                                                      0 && (
-                                                      <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs whitespace-nowrap">
-                                                        Paid:{" "}
-                                                        {
-                                                          group.statusCounts
-                                                            .paid
-                                                        }
-                                                      </Badge>
-                                                    )}
-                                                    {group.statusCounts
-                                                      .pending > 0 && (
-                                                      <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs whitespace-nowrap">
-                                                        Pending:{" "}
-                                                        {
-                                                          group.statusCounts
-                                                            .pending
-                                                        }
-                                                      </Badge>
-                                                    )}
-                                                    {group.statusCounts
-                                                      .rejected > 0 && (
-                                                      <Badge className="bg-red-100 text-red-700 border border-red-200 text-xs whitespace-nowrap">
-                                                        Rejected:{" "}
-                                                        {
-                                                          group.statusCounts
-                                                            .rejected
-                                                        }
-                                                      </Badge>
-                                                    )}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </TableCell>
-                                          )}
-                                          {isAdminView &&
-                                            (currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("instagram") ||
-                                              currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("tiktok")) && (
-                                              <TableCell className="text-center">
-                                                {(() => {
-                                                  const counts =
-                                                    group.insightsCounts || {};
-                                                  const okCount =
-                                                    counts.ok || 0;
-                                                  const tempCount =
-                                                    counts.temporary_failure ||
-                                                    0;
-                                                  const permCount =
-                                                    counts.permanent_failure ||
-                                                    0;
-                                                  const neverCount =
-                                                    counts.never || 0;
-                                                  return (
-                                                    <div className="flex flex-wrap items-center justify-center gap-1">
-                                                      {okCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                                                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                                              {okCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            Insights fetched
-                                                            successfully
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {tempCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
-                                                              <span className="h-2 w-2 rounded-full bg-amber-400" />
-                                                              {tempCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent className="whitespace-pre-line">
-                                                            Temporary error
-                                                            fetching insights
-                                                            {"\n"}Will retry
-                                                            later
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {permCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-900">
-                                                              <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                                              {permCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            Insights cannot be
-                                                            fetched for this
-                                                            post
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {okCount === 0 &&
-                                                        tempCount === 0 &&
-                                                        permCount === 0 && (
-                                                          <Tooltip>
-                                                            <TooltipTrigger
-                                                              asChild
-                                                            >
-                                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                                                                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                                                                {neverCount}
-                                                              </span>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                              Never refreshed
-                                                              yet
-                                                            </TooltipContent>
-                                                          </Tooltip>
-                                                        )}
-                                                    </div>
-                                                  );
-                                                })()}
+                                                  }
+                                                />
                                               </TableCell>
                                             )}
-                                          {isAdminView &&
-                                            currentContest.platform
-                                              ?.toLowerCase()
-                                              .includes("youtube") &&
-                                            ytVisibleColumns.includes(
-                                              "insights_status",
-                                            ) && (
-                                              <TableCell className="text-center">
-                                                {(() => {
-                                                  const counts =
-                                                    group.insightsCounts || {};
-                                                  const okCount =
-                                                    counts.ok || 0;
-                                                  const tempCount =
-                                                    counts.temporary_failure ||
-                                                    0;
-                                                  const permCount =
-                                                    counts.permanent_failure ||
-                                                    0;
-                                                  const neverCount =
-                                                    counts.never || 0;
-                                                  return (
-                                                    <div className="flex flex-wrap items-center justify-center gap-1">
-                                                      {okCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
-                                                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                                              {okCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            Insights fetched
-                                                            successfully
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {tempCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
-                                                              <span className="h-2 w-2 rounded-full bg-amber-400" />
-                                                              {tempCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent className="whitespace-pre-line">
-                                                            Temporary error
-                                                            fetching insights
-                                                            {"\n"}Will retry
-                                                            later
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {permCount > 0 && (
-                                                        <Tooltip>
-                                                          <TooltipTrigger
-                                                            asChild
-                                                          >
-                                                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-900">
-                                                              <span className="h-2 w-2 rounded-full bg-rose-500" />
-                                                              {permCount}
-                                                            </span>
-                                                          </TooltipTrigger>
-                                                          <TooltipContent>
-                                                            Insights cannot be
-                                                            fetched for this
-                                                            post
-                                                          </TooltipContent>
-                                                        </Tooltip>
-                                                      )}
-                                                      {okCount === 0 &&
-                                                        tempCount === 0 &&
-                                                        permCount === 0 && (
-                                                          <Tooltip>
-                                                            <TooltipTrigger
-                                                              asChild
-                                                            >
-                                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                                                                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                                                                {neverCount}
-                                                              </span>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                              Never refreshed
-                                                              yet
-                                                            </TooltipContent>
-                                                          </Tooltip>
-                                                        )}
-                                                    </div>
-                                                  );
-                                                })()}
-                                              </TableCell>
-                                            )}
-                                          {/* For Twitter campaigns, show Twitter-specific metrics */}
-                                          {(currentContest.platform?.toLowerCase() ===
-                                            "twitter" ||
-                                            currentContest.platform?.toLowerCase() ===
-                                              "x") &&
-                                          currentContest.contest_format ===
-                                            "text_image" ? (
-                                            <>
-                                              {/* Total Points */}
-                                              <TableCell className="text-center">
-                                                <div className="flex flex-col items-center">
-                                                  <span
-                                                    className={cn(
-                                                      "font-bold text-sm",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    {formatMetricValue(
-                                                      (group.metrics
-                                                        .base_points || 0) +
-                                                        (group.metrics
-                                                          .manual_points_adjustment ||
-                                                          0),
-                                                    )}
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500",
-                                                    )}
-                                                  >
-                                                    total
-                                                  </span>
-                                                </div>
-                                              </TableCell>
-                                              {/* Base Points */}
-                                              <TableCell className="text-center">
-                                                <div className="flex flex-col items-center">
-                                                  <span
-                                                    className={cn(
-                                                      "font-bold text-sm",
-                                                      isDark
-                                                        ? "text-white"
-                                                        : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    {formatMetricValue(
-                                                      group.metrics
-                                                        .base_points || 0,
-                                                    )}
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500",
-                                                    )}
-                                                  >
-                                                    base
-                                                  </span>
-                                                </div>
-                                              </TableCell>
-                                              {/* Manual Points */}
-                                              {(() => {
-                                                const tweetManualPoints =
-                                                  group.metrics
-                                                    .tweet_manual_points_adjustment ||
-                                                  0;
-                                                return (
-                                                  <TableCell className="text-center">
-                                                    <div className="flex flex-col items-center">
-                                                      <span
-                                                        className={cn(
-                                                          "font-bold text-sm",
-                                                          tweetManualPoints > 0
-                                                            ? "text-green-600"
-                                                            : tweetManualPoints <
-                                                                0
-                                                              ? "text-red-600"
-                                                              : isDark
-                                                                ? "text-white"
-                                                                : "text-slate-900",
-                                                        )}
-                                                      >
-                                                        {tweetManualPoints > 0
-                                                          ? "+"
-                                                          : ""}
-                                                        {formatMetricValue(
-                                                          tweetManualPoints,
-                                                        )}
-                                                      </span>
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs",
-                                                          isDark
-                                                            ? "text-slate-400"
-                                                            : "text-slate-500",
-                                                        )}
-                                                      >
-                                                        manual
-                                                      </span>
-                                                    </div>
-                                                  </TableCell>
-                                                );
-                                              })()}
-                                              <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.likes || 0,
-                                                )}
-                                              </TableCell>
-                                              <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.comments || 0,
-                                                )}
-                                              </TableCell>
-                                              <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.retweets || 0,
-                                                )}
-                                              </TableCell>
-                                              <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.quote_reposts ||
-                                                    0,
-                                                )}
-                                              </TableCell>
-                                              <TableCell className="text-center">
-                                                {formatMetricValue(
-                                                  group.metrics.impressions ||
-                                                    0,
-                                                )}
-                                              </TableCell>
-                                            </>
-                                          ) : (
-                                            <>
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
-                                                ? ytVisibleColumns.includes(
-                                                    "views",
-                                                  )
-                                                : true) && (
-                                                <TableCell className="text-center">
-                                                  {group.metrics.views.toLocaleString()}
-                                                </TableCell>
-                                              )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
-                                                ? ytVisibleColumns.includes(
-                                                    "likes",
-                                                  )
-                                                : true) && (
-                                                <TableCell className="text-center">
-                                                  {group.metrics.likes.toLocaleString()}
-                                                </TableCell>
-                                              )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
-                                                ? ytVisibleColumns.includes(
-                                                    "comments",
-                                                  )
-                                                : true) && (
-                                                <TableCell className="text-center">
-                                                  {group.metrics.comments.toLocaleString()}
-                                                </TableCell>
-                                              )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("instagram") ||
-                                                currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("tiktok") ||
-                                                (canSeeCore &&
-                                                  (currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("youtube")
-                                                    ? ytVisibleColumns.includes(
-                                                        "shares",
-                                                      )
-                                                    : true))) && (
-                                                <TableCell className="text-center font-mono text-sm">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    <Share2 className="h-3 w-3 text-purple-500" />
-                                                    {formatMetricValue(
-                                                      group.metrics.shares || 0,
-                                                    )}
-                                                  </div>
-                                                </TableCell>
-                                              )}
-                                              {currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("tiktok") &&
-                                                (() => {
-                                                  const ttEng =
-                                                    (group.metrics.likes || 0) +
-                                                    (group.metrics.comments ||
-                                                      0) +
-                                                    (group.metrics.shares || 0);
-                                                  const ttViews =
-                                                    group.metrics.views || 0;
-                                                  const ttRate =
-                                                    ttViews > 0
-                                                      ? Math.round(
-                                                          (ttEng / ttViews) *
-                                                            10000,
-                                                        ) / 100
-                                                      : 0;
-                                                  return (
-                                                    <>
-                                                      <TableCell className="text-center font-mono text-sm">
-                                                        {formatMetricValue(
-                                                          ttEng,
-                                                        )}
-                                                      </TableCell>
-                                                      <TableCell className="text-center font-mono text-sm">
-                                                        {ttViews > 0
-                                                          ? `${formatMetricValue(ttRate)}%`
-                                                          : "—"}
-                                                      </TableCell>
-                                                    </>
-                                                  );
-                                                })()}
-                                              {/* Instagram-specific metrics */}
-                                              {currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("instagram") && (
-                                                <>
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    {formatMetricValue(
-                                                      group.metrics.saves || 0,
-                                                    )}
-                                                  </TableCell>
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    {formatMetricValue(
-                                                      group.metrics.reach || 0,
-                                                    )}
-                                                  </TableCell>
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    {formatMetricValue(
-                                                      group.metrics
-                                                        .interactions || 0,
-                                                    )}
-                                                  </TableCell>
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    <div className="flex flex-col items-center">
-                                                      <span className="font-bold">
-                                                        {formatWatchTime(
-                                                          group.totalCount >
-                                                            0 &&
-                                                            group.metrics
-                                                              .avg_watch_time_ms >
-                                                              0
-                                                            ? Math.round(
-                                                                (group.metrics
-                                                                  .avg_watch_time_ms ||
-                                                                  0) /
-                                                                  group.totalCount,
-                                                              )
-                                                            : 0,
-                                                        )}
-                                                      </span>
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs",
-                                                          isDark
-                                                            ? "text-slate-400"
-                                                            : "text-slate-500",
-                                                        )}
-                                                      >
-                                                        avg
-                                                      </span>
-                                                    </div>
-                                                  </TableCell>
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    <div className="flex flex-col items-center">
-                                                      <span className="font-bold">
-                                                        {formatWatchTime(
-                                                          group.metrics
-                                                            .total_watch_time_ms ||
-                                                            0,
-                                                        )}
-                                                      </span>
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs",
-                                                          isDark
-                                                            ? "text-slate-400"
-                                                            : "text-slate-500",
-                                                        )}
-                                                      >
-                                                        total
-                                                      </span>
-                                                    </div>
-                                                  </TableCell>
-                                                </>
-                                              )}
-                                            </>
-                                          )}
-                                          {/* Show reward columns for leaderboard, CPM, and milestone campaigns */}
-                                          {(currentContest.contest_type ===
-                                            "leaderboard" ||
-                                            isCpmContestType(
-                                              currentContest.contest_type,
-                                            ) ||
-                                            isMilestoneContestType(
-                                              currentContest.contest_type,
-                                            )) && (
-                                            <>
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
-                                                ? ytVisibleColumns.includes(
-                                                    "expected_reward",
-                                                  )
-                                                : true) && (
-                                                <>
-                                                  {isDualRewardsContestType(
-                                                    currentContest.contest_type,
-                                                  ) ? (
-                                                    <>
-                                                      {(() => {
-                                                        const subs =
-                                                          group.submissions ||
-                                                          [];
-                                                        let cpmPre = 0;
-                                                        let msPre = 0;
-                                                        for (const sub of subs) {
-                                                          const tw =
-                                                            sub.is_twitter_tweet ||
-                                                            String(
-                                                              sub.platform ||
-                                                                "",
-                                                            ).toLowerCase() ===
-                                                              "twitter";
-                                                          if (tw) continue;
-                                                          cpmPre +=
-                                                            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                                                              sub.id,
-                                                            ) ?? 0;
-                                                          msPre +=
-                                                            cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
-                                                              sub.id,
-                                                            ) ??
-                                                            milestoneSubmissionExpectedPayoutCents.get(
-                                                              sub.id,
-                                                            ) ??
-                                                            0;
-                                                        }
-                                                        const cpmAdj =
-                                                          dualAdjustCpmForDisplay
-                                                            ? applyPayoutAdjustment(
-                                                                cpmPre,
-                                                                contestPayoutAdjPct,
-                                                              )
-                                                            : cpmPre;
-                                                        const msAdj =
-                                                          dualAdjustMilestoneForDisplay
-                                                            ? applyPayoutAdjustment(
-                                                                msPre,
-                                                                contestPayoutAdjPct,
-                                                              )
-                                                            : msPre;
-                                                        const totalPre =
-                                                          cpmPre + msPre;
-                                                        const totalAdj =
-                                                          cpmAdj + msAdj;
-                                                        return (
-                                                          <>
-                                                            <TableCell className="text-center font-medium">
-                                                              <div className="flex items-center justify-center gap-1">
-                                                                {formatMoney(
-                                                                  totalPre,
-                                                                )}
-                                                                {group.isCapped && (
-                                                                  <span
-                                                                    className="text-amber-600 cursor-help"
-                                                                    title={`Capped at ${formatMoney(
-                                                                      currentContest.max_earnings_per_creator ??
-                                                                        (
-                                                                          currentContest.contest_based_details as any
-                                                                        )
-                                                                          ?.cpm_contest
-                                                                          ?.max_earnings_per_creator ??
-                                                                        (
-                                                                          currentContest.contest_based_details as any
-                                                                        )
-                                                                          ?.leaderboard_contest
-                                                                          ?.max_earnings_per_creator,
-                                                                    )}. Original: ${formatMoney(
-                                                                      group.earningsBeforeCap,
-                                                                    )}`}
-                                                                  >
-                                                                    ⚠️
-                                                                  </span>
-                                                                )}
-                                                              </div>
-                                                            </TableCell>
-                                                            <TableCell className="text-center font-medium">
-                                                              {formatMoney(
-                                                                cpmPre,
-                                                              )}
-                                                            </TableCell>
-                                                            <TableCell className="text-center font-medium">
-                                                              {formatMoney(
-                                                                msPre,
-                                                              )}
-                                                            </TableCell>
-                                                            {showDualPayoutAdjustedColumns &&
-                                                              (currentContest.platform
-                                                                ?.toLowerCase()
-                                                                .includes(
-                                                                  "youtube",
-                                                                )
-                                                                ? ytVisibleColumns.includes(
-                                                                    "adjusted_reward",
-                                                                  )
-                                                                : true) && (
-                                                                <>
-                                                                  <TableCell className="text-center font-medium">
-                                                                    {formatMoney(
-                                                                      totalAdj,
-                                                                    )}
-                                                                  </TableCell>
-                                                                  {dualAdjustCpmForDisplay && (
-                                                                    <TableCell className="text-center font-medium">
-                                                                      {formatMoney(
-                                                                        cpmAdj,
-                                                                      )}
-                                                                    </TableCell>
-                                                                  )}
-                                                                  {dualAdjustMilestoneForDisplay && (
-                                                                    <TableCell className="text-center font-medium">
-                                                                      {formatMoney(
-                                                                        msAdj,
-                                                                      )}
-                                                                    </TableCell>
-                                                                  )}
-                                                                </>
-                                                              )}
-                                                          </>
-                                                        );
-                                                      })()}
-                                                      <TableCell className="text-center font-medium min-w-[170px]">
-                                                        {(() => {
-                                                          const counts =
-                                                            new Map<
-                                                              number,
-                                                              number
-                                                            >();
-
-                                                          for (const sub of group.submissions ||
-                                                            []) {
-                                                            const label =
-                                                              milestoneSubmissionAssignedLabelBySubmissionId.get(
-                                                                sub.id,
-                                                              ) ?? "—";
-                                                            const order =
-                                                              extractMilestoneOrderFromLabel(
-                                                                label,
-                                                              );
-                                                            if (order == null) {
-                                                              continue;
-                                                            }
-                                                            counts.set(
-                                                              order,
-                                                              (counts.get(
-                                                                order,
-                                                              ) || 0) + 1,
-                                                            );
-                                                          }
-
-                                                          if (
-                                                            counts.size === 0
-                                                          ) {
-                                                            return (
-                                                              <span className="text-muted-foreground">
-                                                                —
-                                                              </span>
-                                                            );
-                                                          }
-
-                                                          const milestonesAchieved =
-                                                            Array.from(
-                                                              counts.entries(),
-                                                            ).sort(
-                                                              (a, b) =>
-                                                                a[0] - b[0],
-                                                            );
-                                                          const creatorId =
-                                                            String(
-                                                              group.creator.id,
-                                                            );
-                                                          const milestonePreviewCount = 2;
-                                                          const showMilestoneExpand =
-                                                            milestonesAchieved.length >
-                                                            milestonePreviewCount;
-                                                          const milestonesExpanded =
-                                                            !!creatorWiseMilestoneExpandedByCreatorId[
-                                                              creatorId
+                                            {showCreatorWiseMinQualityColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={formatQualitySumDisplay(
+                                                    creatorQualityScoreSum,
+                                                  )}
+                                                  belowThreshold={
+                                                    minQualityBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <div className="space-y-1 text-xs">
+                                                      <p className="font-medium">
+                                                        Total Quality Score
+                                                      </p>
+                                                      {[5, 4, 3, 2, 1].map(
+                                                        (score) => {
+                                                          const count =
+                                                            creatorQualityScoreBreakdown[
+                                                              `score${score}` as keyof QualityScoreCounts
                                                             ];
-                                                          const milestonesToShow =
-                                                            showMilestoneExpand &&
-                                                            !milestonesExpanded
-                                                              ? milestonesAchieved.slice(
-                                                                  0,
-                                                                  milestonePreviewCount,
-                                                                )
-                                                              : milestonesAchieved;
-
                                                           return (
-                                                            <div className="flex flex-col items-center gap-1">
-                                                              <div className="flex flex-wrap justify-center gap-1.5">
-                                                                {milestonesToShow.map(
-                                                                  ([
-                                                                    order,
-                                                                    count,
-                                                                  ]) => {
-                                                                    return (
-                                                                      <span
-                                                                        key={`${group.creator.id}-milestone-${order}`}
-                                                                        className="inline-flex items-center gap-1"
-                                                                      >
-                                                                        <Badge
-                                                                          className={cn(
-                                                                            "text-[11px] font-semibold px-2 py-0.5 border",
-                                                                            "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
-                                                                          )}
-                                                                        >
-                                                                          Milestone{" "}
-                                                                          {
-                                                                            order
-                                                                          }
-                                                                        </Badge>
-                                                                        <span className="text-[11px] text-muted-foreground">
-                                                                          {
-                                                                            count
-                                                                          }{" "}
-                                                                          {count ===
-                                                                          1
-                                                                            ? "sub"
-                                                                            : "sub"}
-                                                                        </span>
-                                                                      </span>
-                                                                    );
-                                                                  },
-                                                                )}
-                                                              </div>
-                                                              {showMilestoneExpand && (
-                                                                <Button
-                                                                  type="button"
-                                                                  variant="ghost"
-                                                                  size="sm"
-                                                                  className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
-                                                                  aria-expanded={
-                                                                    milestonesExpanded
-                                                                  }
-                                                                  onClick={(
-                                                                    e,
-                                                                  ) => {
-                                                                    e.stopPropagation();
-                                                                    toggleCreatorWiseMilestoneRow(
-                                                                      creatorId,
-                                                                    );
-                                                                  }}
-                                                                >
-                                                                  {milestonesExpanded
-                                                                    ? "Less"
-                                                                    : "More"}
-                                                                </Button>
-                                                              )}
-                                                            </div>
+                                                            <p key={score}>
+                                                              Score {score}: {count}{" "}
+                                                              submission
+                                                              {count === 1
+                                                                ? ""
+                                                                : "s"}
+                                                            </p>
                                                           );
-                                                        })()}
-                                                      </TableCell>
+                                                        },
+                                                      )}
+                                                      <p className="pt-1 border-t border-border/50">
+                                                        {minQualityBelowThreshold
+                                                          ? "Below"
+                                                          : "Meets"}{" "}
+                                                        required total quality
+                                                        score (
+                                                        {contestMinQuality!}).
+                                                        Creator:{" "}
+                                                        {formatQualitySumDisplay(
+                                                          creatorQualityScoreSum,
+                                                        )}
+                                                      </p>
+                                                    </div>
+                                                  }
+                                                />
+                                              </TableCell>
+                                            )}
+                                            {showCreatorWiseAvgQualityColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={
+                                                    creatorAvgQuality !== null
+                                                      ? `${formatDecimalMetric(creatorAvgQuality)} / 5`
+                                                      : "—"
+                                                  }
+                                                  belowThreshold={
+                                                    avgQualityBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <CreatorQualityScoreBreakdownTooltip
+                                                      breakdown={
+                                                        creatorQualityScoreBreakdown
+                                                      }
+                                                      requirementLabel="average quality"
+                                                      belowThreshold={
+                                                        avgQualityBelowThreshold
+                                                      }
+                                                      requirementValue={
+                                                        contestMinAvgQuality!
+                                                      }
+                                                      creatorValue={
+                                                        creatorAvgQuality
+                                                      }
+                                                    />
+                                                  }
+                                                />
+                                              </TableCell>
+                                            )}
+                                            {showCreatorWisePlatformEarningsColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={formatMoney(
+                                                    creatorPlatformEarnings,
+                                                  )}
+                                                  belowThreshold={
+                                                    platformEarningsBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <div className="space-y-1 text-xs">
+                                                      {platformEarningsBelowThreshold ? (
+                                                        <p>
+                                                          Below required
+                                                          platform earnings (
+                                                          {formatMoney(
+                                                            contestMinPlatformEarnings!,
+                                                          )}
+                                                          ). Creator:{" "}
+                                                          {formatMoney(
+                                                            creatorPlatformEarnings,
+                                                          )}
+                                                        </p>
+                                                      ) : (
+                                                        <p>
+                                                          Meets required
+                                                          platform earnings (
+                                                          {formatMoney(
+                                                            contestMinPlatformEarnings!,
+                                                          )}
+                                                          ). Creator:{" "}
+                                                          {formatMoney(
+                                                            creatorPlatformEarnings,
+                                                          )}
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                  }
+                                                />
+                                              </TableCell>
+                                            )}
+                                            {showCreatorWisePlatformViewsColumn && (
+                                              <TableCell className="text-center whitespace-nowrap">
+                                                <CreatorWiseEligibilityText
+                                                  value={creatorPlatformViews.toLocaleString()}
+                                                  belowThreshold={
+                                                    platformViewsBelowThreshold
+                                                  }
+                                                  isDark={isDark}
+                                                  tooltip={
+                                                    <div className="space-y-1 text-xs">
+                                                      {platformViewsBelowThreshold ? (
+                                                        <p>
+                                                          Below required
+                                                          platform views (
+                                                          {contestMinPlatformViews!.toLocaleString()}
+                                                          ). Creator:{" "}
+                                                          {creatorPlatformViews.toLocaleString()}
+                                                        </p>
+                                                      ) : (
+                                                        <p>
+                                                          Meets required
+                                                          platform views (
+                                                          {contestMinPlatformViews!.toLocaleString()}
+                                                          ). Creator:{" "}
+                                                          {creatorPlatformViews.toLocaleString()}
+                                                        </p>
+                                                      )}
+                                                    </div>
+                                                  }
+                                                />
+                                              </TableCell>
+                                            )}
+                                            <TableCell className="text-center font-semibold">
+                                              {group.totalCount}
+                                            </TableCell>
+                                            {(submissionsTablePlatform.includes(
+                                              "youtube",
+                                            )
+                                              ? ytVisibleColumns.includes(
+                                                  "status",
+                                                )
+                                              : true) && (
+                                              <TableCell>
+                                                <div className="flex flex-col items-center gap-1">
+                                                  {(currentContest.platform?.toLowerCase() ===
+                                                    "twitter" ||
+                                                    currentContest.platform?.toLowerCase() ===
+                                                      "x") &&
+                                                  currentContest.contest_format ===
+                                                    "text_image" ? (
+                                                    <>
+                                                      <TwitterCreatorRowStatusPills
+                                                        submissions={
+                                                          group.submissions ||
+                                                          []
+                                                        }
+                                                        getStatus={getStatus}
+                                                      />
+                                                      {group.creator_rejection_reason && (
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs italic truncate max-w-[150px] text-center",
+                                                            isDark
+                                                              ? "text-red-400"
+                                                              : "text-red-600",
+                                                          )}
+                                                          title={
+                                                            group.creator_rejection_reason
+                                                          }
+                                                        >
+                                                          {group
+                                                            .creator_rejection_reason
+                                                            .length > 20
+                                                            ? group.creator_rejection_reason.substring(
+                                                                0,
+                                                                20,
+                                                              ) + "..."
+                                                            : group.creator_rejection_reason}
+                                                        </span>
+                                                      )}
                                                     </>
                                                   ) : (
-                                                    <>
-                                                      <TableCell className="text-center font-medium">
-                                                        <div className="flex items-center justify-center gap-1">
-                                                          {formatMoney(
-                                                            group.earnings
-                                                              .expected,
-                                                          )}
-                                                          {group.isCapped && (
-                                                            <span
-                                                              className="text-amber-600 cursor-help"
-                                                              title={`Capped at ${formatMoney(
-                                                                currentContest.max_earnings_per_creator,
-                                                              )}. Original: ${formatMoney(
-                                                                group.earningsBeforeCap,
-                                                              )}`}
-                                                            >
-                                                              ⚠️
+                                                    <div className="flex flex-col flex-wrap gap-2 justify-center items-center">
+                                                      {group.statusCounts
+                                                        .verified > 0 && (
+                                                        <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs whitespace-nowrap">
+                                                          Verified:{" "}
+                                                          {
+                                                            group.statusCounts
+                                                              .verified
+                                                          }
+                                                        </Badge>
+                                                      )}
+                                                      {group.statusCounts.paid >
+                                                        0 && (
+                                                        <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs whitespace-nowrap">
+                                                          Paid:{" "}
+                                                          {
+                                                            group.statusCounts
+                                                              .paid
+                                                          }
+                                                        </Badge>
+                                                      )}
+                                                      {group.statusCounts
+                                                        .pending > 0 && (
+                                                        <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs whitespace-nowrap">
+                                                          Pending:{" "}
+                                                          {
+                                                            group.statusCounts
+                                                              .pending
+                                                          }
+                                                        </Badge>
+                                                      )}
+                                                      {group.statusCounts
+                                                        .rejected > 0 && (
+                                                        <Badge className="bg-red-100 text-red-700 border border-red-200 text-xs whitespace-nowrap">
+                                                          Rejected:{" "}
+                                                          {
+                                                            group.statusCounts
+                                                              .rejected
+                                                          }
+                                                        </Badge>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </TableCell>
+                                            )}
+                                            {showSubmissionsInsightsStatusColumn && (
+                                              <TableCell className="text-center">
+                                                {(() => {
+                                                  const counts =
+                                                    group.insightsCounts || {};
+                                                  const okCount =
+                                                    counts.ok || 0;
+                                                  const tempCount =
+                                                    counts.temporary_failure ||
+                                                    0;
+                                                  const permCount =
+                                                    counts.permanent_failure ||
+                                                    0;
+                                                  const neverCount =
+                                                    counts.never || 0;
+                                                  return (
+                                                    <div className="flex flex-wrap items-center justify-center gap-1">
+                                                      {okCount > 0 && (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                                                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                                              {okCount}
                                                             </span>
-                                                          )}
-                                                        </div>
-                                                      </TableCell>
-                                                      {showAdjustedRewardColumn &&
-                                                        (currentContest.platform
-                                                          ?.toLowerCase()
-                                                          .includes("youtube")
-                                                          ? ytVisibleColumns.includes(
-                                                              "adjusted_reward",
-                                                            )
-                                                          : true) && (
-                                                          <TableCell className="text-center font-medium">
-                                                            {/*
-                                                              Creator-wise expected is aggregated then creator-capped; per-submission ordering caps in normal view may differ.
-                                                            */}
-                                                            {formatMoney(
-                                                              applyPayoutAdjustment(
-                                                                Number(
-                                                                  group.earnings
-                                                                    .expected ||
-                                                                    0,
-                                                                ),
-                                                                payoutAdjustmentPercentageForUi,
-                                                              ),
-                                                            )}
-                                                          </TableCell>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                            Insights fetched
+                                                            successfully
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )}
+                                                      {tempCount > 0 && (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                                                              <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                                              {tempCount}
+                                                            </span>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent className="whitespace-pre-line">
+                                                            Temporary error
+                                                            fetching insights
+                                                            {"\n"}Will retry
+                                                            later
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )}
+                                                      {permCount > 0 && (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-900">
+                                                              <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                                              {permCount}
+                                                            </span>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                            Insights cannot be
+                                                            fetched for this
+                                                            post
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )}
+                                                      {okCount === 0 &&
+                                                        tempCount === 0 &&
+                                                        permCount === 0 && (
+                                                          <Tooltip>
+                                                            <TooltipTrigger
+                                                              asChild
+                                                            >
+                                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                                                <span className="h-2 w-2 rounded-full bg-slate-400" />
+                                                                {neverCount}
+                                                              </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                              Never refreshed
+                                                              yet
+                                                            </TooltipContent>
+                                                          </Tooltip>
                                                         )}
-                                                      {isMilestoneContestType(
-                                                        currentContest.contest_type,
-                                                      ) && (
+                                                    </div>
+                                                  );
+                                                })()}
+                                              </TableCell>
+                                            )}
+                                            {/* For Twitter campaigns, show Twitter-specific metrics */}
+                                            {(currentContest.platform?.toLowerCase() ===
+                                              "twitter" ||
+                                              currentContest.platform?.toLowerCase() ===
+                                                "x") &&
+                                            currentContest.contest_format ===
+                                              "text_image" ? (
+                                              <>
+                                                {/* Total Points */}
+                                                <TableCell className="text-center">
+                                                  <div className="flex flex-col items-center">
+                                                    <span
+                                                      className={cn(
+                                                        "font-bold text-sm",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-900",
+                                                      )}
+                                                    >
+                                                      {formatMetricValue(
+                                                        (group.metrics
+                                                          .base_points || 0) +
+                                                          (group.metrics
+                                                            .manual_points_adjustment ||
+                                                            0),
+                                                      )}
+                                                    </span>
+                                                    <span
+                                                      className={cn(
+                                                        "text-xs",
+                                                        isDark
+                                                          ? "text-slate-400"
+                                                          : "text-slate-500",
+                                                      )}
+                                                    >
+                                                      total
+                                                    </span>
+                                                  </div>
+                                                </TableCell>
+                                                {/* Base Points */}
+                                                <TableCell className="text-center">
+                                                  <div className="flex flex-col items-center">
+                                                    <span
+                                                      className={cn(
+                                                        "font-bold text-sm",
+                                                        isDark
+                                                          ? "text-white"
+                                                          : "text-slate-900",
+                                                      )}
+                                                    >
+                                                      {formatMetricValue(
+                                                        group.metrics
+                                                          .base_points || 0,
+                                                      )}
+                                                    </span>
+                                                    <span
+                                                      className={cn(
+                                                        "text-xs",
+                                                        isDark
+                                                          ? "text-slate-400"
+                                                          : "text-slate-500",
+                                                      )}
+                                                    >
+                                                      base
+                                                    </span>
+                                                  </div>
+                                                </TableCell>
+                                                {/* Manual Points */}
+                                                {(() => {
+                                                  const tweetManualPoints =
+                                                    group.metrics
+                                                      .tweet_manual_points_adjustment ||
+                                                    0;
+                                                  return (
+                                                    <TableCell className="text-center">
+                                                      <div className="flex flex-col items-center">
+                                                        <span
+                                                          className={cn(
+                                                            "font-bold text-sm",
+                                                            tweetManualPoints >
+                                                              0
+                                                              ? "text-green-600"
+                                                              : tweetManualPoints <
+                                                                  0
+                                                                ? "text-red-600"
+                                                                : isDark
+                                                                  ? "text-white"
+                                                                  : "text-slate-900",
+                                                          )}
+                                                        >
+                                                          {tweetManualPoints > 0
+                                                            ? "+"
+                                                            : ""}
+                                                          {formatMetricValue(
+                                                            tweetManualPoints,
+                                                          )}
+                                                        </span>
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs",
+                                                            isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500",
+                                                          )}
+                                                        >
+                                                          manual
+                                                        </span>
+                                                      </div>
+                                                    </TableCell>
+                                                  );
+                                                })()}
+                                                <TableCell className="text-center">
+                                                  {formatMetricValue(
+                                                    group.metrics.likes || 0,
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {formatMetricValue(
+                                                    group.metrics.comments || 0,
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {formatMetricValue(
+                                                    group.metrics.retweets || 0,
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {formatMetricValue(
+                                                    group.metrics
+                                                      .quote_reposts || 0,
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {formatMetricValue(
+                                                    group.metrics.impressions ||
+                                                      0,
+                                                  )}
+                                                </TableCell>
+                                              </>
+                                            ) : (
+                                              <>
+                                                {(submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
+                                                  ? ytVisibleColumns.includes(
+                                                      "views",
+                                                    )
+                                                  : true) && (
+                                                  <TableCell className="text-center">
+                                                    {group.metrics.views.toLocaleString()}
+                                                  </TableCell>
+                                                )}
+                                                {(submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
+                                                  ? ytVisibleColumns.includes(
+                                                      "likes",
+                                                    )
+                                                  : true) && (
+                                                  <TableCell className="text-center">
+                                                    {group.metrics.likes.toLocaleString()}
+                                                  </TableCell>
+                                                )}
+                                                {(submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
+                                                  ? ytVisibleColumns.includes(
+                                                      "comments",
+                                                    )
+                                                  : true) && (
+                                                  <TableCell className="text-center">
+                                                    {group.metrics.comments.toLocaleString()}
+                                                  </TableCell>
+                                                )}
+                                                {showSubmissionsSharesColumn && (
+                                                  <TableCell className="text-center font-mono text-sm">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                      <Share2 className="h-3 w-3 text-purple-500" />
+                                                      {formatMetricValue(
+                                                        group.metrics.shares ||
+                                                          0,
+                                                      )}
+                                                    </div>
+                                                  </TableCell>
+                                                )}
+                                                {submissionsTablePlatform.includes(
+                                                  "tiktok",
+                                                ) &&
+                                                  (() => {
+                                                    if (!groupHasTiktok) {
+                                                      return (
+                                                        <>
+                                                          <TableCell className="text-center font-mono text-sm">
+                                                            <UnavailableMetricDash
+                                                              isDark={isDark}
+                                                            />
+                                                          </TableCell>
+                                                          <TableCell className="text-center font-mono text-sm">
+                                                            <UnavailableMetricDash
+                                                              isDark={isDark}
+                                                            />
+                                                          </TableCell>
+                                                        </>
+                                                      );
+                                                    }
+                                                    let ttEng = 0;
+                                                    let ttViews = 0;
+                                                    for (const sub of group.submissions ||
+                                                      []) {
+                                                      if (
+                                                        !submissionMatchesVideoPlatform(
+                                                          sub,
+                                                          "tiktok",
+                                                        )
+                                                      )
+                                                        continue;
+                                                      const m =
+                                                        extractPlatformMetrics(
+                                                          sub as Submission,
+                                                        );
+                                                      ttEng +=
+                                                        (m.likes || 0) +
+                                                        (m.comments || 0) +
+                                                        (m.shares || 0);
+                                                      ttViews += m.views || 0;
+                                                    }
+                                                    const ttRate =
+                                                      ttViews > 0
+                                                        ? Math.round(
+                                                            (ttEng / ttViews) *
+                                                              10000,
+                                                          ) / 100
+                                                        : 0;
+                                                    return (
+                                                      <>
+                                                        <TableCell className="text-center font-mono text-sm">
+                                                          {formatMetricValue(
+                                                            ttEng,
+                                                          )}
+                                                        </TableCell>
+                                                        <TableCell className="text-center font-mono text-sm">
+                                                          {ttViews > 0 ? (
+                                                            `${formatMetricValue(ttRate)}%`
+                                                          ) : (
+                                                            <UnavailableMetricDash
+                                                              isDark={isDark}
+                                                            />
+                                                          )}
+                                                        </TableCell>
+                                                      </>
+                                                    );
+                                                  })()}
+                                                {/* Instagram-specific metrics */}
+                                                {submissionsTablePlatform.includes(
+                                                  "instagram",
+                                                ) && (
+                                                  <>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {groupHasInstagram ? (
+                                                        formatMetricValue(
+                                                          group.metrics.saves ||
+                                                            0,
+                                                        )
+                                                      ) : (
+                                                        <UnavailableMetricDash
+                                                          isDark={isDark}
+                                                        />
+                                                      )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {groupHasInstagram ? (
+                                                        formatMetricValue(
+                                                          group.metrics.reach ||
+                                                            0,
+                                                        )
+                                                      ) : (
+                                                        <UnavailableMetricDash
+                                                          isDark={isDark}
+                                                        />
+                                                      )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {groupHasInstagram ? (
+                                                        formatMetricValue(
+                                                          group.metrics
+                                                            .interactions || 0,
+                                                        )
+                                                      ) : (
+                                                        <UnavailableMetricDash
+                                                          isDark={isDark}
+                                                        />
+                                                      )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {groupHasInstagram ? (
+                                                        <div className="flex flex-col items-center">
+                                                          <span className="font-bold">
+                                                            {formatWatchTime(
+                                                              instagramSubmissionCount >
+                                                                0 &&
+                                                                group.metrics
+                                                                  .avg_watch_time_ms >
+                                                                  0
+                                                                ? Math.round(
+                                                                    (group
+                                                                      .metrics
+                                                                      .avg_watch_time_ms ||
+                                                                      0) /
+                                                                      instagramSubmissionCount,
+                                                                  )
+                                                                : 0,
+                                                            )}
+                                                          </span>
+                                                          <span
+                                                            className={cn(
+                                                              "text-xs",
+                                                              isDark
+                                                                ? "text-slate-400"
+                                                                : "text-slate-500",
+                                                            )}
+                                                          >
+                                                            avg
+                                                          </span>
+                                                        </div>
+                                                      ) : (
+                                                        <UnavailableMetricDash
+                                                          isDark={isDark}
+                                                        />
+                                                      )}
+                                                    </TableCell>
+                                                    <TableCell className="text-center font-mono text-sm">
+                                                      {groupHasInstagram ? (
+                                                        <div className="flex flex-col items-center">
+                                                          <span className="font-bold">
+                                                            {formatWatchTime(
+                                                              group.metrics
+                                                                .total_watch_time_ms ||
+                                                                0,
+                                                            )}
+                                                          </span>
+                                                          <span
+                                                            className={cn(
+                                                              "text-xs",
+                                                              isDark
+                                                                ? "text-slate-400"
+                                                                : "text-slate-500",
+                                                            )}
+                                                          >
+                                                            total
+                                                          </span>
+                                                        </div>
+                                                      ) : (
+                                                        <UnavailableMetricDash
+                                                          isDark={isDark}
+                                                        />
+                                                      )}
+                                                    </TableCell>
+                                                  </>
+                                                )}
+                                              </>
+                                            )}
+                                            {/* Show reward columns for leaderboard, CPM, and milestone campaigns */}
+                                            {(currentContest.contest_type ===
+                                              "leaderboard" ||
+                                              isCpmContestType(
+                                                currentContest.contest_type,
+                                              ) ||
+                                              isMilestoneContestType(
+                                                currentContest.contest_type,
+                                              )) && (
+                                              <>
+                                                {(submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
+                                                  ? ytVisibleColumns.includes(
+                                                      "expected_reward",
+                                                    )
+                                                  : true) && (
+                                                  <>
+                                                    {isDualRewardsContestType(
+                                                      currentContest.contest_type,
+                                                    ) ? (
+                                                      <>
+                                                        {(() => {
+                                                          const subs =
+                                                            group.submissions ||
+                                                            [];
+                                                          let cpmPre = 0;
+                                                          let msPre = 0;
+                                                          for (const sub of subs) {
+                                                            const tw =
+                                                              sub.is_twitter_tweet ||
+                                                              String(
+                                                                sub.platform ||
+                                                                  "",
+                                                              ).toLowerCase() ===
+                                                                "twitter";
+                                                            if (tw) continue;
+                                                            cpmPre +=
+                                                              cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+                                                                sub.id,
+                                                              ) ?? 0;
+                                                            msPre +=
+                                                              cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+                                                                sub.id,
+                                                              ) ??
+                                                              milestoneSubmissionExpectedPayoutCents.get(
+                                                                sub.id,
+                                                              ) ??
+                                                              0;
+                                                          }
+                                                          const cpmAdj =
+                                                            dualAdjustCpmForDisplay
+                                                              ? applyPayoutAdjustment(
+                                                                  cpmPre,
+                                                                  contestPayoutAdjPct,
+                                                                )
+                                                              : cpmPre;
+                                                          const msAdj =
+                                                            dualAdjustMilestoneForDisplay
+                                                              ? applyPayoutAdjustment(
+                                                                  msPre,
+                                                                  contestPayoutAdjPct,
+                                                                )
+                                                              : msPre;
+                                                          const totalPre =
+                                                            cpmPre + msPre;
+                                                          const totalAdj =
+                                                            cpmAdj + msAdj;
+                                                          return (
+                                                            <>
+                                                              <TableCell className="text-center font-medium">
+                                                                <div className="flex items-center justify-center gap-1">
+                                                                  {formatMoney(
+                                                                    totalPre,
+                                                                  )}
+                                                                  {group.isCapped && (
+                                                                    <span
+                                                                      className="text-amber-600 cursor-help"
+                                                                      title={`Capped at ${formatMoney(
+                                                                        resolveMaxEarningsCentsForSubmission(
+                                                                          currentContest as any,
+                                                                          group
+                                                                            .submissions?.[0]
+                                                                            ?.platform,
+                                                                        ) ??
+                                                                          (
+                                                                            currentContest.contest_based_details as any
+                                                                          )
+                                                                            ?.cpm_contest
+                                                                            ?.max_earnings_per_creator ??
+                                                                          (
+                                                                            currentContest.contest_based_details as any
+                                                                          )
+                                                                            ?.leaderboard_contest
+                                                                            ?.max_earnings_per_creator,
+                                                                      )}${
+                                                                        isKeyedMaxEarningsMap(
+                                                                          currentContest.max_earnings_per_creator,
+                                                                        )
+                                                                          ? " per platform"
+                                                                          : ""
+                                                                      }. Original: ${formatMoney(
+                                                                        group.earningsBeforeCap,
+                                                                      )}`}
+                                                                    >
+                                                                      ⚠️
+                                                                    </span>
+                                                                  )}
+                                                                </div>
+                                                              </TableCell>
+                                                              <TableCell className="text-center font-medium">
+                                                                {formatMoney(
+                                                                  cpmPre,
+                                                                )}
+                                                              </TableCell>
+                                                              <TableCell className="text-center font-medium">
+                                                                {formatMoney(
+                                                                  msPre,
+                                                                )}
+                                                              </TableCell>
+                                                              {showDualPayoutAdjustedColumns &&
+                                                                (submissionsTablePlatform.includes(
+                                                                  "youtube",
+                                                                )
+                                                                  ? ytVisibleColumns.includes(
+                                                                      "adjusted_reward",
+                                                                    )
+                                                                  : true) && (
+                                                                  <>
+                                                                    <TableCell className="text-center font-medium">
+                                                                      {formatMoney(
+                                                                        totalAdj,
+                                                                      )}
+                                                                    </TableCell>
+                                                                    {dualAdjustCpmForDisplay && (
+                                                                      <TableCell className="text-center font-medium">
+                                                                        {formatMoney(
+                                                                          cpmAdj,
+                                                                        )}
+                                                                      </TableCell>
+                                                                    )}
+                                                                    {dualAdjustMilestoneForDisplay && (
+                                                                      <TableCell className="text-center font-medium">
+                                                                        {formatMoney(
+                                                                          msAdj,
+                                                                        )}
+                                                                      </TableCell>
+                                                                    )}
+                                                                  </>
+                                                                )}
+                                                            </>
+                                                          );
+                                                        })()}
                                                         <TableCell className="text-center font-medium min-w-[170px]">
                                                           {(() => {
                                                             const counts =
@@ -27396,951 +29036,1060 @@ export default function ContestDetailClient({
                                                             );
                                                           })()}
                                                         </TableCell>
-                                                      )}
-                                                    </>
-                                                  )}
-                                                </>
-                                              )}
-                                              {(currentContest.platform
-                                                ?.toLowerCase()
-                                                .includes("youtube")
-                                                ? ytVisibleColumns.includes(
-                                                    "reward_granted",
-                                                  )
-                                                : true) && (
-                                                <>
-                                                  {isDualRewardsContestType(
-                                                    currentContest.contest_type,
-                                                  ) ? (
-                                                    <>
+                                                      </>
+                                                    ) : (
+                                                      <>
+                                                        <TableCell className="text-center font-medium">
+                                                          <div className="flex items-center justify-center gap-1">
+                                                            {formatMoney(
+                                                              group.earnings
+                                                                .expected,
+                                                            )}
+                                                            {group.isCapped && (
+                                                              <span
+                                                                className="text-amber-600 cursor-help"
+                                                                title={`Capped at ${formatMoney(
+                                                                  resolveMaxEarningsCentsForSubmission(
+                                                                    currentContest as any,
+                                                                    group
+                                                                      .submissions?.[0]
+                                                                      ?.platform,
+                                                                  ) ??
+                                                                    currentContest.max_earnings_per_creator,
+                                                                )}${
+                                                                  isKeyedMaxEarningsMap(
+                                                                    currentContest.max_earnings_per_creator,
+                                                                  )
+                                                                    ? " per platform"
+                                                                    : ""
+                                                                }. Original: ${formatMoney(
+                                                                  group.earningsBeforeCap,
+                                                                )}`}
+                                                              >
+                                                                ⚠️
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        </TableCell>
+                                                        {showAdjustedRewardColumn &&
+                                                          (submissionsTablePlatform.includes(
+                                                            "youtube",
+                                                          )
+                                                            ? ytVisibleColumns.includes(
+                                                                "adjusted_reward",
+                                                              )
+                                                            : true) && (
+                                                            <TableCell className="text-center font-medium">
+                                                              {/*
+                                                              Creator-wise expected is aggregated then creator-capped; per-submission ordering caps in normal view may differ.
+                                                            */}
+                                                              {formatMoney(
+                                                                applyPayoutAdjustment(
+                                                                  Number(
+                                                                    group
+                                                                      .earnings
+                                                                      .expected ||
+                                                                      0,
+                                                                  ),
+                                                                  payoutAdjustmentPercentageForUi,
+                                                                ),
+                                                              )}
+                                                            </TableCell>
+                                                          )}
+                                                        {isMilestoneContestType(
+                                                          currentContest.contest_type,
+                                                        ) && (
+                                                          <TableCell className="text-center font-medium min-w-[170px]">
+                                                            {(() => {
+                                                              const counts =
+                                                                new Map<
+                                                                  number,
+                                                                  number
+                                                                >();
+
+                                                              for (const sub of group.submissions ||
+                                                                []) {
+                                                                const label =
+                                                                  milestoneSubmissionAssignedLabelBySubmissionId.get(
+                                                                    sub.id,
+                                                                  ) ?? "—";
+                                                                const order =
+                                                                  extractMilestoneOrderFromLabel(
+                                                                    label,
+                                                                  );
+                                                                if (
+                                                                  order == null
+                                                                ) {
+                                                                  continue;
+                                                                }
+                                                                counts.set(
+                                                                  order,
+                                                                  (counts.get(
+                                                                    order,
+                                                                  ) || 0) + 1,
+                                                                );
+                                                              }
+
+                                                              if (
+                                                                counts.size ===
+                                                                0
+                                                              ) {
+                                                                return (
+                                                                  <span className="text-muted-foreground">
+                                                                    —
+                                                                  </span>
+                                                                );
+                                                              }
+
+                                                              const milestonesAchieved =
+                                                                Array.from(
+                                                                  counts.entries(),
+                                                                ).sort(
+                                                                  (a, b) =>
+                                                                    a[0] - b[0],
+                                                                );
+                                                              const creatorId =
+                                                                String(
+                                                                  group.creator
+                                                                    .id,
+                                                                );
+                                                              const milestonePreviewCount = 2;
+                                                              const showMilestoneExpand =
+                                                                milestonesAchieved.length >
+                                                                milestonePreviewCount;
+                                                              const milestonesExpanded =
+                                                                !!creatorWiseMilestoneExpandedByCreatorId[
+                                                                  creatorId
+                                                                ];
+                                                              const milestonesToShow =
+                                                                showMilestoneExpand &&
+                                                                !milestonesExpanded
+                                                                  ? milestonesAchieved.slice(
+                                                                      0,
+                                                                      milestonePreviewCount,
+                                                                    )
+                                                                  : milestonesAchieved;
+
+                                                              return (
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                  <div className="flex flex-wrap justify-center gap-1.5">
+                                                                    {milestonesToShow.map(
+                                                                      ([
+                                                                        order,
+                                                                        count,
+                                                                      ]) => {
+                                                                        return (
+                                                                          <span
+                                                                            key={`${group.creator.id}-milestone-${order}`}
+                                                                            className="inline-flex items-center gap-1"
+                                                                          >
+                                                                            <Badge
+                                                                              className={cn(
+                                                                                "text-[11px] font-semibold px-2 py-0.5 border",
+                                                                                "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+                                                                              )}
+                                                                            >
+                                                                              Milestone{" "}
+                                                                              {
+                                                                                order
+                                                                              }
+                                                                            </Badge>
+                                                                            <span className="text-[11px] text-muted-foreground">
+                                                                              {
+                                                                                count
+                                                                              }{" "}
+                                                                              {count ===
+                                                                              1
+                                                                                ? "sub"
+                                                                                : "sub"}
+                                                                            </span>
+                                                                          </span>
+                                                                        );
+                                                                      },
+                                                                    )}
+                                                                  </div>
+                                                                  {showMilestoneExpand && (
+                                                                    <Button
+                                                                      type="button"
+                                                                      variant="ghost"
+                                                                      size="sm"
+                                                                      className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+                                                                      aria-expanded={
+                                                                        milestonesExpanded
+                                                                      }
+                                                                      onClick={(
+                                                                        e,
+                                                                      ) => {
+                                                                        e.stopPropagation();
+                                                                        toggleCreatorWiseMilestoneRow(
+                                                                          creatorId,
+                                                                        );
+                                                                      }}
+                                                                    >
+                                                                      {milestonesExpanded
+                                                                        ? "Less"
+                                                                        : "More"}
+                                                                    </Button>
+                                                                  )}
+                                                                </div>
+                                                              );
+                                                            })()}
+                                                          </TableCell>
+                                                        )}
+                                                      </>
+                                                    )}
+                                                  </>
+                                                )}
+                                                {(submissionsTablePlatform.includes(
+                                                  "youtube",
+                                                )
+                                                  ? ytVisibleColumns.includes(
+                                                      "reward_granted",
+                                                    )
+                                                  : true) && (
+                                                  <>
+                                                    {isDualRewardsContestType(
+                                                      currentContest.contest_type,
+                                                    ) ? (
+                                                      <>
+                                                        <TableCell className="text-center font-medium text-green-600">
+                                                          {formatMoney(
+                                                            Number(
+                                                              group.earnings
+                                                                ?.granted ?? 0,
+                                                            ),
+                                                          )}
+                                                        </TableCell>
+                                                        <TableCell className="text-center font-medium text-green-600">
+                                                          {(() => {
+                                                            const cpmGrantedCents =
+                                                              (
+                                                                group.submissions ||
+                                                                []
+                                                              ).reduce(
+                                                                (
+                                                                  sum: number,
+                                                                  sub: any,
+                                                                ) => {
+                                                                  const tw =
+                                                                    sub.is_twitter_tweet ||
+                                                                    String(
+                                                                      sub.platform ||
+                                                                        "",
+                                                                    ).toLowerCase() ===
+                                                                      "twitter";
+                                                                  if (tw)
+                                                                    return sum;
+                                                                  const cpmCap =
+                                                                    cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+                                                                      sub.id,
+                                                                    ) ?? 0;
+                                                                  const msCap =
+                                                                    cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+                                                                      sub.id,
+                                                                    ) ??
+                                                                    milestoneSubmissionExpectedPayoutCents.get(
+                                                                      sub.id,
+                                                                    ) ??
+                                                                    0;
+                                                                  const adjCpm =
+                                                                    dualAdjustCpmForDisplay
+                                                                      ? applyPayoutAdjustment(
+                                                                          cpmCap,
+                                                                          contestPayoutAdjPct,
+                                                                        )
+                                                                      : cpmCap;
+                                                                  const adjMilestone =
+                                                                    dualAdjustMilestoneForDisplay
+                                                                      ? applyPayoutAdjustment(
+                                                                          msCap,
+                                                                          contestPayoutAdjPct,
+                                                                        )
+                                                                      : msCap;
+                                                                  const breakdown =
+                                                                    getDualGrantedBreakdown(
+                                                                      sub,
+                                                                      adjCpm,
+                                                                      adjMilestone,
+                                                                    );
+                                                                  return (
+                                                                    sum +
+                                                                    breakdown.cpmCents
+                                                                  );
+                                                                },
+                                                                0,
+                                                              );
+                                                            return formatMoney(
+                                                              cpmGrantedCents,
+                                                            );
+                                                          })()}
+                                                        </TableCell>
+                                                        <TableCell className="text-center font-medium text-green-600">
+                                                          {(() => {
+                                                            const milestoneGrantedCents =
+                                                              (
+                                                                group.submissions ||
+                                                                []
+                                                              ).reduce(
+                                                                (
+                                                                  sum: number,
+                                                                  sub: any,
+                                                                ) => {
+                                                                  const tw =
+                                                                    sub.is_twitter_tweet ||
+                                                                    String(
+                                                                      sub.platform ||
+                                                                        "",
+                                                                    ).toLowerCase() ===
+                                                                      "twitter";
+                                                                  if (tw)
+                                                                    return sum;
+                                                                  const cpmCap =
+                                                                    cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+                                                                      sub.id,
+                                                                    ) ?? 0;
+                                                                  const msCap =
+                                                                    cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+                                                                      sub.id,
+                                                                    ) ??
+                                                                    milestoneSubmissionExpectedPayoutCents.get(
+                                                                      sub.id,
+                                                                    ) ??
+                                                                    0;
+                                                                  const adjCpm =
+                                                                    dualAdjustCpmForDisplay
+                                                                      ? applyPayoutAdjustment(
+                                                                          cpmCap,
+                                                                          contestPayoutAdjPct,
+                                                                        )
+                                                                      : cpmCap;
+                                                                  const adjMilestone =
+                                                                    dualAdjustMilestoneForDisplay
+                                                                      ? applyPayoutAdjustment(
+                                                                          msCap,
+                                                                          contestPayoutAdjPct,
+                                                                        )
+                                                                      : msCap;
+                                                                  const breakdown =
+                                                                    getDualGrantedBreakdown(
+                                                                      sub,
+                                                                      adjCpm,
+                                                                      adjMilestone,
+                                                                    );
+                                                                  return (
+                                                                    sum +
+                                                                    breakdown.milestoneCents
+                                                                  );
+                                                                },
+                                                                0,
+                                                              );
+                                                            return formatMoney(
+                                                              milestoneGrantedCents,
+                                                            );
+                                                          })()}
+                                                        </TableCell>
+                                                      </>
+                                                    ) : (
                                                       <TableCell className="text-center font-medium text-green-600">
                                                         {formatMoney(
-                                                          Number(
-                                                            group.earnings
-                                                              ?.granted ?? 0,
-                                                          ),
+                                                          group.earnings
+                                                            .granted,
                                                         )}
                                                       </TableCell>
-                                                      <TableCell className="text-center font-medium text-green-600">
-                                                        {(() => {
-                                                          const cpmGrantedCents =
-                                                            (
-                                                              group.submissions ||
-                                                              []
-                                                            ).reduce(
-                                                              (
-                                                                sum: number,
-                                                                sub: any,
-                                                              ) => {
-                                                                const tw =
-                                                                  sub.is_twitter_tweet ||
-                                                                  String(
-                                                                    sub.platform ||
-                                                                      "",
-                                                                  ).toLowerCase() ===
-                                                                    "twitter";
-                                                                if (tw)
-                                                                  return sum;
-                                                                const cpmCap =
-                                                                  cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                                                                    sub.id,
-                                                                  ) ?? 0;
-                                                                const msCap =
-                                                                  cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
-                                                                    sub.id,
-                                                                  ) ??
-                                                                  milestoneSubmissionExpectedPayoutCents.get(
-                                                                    sub.id,
-                                                                  ) ??
-                                                                  0;
-                                                                const adjCpm =
-                                                                  dualAdjustCpmForDisplay
-                                                                    ? applyPayoutAdjustment(
-                                                                        cpmCap,
-                                                                        contestPayoutAdjPct,
-                                                                      )
-                                                                    : cpmCap;
-                                                                const adjMilestone =
-                                                                  dualAdjustMilestoneForDisplay
-                                                                    ? applyPayoutAdjustment(
-                                                                        msCap,
-                                                                        contestPayoutAdjPct,
-                                                                      )
-                                                                    : msCap;
-                                                                const breakdown =
-                                                                  getDualGrantedBreakdown(
-                                                                    sub,
-                                                                    adjCpm,
-                                                                    adjMilestone,
-                                                                  );
-                                                                return (
-                                                                  sum +
-                                                                  breakdown.cpmCents
-                                                                );
-                                                              },
-                                                              0,
-                                                            );
-                                                          return formatMoney(
-                                                            cpmGrantedCents,
-                                                          );
-                                                        })()}
-                                                      </TableCell>
-                                                      <TableCell className="text-center font-medium text-green-600">
-                                                        {(() => {
-                                                          const milestoneGrantedCents =
-                                                            (
-                                                              group.submissions ||
-                                                              []
-                                                            ).reduce(
-                                                              (
-                                                                sum: number,
-                                                                sub: any,
-                                                              ) => {
-                                                                const tw =
-                                                                  sub.is_twitter_tweet ||
-                                                                  String(
-                                                                    sub.platform ||
-                                                                      "",
-                                                                  ).toLowerCase() ===
-                                                                    "twitter";
-                                                                if (tw)
-                                                                  return sum;
-                                                                const cpmCap =
-                                                                  cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                                                                    sub.id,
-                                                                  ) ?? 0;
-                                                                const msCap =
-                                                                  cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
-                                                                    sub.id,
-                                                                  ) ??
-                                                                  milestoneSubmissionExpectedPayoutCents.get(
-                                                                    sub.id,
-                                                                  ) ??
-                                                                  0;
-                                                                const adjCpm =
-                                                                  dualAdjustCpmForDisplay
-                                                                    ? applyPayoutAdjustment(
-                                                                        cpmCap,
-                                                                        contestPayoutAdjPct,
-                                                                      )
-                                                                    : cpmCap;
-                                                                const adjMilestone =
-                                                                  dualAdjustMilestoneForDisplay
-                                                                    ? applyPayoutAdjustment(
-                                                                        msCap,
-                                                                        contestPayoutAdjPct,
-                                                                      )
-                                                                    : msCap;
-                                                                const breakdown =
-                                                                  getDualGrantedBreakdown(
-                                                                    sub,
-                                                                    adjCpm,
-                                                                    adjMilestone,
-                                                                  );
-                                                                return (
-                                                                  sum +
-                                                                  breakdown.milestoneCents
-                                                                );
-                                                              },
-                                                              0,
-                                                            );
-                                                          return formatMoney(
-                                                            milestoneGrantedCents,
-                                                          );
-                                                        })()}
-                                                      </TableCell>
-                                                    </>
-                                                  ) : (
-                                                    <TableCell className="text-center font-medium text-green-600">
-                                                      {formatMoney(
-                                                        group.earnings.granted,
-                                                      )}
-                                                    </TableCell>
-                                                  )}
-                                                </>
-                                              )}
-                                            </>
-                                          )}
-                                          {(() => {
-                                            const flatFeeBonus =
-                                              isCpmContestType(
-                                                currentContest.contest_type,
-                                              )
-                                                ? (
-                                                    currentContest.contest_based_details as any
-                                                  )?.cpm_contest?.flat_fee_bonus
-                                                : (
-                                                    currentContest.contest_based_details as any
-                                                  )?.leaderboard_contest
-                                                    ?.flat_fee_bonus;
-                                            return flatFeeBonus > 0;
-                                          })() && (
-                                            <>
-                                              <TableCell className="text-center font-medium">
-                                                {formatMoney(
-                                                  bonusExpectedForDisplay,
+                                                    )}
+                                                  </>
                                                 )}
-                                              </TableCell>
-                                              <TableCell className="text-center font-medium text-green-600">
-                                                {formatMoney(
-                                                  group.bonus.granted,
-                                                )}
-                                              </TableCell>
-                                            </>
-                                          )}
-                                          {showMostVerifiedViewsBonusColumns && (
-                                            <>
-                                              <TableCell className="text-center font-medium">
-                                                {reelsBonusInfo.viewsExpectedCents >
-                                                0
-                                                  ? formatMoney(
-                                                      reelsBonusInfo.viewsExpectedCents,
-                                                    )
-                                                  : "-"}
-                                              </TableCell>
-                                              {showMilestoneMvBonusAdjustedExpectedColumns && (
-                                                <TableCell className="text-center font-medium">
-                                                  {reelsBonusInfo.viewsExpectedCents >
-                                                  0
-                                                    ? formatMoney(
-                                                        adjustBonusCents(
-                                                          reelsBonusInfo.viewsExpectedCents,
-                                                          {
-                                                            shouldAdjustBonus:
-                                                              payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
-                                                            percentage:
-                                                              payoutAdjustmentForUi.percentage,
-                                                          },
-                                                        ),
-                                                      )
-                                                    : "-"}
-                                                </TableCell>
-                                              )}
-                                              <TableCell className="text-center font-medium text-green-600">
-                                                {reelsBonusInfo.viewsPaidCents >
-                                                0
-                                                  ? formatMoney(
-                                                      reelsBonusInfo.viewsPaidCents,
-                                                    )
-                                                  : "-"}
-                                              </TableCell>
-                                            </>
-                                          )}
-                                          {showMostVerifiedReelsCreatorColumn && (
-                                            <>
-                                              <TableCell className="text-center font-medium">
-                                                {reelsBonusInfo.expectedCents >
-                                                0
-                                                  ? formatMoney(
-                                                      reelsBonusInfo.expectedCents,
-                                                    )
-                                                  : "-"}
-                                              </TableCell>
-                                              {showMilestoneMvBonusAdjustedExpectedColumns && (
-                                                <TableCell className="text-center font-medium">
-                                                  {reelsBonusInfo.expectedCents >
-                                                  0
-                                                    ? formatMoney(
-                                                        adjustBonusCents(
-                                                          reelsBonusInfo.expectedCents,
-                                                          {
-                                                            shouldAdjustBonus:
-                                                              payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
-                                                            percentage:
-                                                              payoutAdjustmentForUi.percentage,
-                                                          },
-                                                        ),
-                                                      )
-                                                    : "-"}
-                                                </TableCell>
-                                              )}
-                                              <TableCell className="text-center font-medium text-green-600">
-                                                {reelsBonusInfo.paidCents > 0
-                                                  ? formatMoney(
-                                                      reelsBonusInfo.paidCents,
-                                                    )
-                                                  : "-"}
-                                              </TableCell>
-                                            </>
-                                          )}
-                                          {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
-                                          {(currentContest.platform?.toLowerCase() ===
-                                            "twitter" ||
-                                            currentContest.platform?.toLowerCase() ===
-                                              "x") &&
-                                            currentContest.contest_format ===
-                                              "text_image" &&
-                                            (currentContest.contest_type ===
-                                              "leaderboard" ||
-                                              isCpmContestType(
-                                                currentContest.contest_type,
-                                              )) && (
+                                              </>
+                                            )}
+                                            {showNormalViewFlatFeeBonusColumns && (
                                               <>
-                                                <TableCell className="text-center">
-                                                  <div className="flex flex-col items-center">
-                                                    <span
-                                                      className={cn(
-                                                        "font-semibold text-sm",
-                                                        group.metrics
-                                                          .creator_manual_points_adjustment >
-                                                          0
-                                                          ? "text-green-600"
-                                                          : group.metrics
-                                                                .creator_manual_points_adjustment <
-                                                              0
-                                                            ? "text-red-600"
-                                                            : isDark
-                                                              ? "text-white"
-                                                              : "text-slate-900",
-                                                      )}
-                                                    >
-                                                      {group.metrics
-                                                        .creator_manual_points_adjustment >
-                                                      0
-                                                        ? "+"
-                                                        : ""}
-                                                      {formatMetricValue(
-                                                        group.metrics
-                                                          .creator_manual_points_adjustment ||
-                                                          0,
-                                                      )}
-                                                    </span>
-                                                  </div>
+                                                <TableCell className="text-center font-medium">
+                                                  {formatMoney(
+                                                    bonusExpectedForDisplay,
+                                                  )}
                                                 </TableCell>
-                                                <TableCell className="text-center">
-                                                  {group.metrics
-                                                    .manual_points_reason ? (
-                                                    <div className="flex flex-col items-center max-w-[200px] mx-auto">
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs italic truncate",
-                                                          isDark
-                                                            ? "text-slate-300"
-                                                            : "text-slate-700",
-                                                        )}
-                                                        title={
-                                                          group.metrics
-                                                            .manual_points_reason
-                                                        }
-                                                      >
-                                                        {group.metrics
-                                                          .manual_points_reason
-                                                          .length > 30
-                                                          ? group.metrics.manual_points_reason.substring(
-                                                              0,
-                                                              30,
-                                                            ) + "..."
-                                                          : group.metrics
-                                                              .manual_points_reason}
-                                                      </span>
-                                                    </div>
-                                                  ) : (
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-500"
-                                                          : "text-slate-400",
-                                                      )}
-                                                    >
-                                                      —
-                                                    </span>
+                                                <TableCell className="text-center font-medium text-green-600">
+                                                  {formatMoney(
+                                                    group.bonus.granted,
                                                   )}
                                                 </TableCell>
                                               </>
                                             )}
-                                          {/* Rejection Reason Column */}
-                                          {showRejectionReasonInCreatorView && (
-                                            <TableCell className="text-center">
-                                              {group.creator_rejection_reason ? (
-                                                <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                            {showMostVerifiedViewsBonusColumns && (
+                                              <>
+                                                <TableCell className="text-center font-medium">
+                                                  {reelsBonusInfo.viewsExpectedCents >
+                                                  0
+                                                    ? formatMoney(
+                                                        reelsBonusInfo.viewsExpectedCents,
+                                                      )
+                                                    : "-"}
+                                                </TableCell>
+                                                {showMilestoneMvBonusAdjustedExpectedColumns && (
+                                                  <TableCell className="text-center font-medium">
+                                                    {reelsBonusInfo.viewsExpectedCents >
+                                                    0
+                                                      ? formatMoney(
+                                                          adjustBonusCents(
+                                                            reelsBonusInfo.viewsExpectedCents,
+                                                            {
+                                                              shouldAdjustBonus:
+                                                                payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+                                                              percentage:
+                                                                payoutAdjustmentForUi.percentage,
+                                                            },
+                                                          ),
+                                                        )
+                                                      : "-"}
+                                                  </TableCell>
+                                                )}
+                                                <TableCell className="text-center font-medium text-green-600">
+                                                  {reelsBonusInfo.viewsPaidCents >
+                                                  0
+                                                    ? formatMoney(
+                                                        reelsBonusInfo.viewsPaidCents,
+                                                      )
+                                                    : "-"}
+                                                </TableCell>
+                                              </>
+                                            )}
+                                            {showMostVerifiedReelsCreatorColumn && (
+                                              <>
+                                                <TableCell className="text-center font-medium">
+                                                  {reelsBonusInfo.expectedCents >
+                                                  0
+                                                    ? formatMoney(
+                                                        reelsBonusInfo.expectedCents,
+                                                      )
+                                                    : "-"}
+                                                </TableCell>
+                                                {showMilestoneMvBonusAdjustedExpectedColumns && (
+                                                  <TableCell className="text-center font-medium">
+                                                    {reelsBonusInfo.expectedCents >
+                                                    0
+                                                      ? formatMoney(
+                                                          adjustBonusCents(
+                                                            reelsBonusInfo.expectedCents,
+                                                            {
+                                                              shouldAdjustBonus:
+                                                                payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+                                                              percentage:
+                                                                payoutAdjustmentForUi.percentage,
+                                                            },
+                                                          ),
+                                                        )
+                                                      : "-"}
+                                                  </TableCell>
+                                                )}
+                                                <TableCell className="text-center font-medium text-green-600">
+                                                  {reelsBonusInfo.paidCents > 0
+                                                    ? formatMoney(
+                                                        reelsBonusInfo.paidCents,
+                                                      )
+                                                    : "-"}
+                                                </TableCell>
+                                              </>
+                                            )}
+                                            {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
+                                            {(currentContest.platform?.toLowerCase() ===
+                                              "twitter" ||
+                                              currentContest.platform?.toLowerCase() ===
+                                                "x") &&
+                                              currentContest.contest_format ===
+                                                "text_image" &&
+                                              (currentContest.contest_type ===
+                                                "leaderboard" ||
+                                                isCpmContestType(
+                                                  currentContest.contest_type,
+                                                )) && (
+                                                <>
+                                                  <TableCell className="text-center">
+                                                    <div className="flex flex-col items-center">
+                                                      <span
+                                                        className={cn(
+                                                          "font-semibold text-sm",
+                                                          group.metrics
+                                                            .creator_manual_points_adjustment >
+                                                            0
+                                                            ? "text-green-600"
+                                                            : group.metrics
+                                                                  .creator_manual_points_adjustment <
+                                                                0
+                                                              ? "text-red-600"
+                                                              : isDark
+                                                                ? "text-white"
+                                                                : "text-slate-900",
+                                                        )}
+                                                      >
+                                                        {group.metrics
+                                                          .creator_manual_points_adjustment >
+                                                        0
+                                                          ? "+"
+                                                          : ""}
+                                                        {formatMetricValue(
+                                                          group.metrics
+                                                            .creator_manual_points_adjustment ||
+                                                            0,
+                                                        )}
+                                                      </span>
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-center">
+                                                    {group.metrics
+                                                      .manual_points_reason ? (
+                                                      <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs italic truncate",
+                                                            isDark
+                                                              ? "text-slate-300"
+                                                              : "text-slate-700",
+                                                          )}
+                                                          title={
+                                                            group.metrics
+                                                              .manual_points_reason
+                                                          }
+                                                        >
+                                                          {group.metrics
+                                                            .manual_points_reason
+                                                            .length > 30
+                                                            ? group.metrics.manual_points_reason.substring(
+                                                                0,
+                                                                30,
+                                                              ) + "..."
+                                                            : group.metrics
+                                                                .manual_points_reason}
+                                                        </span>
+                                                      </div>
+                                                    ) : (
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs",
+                                                          isDark
+                                                            ? "text-slate-500"
+                                                            : "text-slate-400",
+                                                        )}
+                                                      >
+                                                        —
+                                                      </span>
+                                                    )}
+                                                  </TableCell>
+                                                </>
+                                              )}
+                                            {/* Rejection Reason Column */}
+                                            {showRejectionReasonInCreatorView && (
+                                              <TableCell className="text-center">
+                                                {group.creator_rejection_reason ? (
+                                                  <div className="flex flex-col items-center max-w-[200px] mx-auto">
+                                                    <span
+                                                      className={cn(
+                                                        "text-xs italic truncate",
+                                                        isDark
+                                                          ? "text-red-400"
+                                                          : "text-red-600",
+                                                      )}
+                                                      title={
+                                                        group.creator_rejection_reason
+                                                      }
+                                                    >
+                                                      {group
+                                                        .creator_rejection_reason
+                                                        .length > 30
+                                                        ? group.creator_rejection_reason.substring(
+                                                            0,
+                                                            30,
+                                                          ) + "..."
+                                                        : group.creator_rejection_reason}
+                                                    </span>
+                                                  </div>
+                                                ) : (
                                                   <span
                                                     className={cn(
-                                                      "text-xs italic truncate",
+                                                      "text-xs",
                                                       isDark
-                                                        ? "text-red-400"
-                                                        : "text-red-600",
+                                                        ? "text-slate-500"
+                                                        : "text-slate-400",
                                                     )}
-                                                    title={
-                                                      group.creator_rejection_reason
+                                                  >
+                                                    —
+                                                  </span>
+                                                )}
+                                              </TableCell>
+                                            )}
+                                            {(submissionsTablePlatform.includes(
+                                              "youtube",
+                                            )
+                                              ? ytVisibleColumns.includes(
+                                                  "submitted",
+                                                )
+                                              : true) && (
+                                              <TableCell className="text-center text-sm">
+                                                {formatLocalDateTime(
+                                                  group.firstSubmittedAt,
+                                                )}
+                                              </TableCell>
+                                            )}
+                                            <TableCell className="text-center">
+                                              <div className="flex flex-col items-center gap-2">
+                                                <div className="flex items-center gap-2">
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className={cn(
+                                                      "border",
+                                                      isDark
+                                                        ? "bg-[#170337] border-gray-600 text-white"
+                                                        : "border-gray-400 bg-white text-gray-800",
+                                                    )}
+                                                    onClick={() =>
+                                                      setSelectedCreatorForModal(
+                                                        group.creator.id,
+                                                      )
                                                     }
                                                   >
-                                                    {group
-                                                      .creator_rejection_reason
-                                                      .length > 30
-                                                      ? group.creator_rejection_reason.substring(
-                                                          0,
-                                                          30,
-                                                        ) + "..."
-                                                      : group.creator_rejection_reason}
-                                                  </span>
-                                                </div>
-                                              ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                          )}
-                                          {(currentContest.platform
-                                            ?.toLowerCase()
-                                            .includes("youtube")
-                                            ? ytVisibleColumns.includes(
-                                                "submitted",
-                                              )
-                                            : true) && (
-                                            <TableCell className="text-center text-sm">
-                                              {formatLocalDateTime(
-                                                group.firstSubmittedAt,
-                                              )}
-                                            </TableCell>
-                                          )}
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center gap-2">
-                                              <div className="flex items-center gap-2">
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  className={cn(
-                                                    "border",
-                                                    isDark
-                                                      ? "bg-[#170337] border-gray-600 text-white"
-                                                      : "border-gray-400 bg-white text-gray-800",
-                                                  )}
-                                                  onClick={() =>
-                                                    setSelectedCreatorForModal(
-                                                      group.creator.id,
+                                                    View All ({group.totalCount}
                                                     )
-                                                  }
-                                                >
-                                                  View All ({group.totalCount})
-                                                </Button>
-                                                {isAdminView &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("instagram") && (
-                                                    <Button
-                                                      size="sm"
-                                                      variant="outline"
-                                                      className={cn(
-                                                        "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
-                                                        isDark
-                                                          ? "bg-[#170337] border-purple-500/50 text-white"
-                                                          : "border-purple-300 bg-purple-50 text-purple-900",
-                                                      )}
-                                                      disabled={
-                                                        igAnalyticsLoadingCreatorId ===
-                                                        group.creator.id
-                                                      }
-                                                      onClick={() => {
-                                                        setIgAnalyticsCreatorId(
-                                                          group.creator.id,
-                                                        );
-                                                        setIgAnalyticsCreatorLabel(
-                                                          userTableUsername ||
-                                                            group.creator
-                                                              .username ||
-                                                            platformUsername ||
+                                                  </Button>
+                                                  {isAdminView &&
+                                                    creatorGroupHasVideoPlatform(
+                                                      group,
+                                                      "instagram",
+                                                    ) && (
+                                                      <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className={cn(
+                                                          "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
+                                                          isDark
+                                                            ? "bg-[#170337] border-purple-500/50 text-white"
+                                                            : "border-purple-300 bg-purple-50 text-purple-900",
+                                                        )}
+                                                        disabled={
+                                                          igAnalyticsLoadingCreatorId ===
+                                                          group.creator.id
+                                                        }
+                                                        onClick={() =>
+                                                          openInstagramCreatorAnalytics(
                                                             group.creator.id,
-                                                        );
-                                                        setIgAnalyticsLoadingCreatorId(
-                                                          group.creator.id,
-                                                        );
-                                                        setIgAnalyticsOpen(
-                                                          true,
-                                                        );
-                                                      }}
-                                                    >
-                                                      {igAnalyticsLoadingCreatorId ===
-                                                      group.creator.id ? (
-                                                        <>
-                                                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                                                          Opening…
-                                                        </>
-                                                      ) : (
-                                                        "Show analytics"
-                                                      )}
-                                                    </Button>
-                                                  )}
-                                                {/* YouTube per-creator analytics refresh (admin only) */}
-                                                {isAdminView &&
-                                                  currentContest.platform?.toLowerCase() ===
-                                                    "youtube" && (
-                                                    <DropdownMenu>
-                                                      <DropdownMenuTrigger
-                                                        asChild
+                                                            userTableUsername ||
+                                                              group.creator
+                                                                .username ||
+                                                              platformUsername ||
+                                                              group.creator.id,
+                                                          )
+                                                        }
                                                       >
-                                                        <Button
-                                                          size="sm"
-                                                          variant="ghost"
-                                                          className="h-8 w-8 p-0"
-                                                        >
-                                                          {loadingDetailedAnalytics[
-                                                            group.creator.id
-                                                          ] ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                          ) : (
-                                                            <MoreVertical className="h-4 w-4" />
-                                                          )}
-                                                        </Button>
-                                                      </DropdownMenuTrigger>
-                                                      <DropdownMenuContent align="end">
-                                                        <DropdownMenuLabel className="text-purple-500">
-                                                          Analytics
-                                                        </DropdownMenuLabel>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                          disabled={
-                                                            (!isPostCampaignLeaderboard &&
-                                                              ytPostContestLocked) ||
-                                                            !!loadingDetailedAnalytics[
-                                                              group.creator.id
-                                                            ]
-                                                          }
-                                                          onClick={() =>
-                                                            handleRefreshDetailedAnalytics(
-                                                              "core",
-                                                              {
-                                                                creatorId:
-                                                                  group.creator
-                                                                    .id,
-                                                                username:
-                                                                  group.creator
-                                                                    ?.username,
-                                                              },
-                                                            )
-                                                          }
-                                                        >
-                                                          <BarChart2 className="h-4 w-4 mr-2" />
-                                                          Refresh Core Analytics
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                          disabled={
-                                                            (!isPostCampaignLeaderboard &&
-                                                              ytPostContestLocked) ||
-                                                            !!loadingDetailedAnalytics[
-                                                              group.creator.id
-                                                            ]
-                                                          }
-                                                          onClick={() =>
-                                                            handleRefreshDetailedAnalytics(
-                                                              "traffic",
-                                                              {
-                                                                creatorId:
-                                                                  group.creator
-                                                                    .id,
-                                                                username:
-                                                                  group.creator
-                                                                    ?.username,
-                                                              },
-                                                            )
-                                                          }
-                                                        >
-                                                          <TrendingUp className="h-4 w-4 mr-2" />
-                                                          Refresh Traffic
-                                                          Sources
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                          disabled={
-                                                            (!isPostCampaignLeaderboard &&
-                                                              ytPostContestLocked) ||
-                                                            !!loadingDetailedAnalytics[
-                                                              group.creator.id
-                                                            ]
-                                                          }
-                                                          onClick={() =>
-                                                            handleRefreshDetailedAnalytics(
-                                                              "demographics",
-                                                              {
-                                                                creatorId:
-                                                                  group.creator
-                                                                    .id,
-                                                                username:
-                                                                  group.creator
-                                                                    ?.username,
-                                                              },
-                                                            )
-                                                          }
-                                                        >
-                                                          <Users className="h-4 w-4 mr-2" />
-                                                          Refresh Demographics
-                                                        </DropdownMenuItem>
-
-                                                        <DropdownMenuItem
-                                                          disabled={
-                                                            (!isPostCampaignLeaderboard &&
-                                                              ytPostContestLocked) ||
-                                                            !!loadingDetailedAnalytics[
-                                                              group.creator.id
-                                                            ]
-                                                          }
-                                                          onClick={() =>
-                                                            handleRefreshDetailedAnalytics(
-                                                              "all",
-                                                              {
-                                                                creatorId:
-                                                                  group.creator
-                                                                    .id,
-                                                                username:
-                                                                  group.creator
-                                                                    ?.username,
-                                                              },
-                                                            )
-                                                          }
-                                                        >
-                                                          <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
-                                                          Refresh All Metrics
-                                                        </DropdownMenuItem>
-                                                        {renderMilestoneVerifiedBonusMenuItems(
-                                                          group.creator.id,
-                                                          !!loadingDetailedAnalytics[
-                                                            group.creator.id
-                                                          ],
+                                                        {igAnalyticsLoadingCreatorId ===
+                                                        group.creator.id ? (
+                                                          <>
+                                                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                                            Opening…
+                                                          </>
+                                                        ) : (
+                                                          "Show analytics"
                                                         )}
-                                                      </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                  )}
-                                                {showCreatorMilestoneVerifiedBonusActions &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("instagram") && (
-                                                    <DropdownMenu>
-                                                      <DropdownMenuTrigger
-                                                        asChild
-                                                      >
-                                                        <Button
-                                                          size="sm"
-                                                          variant="ghost"
-                                                          className="h-8 w-8 p-0"
-                                                          aria-label="Milestone bonus actions"
+                                                      </Button>
+                                                    )}
+                                                  {/* YouTube per-creator analytics refresh (admin only) */}
+                                                  {isAdminView &&
+                                                    creatorGroupHasVideoPlatform(
+                                                      group,
+                                                      "youtube",
+                                                    ) && (
+                                                      <DropdownMenu>
+                                                        <DropdownMenuTrigger
+                                                          asChild
                                                         >
-                                                          {markingMilestoneVerifiedBonus[
-                                                            group.creator.id
-                                                          ] ||
-                                                          markingMilestoneMvBonusReversal[
-                                                            group.creator.id
-                                                          ] ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                          ) : (
-                                                            <MoreVertical className="h-4 w-4" />
-                                                          )}
-                                                        </Button>
-                                                      </DropdownMenuTrigger>
-                                                      <DropdownMenuContent align="end">
-                                                        {renderMilestoneVerifiedBonusMenuItems(
-                                                          group.creator.id,
-                                                        )}
-                                                      </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                  )}
-                                                {showCreatorMilestoneVerifiedBonusActions &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("tiktok") && (
-                                                    <DropdownMenu>
-                                                      <DropdownMenuTrigger
-                                                        asChild
-                                                      >
-                                                        <Button
-                                                          size="sm"
-                                                          variant="ghost"
-                                                          className="h-8 w-8 p-0"
-                                                          aria-label="Milestone bonus actions"
-                                                        >
-                                                          {markingMilestoneVerifiedBonus[
-                                                            group.creator.id
-                                                          ] ||
-                                                          markingMilestoneMvBonusReversal[
-                                                            group.creator.id
-                                                          ] ? (
-                                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                                          ) : (
-                                                            <MoreVertical className="h-4 w-4" />
-                                                          )}
-                                                        </Button>
-                                                      </DropdownMenuTrigger>
-                                                      <DropdownMenuContent align="end">
-                                                        {renderMilestoneVerifiedBonusMenuItems(
-                                                          group.creator.id,
-                                                        )}
-                                                      </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                  )}
-                                                {/* Creator moderation and payment options for Twitter leaderboard only (CPM uses per-tweet flows). */}
-                                                {(currentContest.platform?.toLowerCase() ===
-                                                  "twitter" ||
-                                                  currentContest.platform?.toLowerCase() ===
-                                                    "x") &&
-                                                  currentContest.contest_format ===
-                                                    "text_image" &&
-                                                  currentContest.contest_type ===
-                                                    "leaderboard" &&
-                                                  currentContest.post_contest_status !==
-                                                    "payouts_processed" && (
-                                                    <DropdownMenu>
-                                                      <DropdownMenuTrigger
-                                                        asChild
-                                                      >
-                                                        <Button
-                                                          size="sm"
-                                                          variant="ghost"
-                                                          className="h-8 w-8 p-0"
-                                                        >
-                                                          <MoreVertical className="h-4 w-4" />
-                                                        </Button>
-                                                      </DropdownMenuTrigger>
-                                                      <DropdownMenuContent align="end">
-                                                        {(group.creator_moderation_status !==
-                                                          "verified" ||
-                                                          group.paid) && (
+                                                          <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 p-0"
+                                                          >
+                                                            {loadingDetailedAnalytics[
+                                                              group.creator.id
+                                                            ] ? (
+                                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                              <MoreVertical className="h-4 w-4" />
+                                                            )}
+                                                          </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                          <DropdownMenuLabel className="text-purple-500">
+                                                            Analytics
+                                                          </DropdownMenuLabel>
+                                                          <DropdownMenuSeparator />
                                                           <DropdownMenuItem
-                                                            onClick={() => {
-                                                              if (group.paid) {
-                                                                // Show reversal confirmation when any tweet is paid (revert + approve)
-                                                                setConfirmTwitterCreatorReversal(
-                                                                  {
-                                                                    creatorId:
-                                                                      group
-                                                                        .creator
-                                                                        .id,
-                                                                    action:
-                                                                      "approve",
-                                                                  },
-                                                                );
-                                                              } else {
-                                                                // Direct approval for non-paid creators
-                                                                (async () => {
-                                                                  try {
-                                                                    const response =
-                                                                      await fetch(
-                                                                        `/api/contests/${contestId}/moderate-creator`,
-                                                                        {
-                                                                          method:
-                                                                            "POST",
-                                                                          headers:
-                                                                            {
-                                                                              "Content-Type":
-                                                                                "application/json",
-                                                                            },
-                                                                          body: JSON.stringify(
-                                                                            {
-                                                                              creatorId:
-                                                                                group
-                                                                                  .creator
-                                                                                  .id,
-                                                                              action:
-                                                                                "approve",
-                                                                            },
-                                                                          ),
-                                                                        },
-                                                                      );
-                                                                    if (
-                                                                      response.ok
-                                                                    ) {
-                                                                      markCreatorSubmissionsVerifiedLocally(
+                                                            disabled={
+                                                              (!isPostCampaignLeaderboard &&
+                                                                ytPostContestLocked) ||
+                                                              !!loadingDetailedAnalytics[
+                                                                group.creator.id
+                                                              ]
+                                                            }
+                                                            onClick={() =>
+                                                              handleRefreshDetailedAnalytics(
+                                                                "core",
+                                                                {
+                                                                  creatorId:
+                                                                    group
+                                                                      .creator
+                                                                      .id,
+                                                                  username:
+                                                                    group
+                                                                      .creator
+                                                                      ?.username,
+                                                                },
+                                                              )
+                                                            }
+                                                          >
+                                                            <BarChart2 className="h-4 w-4 mr-2" />
+                                                            Refresh Core
+                                                            Analytics
+                                                          </DropdownMenuItem>
+                                                          <DropdownMenuItem
+                                                            disabled={
+                                                              (!isPostCampaignLeaderboard &&
+                                                                ytPostContestLocked) ||
+                                                              !!loadingDetailedAnalytics[
+                                                                group.creator.id
+                                                              ]
+                                                            }
+                                                            onClick={() =>
+                                                              handleRefreshDetailedAnalytics(
+                                                                "traffic",
+                                                                {
+                                                                  creatorId:
+                                                                    group
+                                                                      .creator
+                                                                      .id,
+                                                                  username:
+                                                                    group
+                                                                      .creator
+                                                                      ?.username,
+                                                                },
+                                                              )
+                                                            }
+                                                          >
+                                                            <TrendingUp className="h-4 w-4 mr-2" />
+                                                            Refresh Traffic
+                                                            Sources
+                                                          </DropdownMenuItem>
+                                                          <DropdownMenuItem
+                                                            disabled={
+                                                              (!isPostCampaignLeaderboard &&
+                                                                ytPostContestLocked) ||
+                                                              !!loadingDetailedAnalytics[
+                                                                group.creator.id
+                                                              ]
+                                                            }
+                                                            onClick={() =>
+                                                              handleRefreshDetailedAnalytics(
+                                                                "demographics",
+                                                                {
+                                                                  creatorId:
+                                                                    group
+                                                                      .creator
+                                                                      .id,
+                                                                  username:
+                                                                    group
+                                                                      .creator
+                                                                      ?.username,
+                                                                },
+                                                              )
+                                                            }
+                                                          >
+                                                            <Users className="h-4 w-4 mr-2" />
+                                                            Refresh Demographics
+                                                          </DropdownMenuItem>
+
+                                                          <DropdownMenuItem
+                                                            disabled={
+                                                              (!isPostCampaignLeaderboard &&
+                                                                ytPostContestLocked) ||
+                                                              !!loadingDetailedAnalytics[
+                                                                group.creator.id
+                                                              ]
+                                                            }
+                                                            onClick={() =>
+                                                              handleRefreshDetailedAnalytics(
+                                                                "all",
+                                                                {
+                                                                  creatorId:
+                                                                    group
+                                                                      .creator
+                                                                      .id,
+                                                                  username:
+                                                                    group
+                                                                      .creator
+                                                                      ?.username,
+                                                                },
+                                                              )
+                                                            }
+                                                          >
+                                                            <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
+                                                            Refresh All Metrics
+                                                          </DropdownMenuItem>
+                                                          {renderMilestoneVerifiedBonusMenuItems(
+                                                            group.creator.id,
+                                                            !!loadingDetailedAnalytics[
+                                                              group.creator.id
+                                                            ],
+                                                          )}
+                                                        </DropdownMenuContent>
+                                                      </DropdownMenu>
+                                                    )}
+                                                  {showCreatorMilestoneVerifiedBonusActions &&
+                                                    (submissionsTablePlatform.includes(
+                                                      "instagram",
+                                                    ) ||
+                                                      submissionsTablePlatform.includes(
+                                                        "tiktok",
+                                                      )) &&
+                                                    !(
+                                                      isAdminView &&
+                                                      creatorGroupHasVideoPlatform(
+                                                        group,
+                                                        "youtube",
+                                                      )
+                                                    ) && (
+                                                      <DropdownMenu>
+                                                        <DropdownMenuTrigger
+                                                          asChild
+                                                        >
+                                                          <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 p-0"
+                                                            aria-label="Milestone bonus actions"
+                                                          >
+                                                            {markingMilestoneVerifiedBonus[
+                                                              group.creator.id
+                                                            ] ||
+                                                            markingMilestoneMvBonusReversal[
+                                                              group.creator.id
+                                                            ] ? (
+                                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                              <MoreVertical className="h-4 w-4" />
+                                                            )}
+                                                          </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                          {renderMilestoneVerifiedBonusMenuItems(
+                                                            group.creator.id,
+                                                            undefined,
+                                                            {
+                                                              omitLeadingSeparator: true,
+                                                            },
+                                                          )}
+                                                        </DropdownMenuContent>
+                                                      </DropdownMenu>
+                                                    )}
+                                                  {/* Creator moderation and payment options for Twitter leaderboard only (CPM uses per-tweet flows). */}
+                                                  {(currentContest.platform?.toLowerCase() ===
+                                                    "twitter" ||
+                                                    currentContest.platform?.toLowerCase() ===
+                                                      "x") &&
+                                                    currentContest.contest_format ===
+                                                      "text_image" &&
+                                                    currentContest.contest_type ===
+                                                      "leaderboard" &&
+                                                    currentContest.post_contest_status !==
+                                                      "payouts_processed" && (
+                                                      <DropdownMenu>
+                                                        <DropdownMenuTrigger
+                                                          asChild
+                                                        >
+                                                          <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 p-0"
+                                                          >
+                                                            <MoreVertical className="h-4 w-4" />
+                                                          </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                          {(group.creator_moderation_status !==
+                                                            "verified" ||
+                                                            group.paid) && (
+                                                            <DropdownMenuItem
+                                                              onClick={() => {
+                                                                if (
+                                                                  group.paid
+                                                                ) {
+                                                                  // Show reversal confirmation when any tweet is paid (revert + approve)
+                                                                  setConfirmTwitterCreatorReversal(
+                                                                    {
+                                                                      creatorId:
                                                                         group
                                                                           .creator
                                                                           .id,
+                                                                      action:
+                                                                        "approve",
+                                                                    },
+                                                                  );
+                                                                } else {
+                                                                  // Direct approval for non-paid creators
+                                                                  (async () => {
+                                                                    try {
+                                                                      const response =
+                                                                        await fetch(
+                                                                          `/api/contests/${contestId}/moderate-creator`,
+                                                                          {
+                                                                            method:
+                                                                              "POST",
+                                                                            headers:
+                                                                              {
+                                                                                "Content-Type":
+                                                                                  "application/json",
+                                                                              },
+                                                                            body: JSON.stringify(
+                                                                              {
+                                                                                creatorId:
+                                                                                  group
+                                                                                    .creator
+                                                                                    .id,
+                                                                                action:
+                                                                                  "approve",
+                                                                              },
+                                                                            ),
+                                                                          },
+                                                                        );
+                                                                      if (
+                                                                        response.ok
+                                                                      ) {
+                                                                        markCreatorSubmissionsVerifiedLocally(
+                                                                          group
+                                                                            .creator
+                                                                            .id,
+                                                                        );
+                                                                        window.location.reload();
+                                                                      } else {
+                                                                        const error =
+                                                                          await response.json();
+                                                                        alert(
+                                                                          error.error ||
+                                                                            "Failed to approve creator",
+                                                                        );
+                                                                      }
+                                                                    } catch (error) {
+                                                                      console.error(
+                                                                        "Error approving creator:",
+                                                                        error,
                                                                       );
-                                                                      window.location.reload();
-                                                                    } else {
-                                                                      const error =
-                                                                        await response.json();
                                                                       alert(
-                                                                        error.error ||
-                                                                          "Failed to approve creator",
+                                                                        "Failed to approve creator",
                                                                       );
                                                                     }
-                                                                  } catch (error) {
-                                                                    console.error(
-                                                                      "Error approving creator:",
-                                                                      error,
-                                                                    );
-                                                                    alert(
-                                                                      "Failed to approve creator",
-                                                                    );
-                                                                  }
-                                                                })();
-                                                              }
-                                                            }}
-                                                            className="text-green-600"
-                                                          >
-                                                            <CheckCircle className="h-4 w-4 mr-2" />
-                                                            Approve Creator
-                                                          </DropdownMenuItem>
-                                                        )}
+                                                                  })();
+                                                                }
+                                                              }}
+                                                              className="text-green-600"
+                                                            >
+                                                              <CheckCircle className="h-4 w-4 mr-2" />
+                                                              Approve Creator
+                                                            </DropdownMenuItem>
+                                                          )}
 
-                                                        <DropdownMenuItem
-                                                          onClick={() => {
-                                                            const firstSubmission =
-                                                              group
-                                                                .submissions?.[0];
-                                                            if (
-                                                              !firstSubmission
-                                                            )
-                                                              return;
-
-                                                            setPendingManualPointsSubmission(
-                                                              {
-                                                                id: firstSubmission.id,
-                                                                type: "leaderboard",
-                                                                creatorId:
-                                                                  group.creator
-                                                                    .id,
-                                                              },
-                                                            );
-                                                            setManualPointsModalOpen(
-                                                              true,
-                                                            );
-                                                          }}
-                                                        >
-                                                          <Users className="h-4 w-4 mr-2" />
-                                                          Adjust Creator Points
-                                                        </DropdownMenuItem>
-
-                                                        {group.creator_moderation_status !==
-                                                          "rejected" && (
                                                           <DropdownMenuItem
                                                             onClick={() => {
-                                                              if (group.paid) {
-                                                                // Show reversal confirmation for paid creators
-                                                                setConfirmTwitterCreatorReversal(
-                                                                  {
-                                                                    creatorId:
-                                                                      group
-                                                                        .creator
-                                                                        .id,
-                                                                    action:
-                                                                      "reject",
-                                                                    needRejectionReason: true,
-                                                                    creatorUsername:
-                                                                      group
-                                                                        .creator
-                                                                        .username,
-                                                                  },
-                                                                );
-                                                              } else {
-                                                                // Direct rejection for non-paid creators
-                                                                setPendingTwitterRejection(
-                                                                  {
-                                                                    id: group
+                                                              const firstSubmission =
+                                                                group
+                                                                  .submissions?.[0];
+                                                              if (
+                                                                !firstSubmission
+                                                              )
+                                                                return;
+
+                                                              setPendingManualPointsSubmission(
+                                                                {
+                                                                  id: firstSubmission.id,
+                                                                  type: "leaderboard",
+                                                                  creatorId:
+                                                                    group
                                                                       .creator
                                                                       .id,
-                                                                    type: "creator",
-                                                                    creatorId:
-                                                                      group
+                                                                },
+                                                              );
+                                                              setManualPointsModalOpen(
+                                                                true,
+                                                              );
+                                                            }}
+                                                          >
+                                                            <Users className="h-4 w-4 mr-2" />
+                                                            Adjust Creator
+                                                            Points
+                                                          </DropdownMenuItem>
+
+                                                          {group.creator_moderation_status !==
+                                                            "rejected" && (
+                                                            <DropdownMenuItem
+                                                              onClick={() => {
+                                                                if (
+                                                                  group.paid
+                                                                ) {
+                                                                  // Show reversal confirmation for paid creators
+                                                                  setConfirmTwitterCreatorReversal(
+                                                                    {
+                                                                      creatorId:
+                                                                        group
+                                                                          .creator
+                                                                          .id,
+                                                                      action:
+                                                                        "reject",
+                                                                      needRejectionReason: true,
+                                                                      creatorUsername:
+                                                                        group
+                                                                          .creator
+                                                                          .username,
+                                                                    },
+                                                                  );
+                                                                } else {
+                                                                  // Direct rejection for non-paid creators
+                                                                  setPendingTwitterRejection(
+                                                                    {
+                                                                      id: group
                                                                         .creator
                                                                         .id,
-                                                                    creatorUsername:
-                                                                      group
-                                                                        .creator
-                                                                        .username,
-                                                                  },
-                                                                );
-                                                                setTwitterRejectionModalOpen(
-                                                                  true,
-                                                                );
-                                                              }
-                                                            }}
-                                                            className="text-red-600"
-                                                          >
-                                                            <XCircle className="h-4 w-4 mr-2" />
-                                                            Reject Creator
-                                                          </DropdownMenuItem>
-                                                        )}
-                                                        {/* Payment options for Twitter leaderboard creators — hide for rejected */}
-                                                        {currentContest.post_contest_status ===
-                                                          "verification_complete" &&
-                                                          !group.paid &&
-                                                          group.creator_moderation_status !==
-                                                            "rejected" &&
-                                                          isAdminView &&
-                                                          (currentContest.contest_type ===
-                                                            "leaderboard" ||
-                                                            isCpmContestType(
-                                                              currentContest.contest_type,
-                                                            )) && (
-                                                            <>
-                                                              <DropdownMenuSeparator />
-                                                              <DropdownMenuItem
-                                                                onClick={async () => {
-                                                                  setIsLoadingSubmission(
-                                                                    (prev) => ({
-                                                                      ...prev,
-                                                                      [group
-                                                                        .creator
-                                                                        .id]:
-                                                                        true,
-                                                                    }),
+                                                                      type: "creator",
+                                                                      creatorId:
+                                                                        group
+                                                                          .creator
+                                                                          .id,
+                                                                      creatorUsername:
+                                                                        group
+                                                                          .creator
+                                                                          .username,
+                                                                    },
                                                                   );
-                                                                  try {
-                                                                    const response =
-                                                                      await fetch(
-                                                                        `/api/contests/${contestId}/pay-twitter-creator`,
-                                                                        {
-                                                                          method:
-                                                                            "POST",
-                                                                          headers:
-                                                                            {
-                                                                              "Content-Type":
-                                                                                "application/json",
-                                                                            },
-                                                                          body: JSON.stringify(
-                                                                            {
-                                                                              creatorId:
-                                                                                group
-                                                                                  .creator
-                                                                                  .id,
-                                                                            },
-                                                                          ),
-                                                                        },
-                                                                      );
-                                                                    if (
-                                                                      !response.ok
-                                                                    ) {
-                                                                      const error =
-                                                                        await response.json();
-                                                                      throw new Error(
-                                                                        error.error ||
-                                                                          "Failed to process payment",
-                                                                      );
-                                                                    }
-                                                                    toast({
-                                                                      title:
-                                                                        "Success",
-                                                                      description:
-                                                                        "Creator payment processed successfully",
-                                                                      variant:
-                                                                        "payment",
-                                                                    });
-                                                                    setTimeout(
-                                                                      () => {
-                                                                        window.location.reload();
-                                                                      },
-                                                                      1000,
-                                                                    );
-                                                                  } catch (error: any) {
-                                                                    console.error(
-                                                                      "Error paying Twitter creator:",
-                                                                      error,
-                                                                    );
-                                                                    toast({
-                                                                      title:
-                                                                        "Error",
-                                                                      description:
-                                                                        error.message ||
-                                                                        "Failed to process payment",
-                                                                      variant:
-                                                                        "destructive",
-                                                                    });
-                                                                  } finally {
+                                                                  setTwitterRejectionModalOpen(
+                                                                    true,
+                                                                  );
+                                                                }
+                                                              }}
+                                                              className="text-red-600"
+                                                            >
+                                                              <XCircle className="h-4 w-4 mr-2" />
+                                                              Reject Creator
+                                                            </DropdownMenuItem>
+                                                          )}
+                                                          {/* Payment options for Twitter leaderboard creators — hide for rejected */}
+                                                          {currentContest.post_contest_status ===
+                                                            "verification_complete" &&
+                                                            !group.paid &&
+                                                            group.creator_moderation_status !==
+                                                              "rejected" &&
+                                                            isAdminView &&
+                                                            (currentContest.contest_type ===
+                                                              "leaderboard" ||
+                                                              isCpmContestType(
+                                                                currentContest.contest_type,
+                                                              )) && (
+                                                              <>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem
+                                                                  onClick={async () => {
                                                                     setIsLoadingSubmission(
                                                                       (
                                                                         prev,
@@ -28349,110 +30098,163 @@ export default function ContestDetailClient({
                                                                         [group
                                                                           .creator
                                                                           .id]:
-                                                                          false,
+                                                                          true,
                                                                       }),
                                                                     );
-                                                                  }
-                                                                }}
-                                                                disabled={
-                                                                  isLoadingSubmission[
-                                                                    group
-                                                                      .creator
-                                                                      .id
-                                                                  ]
-                                                                }
-                                                              >
-                                                                <DollarSign className="h-4 w-4 mr-2" />
-                                                                Mark as Paid
-                                                              </DropdownMenuItem>
-                                                              <DropdownMenuItem
-                                                                onClick={() => {
-                                                                  setPendingTwitterPaymentCreator(
-                                                                    group
-                                                                      .creator
-                                                                      .id,
-                                                                  );
-                                                                  setPaymentModalOpen(
-                                                                    true,
-                                                                  );
-                                                                }}
-                                                                disabled={
-                                                                  isLoadingSubmission[
-                                                                    group
-                                                                      .creator
-                                                                      .id
-                                                                  ]
-                                                                }
-                                                              >
-                                                                <DollarSign className="h-4 w-4 mr-2" />
-                                                                Mark as Custom
-                                                                Paid
-                                                              </DropdownMenuItem>
-                                                              {(() => {
-                                                                const flatFeeBonus =
-                                                                  isCpmContestType(
-                                                                    currentContest.contest_type,
-                                                                  )
-                                                                    ? (
-                                                                        currentContest.contest_based_details as any
-                                                                      )
-                                                                        ?.cpm_contest
-                                                                        ?.flat_fee_bonus
-                                                                    : (
-                                                                        currentContest.contest_based_details as any
-                                                                      )
-                                                                        ?.leaderboard_contest
-                                                                        ?.flat_fee_bonus;
-                                                                return (
-                                                                  flatFeeBonus >
-                                                                  0
-                                                                );
-                                                              })() && (
-                                                                <>
-                                                                  <DropdownMenuItem
-                                                                    onClick={() => {
-                                                                      const tweetIds =
-                                                                        (
-                                                                          group.submissions ||
-                                                                          []
-                                                                        )
-                                                                          .filter(
-                                                                            (
-                                                                              s: any,
-                                                                            ) =>
-                                                                              s.is_twitter_tweet,
-                                                                          )
-                                                                          .map(
-                                                                            (
-                                                                              s: any,
-                                                                            ) =>
-                                                                              s.id,
-                                                                          );
-                                                                      handleCreatorMarkBothPaid(
-                                                                        group
-                                                                          .creator
-                                                                          .id,
-                                                                        tweetIds,
+                                                                    try {
+                                                                      const response =
+                                                                        await fetch(
+                                                                          `/api/contests/${contestId}/pay-twitter-creator`,
+                                                                          {
+                                                                            method:
+                                                                              "POST",
+                                                                            headers:
+                                                                              {
+                                                                                "Content-Type":
+                                                                                  "application/json",
+                                                                              },
+                                                                            body: JSON.stringify(
+                                                                              {
+                                                                                creatorId:
+                                                                                  group
+                                                                                    .creator
+                                                                                    .id,
+                                                                              },
+                                                                            ),
+                                                                          },
+                                                                        );
+                                                                      if (
+                                                                        !response.ok
+                                                                      ) {
+                                                                        const error =
+                                                                          await response.json();
+                                                                        throw new Error(
+                                                                          error.error ||
+                                                                            "Failed to process payment",
+                                                                        );
+                                                                      }
+                                                                      toast({
+                                                                        title:
+                                                                          "Success",
+                                                                        description:
+                                                                          "Creator payment processed successfully",
+                                                                        variant:
+                                                                          "payment",
+                                                                      });
+                                                                      setTimeout(
+                                                                        () => {
+                                                                          window.location.reload();
+                                                                        },
+                                                                        1000,
                                                                       );
-                                                                    }}
-                                                                  >
-                                                                    <DollarSign className="h-4 w-4 mr-2" />
-                                                                    Mark Both as
-                                                                    Paid
-                                                                  </DropdownMenuItem>
-                                                                </>
-                                                              )}
-                                                            </>
-                                                          )}
-                                                      </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                  )}
+                                                                    } catch (error: any) {
+                                                                      console.error(
+                                                                        "Error paying Twitter creator:",
+                                                                        error,
+                                                                      );
+                                                                      toast({
+                                                                        title:
+                                                                          "Error",
+                                                                        description:
+                                                                          error.message ||
+                                                                          "Failed to process payment",
+                                                                        variant:
+                                                                          "destructive",
+                                                                      });
+                                                                    } finally {
+                                                                      setIsLoadingSubmission(
+                                                                        (
+                                                                          prev,
+                                                                        ) => ({
+                                                                          ...prev,
+                                                                          [group
+                                                                            .creator
+                                                                            .id]:
+                                                                            false,
+                                                                        }),
+                                                                      );
+                                                                    }
+                                                                  }}
+                                                                  disabled={
+                                                                    isLoadingSubmission[
+                                                                      group
+                                                                        .creator
+                                                                        .id
+                                                                    ]
+                                                                  }
+                                                                >
+                                                                  <DollarSign className="h-4 w-4 mr-2" />
+                                                                  Mark as Paid
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                  onClick={() => {
+                                                                    setPendingTwitterPaymentCreator(
+                                                                      group
+                                                                        .creator
+                                                                        .id,
+                                                                    );
+                                                                    setPaymentModalOpen(
+                                                                      true,
+                                                                    );
+                                                                  }}
+                                                                  disabled={
+                                                                    isLoadingSubmission[
+                                                                      group
+                                                                        .creator
+                                                                        .id
+                                                                    ]
+                                                                  }
+                                                                >
+                                                                  <DollarSign className="h-4 w-4 mr-2" />
+                                                                  Mark as Custom
+                                                                  Paid
+                                                                </DropdownMenuItem>
+                                                                {showNormalViewFlatFeeBonusColumns && (
+                                                                  <>
+                                                                    <DropdownMenuItem
+                                                                      onClick={() => {
+                                                                        const tweetIds =
+                                                                          (
+                                                                            group.submissions ||
+                                                                            []
+                                                                          )
+                                                                            .filter(
+                                                                              (
+                                                                                s: any,
+                                                                              ) =>
+                                                                                s.is_twitter_tweet,
+                                                                            )
+                                                                            .map(
+                                                                              (
+                                                                                s: any,
+                                                                              ) =>
+                                                                                s.id,
+                                                                            );
+                                                                        handleCreatorMarkBothPaid(
+                                                                          group
+                                                                            .creator
+                                                                            .id,
+                                                                          tweetIds,
+                                                                        );
+                                                                      }}
+                                                                    >
+                                                                      <DollarSign className="h-4 w-4 mr-2" />
+                                                                      Mark Both
+                                                                      as Paid
+                                                                    </DropdownMenuItem>
+                                                                  </>
+                                                                )}
+                                                              </>
+                                                            )}
+                                                        </DropdownMenuContent>
+                                                      </DropdownMenu>
+                                                    )}
+                                                </div>
                                               </div>
-                                            </div>
-                                          </TableCell>
-                                        </TableRow>
-                                      );
-                                    },
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      },
                                     )}
                                     {creatorWiseVirtualTable.paddingBottom >
                                       0 && (
@@ -28761,6 +30563,8 @@ export default function ContestDetailClient({
                       isDark={isDark}
                       activeTab={activeAnalyticsTab}
                       {...reportExportDialogProps}
+                      reportAllSubmissions={analyticsReportScopedSubmissions}
+                      reportContest={analyticsReportExportContest}
                     />
                   </div>
                 </div>
@@ -28791,7 +30595,7 @@ export default function ContestDetailClient({
                             aria-hidden
                           />
                         ) : null}
-                        All ({analyticsQualityFilteredSubmissions.length || 0})
+                        All ({analyticsPlatformScopedSubmissions.length || 0})
                       </TabsTrigger>
                       <TabsTrigger
                         value="not_rejected"
@@ -28810,7 +30614,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Not Rejected (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) !== "rejected",
                         ).length || 0}
                         )
@@ -28832,7 +30636,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Verified (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "verified",
                         ).length || 0}
                         )
@@ -28854,7 +30658,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Paid (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "paid",
                         ).length || 0}
                         )
@@ -28876,7 +30680,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Pending (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "pending",
                         ).length || 0}
                         )
@@ -28898,7 +30702,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Rejected (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) => getStatus(s) === "rejected",
                         ).length || 0}
                         )
@@ -28920,7 +30724,7 @@ export default function ContestDetailClient({
                           />
                         ) : null}
                         Verified/Paid (
-                        {analyticsQualityFilteredSubmissions.filter(
+                        {analyticsPlatformScopedSubmissions.filter(
                           (s) =>
                             getStatus(s) === "verified" ||
                             getStatus(s) === "paid",
@@ -28930,6 +30734,19 @@ export default function ContestDetailClient({
                     </TabsList>
                   </Tabs>
                 </div>
+                {overviewVideoPlatforms.length >= 2 && (
+                  <div className="mt-3">
+                    <ContestDetailPlatformTabs
+                      platforms={overviewVideoPlatforms}
+                      active={analyticsPlatformTab}
+                      onChange={setAnalyticsPlatformTab}
+                      isDark={isDark}
+                      fullWidth
+                      counts={analyticsPlatformTabCounts}
+                      disabled={platformTabsLocked}
+                    />
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 {isPostCampaignLeaderboard &&
@@ -30222,7 +32039,7 @@ export default function ContestDetailClient({
                       >
                         <p className="text-lg font-medium">Total Submissions</p>
                         <p className="text-xl font-bold">
-                          {analyticsQualityFilteredSubmissions.length || 0}
+                          {analyticsPlatformScopedSubmissions.length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
@@ -30257,7 +32074,7 @@ export default function ContestDetailClient({
                         <p className="text-lg font-medium">Approved Content</p>
                         <p className="text-xl font-bold">
                           {" "}
-                          {analyticsQualityFilteredSubmissions.filter((s) => {
+                          {analyticsPlatformScopedSubmissions.filter((s) => {
                             const status = getStatus(s);
                             return status === "verified" || status === "paid";
                           }).length || 0}
@@ -30916,6 +32733,11 @@ export default function ContestDetailClient({
                                   )}
                                 >
                                   {(() => {
+                                    const roiContestType =
+                                      resolveAnalyticsRoiContestType(
+                                        currentContest,
+                                        analyticsScopedPlatform,
+                                      );
                                     if (
                                       currentContest.post_contest_status ===
                                       "payouts_processed"
@@ -30927,24 +32749,17 @@ export default function ContestDetailClient({
                                       );
                                     }
 
-                                    if (
-                                      currentContest.contest_type ===
-                                      "leaderboard"
-                                    ) {
-                                      const totalPrize =
-                                        currentContest.contest_based_details
-                                          ?.leaderboard_contest?.total_prize ||
-                                        0;
-                                      return formatMoney(totalPrize);
+                                    if (roiContestType === "leaderboard") {
+                                      return formatMoney(
+                                        getAnalyticsCampaignBudgetCents(
+                                          currentContest,
+                                          analyticsScopedPlatform,
+                                        ),
+                                      );
                                     } else if (
-                                      isCpmContestType(
-                                        currentContest.contest_type,
-                                      ) ||
-                                      isMilestoneContestType(
-                                        currentContest.contest_type,
-                                      )
+                                      isCpmContestType(roiContestType) ||
+                                      isMilestoneContestType(roiContestType)
                                     ) {
-                                      // Calculate total paid for CPM/Milestone contest
                                       const totalPaid =
                                         filteredAnalyticsSubmissions
                                           ?.filter((s) => s.status === "paid")
@@ -30963,13 +32778,14 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
-                                  {currentContest.post_contest_status ===
-                                  "payouts_processed"
-                                    ? "Expected Reward"
-                                    : currentContest.contest_type ===
-                                        "leaderboard"
-                                      ? "Prize Pool"
-                                      : "Total Paid"}
+                                  {getAnalyticsInvestmentNote(
+                                    resolveAnalyticsRoiContestType(
+                                      currentContest,
+                                      analyticsScopedPlatform,
+                                    ),
+                                    currentContest.post_contest_status ===
+                                      "payouts_processed",
+                                  )}
                                 </p>
                               </div>
                               <div
@@ -31110,19 +32926,27 @@ export default function ContestDetailClient({
                                             (sum, s) => sum + (s.views || 0),
                                             0,
                                           ) || 0;
-                                        if (totalViews === 0) return "$0.00";
-
                                         const expectedPayoutCents =
                                           sumFilteredAnalyticsExpectedCents(
                                             filteredAnalyticsSubmissions,
                                           );
-
-                                        const expectedEffectiveCpm =
-                                          (expectedPayoutCents /
-                                            100 /
-                                            totalViews) *
-                                          1000;
-                                        return `$${expectedEffectiveCpm.toFixed(3)}`;
+                                        return resolveAnalyticsExpectedCpmDisplay(
+                                          {
+                                            submissions:
+                                              filteredAnalyticsSubmissions,
+                                            details:
+                                              (currentContest.contest_based_details as Record<
+                                                string,
+                                                unknown
+                                              >) || null,
+                                            contestPlatformCsv:
+                                              currentContest.platform,
+                                            scopedPlatform:
+                                              analyticsScopedPlatform,
+                                            expectedPayoutCents,
+                                            totalViews,
+                                          },
+                                        ).value;
                                       })()
                                     : (() => {
                                         const totalViews =
@@ -31151,7 +32975,28 @@ export default function ContestDetailClient({
                                   {showsAnalyticsExpectedRewardMetrics
                                     ? activeAnalyticsTab === "paid"
                                       ? "Paid amount ÷ paid views × 1000"
-                                      : "Expected reward ÷ views × 1000"
+                                      : resolveAnalyticsExpectedCpmDisplay({
+                                          submissions:
+                                            filteredAnalyticsSubmissions,
+                                          details:
+                                            (currentContest.contest_based_details as Record<
+                                              string,
+                                              unknown
+                                            >) || null,
+                                          contestPlatformCsv:
+                                            currentContest.platform,
+                                          scopedPlatform:
+                                            analyticsScopedPlatform,
+                                          expectedPayoutCents:
+                                            sumFilteredAnalyticsExpectedCents(
+                                              filteredAnalyticsSubmissions,
+                                            ),
+                                          totalViews:
+                                            filteredAnalyticsSubmissions?.reduce(
+                                              (sum, s) => sum + (s.views || 0),
+                                              0,
+                                            ) || 0,
+                                        }).note
                                     : "Paid ÷ Views"}
                                 </p>
                               </div>
@@ -31167,7 +33012,12 @@ export default function ContestDetailClient({
                               </div>
                             </div>
                           </div>
-                          {isCpmContestType(currentContest.contest_type) &&
+                          {isCpmContestType(
+                            resolveAnalyticsRoiContestType(
+                              currentContest,
+                              analyticsScopedPlatform,
+                            ),
+                          ) &&
                             currentContest.post_contest_status !==
                               "payouts_processed" && (
                               <div
@@ -31498,20 +33348,19 @@ export default function ContestDetailClient({
                                       0,
                                     ) || 0;
                                   let totalCost = 0;
-                                  if (
-                                    currentContest.contest_type ===
-                                    "leaderboard"
-                                  ) {
-                                    totalCost =
-                                      currentContest.contest_based_details
-                                        ?.leaderboard_contest?.total_prize || 0;
+                                  const roiContestType =
+                                    resolveAnalyticsRoiContestType(
+                                      currentContest,
+                                      analyticsScopedPlatform,
+                                    );
+                                  if (roiContestType === "leaderboard") {
+                                    totalCost = getAnalyticsCampaignBudgetCents(
+                                      currentContest,
+                                      analyticsScopedPlatform,
+                                    );
                                   } else if (
-                                    isCpmContestType(
-                                      currentContest.contest_type,
-                                    ) ||
-                                    isMilestoneContestType(
-                                      currentContest.contest_type,
-                                    )
+                                    isCpmContestType(roiContestType) ||
+                                    isMilestoneContestType(roiContestType)
                                   ) {
                                     totalCost =
                                       filteredAnalyticsSubmissions
@@ -31818,14 +33667,14 @@ export default function ContestDetailClient({
         open={normalViewBulkDownloadDialogOpen}
         onOpenChange={setNormalViewBulkDownloadDialogOpen}
         isDark={isDark}
-        videoCount={orderedNormalViewDownloadIds.length}
+        videoCount={orderedNormalViewDownloadableIds.length}
         zipFilenamePrefix={bulkZipFilenamePrefix}
         downloading={normalViewBulkDownloading}
         onConfirm={runNormalViewBulkDownload}
         contestId={
           currentContest?.id ? String(currentContest.id) : undefined
         }
-        submissionIds={orderedNormalViewDownloadIds}
+        submissionIds={orderedNormalViewDownloadableIds}
         youtubeSubmissionIds={normalViewDownloadSplit.youtubeIds}
         instagramSubmissionIds={normalViewDownloadSplit.instagramIds}
         hasInstagramSelection={normalViewDownloadSplit.instagramIds.length > 0}
@@ -32312,9 +34161,7 @@ export default function ContestDetailClient({
                                 : {formatMoney(preview.rewardCents)}
                               </p>
                               {preview.bonusCents > 0 ? (
-                                <p>
-                                  Bonus: {formatMoney(preview.bonusCents)}
-                                </p>
+                                <p>Bonus: {formatMoney(preview.bonusCents)}</p>
                               ) : null}
                               <p className="font-semibold">
                                 Total: {formatMoney(standardReversalTotalCents)}
@@ -32447,6 +34294,7 @@ export default function ContestDetailClient({
             >["submissions"]
           }
           contest={currentContest}
+          platformTab={submissionsPlatformTab}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
           }
@@ -32592,9 +34440,7 @@ export default function ContestDetailClient({
                         null,
                       quality_score_counts: qualityScoreCounts ??
                         existingCreator.quality_score_counts ?? {
-                          score1: 0,
-                          score2: 0,
-                          score3: 0,
+                          ...EMPTY_QUALITY_SCORE_COUNTS,
                         },
                     },
                   };

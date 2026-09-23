@@ -40,7 +40,7 @@ export default async function SubmissionsPage() {
   const { data: submissionsData, error: submissionsError, count: totalCount } = await supabase
     .from("submissions")
     .select(
-      "id, contest_id, creator_id, content_link, views, metadata, other_stats, created_at, status, earnings, last_insights_update, insights_status, platform, video_id, video_title, video_thumbnail_url, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, dual_rewards_payout",
+      "id, contest_id, creator_id, content_link, views, metadata, other_stats, created_at, status, earnings, last_insights_update, insights_status, platform, video_id, video_title, video_thumbnail_url, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, dual_rewards_payout, quality_score, quality_score_backfilled",
       { count: "exact" },
     )
     .eq("creator_id", user.id)

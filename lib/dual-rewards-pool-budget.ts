@@ -16,7 +16,7 @@ export type DualPoolSpendSubmissionRow = {
   bonus_paid?: boolean | null;
   dual_rewards_payout?: unknown;
   milestone_bonus_paid?: unknown;
-  metadata?: { milestone_bonus_paid?: unknown } | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 const MOST_VERIFIED_BONUS_TYPES = new Set([
@@ -963,6 +963,38 @@ function isRpcMissingError(rpcError: { message?: string; code?: string } | null)
   );
 }
 
+async function validatePoolBudgetFromLoadedRows(
+  supabaseAdmin: SupabaseClient,
+  contestId: string,
+  targetSubmissionId: string,
+  targetCpm: number,
+  targetMs: number,
+  poolBudgetCents: number,
+): Promise<DualPoolBudgetCheckResult> {
+  const fetchResult = await fetchDualRewardsPoolSpendRows(
+    supabaseAdmin,
+    contestId,
+  );
+  if (fetchResult.error) {
+    return {
+      allowed: false,
+      error: `Failed to load contest spend for pool check: ${fetchResult.error}`,
+      poolBudgetCents,
+      projectedSpentCents: 0,
+      remainingCents: 0,
+      committed: false,
+    };
+  }
+
+  return validateDualRewardsPoolBudget({
+    poolBudgetCents,
+    rows: fetchResult.rows ?? [],
+    targetSubmissionId,
+    targetAfter: { cpmCents: targetCpm, milestoneCents: targetMs },
+    requirePositivePool: true,
+  });
+}
+
 /**
  * Serialized pool check (Postgres advisory lock). When `commit` is true, persists
  * `dual_rewards_payout` on the target row in the same DB transaction so concurrent
@@ -1003,36 +1035,28 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
 
   if (!rpcError && rpcData != null) {
     const parsed = parseRpcPoolBudgetResult(rpcData);
-    if (commit && parsed.allowed && parsed.committed !== true) {
-      return {
-        allowed: false,
-        error:
-          "Pool budget commit did not persist (deploy migration 20260521130000_dual_rewards_pool_budget_commit)",
-        poolBudgetCents: parsed.poolBudgetCents,
-        projectedSpentCents: parsed.projectedSpentCents,
-        remainingCents: parsed.remainingCents ?? 0,
-        committed: false,
-      };
+    const rpcMissedNestedPool =
+      !parsed.allowed &&
+      parsed.error === DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR &&
+      poolBudgetCents > 0;
+    if (!rpcMissedNestedPool) {
+      if (commit && parsed.allowed && parsed.committed !== true) {
+        return {
+          allowed: false,
+          error:
+            "Pool budget commit did not persist (deploy migration 20260521130000_dual_rewards_pool_budget_commit)",
+          poolBudgetCents: parsed.poolBudgetCents,
+          projectedSpentCents: parsed.projectedSpentCents,
+          remainingCents: parsed.remainingCents ?? 0,
+          committed: false,
+        };
+      }
+      return parsed;
     }
-    return parsed;
-  }
-
-  if (!isRpcMissingError(rpcError)) {
+  } else if (!isRpcMissingError(rpcError)) {
     return {
       allowed: false,
       error: `Failed to verify contest pool budget: ${rpcError?.message || "unknown"}`,
-      poolBudgetCents,
-      projectedSpentCents: 0,
-      remainingCents: 0,
-      committed: false,
-    };
-  }
-
-  if (commit) {
-    return {
-      allowed: false,
-      error:
-        "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
       poolBudgetCents,
       projectedSpentCents: 0,
       remainingCents: 0,
@@ -1044,28 +1068,51 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
     return poolBudgetNotConfiguredResult();
   }
 
-  const fetchResult = await fetchDualRewardsPoolSpendRows(
+  const validated = await validatePoolBudgetFromLoadedRows(
     supabaseAdmin,
     contestId,
+    targetSubmissionId,
+    targetCpm,
+    targetMs,
+    poolBudgetCents,
   );
-  if (fetchResult.error) {
+  if (!validated.allowed) return validated;
+  // Read-only checks may use in-app projection when the SQL helper is stale.
+  if (!commit) return validated;
+
+  // Never commit without the Postgres advisory-lock RPC. An unlocked
+  // read→update fallback races concurrent bulk/verify payouts and can
+  // overspend — especially when the pool lives under platform keys and the
+  // pre-20260908 helper only inspected root total_budget_cents.
+  const parsedRpcResult =
+    rpcData != null ? parseRpcPoolBudgetResult(rpcData) : null;
+  const rpcReturnedNotConfigured =
+    !rpcError &&
+    parsedRpcResult != null &&
+    !parsedRpcResult.allowed &&
+    parsedRpcResult.error ===
+      DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR;
+  if (rpcReturnedNotConfigured) {
     return {
       allowed: false,
-      error: `Failed to load contest spend for pool check: ${fetchResult.error}`,
+      error:
+        "Contest prize pool is nested under platform keys; deploy migration 20260908120000_dual_rewards_pool_budget_multi_platform.sql before dual-rewards payouts",
       poolBudgetCents,
-      projectedSpentCents: 0,
-      remainingCents: 0,
+      projectedSpentCents: validated.projectedSpentCents,
+      remainingCents: validated.remainingCents ?? 0,
       committed: false,
     };
   }
 
-  return validateDualRewardsPoolBudget({
+  return {
+    allowed: false,
+    error:
+      "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
     poolBudgetCents,
-    rows: fetchResult.rows ?? [],
-    targetSubmissionId,
-    targetAfter: { cpmCents: targetCpm, milestoneCents: targetMs },
-    requirePositivePool: true,
-  });
+    projectedSpentCents: validated.projectedSpentCents,
+    remainingCents: validated.remainingCents ?? 0,
+    committed: false,
+  };
 }
 
 /** Undo a pool commit when wallet credit fails after dual_rewards_payout was reserved. */

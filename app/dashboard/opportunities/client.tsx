@@ -20,7 +20,6 @@ import {
   Users,
   Clock,
   CheckCheck,
-  Gift,
   Tag,
   Star,
   Play,
@@ -43,6 +42,7 @@ import {
   compareContestBudgetUsed,
 } from "@/lib/contest-budget-remaining-sort";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { getAdminSubmissionTotal, getMultipleSubmissionsBadgeLabel } from "@/lib/contest-list-card-metrics";
 import { createClient } from "@/utils/supabase/client";
 import {
   calculateLeaderboardBudgetSpent,
@@ -50,9 +50,7 @@ import {
   Submission,
 } from "@/lib/contest-utils-client";
 import {
-  getPoolBudgetCentsFromDetails,
   isCpmContestType,
-  isMilestoneContestType,
 } from "@/lib/contest-type";
 import {
   computeBudgetFilledCents,
@@ -99,7 +97,14 @@ type CpmBudgetSubmissionRow = {
   bonus_paid: boolean;
   bonus_amount?: number | null;
 };
-import { getPlatformIconWithFallback } from "@/lib/platform-icons";
+import { getContestPlatformIcons } from "@/lib/platform-icons";
+import {
+  formatContestListCpmRatesText,
+  formatContestPlatformLabel,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+  resolveLeaderboardFlatFeeBonusBudgetCents,
+} from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
@@ -120,6 +125,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
+import { ContestListFlatFeeBonusBadge } from "@/components/ContestListCardMetrics";
 import { type CreatorRequirementsSnapshot } from "@/lib/creator-requirements";
 
 import {
@@ -145,22 +151,21 @@ import {
   type ContestTypeFilterOption,
   type OpportunitiesMediaTypeOption,
   type OpportunitiesEligibilityFilterOption,
-  type OpportunitiesPlatformFilterOption,
   type OpportunitiesSortOption,
   type PageSizeOption,
   type ViewModeOption,
 } from "@/lib/campaign-list-filters-storage";
+import { CampaignPlatformFilter } from "@/components/campaign-list/CampaignPlatformFilter";
+import {
+  campaignPlatformsForMediaType,
+  normalizeCampaignPlatformFilter,
+} from "@/lib/campaign-platform-filter";
 import { buildOpportunitiesListQueryKey } from "@/lib/opportunities-list-query";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
 type EligibilityFilterType = "all" | "eligible";
-type PlatformFilterType =
-  | "all"
-  | "youtube"
-  | "instagram"
-  | "twitter"
-  | "tiktok"; // Scalable: add more platforms as needed
+type PlatformFilterType = string;
 type ContestTypeFilterType =
   | "all"
   | "leaderboard"
@@ -203,26 +208,73 @@ const getBudgetTrackerValues = (
  * without nested `cpm_contest.total_budget` / `milestone_contest.total_budget_cents`.
  * Spend is still computed per-side into `budget_spent` on those nested objects.
  */
-function getDualUnifiedBudgetMeta(contest: any): {
+const getContestListPoolBudgetCents = (contest: {
+  contest_type?: string | null;
+  contest_based_details?: Record<string, unknown> | null;
+  platform?: string | null;
+}): number =>
+  resolveContestPoolBudgetCents(
+    contest.contest_type,
+    contest.contest_based_details,
+    contest.platform,
+  );
+
+const isTwitterLikePlatform = (platform?: string | null) => {
+  const lower = platform?.toLowerCase();
+  return lower === "twitter" || lower === "x";
+};
+
+const getContestListCpmRateRow = (
+  contest: any,
+): { label: string; value: string } | null => {
+  if (!isCpmContestType(contest?.contest_type)) return null;
+
+  if (isTwitterLikePlatform(contest.platform)) {
+    const rate = contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
+    if (rate == null) return null;
+    return {
+      label: "Points Rate: ",
+      value: `${formatMoney(rate * 100)} / 1k points`,
+    };
+  }
+
+  const rates = resolveContestPlatformCpmRates(
+    contest.contest_based_details,
+    contest.platform,
+  );
+  const value = formatContestListCpmRatesText(rates, formatMoney);
+  if (!value) return null;
+  return { label: "CPM Rate: ", value };
+};
+
+function getOpportunitySubmissionCount(contest: any): number {
+  return getAdminSubmissionTotal(contest);
+}
+
+function getOpportunityMultipleEntryBadgeLabel(contest: any): string {
+  return getMultipleSubmissionsBadgeLabel(contest);
+}
+
+function getOpportunityLeaderboardBonusBudgetCents(contest: any): number {
+  if (contest?.contest_type !== "leaderboard") return 0;
+  return resolveLeaderboardFlatFeeBonusBudgetCents(
+    contest.contest_based_details,
+    contest.platform,
+  );
+}
+
+function getOpportunityBudgetTrackerMeta(contest: any): {
   total: number;
   spent: number;
 } | null {
-  if (contest?.contest_type !== "dual_rewards") return null;
-  const details = contest.contest_based_details;
-  if (!details) return null;
-  const total = getPoolBudgetCentsFromDetails("dual_rewards", details);
+  if (!contest || contest.contest_type === "leaderboard") return null;
+  const total = getContestListPoolBudgetCents(contest);
   if (total <= 0) return null;
-  const hasNestedCpmBudget =
-    typeof details.cpm_contest?.total_budget === "number" &&
-    details.cpm_contest.total_budget > 0;
-  const hasNestedMilestoneBudget =
-    typeof details.milestone_contest?.total_budget_cents === "number" &&
-    details.milestone_contest.total_budget_cents > 0;
-  if (hasNestedCpmBudget || hasNestedMilestoneBudget) return null;
   const spentRaw = getPoolBudgetSpentCentsForDisplay({
     contest_type: contest.contest_type,
     post_contest_status: contest.post_contest_status,
-    contest_based_details: details,
+    contest_based_details: contest.contest_based_details,
+    platform: contest.platform,
   });
   const tracker = getBudgetTrackerValues(total, spentRaw);
   return { total, spent: tracker.spent };
@@ -361,6 +413,22 @@ export default function OpportunitiesPage({
 
   const [platformFilter, setPlatformFilter] =
     useState<PlatformFilterType>("all");
+  const platformOptions = useMemo(
+    () => campaignPlatformsForMediaType(mediaType),
+    [mediaType],
+  );
+  const handleMediaTypeChange = useCallback(
+    (next: OpportunitiesMediaTypeOption) => {
+      setMediaType(next);
+      setPlatformFilter((prev) =>
+        normalizeCampaignPlatformFilter(
+          prev,
+          campaignPlatformsForMediaType(next),
+        ),
+      );
+    },
+    [],
+  );
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
   const [sortOption, setSortOption] =
     useState<SortOptionType>("relevance_desc");
@@ -387,7 +455,12 @@ export default function OpportunitiesPage({
     );
     setMediaType(stored.mediaType);
     setEligibilityFilter(stored.eligibilityFilter);
-    setPlatformFilter(stored.platformFilter);
+    setPlatformFilter(
+      normalizeCampaignPlatformFilter(
+        stored.platformFilter,
+        campaignPlatformsForMediaType(stored.mediaType),
+      ),
+    );
     setTypeFilter(stored.typeFilter);
     setSortOption(stored.sortOption);
     setViewMode(stored.viewMode);
@@ -433,6 +506,10 @@ export default function OpportunitiesPage({
             bestQualityScore:
               data.bestQualityScore ??
               data.quality_metrics?.best_quality_score ??
+              null,
+            qualityScoreSum:
+              data.qualityScoreSum ??
+              data.quality_metrics?.quality_score_sum ??
               null,
             totalPlatformEarningsCents: Number(
               data.totalPlatformEarningsCents ?? 0,
@@ -485,7 +562,7 @@ export default function OpportunitiesPage({
       mediaType: mediaType as OpportunitiesMediaTypeOption,
       eligibilityFilter:
         eligibilityFilter as OpportunitiesEligibilityFilterOption,
-      platformFilter: platformFilter as OpportunitiesPlatformFilterOption,
+      platformFilter,
       typeFilter: typeFilter as ContestTypeFilterOption,
       sortOption: sortOption as OpportunitiesSortOption,
       viewMode: viewMode as ViewModeOption,
@@ -1426,7 +1503,7 @@ export default function OpportunitiesPage({
 
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
-    const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
+    const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
     return (
       <Card
         key={contest.id}
@@ -1542,9 +1619,7 @@ export default function OpportunitiesPage({
                         )}
                       >
                         <CheckCheck className="h-3 w-3 mr-1" />
-                        {(contest.max_submissions_per_creator ?? 1) > 1
-                          ? `${contest.max_submissions_per_creator} Submissions`
-                          : "Multiple Entries"}
+                        {getOpportunityMultipleEntryBadgeLabel(contest)}
                       </Badge>
                     );
                   }
@@ -1579,29 +1654,11 @@ export default function OpportunitiesPage({
                   }
                   return null;
                 })()}
-                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-sm px-3 py-1 font-medium",
-                      isDark
-                        ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200",
-                    )}
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
-                        contest.contest_based_details?.leaderboard_contest
-                          ?.flat_fee_bonus ||
-                        0,
-                    )}
-                    /submission
-                  </Badge>
-                )}
+                <ContestListFlatFeeBonusBadge
+                  contest={contest}
+                  isDark={isDark}
+                  size="default"
+                />
                 {contest.bonus_details?.description_html && (
                   <Badge
                     variant="outline"
@@ -1629,7 +1686,7 @@ export default function OpportunitiesPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-2 text-resp">
                 <div className="flex items-center">
                   <div className="mr-2 flex-shrink-0">
-                    {getPlatformIconWithFallback(contest.platform, "sm")}
+                    {getContestPlatformIcons(contest.platform, "sm")}
                   </div>
                   <span
                     style={{
@@ -1639,7 +1696,7 @@ export default function OpportunitiesPage({
                   >
                     Platform:{" "}
                     <span className="font-medium">
-                      {contest.platform || "N/A"}
+                      {formatContestPlatformLabel(contest.platform)}
                     </span>
                   </span>
                 </div>
@@ -1718,28 +1775,22 @@ export default function OpportunitiesPage({
                   }
 
                   // For non-Twitter contests, show submissions count
-                  if (
-                    contest.live_submission_count !== null &&
-                    contest.live_submission_count !== undefined
-                  ) {
-                    return (
-                      <div className="flex items-center">
-                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Submissions:{" "}
-                          <span className="font-medium">
-                            {contest.live_submission_count}
-                          </span>
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Submissions:{" "}
+                        <span className="font-medium">
+                          {getOpportunitySubmissionCount(contest)}
                         </span>
-                      </div>
-                    );
-                  }
-                  return null;
+                      </span>
+                    </div>
+                  );
                 })()}
                 {(() => {
                   const contestCategories = Array.isArray(contest.categories)
@@ -1808,40 +1859,27 @@ export default function OpportunitiesPage({
                     </span>
                   </span>
                 </div>
-                {isCpmContestType(contest.contest_type) &&
-                  contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                    null && (
-                    <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                {(() => {
+                  const cpmRow = getContestListCpmRateRow(contest);
+                  if (!cpmRow) return null;
+                  return (
+                    <div className="flex items-start">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                       <span
                         style={{
                           color: isDark ? "white" : "#475569",
                           transition: "none",
                         }}
                       >
-                        {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
-                          ? "Points Rate: "
-                          : "CPM Rate: "}
-                        <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .cpm_rate_usd * 100,
-                          )}{" "}
-                          {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
-                            ? "/ 1k points"
-                            : "/ 1k views"}
-                        </span>
+                        {cpmRow.label}
+                        <span className="font-medium">{cpmRow.value}</span>
                       </span>
                     </div>
-                  )}
+                  );
+                })()}
                 {isCpmContestType(contest.contest_type) &&
                   (() => {
-                    const poolCents = getPoolBudgetCentsFromDetails(
-                      contest.contest_type,
-                      contest.contest_based_details,
-                    );
+                    const poolCents = getContestListPoolBudgetCents(contest);
                     if (poolCents <= 0) return null;
                     return (
                       <div className="flex items-center">
@@ -1889,11 +1927,26 @@ export default function OpportunitiesPage({
                       </span>
                     </div>
                   )}
+                {getOpportunityLeaderboardBonusBudgetCents(contest) > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Bonus Budget:{" "}
+                        <span className="font-medium">
+                          {formatMoney(
+                            getOpportunityLeaderboardBonusBudgetCents(contest),
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                 {contest.contest_type === "milestone" &&
-                  contest.contest_based_details?.milestone_contest
-                    ?.total_budget_cents != null &&
-                  contest.contest_based_details.milestone_contest
-                    .total_budget_cents > 0 && (
+                  getContestListPoolBudgetCents(contest) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -1904,10 +1957,7 @@ export default function OpportunitiesPage({
                       >
                         Total Budget:{" "}
                         <span className="font-medium">
-                          {formatMoney(
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents,
-                          )}
+                          {formatMoney(getContestListPoolBudgetCents(contest))}
                         </span>
                       </span>
                     </div>
@@ -1915,9 +1965,9 @@ export default function OpportunitiesPage({
               </div>
 
               {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
-              {dualUnifiedBudget &&
+              {opportunityBudgetTracker &&
                 (() => {
-                  const { total, spent } = dualUnifiedBudget;
+                  const { total, spent } = opportunityBudgetTracker;
                   const tracker = getBudgetTrackerValues(total, spent);
                   return (
                     <div className="mt-3">
@@ -1959,7 +2009,7 @@ export default function OpportunitiesPage({
                 })()}
 
               {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
-              {!dualUnifiedBudget &&
+              {!opportunityBudgetTracker &&
                 isCpmContestType(contest.contest_type) &&
                 contest.contest_based_details?.cpm_contest?.total_budget !=
                   null &&
@@ -2019,20 +2069,16 @@ export default function OpportunitiesPage({
                 })()}
 
               {/* Milestone budget_spent: paid vs filled in fetchData (see contest-budget-tile-metrics) */}
-              {!dualUnifiedBudget &&
-                isMilestoneContestType(contest.contest_type) &&
-                contest.contest_based_details?.milestone_contest
-                  ?.total_budget_cents != null &&
-                contest.contest_based_details.milestone_contest
-                  .total_budget_cents > 0 &&
+              {!opportunityBudgetTracker &&
+                contest.contest_type === "milestone" &&
+                getContestListPoolBudgetCents(contest) > 0 &&
                 (() => {
-                  const totalBudget =
-                    contest.contest_based_details.milestone_contest
-                      .total_budget_cents;
+                  const totalBudget = getContestListPoolBudgetCents(contest);
                   const budgetSpent = getPoolBudgetSpentCentsForDisplay({
                     contest_type: contest.contest_type,
                     post_contest_status: contest.post_contest_status,
                     contest_based_details: contest.contest_based_details,
+                    platform: contest.platform,
                   });
                   const tracker = getBudgetTrackerValues(
                     totalBudget,
@@ -2075,6 +2121,67 @@ export default function OpportunitiesPage({
                         className="flex justify-between text-xs mt-1.5"
                         style={{
                           color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              {/* Bonus Budget Tracker for Leaderboard contests */}
+              {getOpportunityLeaderboardBonusBudgetCents(contest) > 0 &&
+                (() => {
+                  const totalBudget =
+                    getOpportunityLeaderboardBonusBudgetCents(contest);
+                  const tracker = getBudgetTrackerValues(
+                    totalBudget,
+                    getPoolBudgetSpentCentsForDisplay({
+                      contest_type: contest.contest_type,
+                      post_contest_status: contest.post_contest_status,
+                      contest_based_details: contest.contest_based_details,
+                      platform: contest.platform,
+                    }),
+                  );
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#cbd5e1" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">
+                          Flat Fee Bonus Budget Tracker
+                        </span>
+                        <span className="font-semibold">
+                          {formatMoney(tracker.spent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                        )}
+                        title={`Flat Fee Bonus Budget Spent: ${formatMoney(
+                          tracker.spent,
+                        )}`}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                          style={{
+                            width: `${Math.min(tracker.percentage, 100)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#94a3b8" : "#64748b",
                           transition: "none",
                         }}
                       >
@@ -2295,7 +2402,7 @@ export default function OpportunitiesPage({
                 >
                   <button
                     type="button"
-                    onClick={() => setMediaType("all")}
+                    onClick={() => handleMediaTypeChange("all")}
                     title="All opportunities"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
@@ -2311,7 +2418,7 @@ export default function OpportunitiesPage({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMediaType("text")}
+                    onClick={() => handleMediaTypeChange("text")}
                     title="Text and image opportunities"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
@@ -2327,7 +2434,7 @@ export default function OpportunitiesPage({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMediaType("media")}
+                    onClick={() => handleMediaTypeChange("media")}
                     title="Video opportunities"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
@@ -2441,63 +2548,16 @@ export default function OpportunitiesPage({
         {/* Enhanced Filter and Sort Select Dropdowns */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Platform Filter */}
-          <Select
+          <CampaignPlatformFilter
             value={platformFilter}
-            onValueChange={(value) =>
-              setPlatformFilter(value as PlatformFilterType)
-            }
-          >
-            <SelectTrigger
-              className={cn(
-                "border font-medium",
-                isDark ? "border-gray-600" : "border-gray-400",
-              )}
-            >
-              <SelectValue placeholder="Filter by Platform" />
-            </SelectTrigger>
-            <SelectContent isDark={isDark}>
-              <SelectItem value="all" isDark={isDark}>
-                All Platforms
-              </SelectItem>
-
-              {mediaType == "all" && (
-                <>
-                  <SelectItem value="youtube" isDark={isDark}>
-                    YouTube
-                  </SelectItem>
-                  <SelectItem value="instagram" isDark={isDark}>
-                    Instagram
-                  </SelectItem>
-                  <SelectItem value="tiktok" isDark={isDark}>
-                    TikTok
-                  </SelectItem>
-                  <SelectItem value="twitter" isDark={isDark}>
-                    Twitter
-                  </SelectItem>
-                </>
-              )}
-              {mediaType == "media" && (
-                <>
-                  <SelectItem value="youtube" isDark={isDark}>
-                    YouTube
-                  </SelectItem>
-                  <SelectItem value="instagram" isDark={isDark}>
-                    Instagram
-                  </SelectItem>
-                  <SelectItem value="tiktok" isDark={isDark}>
-                    TikTok
-                  </SelectItem>
-                </>
-              )}
-              {mediaType == "text" && (
-                <SelectItem value="twitter" isDark={isDark}>
-                  Twitter
-                </SelectItem>
-              )}
-
-              {/* Add more platforms as needed */}
-            </SelectContent>
-          </Select>
+            onChange={setPlatformFilter}
+            platforms={platformOptions}
+            isDark={isDark}
+            triggerClassName={cn(
+              "border font-medium",
+              isDark ? "border-gray-600" : "border-gray-400",
+            )}
+          />
 
           {/* Contest Type Filter */}
           <Select
@@ -2649,7 +2709,7 @@ export default function OpportunitiesPage({
                 </div>
               ) : paginatedContests && paginatedContests.length > 0 ? (
                 paginatedContests.map((contest) => {
-                  const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
+                  const opportunityBudgetTracker = getOpportunityBudgetTrackerMeta(contest);
                   return (
                     <Card
                       key={contest.id}
@@ -2771,38 +2831,19 @@ export default function OpportunitiesPage({
                                       )}
                                     >
                                       <CheckCheck className="h-3 w-3 mr-1" />
-                                      {contest.max_submissions_per_creator > 1
-                                        ? `${contest.max_submissions_per_creator} Submissions`
-                                        : "Multiple Entries"}
+                                      {getOpportunityMultipleEntryBadgeLabel(
+                                        contest,
+                                      )}
                                     </Badge>
                                   );
                                 }
                                 return null;
                               })()}
-                              {(contest.contest_based_details?.cpm_contest
-                                ?.flat_fee_bonus ||
-                                contest.contest_based_details
-                                  ?.leaderboard_contest?.flat_fee_bonus) && (
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "text-[12px]",
-                                    isDark
-                                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                                      : "bg-green-50 text-green-700 border-green-200",
-                                  )}
-                                >
-                                  <Gift className="h-3 w-3 mr-1" />
-                                  {formatMoney(
-                                    contest.contest_based_details?.cpm_contest
-                                      ?.flat_fee_bonus ||
-                                      contest.contest_based_details
-                                        ?.leaderboard_contest?.flat_fee_bonus ||
-                                      0,
-                                  )}
-                                  /submission
-                                </Badge>
-                              )}
+                              <ContestListFlatFeeBonusBadge
+                                contest={contest}
+                                isDark={isDark}
+                                size="compact"
+                              />
                               {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
                               {(() => {
                                 const isTwitterTextImage =
@@ -2858,10 +2899,7 @@ export default function OpportunitiesPage({
 
                             <div className="flex items-center">
                               <div className="mr-2 flex-shrink-0">
-                                {getPlatformIconWithFallback(
-                                  contest.platform,
-                                  "sm",
-                                )}
+                                {getContestPlatformIcons(contest.platform, "sm")}
                               </div>
                               <span>
                                 Platform:{" "}
@@ -2871,7 +2909,7 @@ export default function OpportunitiesPage({
                                     isDark ? "text-white" : "text-slate-700",
                                   )}
                                 >
-                                  {contest.platform || "N/A"}
+                                  {formatContestPlatformLabel(contest.platform)}
                                 </span>
                               </span>
                             </div>
@@ -2956,30 +2994,24 @@ export default function OpportunitiesPage({
                               }
 
                               // For non-Twitter contests, show submissions count
-                              if (
-                                contest.live_submission_count !== null &&
-                                contest.live_submission_count !== undefined
-                              ) {
-                                return (
-                                  <div className="flex items-center">
-                                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span>
-                                      Submissions:{" "}
-                                      <span
-                                        className={cn(
-                                          "font-medium",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-700",
-                                        )}
-                                      >
-                                        {contest.live_submission_count}
-                                      </span>
+                              return (
+                                <div className="flex items-center">
+                                  <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                                  <span>
+                                    Submissions:{" "}
+                                    <span
+                                      className={cn(
+                                        "font-medium",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      {getOpportunitySubmissionCount(contest)}
                                     </span>
-                                  </div>
-                                );
-                              }
-                              return null;
+                                  </span>
+                                </div>
+                              );
                             })()}
                             {(() => {
                               const contestCategories = Array.isArray(
@@ -3061,17 +3093,14 @@ export default function OpportunitiesPage({
                                 </span>
                               </span>
                             </div>
-                            {isCpmContestType(contest.contest_type) &&
-                              contest.contest_based_details?.cpm_contest
-                                ?.cpm_rate_usd != null && (
-                                <div className="flex items-center">
-                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                            {(() => {
+                              const cpmRow = getContestListCpmRateRow(contest);
+                              if (!cpmRow) return null;
+                              return (
+                                <div className="flex items-start">
+                                  <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 mt-0.5" />
                                   <span>
-                                    {contest.platform?.toLowerCase() ===
-                                      "twitter" ||
-                                    contest.platform?.toLowerCase() === "x"
-                                      ? "Points Rate: "
-                                      : "CPM Rate: "}
+                                    {cpmRow.label}
                                     <span
                                       className={cn(
                                         "font-medium",
@@ -3080,25 +3109,15 @@ export default function OpportunitiesPage({
                                           : "text-slate-700",
                                       )}
                                     >
-                                      {formatMoney(
-                                        contest.contest_based_details
-                                          .cpm_contest.cpm_rate_usd * 100,
-                                      )}{" "}
-                                      {contest.platform?.toLowerCase() ===
-                                        "twitter" ||
-                                      contest.platform?.toLowerCase() === "x"
-                                        ? "/ 1k points"
-                                        : "/ 1k views"}
+                                      {cpmRow.value}
                                     </span>
                                   </span>
                                 </div>
-                              )}
+                              );
+                            })()}
                             {isCpmContestType(contest.contest_type) &&
                               (() => {
-                                const poolCents = getPoolBudgetCentsFromDetails(
-                                  contest.contest_type,
-                                  contest.contest_based_details,
-                                );
+                                const poolCents = getContestListPoolBudgetCents(contest);
                                 if (poolCents <= 0) return null;
                                 return (
                                   <div className="flex items-center">
@@ -3151,11 +3170,8 @@ export default function OpportunitiesPage({
                                   </span>
                                 </div>
                               )}
-                            {contest.contest_type === "leaderboard" &&
-                              contest.contest_based_details?.leaderboard_contest
-                                ?.total_budget != null &&
-                              contest.contest_based_details.leaderboard_contest
-                                .total_budget > 0 && (
+                            {getOpportunityLeaderboardBonusBudgetCents(contest) >
+                              0 && (
                                 <div className="flex items-center">
                                   <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
                                   <span>
@@ -3169,18 +3185,16 @@ export default function OpportunitiesPage({
                                       )}
                                     >
                                       {formatMoney(
-                                        contest.contest_based_details
-                                          .leaderboard_contest.total_budget,
+                                        getOpportunityLeaderboardBonusBudgetCents(
+                                          contest,
+                                        ),
                                       )}
                                     </span>
                                   </span>
                                 </div>
                               )}
                             {contest.contest_type === "milestone" &&
-                              contest.contest_based_details?.milestone_contest
-                                ?.total_budget_cents != null &&
-                              contest.contest_based_details.milestone_contest
-                                .total_budget_cents > 0 && (
+                              getContestListPoolBudgetCents(contest) > 0 && (
                                 <div className="flex items-center">
                                   <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                                   <span>
@@ -3194,8 +3208,7 @@ export default function OpportunitiesPage({
                                       )}
                                     >
                                       {formatMoney(
-                                        contest.contest_based_details
-                                          .milestone_contest.total_budget_cents,
+                                        getContestListPoolBudgetCents(contest),
                                       )}
                                     </span>
                                   </span>
@@ -3204,9 +3217,9 @@ export default function OpportunitiesPage({
                           </div>
 
                           {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
-                          {dualUnifiedBudget &&
+                          {opportunityBudgetTracker &&
                             (() => {
-                              const { total, spent } = dualUnifiedBudget;
+                              const { total, spent } = opportunityBudgetTracker;
                               const tracker = getBudgetTrackerValues(
                                 total,
                                 spent,
@@ -3265,7 +3278,7 @@ export default function OpportunitiesPage({
                             })()}
 
                           {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
-                          {!dualUnifiedBudget &&
+                          {!opportunityBudgetTracker &&
                             isCpmContestType(contest.contest_type) &&
                             contest.contest_based_details?.cpm_contest
                               ?.total_budget != null &&
@@ -3342,21 +3355,23 @@ export default function OpportunitiesPage({
                             })()}
 
                           {/* Bonus Budget Tracker for Leaderboard contests */}
-                          {contest.contest_type === "leaderboard" &&
-                            contest.contest_based_details?.leaderboard_contest
-                              ?.total_budget != null &&
-                            contest.contest_based_details.leaderboard_contest
-                              .total_budget > 0 &&
+                          {getOpportunityLeaderboardBonusBudgetCents(contest) >
+                            0 &&
                             (() => {
                               const totalBudget =
-                                contest.contest_based_details
-                                  .leaderboard_contest.total_budget;
-                              const leaderboardBudgetSpent =
-                                contest.contest_based_details
-                                  .leaderboard_contest.budget_spent || 0;
+                                getOpportunityLeaderboardBonusBudgetCents(
+                                  contest,
+                                );
                               const tracker = getBudgetTrackerValues(
                                 totalBudget,
-                                leaderboardBudgetSpent,
+                                getPoolBudgetSpentCentsForDisplay({
+                                  contest_type: contest.contest_type,
+                                  post_contest_status:
+                                    contest.post_contest_status,
+                                  contest_based_details:
+                                    contest.contest_based_details,
+                                  platform: contest.platform,
+                                }),
                               );
                               const percentage = tracker.percentage;
                               const remaining = tracker.remaining;
@@ -3408,16 +3423,12 @@ export default function OpportunitiesPage({
                             })()}
 
                           {/* Budget Spent Progress Bar for Milestone contests (and dual rewards milestone pool) */}
-                          {!dualUnifiedBudget &&
-                            isMilestoneContestType(contest.contest_type) &&
-                            contest.contest_based_details?.milestone_contest
-                              ?.total_budget_cents != null &&
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents > 0 &&
+                          {!opportunityBudgetTracker &&
+                            contest.contest_type === "milestone" &&
+                            getContestListPoolBudgetCents(contest) > 0 &&
                             (() => {
                               const totalBudget =
-                                contest.contest_based_details.milestone_contest
-                                  .total_budget_cents;
+                                getContestListPoolBudgetCents(contest);
                               const budgetSpent =
                                 getPoolBudgetSpentCentsForDisplay({
                                   contest_type: contest.contest_type,
@@ -3425,6 +3436,7 @@ export default function OpportunitiesPage({
                                     contest.post_contest_status,
                                   contest_based_details:
                                     contest.contest_based_details,
+                                  platform: contest.platform,
                                 });
                               const tracker = getBudgetTrackerValues(
                                 totalBudget,

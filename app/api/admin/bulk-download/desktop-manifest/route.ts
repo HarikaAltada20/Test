@@ -360,7 +360,8 @@ export async function POST(request: Request) {
       })),
       source: "desktop",
       deliveryMode: "gocdownload",
-      status: "queued",
+      // Web deliverable is the .gocdownload text file — mark complete on create.
+      status: "completed",
     });
 
     if (created.error || !created.data) {

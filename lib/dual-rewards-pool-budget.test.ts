@@ -4,6 +4,7 @@ import {
   computeDualRewardsProjectedPoolSpentCents,
   computeDualRewardsSubmissionReversalDue,
   DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR,
+  getDualRewardsPoolBudgetCents,
   getDualRewardsSubmissionPaidComponents,
   scaleDualReversalDuesToTotalCap,
   validateDualRewardsPoolBudget,
@@ -486,6 +487,21 @@ describe("scaleDualReversalDuesToTotalCap", () => {
       sum += due.totalCents;
     }
     assert.equal(sum, 5750);
+  });
+});
+
+describe("getDualRewardsPoolBudgetCents", () => {
+  it("reads shared multi-platform dual rewards pool from platform keys", () => {
+    const cents = getDualRewardsPoolBudgetCents({
+      contest_type: "dual_rewards",
+      contest_based_details: {
+        pool_budget_spent_cents: 3300,
+        youtube: { total_budget_cents: 10_000 },
+        instagram: { total_budget_cents: 10_000 },
+        tiktok: { total_budget_cents: 10_000 },
+      },
+    });
+    assert.equal(cents, 10_000);
   });
 });
 

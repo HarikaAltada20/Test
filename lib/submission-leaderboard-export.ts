@@ -1,5 +1,6 @@
 import type { SubmissionExportColumnId } from "@/lib/submission-leaderboard-export-columns";
 import { SUBMISSION_EXPORT_COLUMN_LABELS } from "@/lib/submission-leaderboard-export-columns";
+import { videoPlatformHasMetric } from "@/lib/platform-metric-availability";
 import {
   isCpmContestType,
   isDualRewardsContestType,
@@ -300,6 +301,9 @@ export function buildSubmissionExportCellValue(
   metrics: PlatformMetrics,
   ctx: RewardExportContext,
 ): string {
+  if (!videoPlatformHasMetric(String(submission.platform || ""), columnId)) {
+    return EMPTY_CELL;
+  }
   switch (columnId) {
     case "rank":
       return String(rank);

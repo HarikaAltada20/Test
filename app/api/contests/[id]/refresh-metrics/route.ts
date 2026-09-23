@@ -30,6 +30,16 @@ import {
   isTikTokMetricsQueueEnabled,
 } from "@/lib/queue/tiktok-metrics-queue";
 import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue";
+import {
+  parseRequestedRefreshPlatforms,
+  partitionRefreshPlatformsByQueueAvailability,
+  resolveLiveContestVideoPlatforms,
+  resolveMetricsRefreshPlatformQueue,
+  youtubeScopeForMetricsRefresh,
+} from "@/lib/multi-platform-metrics-refresh";
+import { startMultiPlatformMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
+import { filterPlatformsWithEligibleLiveSubmissions } from "@/lib/eligible-live-submissions-for-refresh";
+import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 
 export async function POST(
   request: Request,
@@ -143,57 +153,123 @@ export async function POST(
       }
     }
 
-    // Determine which cron job to call based on platform
+    const body = await request.json().catch(() => ({}));
+    const requestedPlatforms = parseRequestedRefreshPlatforms(
+      (body as { platforms?: unknown })?.platforms,
+    );
+
+    const platformLower = (contest.platform ?? "").toLowerCase();
+    const isTwitter =
+      platformLower === "twitter" ||
+      platformLower === "x" ||
+      platformLower.includes("twitter");
+
+    const liveVideoPlatforms = resolveLiveContestVideoPlatforms(contest.platform);
+    const videoQueueTargets = resolveMetricsRefreshPlatformQueue({
+      allowedPlatforms: liveVideoPlatforms,
+      requestedPlatforms,
+    });
+
+    // Determine which cron job to call based on platform (sync fallback path)
     let cronEndpoint: string;
     let cronName: string;
-    let isTwitter = false;
 
-    switch (contest.platform?.toLowerCase()) {
-      case "instagram":
-        cronEndpoint = "/api/cron/update-instagram-insights";
-        cronName = "Instagram Insights";
-        break;
-      case "youtube":
-        cronEndpoint = "/api/cron/update-youtube-metrics";
-        cronName = "YouTube Metrics";
-        break;
-      case "twitter":
-      case "x":
-        isTwitter = true;
-        cronEndpoint = `/api/contests/${contestId}/twitter-refresh-tweets`;
-        cronName = "Twitter Metrics";
-        break;
-      case "tiktok":
-        cronEndpoint = "/api/cron/update-tiktok-metrics";
-        cronName = "TikTok Metrics";
-        break;
-      default:
-        return NextResponse.json(
-          {
-            error: `Metrics refresh not supported for platform: ${contest.platform}`,
-          },
-          { status: 400 },
-        );
+    if (isTwitter) {
+      cronEndpoint = `/api/contests/${contestId}/twitter-refresh-tweets`;
+      cronName = "Twitter Metrics";
+    } else if (videoQueueTargets.length === 1) {
+      switch (videoQueueTargets[0]) {
+        case "instagram":
+          cronEndpoint = "/api/cron/update-instagram-insights";
+          cronName = "Instagram Insights";
+          break;
+        case "youtube":
+          cronEndpoint = "/api/cron/update-youtube-metrics";
+          cronName = "YouTube Metrics";
+          break;
+        case "tiktok":
+          cronEndpoint = "/api/cron/update-tiktok-metrics";
+          cronName = "TikTok Metrics";
+          break;
+        default:
+          return NextResponse.json(
+            {
+              error: `Metrics refresh not supported for platform: ${contest.platform}`,
+            },
+            { status: 400 },
+          );
+      }
+    } else if (videoQueueTargets.length > 1) {
+      // Hybrid: sync fallback not supported; require Redis queues below.
+      cronEndpoint = "";
+      cronName = "Multi-platform Metrics";
+    } else if (liveVideoPlatforms.length === 0 && !isTwitter) {
+      return NextResponse.json(
+        {
+          error: `Metrics refresh not supported for platform: ${contest.platform}`,
+        },
+        { status: 400 },
+      );
+    } else if (
+      requestedPlatforms.length > 0 &&
+      videoQueueTargets.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "None of the requested platforms are available on this contest.",
+        },
+        { status: 400 },
+      );
+    } else {
+      // Legacy exact match for odd single-platform strings
+      switch (contest.platform?.toLowerCase()) {
+        case "instagram":
+          cronEndpoint = "/api/cron/update-instagram-insights";
+          cronName = "Instagram Insights";
+          break;
+        case "youtube":
+          cronEndpoint = "/api/cron/update-youtube-metrics";
+          cronName = "YouTube Metrics";
+          break;
+        case "tiktok":
+          cronEndpoint = "/api/cron/update-tiktok-metrics";
+          cronName = "TikTok Metrics";
+          break;
+        default:
+          return NextResponse.json(
+            {
+              error: `Metrics refresh not supported for platform: ${contest.platform}`,
+            },
+            { status: 400 },
+          );
+      }
     }
 
-    // Twitter: use Upstash Redis; Instagram: use Instagram insights queue when enabled
+    // Twitter: use Upstash Redis; video platforms: per-platform Redis queues + optional chain
     const queueEnabled = isMetricsQueueEnabled();
     const instagramQueueEnabled = isInstagramInsightsQueueEnabled();
     const tiktokQueueEnabled = isTikTokMetricsQueueEnabled();
     const youtubeQueueEnabled = isYouTubeMetricsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
-    const useInstagramQueue =
-      !isTwitter &&
-      contest.platform?.toLowerCase() === "instagram" &&
-      instagramQueueEnabled;
-    const useTikTokQueue =
-      !isTwitter &&
-      contest.platform?.toLowerCase() === "tiktok" &&
-      tiktokQueueEnabled;
-    const useYouTubeQueue =
-      !isTwitter &&
-      (contest.platform?.toLowerCase().includes("youtube") ?? false) &&
-      youtubeQueueEnabled;
+
+    const {
+      available: queuedVideoPlatforms,
+      unavailable: unqueuedVideoPlatforms,
+    } = partitionRefreshPlatformsByQueueAvailability(videoQueueTargets, {
+      youtube: youtubeQueueEnabled,
+      instagram: instagramQueueEnabled,
+      tiktok: tiktokQueueEnabled,
+    });
+
+    if (videoQueueTargets.length > 1 && unqueuedVideoPlatforms.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Multi-platform metrics refresh is not fully configured. Missing queues: ${unqueuedVideoPlatforms.join(", ")}.`,
+        },
+        { status: 503 },
+      );
+    }
 
     if (isTwitter) {
       const why = queueEnabled
@@ -206,7 +282,8 @@ export async function POST(
       );
     }
 
-    if (useInstagramQueue) {
+    // Multi / single video platform via Redis + QStash (sequential chain when 2+)
+    if (!isTwitter && queuedVideoPlatforms.length > 0) {
       const protocol = request.headers.get("x-forwarded-proto") || "http";
       const host = request.headers.get("host");
       const baseUrl = host
@@ -214,153 +291,82 @@ export async function POST(
         : process.env.NEXT_PUBLIC_APP_URL
           ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
           : "";
-      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}/api/contests/${contestId}/instagram-insights-refresh/enqueue`;
       const cookieHeader = request.headers.get("cookie");
-      const enqueueRes = await fetch(enqueueUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-        },
-        credentials: "include",
+
+      const scopeRaw = (body as { scope?: string })?.scope;
+      const parsedScope =
+        scopeRaw === "basic" ||
+        scopeRaw === "core" ||
+        scopeRaw === "traffic" ||
+        scopeRaw === "demographics" ||
+        scopeRaw === "all" ||
+        scopeRaw === "all_standard"
+          ? (scopeRaw as YouTubeRefreshScope)
+          : null;
+      // Brand + creators always use YouTube basic (same as single-platform).
+      // Admin multi-platform still defaults to `all` unless a scope is sent.
+      const youtubeScope = youtubeScopeForMetricsRefresh({
+        campaignPlatformCount: liveVideoPlatforms.length,
+        forceBasic: !isAdmin,
+        requestedScope: isAdmin ? parsedScope : null,
       });
-      const enqueueData = await enqueueRes.json().catch(() => ({}));
-      if (!enqueueRes.ok) {
+
+      // Skip platforms with no eligible submissions so UI/chain don't show empty progress.
+      const supabaseAdminForEligibility = createAdminSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      );
+      const platformsWithSubs = await filterPlatformsWithEligibleLiveSubmissions(
+        supabaseAdminForEligibility,
+        contestId,
+        queuedVideoPlatforms,
+      );
+      if (platformsWithSubs.length === 0) {
         return NextResponse.json(
-          { error: enqueueData?.error ?? "Failed to start Instagram refresh" },
-          { status: enqueueRes.status },
+          {
+            error:
+              "No eligible submissions to refresh for the selected platform(s).",
+          },
+          { status: 400 },
         );
       }
-      if (enqueueData.alreadyActive) {
-        return NextResponse.json({
-          success: true,
-          queued: true,
-          message: "Refresh already in progress.",
-          contestId,
-          runId: enqueueData.runId,
-          nextRefreshAvailable: new Date(
-            now.getTime() + cooldownMs,
-          ).toISOString(),
-        });
+
+      const chainResult = await startMultiPlatformMetricsChain({
+        baseUrl,
+        contestId,
+        platforms: platformsWithSubs,
+        metricsTarget: "submissions",
+        scope: youtubeScope,
+        cookieHeader,
+      });
+
+      if (chainResult.error) {
+        return NextResponse.json(
+          { error: chainResult.error },
+          { status: chainResult.status ?? 500 },
+        );
       }
-      // Note: Triggering removed here because enqueue route already triggers the processor.
+
+      const runs = chainResult.runs;
+      const labels = runs.map((r) => r.platformLabel).join(" → ");
+      const anyAlreadyActive = runs.some((r) => r.alreadyActive);
+      const orderNote = chainResult.chain
+        ? " Queued in order (YouTube → Instagram → TikTok)."
+        : "";
 
       return NextResponse.json({
         success: true,
         queued: true,
-        message:
-          "Instagram refresh started in background. Metrics will update shortly.",
+        chain: chainResult.chain,
+        message: anyAlreadyActive
+          ? `Refresh already in progress for ${labels}.`
+          : `${labels} refresh started.${orderNote} Metrics will update shortly.`,
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
-        runId: enqueueData.runId,
-        nextRefreshAvailable: new Date(
-          now.getTime() + cooldownMs,
-        ).toISOString(),
-      });
-    }
-
-    if (useYouTubeQueue) {
-      const protocol = request.headers.get("x-forwarded-proto") || "http";
-      const host = request.headers.get("host");
-      const baseUrl = host
-        ? `${protocol}://${host}`
-        : process.env.NEXT_PUBLIC_APP_URL
-          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
-          : "";
-      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}/api/contests/${contestId}/youtube-metrics-refresh/enqueue`;
-      const cookieHeader = request.headers.get("cookie");
-      const enqueueRes = await fetch(enqueueUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({ scope: "basic" }),
-      });
-      const enqueueData = await enqueueRes.json().catch(() => ({}));
-      if (!enqueueRes.ok) {
-        return NextResponse.json(
-          { error: enqueueData?.error ?? "Failed to start YouTube refresh" },
-          { status: enqueueRes.status },
-        );
-      }
-      if (enqueueData.alreadyActive) {
-        return NextResponse.json({
-          success: true,
-          queued: true,
-          message: "Refresh already in progress.",
-          contestId,
-          runId: enqueueData.runId,
-          nextRefreshAvailable: new Date(
-            now.getTime() + cooldownMs,
-          ).toISOString(),
-        });
-      }
-      return NextResponse.json({
-        success: true,
-        queued: true,
-        message:
-          "YouTube refresh started in background. Metrics will update shortly.",
-        contestId,
-        contestTitle: contest.title,
-        platform: contest.platform,
-        runId: enqueueData.runId,
-        nextRefreshAvailable: new Date(
-          now.getTime() + cooldownMs,
-        ).toISOString(),
-      });
-    }
-
-    if (useTikTokQueue) {
-      const protocol = request.headers.get("x-forwarded-proto") || "http";
-      const host = request.headers.get("host");
-      const baseUrl = host
-        ? `${protocol}://${host}`
-        : process.env.NEXT_PUBLIC_APP_URL
-          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
-          : "";
-      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}/api/contests/${contestId}/tiktok-metrics-refresh/enqueue`;
-      const cookieHeader = request.headers.get("cookie");
-      const enqueueRes = await fetch(enqueueUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-        },
-        credentials: "include",
-      });
-      const enqueueData = await enqueueRes.json().catch(() => ({}));
-      if (!enqueueRes.ok) {
-        return NextResponse.json(
-          { error: enqueueData?.error ?? "Failed to start TikTok refresh" },
-          { status: enqueueRes.status },
-        );
-      }
-      if (enqueueData.alreadyActive) {
-        return NextResponse.json({
-          success: true,
-          queued: true,
-          message: "Refresh already in progress.",
-          contestId,
-          runId: enqueueData.runId,
-          nextRefreshAvailable: new Date(
-            now.getTime() + cooldownMs,
-          ).toISOString(),
-        });
-      }
-      // Note: Triggering removed here because enqueue route already triggers the processor.
-
-      return NextResponse.json({
-        success: true,
-        queued: true,
-        message:
-          "TikTok refresh started in background. Metrics will update shortly.",
-        contestId,
-        contestTitle: contest.title,
-        platform: contest.platform,
-        runId: enqueueData.runId,
+        platforms: platformsWithSubs,
+        runs,
+        runId: runs[0]?.runId,
         nextRefreshAvailable: new Date(
           now.getTime() + cooldownMs,
         ).toISOString(),

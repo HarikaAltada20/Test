@@ -6,6 +6,7 @@ import type {
 import type { VideoFilenamePattern } from "@/lib/video-download-filename";
 import {
   canAccessBulkVideoDownloadJob,
+  isStuckDesktopManifestJob,
 } from "@/lib/bulk-video-download-summary";
 import type { DownloadAccessUser } from "@/lib/video-download-auth";
 import {
@@ -558,7 +559,11 @@ export type CreateBulkVideoDownloadJobInput = {
   /** cloud (default) | desktop — requires 20260905 migration. */
   source?: "cloud" | "desktop";
   deliveryMode?: string | null;
-  /** Initial job status; desktop jobs start queued until the app reports started. */
+  /**
+   * Initial job status.
+   * Desktop YouTube jobs should be created as `completed` once the
+   * `.gocdownload` file is ready (web deliverable is the text file).
+   */
   status?: BulkVideoDownloadJobStatus;
 };
 
@@ -569,6 +574,7 @@ export async function createBulkVideoDownloadJob(
   const submissionIds = input.submissionIds.filter(Boolean);
 
   const status = input.status ?? "running";
+  const nowIso = new Date().toISOString();
   const insertRow: Record<string, unknown> = {
     id: input.id,
     contest_id: input.contestId,
@@ -585,7 +591,9 @@ export async function createBulkVideoDownloadJob(
     file_name_prefix: input.fileNamePrefix ?? null,
     submission_ids: submissionIds,
     zip_parts: input.zipParts,
-    started_at: status === "queued" ? null : new Date().toISOString(),
+    started_at: status === "queued" ? null : nowIso,
+    finished_at:
+      status === "completed" || status === "failed" ? nowIso : null,
   };
   if (input.source) insertRow.source = input.source;
   if (input.deliveryMode !== undefined) {
@@ -840,7 +848,7 @@ export async function listBulkVideoDownloadJobsForContest(options: {
   let query = admin
     .from("bulk_video_download_jobs")
     .select(
-      "id, contest_id, user_id, user_type, status, total_count, success_count, failed_count, zip_part_total, naming_pattern, file_name_prefix, created_at, finished_at, source, delivery_mode",
+      "id, contest_id, user_id, user_type, status, total_count, success_count, failed_count, zip_part_total, naming_pattern, file_name_prefix, created_at, started_at, finished_at, source, delivery_mode",
     )
     .eq("contest_id", options.contestId)
     .order("created_at", { ascending: false })
@@ -854,11 +862,33 @@ export async function listBulkVideoDownloadJobsForContest(options: {
     console.error("[bulk-video-download-jobs] list failed:", error);
     return { data: [], error: error.message };
   }
+  const rows = (data || []).map((row) =>
+    normalizeJobRow(row as Record<string, unknown>),
+  );
   return {
-    data: (data || []).map((row) =>
-      normalizeJobRow(row as Record<string, unknown>),
-    ),
+    data: await completeStuckDesktopManifestJobs(rows),
   };
+}
+
+/** Close desktop jobs that never left "file delivered" / never started in the app. */
+async function completeStuckDesktopManifestJobs(
+  rows: BulkVideoDownloadJobRow[],
+): Promise<BulkVideoDownloadJobRow[]> {
+  const out: BulkVideoDownloadJobRow[] = [];
+  for (const row of rows) {
+    if (!isStuckDesktopManifestJob(row)) {
+      out.push(row);
+      continue;
+    }
+    const updated = await updateBulkVideoDownloadJob({
+      id: row.id,
+      userId: row.user_id,
+      status: "completed",
+      errorMessage: null,
+    });
+    out.push(updated.data || { ...row, status: "completed", finished_at: new Date().toISOString() });
+  }
+  return out;
 }
 
 export async function findBulkVideoDownloadJobByZipPartId(options: {
@@ -920,10 +950,14 @@ export async function getLatestBulkVideoDownloadJobForContest(options: {
   const rows = (data || []).map((row) =>
     normalizeJobRow(row as Record<string, unknown>),
   );
+  const resolved = await completeStuckDesktopManifestJobs(rows);
   const now = Date.now();
   const match =
-    rows.find((row) => row.status === "queued" || row.status === "running") ||
-    rows.find((row) => {
+    resolved.find((row) => {
+      if (row.source === "desktop") return false;
+      return row.status === "queued" || row.status === "running";
+    }) ||
+    resolved.find((row) => {
       if (row.status !== "completed" && row.status !== "failed") return false;
       const updated = Date.parse(
         row.updated_at || row.finished_at || row.created_at,

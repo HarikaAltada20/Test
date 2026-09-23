@@ -10,6 +10,7 @@ import type {
   PostPhaseCounts,
 } from "@/lib/campaign-list-filters-storage";
 import { SSR_CAMPAIGN_LIST_DEFAULTS } from "@/lib/campaign-list-filters-storage";
+import { expandAvailableCampaignPlatforms } from "@/lib/campaign-platform-filter";
 
 export type ServerCampaignListQuery = {
   isAdminView: boolean;
@@ -104,6 +105,23 @@ function cacheKeyFromQuery(query: ServerCampaignListQuery): string {
   return buildListUrl(query);
 }
 
+function hasSameCampaignListScope(
+  current: ServerCampaignListQuery,
+  previous: ServerCampaignListQuery,
+): boolean {
+  return (
+    current.isAdminView === previous.isAdminView &&
+    current.tab === previous.tab &&
+    current.sort === previous.sort &&
+    current.platform === previous.platform &&
+    current.contestType === previous.contestType &&
+    current.contestFormat === previous.contestFormat &&
+    current.postContestPhase === previous.postContestPhase &&
+    current.search === previous.search &&
+    current.enabled === previous.enabled
+  );
+}
+
 function parseListPayload<T>(payload: unknown): ServerCampaignListResult<T> | null {
   if (!payload || typeof payload !== "object") return null;
   const p = payload as Record<string, unknown>;
@@ -114,9 +132,11 @@ function parseListPayload<T>(payload: unknown): ServerCampaignListResult<T> | nu
     tabCounts: (p.tabCounts as CampaignListTabCounts) || EMPTY_TAB_COUNTS,
     postPhaseCounts:
       (p.postPhaseCounts as PostPhaseCounts) || EMPTY_POST_PHASE,
-    availablePlatforms: Array.isArray(p.availablePlatforms)
-      ? (p.availablePlatforms as string[])
-      : ["all"],
+    availablePlatforms: expandAvailableCampaignPlatforms(
+      Array.isArray(p.availablePlatforms)
+        ? (p.availablePlatforms as string[])
+        : ["all"],
+    ),
   };
 }
 
@@ -150,10 +170,7 @@ async function prefetchSiblingTabs(current: ServerCampaignListQuery) {
   await Promise.all(tasks);
 }
 
-/**
- * Fetches a server-sorted campaign page. Uses an in-memory cache so switching
- * tabs/filters shows data immediately when previously loaded.
- */
+/** Fetches server-sorted campaign pages and caches results for revisits. */
 export function useServerCampaignList<T>(
   query: ServerCampaignListQuery,
   initial?: Partial<ServerCampaignListResult<T>>,
@@ -181,6 +198,7 @@ export function useServerCampaignList<T>(
   );
   const requestIdRef = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousQueryRef = useRef(query);
   const queryRef = useRef(query);
   queryRef.current = query;
   const seededRef = useRef(false);
@@ -233,13 +251,13 @@ export function useServerCampaignList<T>(
         ? (listCache.get(key) as ServerCampaignListResult<T> | undefined)
         : undefined;
 
-      // Cache hit: paint immediately; optional quiet background revalidation.
+      // A cache hit is safe to paint because it belongs to this exact query.
       if (cached) {
         applyResult(cached);
         setLoading(false);
         setIsValidating(Boolean(opts?.quiet));
       } else {
-        // No cached page for this tab/filter — show spinner, never flash empty state.
+        setContests([]);
         setLoading(true);
         setIsValidating(false);
       }
@@ -292,17 +310,26 @@ export function useServerCampaignList<T>(
   useEffect(() => {
     if (!query.enabled) return;
 
-    // Instant paint from cache when switching tabs/filters.
+    // Invalidate an in-flight response immediately, before a debounced query
+    // starts, so it cannot repaint cards from the previous selection.
+    requestIdRef.current += 1;
+    const previousQuery = previousQueryRef.current;
+    previousQueryRef.current = query;
+    const sameScope = hasSameCampaignListScope(query, previousQuery);
     const key = cacheKeyFromQuery(query);
     const cached = listCache.get(key) as ServerCampaignListResult<T> | undefined;
+    setError(null);
     if (cached) {
+      // Only show cached cards for the exact query the user selected.
       applyResult(cached);
       setLoading(false);
-      setIsValidating(false);
+      setIsValidating(true);
     } else {
-      // Avoid showing the previous tab's campaigns while the new tab loads.
+      // Never leave cards from the previous query on screen while the new
+      // page/filter is loading. Keep the total only within the same scope so
+      // pagination remains stable during page and page-size changes.
       setContests([]);
-      setTotal(0);
+      if (!sameScope) setTotal(0);
       setLoading(true);
       setIsValidating(false);
     }
@@ -337,6 +364,7 @@ export function useServerCampaignList<T>(
     () => fetchPage({ bustCache: true }),
     [fetchPage],
   );
+  const retry = useCallback(() => fetchPage(), [fetchPage]);
 
   return {
     contests,
@@ -349,6 +377,7 @@ export function useServerCampaignList<T>(
     hasLoadedOnce,
     error,
     refresh,
+    retry,
     setContests,
   };
 }

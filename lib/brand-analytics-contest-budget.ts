@@ -1,5 +1,5 @@
 import type { BrandContestRow } from "@/lib/brand-analytics-cache";
-import { normalizeBrandPlatformKey } from "@/lib/brand-analytics-graph";
+import { isBrandTwitterContest } from "@/lib/brand-analytics-graph";
 import {
   getBudgetTileLabel,
   getBudgetTileMode,
@@ -66,7 +66,7 @@ export function resolveContestBudgetTile(
 
   if (
     mode === "paid" &&
-    normalizeBrandPlatformKey(contest) === "twitter" &&
+    isBrandTwitterContest(contest) &&
     twitterLeaderboardPaidCents != null &&
     twitterLeaderboardPaidCents > 0
   ) {

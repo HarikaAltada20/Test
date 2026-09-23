@@ -211,6 +211,13 @@ export async function executeDualRewardsBulkPayment(params: {
     milestones,
     cpmCfg,
     maxCap,
+    {
+      details: (contest.contest_based_details as Record<string, unknown>) || null,
+      contestPlatformCsv:
+        typeof contest.platform === "string" ? contest.platform : null,
+      maxEarningsPerCreator: contest.max_earnings_per_creator,
+      bonusDetails: contest.bonus_details,
+    },
   );
   if (capResult.error || !capResult.maps) {
     return {

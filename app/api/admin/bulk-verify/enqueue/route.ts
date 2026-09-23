@@ -161,7 +161,7 @@ export async function POST(request: Request) {
 
     const foundSubmissionIds = new Set(submissionRows.map((row) => row.id));
     const missingAfterSubmissions = submissionIds.filter(
-      (id) => !foundSubmissionIds.has(id),
+      (id: string) => !foundSubmissionIds.has(id),
     );
 
     let channel: BulkModerationChannel = "submissions";
