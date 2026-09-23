@@ -305,7 +305,7 @@ export default function FAQ() {
   const isHome = pathname === "/";
   const isCreators = pathname.includes("creators");
   const useLightFaq = isLight && (isHome || isBrands || isCreators);
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const faqs = isBrands ? brandFaqs : isHome ? homeFaqs : creatorFaqs;
 

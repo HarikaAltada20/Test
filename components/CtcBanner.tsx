@@ -154,29 +154,12 @@ export default function CtcBanner() {
     >
       {isHome ? (
         <>
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="relative z-10 flex flex-col items-center px-4 w-full">
             <div
               className={cn(
-                "absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2",
-                isLight ? "opacity-40" : "opacity-70",
-              )}
-            >
-              <Image
-                src="/images/attach-money.png"
-                alt=""
-                fill
-                className="object-contain"
-                sizes="280px"
-              />
-            </div>
-          </div>
-
-          <div className="relative z-10 flex flex-col items-center px-4 w-full max-w-4xl">
-            <div
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-sm",
+                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
                 isLight
-                  ? "border-black/[0.06] bg-white text-black/55"
+                  ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
                   : "border-white/10 bg-white/5 text-zinc-200",
               )}
             >
@@ -189,55 +172,103 @@ export default function CtcBanner() {
               Pay for Performance
             </div>
 
-            <h2
-              className={cn(
-                `mt-8 text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-semibold tracking-tight text-center leading-tight ${
-                  inView ? "slide-up" : "opacity-0 translate-y-10"
-                }`,
-                isLight ? "text-black" : "text-white",
-              )}
-              style={{ fontFamily: "Montserrat, sans-serif" }}
-            >
-              Brands Get Results.
-              <br />
-              Creators Get Rewarded.
-            </h2>
+            <div className="relative mt-3 flex flex-col items-center justify-center w-full max-w-[780px] py-10 sm:py-12 md:py-14">
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
+                  isLight ? "border-black/[0.08]" : "border-white/[0.08]",
+                )}
+              />
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border",
+                  isLight ? "border-black/[0.06]" : "border-white/[0.06]",
+                )}
+              />
+              <div
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border",
+                  isLight ? "border-black/[0.04]" : "border-white/[0.04]",
+                )}
+              />
 
-            <div className="mt-10 flex w-full max-w-[480px] flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsNavigating(true);
-                  router.push("/brands");
+              <div
+                className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full"
+                style={{
+                  background:
+                    "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.85) 70deg, rgba(168,85,247,0.85) 110deg, transparent 140deg, transparent 360deg)",
+                  maskImage:
+                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+                  WebkitMaskImage:
+                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
                 }}
-                disabled={isNavigating}
+              />
+
+              <div
                 className={cn(
-                  "inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl px-6 text-sm sm:text-base font-semibold transition-colors disabled:opacity-70",
-                  isLight
-                    ? "bg-[#7c3aed] text-white hover:bg-[#6d28d9] shadow-[0_12px_30px_rgba(124,58,237,0.28)]"
-                    : "border border-white/20 bg-gradient-to-b from-white/[0.08] to-transparent text-white hover:bg-white/10",
+                  "pointer-events-none absolute left-1/2 top-[36%] z-0 h-[180px] w-[180px] sm:h-[220px] sm:w-[220px] md:h-[400px] md:w-[400px] -translate-x-1/2 -translate-y-1/2 rotate-[25.29deg]",
+                  isLight ? "opacity-40" : "opacity-85",
                 )}
               >
-                {isNavigating ? <ButtonLoadingSpinner /> : null}
-                For Brands →
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsNavigating(true);
-                  router.push("/creators");
-                }}
-                disabled={isNavigating}
-                className={cn(
-                  "inline-flex h-[52px] w-full sm:flex-1 items-center justify-center gap-2 rounded-2xl px-6 text-sm sm:text-base font-semibold transition-colors disabled:opacity-70",
-                  isLight
-                    ? "border border-black/[0.08] bg-white text-black hover:bg-white shadow-[0_10px_28px_rgba(15,15,30,0.08)]"
-                    : "bg-[#EDE4F5] text-[#1a1224] hover:bg-white",
-                )}
-              >
-                {isNavigating ? <ButtonLoadingSpinner /> : null}
-                For Creators →
-              </button>
+                <Image
+                  src="/images/attach-money.png"
+                  alt=""
+                  fill
+                  className="object-contain"
+                  sizes="260px"
+                  priority
+                />
+              </div>
+
+              <h2
+  className={cn(
+    `relative z-10 text-center text-3xl font-semibold leading-[1.15] tracking-tight sm:text-4xl md:text-5xl ${
+      inView ? "slide-up" : "translate-y-10 opacity-0"
+    }`,
+    isLight ? "text-black" : "text-white",
+  )}
+  style={{ fontFamily: "Montserrat, sans-serif" }}
+>
+  <span className="block">Brands Get Results.</span>
+  <span className="mt-3 block">Creators Get Rewarded.</span>
+</h2>
+
+              <div className="relative z-10 mt-5 sm:mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNavigating(true);
+                    router.push("/brands");
+                  }}
+                  disabled={isNavigating}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    isLight
+                      ? "bg-black text-white hover:bg-black/90"
+                      : "border border-white/25 bg-black text-white hover:bg-white/10",
+                  )}
+                >
+                  {isNavigating ? <ButtonLoadingSpinner /> : null}
+                  For Brands →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNavigating(true);
+                    router.push("/creators");
+                  }}
+                  disabled={isNavigating}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    isLight
+                      ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
+                      : "bg-white text-black hover:bg-zinc-100",
+                  )}
+                >
+                  {isNavigating ? <ButtonLoadingSpinner /> : null}
+                  For Creators →
+                </button>
+              </div>
             </div>
           </div>
         </>

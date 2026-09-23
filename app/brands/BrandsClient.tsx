@@ -174,41 +174,58 @@ const campaignCenter = { x: 50, y: 45 };
 
 const people: Person[] = [
   {
-    name: "Alex Joined",
+    name: "Alex",
     x: 19,
     y: 28,
     arc: 8,
     avatar: "https://i.pravatar.cc/100?img=12",
   },
   {
-    name: "Leela Joined",
+    name: "Leela",
     x: 66,
     y: 23,
     arc: 6,
     avatar: "https://i.pravatar.cc/100?img=47",
   },
   {
-    name: "Mukesh Joined",
+    name: "Mukesh",
     x: 66,
     y: 42,
     arc: 4,
     avatar: "https://i.pravatar.cc/100?img=11",
   },
   {
-    name: "Sameer Joined",
+    name: "Sameer",
     x: 27,
     y: 69,
     arc: 10,
     avatar: "https://i.pravatar.cc/100?img=13",
   },
   {
-    name: "Sameer Joined",
+    name: "Sameer",
     x: 84,
     y: 69,
     arc: 10,
     avatar: "https://i.pravatar.cc/100?img=33",
   },
 ];
+
+const mapCampaignStages = [
+  {
+    centerLabel: "Campaign Launched",
+    personLabel: (name: string) => `${name} Joined`,
+  },
+  {
+    centerLabel: "Tracking Performance",
+    personLabel: (_name: string) => "Posted Videos",
+  },
+  {
+    centerLabel: "Money paid",
+    personLabel: (_name: string) => "$400 Earned 🎉",
+  },
+] as const;
+
+const MAP_STAGE_MS = 3200;
 
 const connectionPath = ({ x, y, arc }: Person) => {
   const controlX = (x + campaignCenter.x) / 2;
@@ -324,6 +341,9 @@ export default function BrandsClient({
   const [isLaunchingCampaign, setIsLaunchingCampaign] = useState(false);
   const [showCreatorModal, setShowCreatorModal] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapInView, setMapInView] = useState(false);
+  const [mapStage, setMapStage] = useState(0);
 
   useEffect(() => {
     setIsLaunchingCampaign(false);
@@ -424,6 +444,37 @@ export default function BrandsClient({
     };
   }, []);
 
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry], observerInstance) => {
+        if (entry.isIntersecting) {
+          setMapInView(true);
+          observerInstance.disconnect();
+        }
+      },
+      { threshold: 0.25 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!mapInView) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const interval = setInterval(() => {
+      setMapStage((prev) => (prev + 1) % mapCampaignStages.length);
+    }, MAP_STAGE_MS);
+
+    return () => clearInterval(interval);
+  }, [mapInView]);
+
+  const activeMapStage = mapCampaignStages[mapStage];
+
   const servicesWeOffer = [
     {
       title: "CREATOR COLLABS",
@@ -497,8 +548,8 @@ export default function BrandsClient({
             <div className="relative z-10">
               <h1
                 className={cn(
-                  "mx-auto max-w-[700px] text-[28px] font-bold leading-[1.1] tracking-[-1.2px] sm:text-[36px] sm:tracking-[-1.5px] md:text-[48px] md:tracking-[-1.8px]",
-                  isLight ? "text-black" : "text-white/90",
+                  "mx-auto max-w-[700px]  font-['Inter'] font-bold text-[32px] md:text-[48px] leading-[110%] tracking-[-4%] text-center",
+                  isLight ? "text-black" : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
                 )}
               >
                 Pay creators based on
@@ -508,8 +559,8 @@ export default function BrandsClient({
 
               <p
                 className={cn(
-                  "mx-auto mt-4 max-w-[640px] text-[14px] leading-6 sm:mt-5 sm:text-[15px] md:text-[16px]",
-                  isLight ? "text-black/50" : "text-white/50",
+                  "mx-auto mt-4 max-w-[680px] text-[14px] leading-6 sm:mt-5 sm:text-[15px] md:text-[20px] font-['Inter'] font-normal leading-[30px] tracking-[-0.4px] text-center",
+                  isLight ? "text-black/50" : "text-[#8E8E8E]",
                 )}
               >
                 Set your campaign, your brief, and your budget. Game of Creators
@@ -523,10 +574,10 @@ export default function BrandsClient({
                   onClick={handleLaunchCampaign}
                   disabled={isLaunchingCampaign}
                   className={cn(
-                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
+                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[14px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
                     isLight
                       ? "bg-black text-white hover:bg-black/90"
-                      : "border border-white/20 bg-black/50 shadow-[0_0_20px_rgba(255,255,255,0.03)] hover:bg-white/10",
+                      : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10",
                   )}
                 >
                   {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
@@ -546,10 +597,10 @@ export default function BrandsClient({
                     })
                   }
                   className={cn(
-                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition sm:w-auto",
+                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[14px] font-semibold transition sm:w-auto",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
-                      : "bg-white text-black hover:bg-white/90",
+                      : "bg-[#DEDEDE] text-black hover:bg-white/90",
                   )}
                 >
                   See How it works
@@ -2939,21 +2990,20 @@ export default function BrandsClient({
 
           {/* Top content */}
           <div className="relative z-20 mx-auto max-w-3xl text-center">
-            <h2
-              className={cn(
-                "text-[28px] font-semibold leading-[1.1] tracking-[-0.04em] sm:text-4xl md:text-5xl md:text-[52px]",
-                isLight ? "text-black" : "text-white",
-              )}
-            >
-              The results gets sharper
-              <br />
-              with every campaign.
-            </h2>
+          <h2
+  className={cn(
+    "font-['Inter'] font-bold tracking-[-3%] text-center sm:text-4xl md:text-5xl md:text-[52px]",
+    isLight ? "text-black" : "text-white",
+  )}
+>
+  <span className="block">The results gets sharper</span>
+  <span className="mt-6 block">with every campaign.</span>
+</h2>
 
             <p
               className={cn(
-                "mx-auto mt-4 max-w-[620px] text-sm leading-6 sm:mt-5 sm:text-base",
-                isLight ? "text-black/50" : "text-neutral-500",
+                "mx-auto mt-6 max-w-[720px] text-lg leading-7 sm:mt-8",
+                isLight ? "text-black/50" : "text-[#8E8E8E]",
               )}
             >
               More campaigns mean more creators participating, more content, and
@@ -2969,7 +3019,7 @@ export default function BrandsClient({
                 "mt-6 inline-flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-70",
                 isLight
                   ? "bg-black text-white hover:bg-black/90 shadow-[0_10px_30px_rgba(15,15,30,0.12)]"
-                  : "border border-white/20 bg-white/[0.06] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] hover:bg-white/10",
+                  : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_10px_30px_rgba(0,0,0,0.4)] hover:bg-white/10",
               )}
             >
               {isLaunchingCampaign ? <ButtonLoadingSpinner /> : null}
@@ -2979,28 +3029,41 @@ export default function BrandsClient({
           </div>
 
           {/* Map */}
-          <div className="relative mx-auto mt-8 h-[320px] w-full max-w-[1250px] sm:mt-12 sm:h-[420px] md:h-[520px] lg:h-[580px]">
+          <div
+            ref={mapRef}
+            className="relative mx-auto mt-8 h-[320px] w-full max-w-[1250px] sm:mt-12 sm:h-[420px] md:h-[520px] lg:h-[580px]"
+          >
             {isLight ? (
               <div
                 aria-hidden
-                className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-[70%] w-[75%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.35)_0%,transparent_68%)] blur-3xl"
+                className={cn(
+                  "pointer-events-none absolute left-1/2 top-1/2 z-0 h-[70%] w-[75%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.35)_0%,transparent_68%)] blur-3xl",
+                  mapInView && "animate-map-glow-pulse",
+                )}
               />
             ) : null}
-            <Image
-              src={
-                isLight
-                  ? "/images/6c7b71cf5612b7b0ce48a83d308567260c8756d0.png"
-                  : WorldMapDots
-              }
-              alt=""
-              fill
-              priority
+            <div
               className={cn(
-                "object-cover object-center",
-                isLight && "mix-blend-screen",
+                "absolute inset-0",
+                mapInView && "",
               )}
-              sizes="(max-width: 1280px) 100vw, 1250px"
-            />
+            >
+              <Image
+                src={
+                  isLight
+                    ? "/images/6c7b71cf5612b7b0ce48a83d308567260c8756d0.png"
+                    : WorldMapDots
+                }
+                alt=""
+                fill
+                priority
+                className={cn(
+                  "object-cover object-center",
+                  isLight && "mix-blend-screen",
+                )}
+                sizes="(max-width: 1280px) 100vw, 1250px"
+              />
+            </div>
 
             {/* Connection lines */}
             <svg
@@ -3050,13 +3113,19 @@ export default function BrandsClient({
 
               <div
                 className={cn(
-                  "absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-center text-[10px] font-medium shadow-lg sm:mt-2 sm:px-5 sm:py-2 sm:text-sm",
+                  "absolute left-1/2 top-full mt-1 -translate-x-1/2 overflow-hidden rounded-full px-3 py-1 text-center text-[10px] font-medium shadow-lg sm:mt-2 sm:px-5 sm:py-2 sm:text-sm",
                   isLight
                     ? "border border-black/10 bg-white text-black"
                     : "border border-black/30 bg-white/80 text-black backdrop-blur",
+                  "[perspective:480px]",
                 )}
               >
-                Campaign Launched
+                <span
+                  key={`center-${mapStage}`}
+                  className="inline-block animate-map-text-rotate whitespace-nowrap"
+                >
+                  {activeMapStage.centerLabel}
+                </span>
               </div>
             </div>
 
@@ -3095,11 +3164,17 @@ export default function BrandsClient({
 
                 <p
                   className={cn(
-                    "mt-0.5 hidden whitespace-nowrap text-sm font-medium sm:mt-1 sm:block",
+                    "mt-0.5 hidden overflow-hidden whitespace-nowrap text-sm font-medium sm:mt-1 sm:block",
                     isLight ? "text-black/70" : "text-white",
+                    "[perspective:480px]",
                   )}
                 >
-                  {person.name}
+                  <span
+                    key={`person-${index}-${mapStage}`}
+                    className="inline-block animate-map-text-rotate"
+                  >
+                    {activeMapStage.personLabel(person.name)}
+                  </span>
                 </p>
               </div>
             ))}

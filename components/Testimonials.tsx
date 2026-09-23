@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { useThemeMode } from "@/hooks/use-theme-mode";
 import { cn } from "@/lib/utils";
@@ -108,6 +109,19 @@ const config = {
   },
 };
 
+const desktopCardPositions = [
+  // Kabir — mid left
+  { left: "0%", top: "28%" },
+  // Aarav — top center
+  { left: "32%", top: "0%" },
+  // Riya — mid right (slightly higher than Kabir)
+  { left: "64%", top: "25%" },
+  // Ananya — bottom mid-left
+  { left: "12%", top: "64%" },
+  // Dev — bottom right
+  { left: "55%", top: "58%" },
+] as const;
+
 function Rivets({ isLight }: { isLight: boolean }) {
   const rivet = cn(
     "pointer-events-none absolute h-[5px] w-[5px] rounded-full sm:h-1.5 sm:w-1.5",
@@ -126,25 +140,15 @@ function Rivets({ isLight }: { isLight: boolean }) {
   );
 }
 
-function TestimonialCard({
+function TestimonialCardContent({
   testimonial,
   isLight,
-  className,
 }: {
   testimonial: Testimonial;
   isLight: boolean;
-  className?: string;
 }) {
   return (
-    <article
-      className={cn(
-        "relative w-full max-w-[340px] rounded-[16px] border px-5 pb-6 pt-5 sm:w-[340px] sm:max-w-none sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
-        isLight
-          ? "border-[#0000000D] bg-[#ECECEC]"
-          : "bg-[#171717] shadow-[8px_8px_50px_0px_#000000,4px_12px_4px_0px_#00000033,inset_0px_0px_4px_0px_#FFFFFF40]",
-        className,
-      )}
-    >
+    <>
       <Rivets isLight={isLight} />
 
       <div className="flex items-center gap-3">
@@ -153,7 +157,8 @@ function TestimonialCard({
             src={testimonial.image}
             alt={testimonial.name}
             fill
-            className="object-cover"
+            draggable={false}
+            className="pointer-events-none object-cover"
             sizes="48px"
           />
         </div>
@@ -186,7 +191,80 @@ function TestimonialCard({
       >
         &ldquo;{testimonial.quote}&rdquo;
       </p>
+    </>
+  );
+}
+
+function TestimonialCard({
+  testimonial,
+  isLight,
+  className,
+}: {
+  testimonial: Testimonial;
+  isLight: boolean;
+  className?: string;
+}) {
+  return (
+    <article
+      className={cn(
+        "relative w-full max-w-[340px] rounded-[16px] border px-5 pb-6 pt-5 sm:w-[340px] sm:max-w-none sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
+        isLight
+          ? "border-[#0000000D] bg-[#ECECEC]"
+          : "bg-[#171717] shadow-[8px_8px_50px_0px_#000000,4px_12px_4px_0px_#00000033,inset_0px_0px_4px_0px_#FFFFFF40]",
+        className,
+      )}
+    >
+      <TestimonialCardContent testimonial={testimonial} isLight={isLight} />
     </article>
+  );
+}
+
+function DraggableTestimonialCard({
+  testimonial,
+  isLight,
+  position,
+  constraintsRef,
+}: {
+  testimonial: Testimonial;
+  isLight: boolean;
+  position: { left: string; top: string };
+  constraintsRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [zIndex, setZIndex] = useState(1);
+
+  return (
+    <motion.article
+      drag
+      dragConstraints={constraintsRef}
+      dragElastic={0.12}
+      dragMomentum={false}
+      dragSnapToOrigin
+      dragPropagation={false}
+      onDragStart={() => setZIndex(50)}
+      onDragEnd={() => setZIndex(10)}
+      transition={{ type: "spring", stiffness: 320, damping: 28 }}
+      whileDrag={{
+        scale: 1.03,
+        cursor: "grabbing",
+        boxShadow: isLight
+          ? "0 24px 60px rgba(15,15,30,0.18)"
+          : "0 28px 70px rgba(0,0,0,0.65)",
+      }}
+      style={{
+        left: position.left,
+        top: position.top,
+        zIndex,
+        position: "absolute",
+      }}
+      className={cn(
+        "w-[340px] cursor-grab touch-none select-none rounded-[16px] border px-5 pb-6 pt-5 active:cursor-grabbing sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
+        isLight
+          ? "border-[#0000000D] bg-[#ECECEC]"
+          : "bg-[#171717] shadow-[8px_8px_50px_0px_#000000,4px_12px_4px_0px_#00000033,inset_0px_0px_4px_0px_#FFFFFF40]",
+      )}
+    >
+      <TestimonialCardContent testimonial={testimonial} isLight={isLight} />
+    </motion.article>
   );
 }
 
@@ -195,6 +273,7 @@ export default function Testimonials() {
   const { isLight } = useThemeMode();
   const [isNavigating, setIsNavigating] = useState(false);
   const headingRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   const [headingAnimated, setHeadingAnimated] = useState(false);
 
   const key = (
@@ -230,7 +309,7 @@ export default function Testimonials() {
         isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >
-      <div className="mx-auto max-w-[1100px]" ref={headingRef}>
+      <div className="mx-auto max-w-[1200px]" ref={headingRef}>
         <h2
           className={cn(
             "mx-auto max-w-[720px] text-center text-[28px] font-bold leading-[1.15] tracking-[-1px] sm:text-[36px] sm:tracking-[-1.4px] md:text-[44px] md:tracking-[-1.8px]",
@@ -253,46 +332,24 @@ export default function Testimonials() {
           ))}
         </div>
 
-        {/* Desktop: same staggered positions as design */}
-        <div className="relative mx-auto mt-14 hidden h-[640px] w-full max-w-[1040px] md:block lg:h-[700px]">
-          {/* Kabir — mid left */}
-          <TestimonialCard
-            testimonial={testimonials[0]}
-            isLight={isLight}
-            className="absolute left-[-8%] top-[72px] z-[1] lg:top-[170px]"
-          />
-
-          {/* Aarav — center, lower */}
-          <TestimonialCard
-            testimonial={testimonials[1]}
-            isLight={isLight}
-            className="absolute left-[65%] top-[200px] z-[2] lg:top-[200px]"
-          />
-
-          {/* Riya — highest, top right */}
-          <TestimonialCard
-            testimonial={testimonials[2]}
-            isLight={isLight}
-            className="absolute right-[35%] top-0 z-[1]"
-          />
-
-          {/* Ananya — bottom left */}
-          <TestimonialCard
-            testimonial={testimonials[3]}
-            isLight={isLight}
-            className="absolute bottom-0 left-[6%] z-[1] lg:left-[10%] lg:bottom-[70px]"
-          />
-
-          {/* Dev — bottom right */}
-          <TestimonialCard
-            testimonial={testimonials[4]}
-            isLight={isLight}
-            className="absolute bottom-[28px] right-[2%] z-[1] lg:bottom-[90px] lg:right-[4%]"
-          />
+        {/* Desktop: staggered + draggable */}
+        <div
+          ref={boardRef}
+          className="relative mx-auto mt-14 hidden h-[640px] w-full max-w-[1120px] md:block lg:h-[700px]"
+        >
+          {testimonials.map((testimonial, index) => (
+            <DraggableTestimonialCard
+              key={testimonial.name}
+              testimonial={testimonial}
+              isLight={isLight}
+              constraintsRef={boardRef}
+              position={desktopCardPositions[index]}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="mt-12 flex justify-center sm:mt-16">
+      <div className="flex justify-center">
         <Link
           href={href}
           onClick={() => setIsNavigating(true)}

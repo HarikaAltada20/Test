@@ -28,11 +28,404 @@ import {
   Users2,
   Wallet,
 } from "lucide-react";
+import { SiYoutube } from "react-icons/si";
 import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
 import NumbersSection from "./NumberSection";
 import { useThemeMode } from "@/hooks/use-theme-mode";
+
+const FORM_DEMO_TITLE = "Podcasts Clipping Challenge (Dual Rewards)";
+const FORM_DEMO_THUMB =
+  "/images/9ec348288ce12767ffa9907081b7c37124c89470.png";
+
+function BrandFormMockup({ isLight }: { isLight: boolean }) {
+  const [title, setTitle] = useState("");
+  const [platformReady, setPlatformReady] = useState(false);
+  const [typeReady, setTypeReady] = useState(false);
+  const [budget, setBudget] = useState(0);
+  const [showThumb, setShowThumb] = useState(false);
+  const [launchHot, setLaunchHot] = useState(false);
+  const [demoKey, setDemoKey] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setTitle(FORM_DEMO_TITLE);
+      setPlatformReady(true);
+      setTypeReady(true);
+      setBudget(2400);
+      setShowThumb(true);
+      return;
+    }
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        timers.push(setTimeout(resolve, ms));
+      });
+
+    let cancelled = false;
+
+    const run = async () => {
+      setTitle("");
+      setPlatformReady(false);
+      setTypeReady(false);
+      setBudget(0);
+      setShowThumb(false);
+      setLaunchHot(false);
+
+      await wait(500);
+      if (cancelled) return;
+
+      for (let i = 1; i <= FORM_DEMO_TITLE.length; i++) {
+        if (cancelled) return;
+        setTitle(FORM_DEMO_TITLE.slice(0, i));
+        await wait(38);
+      }
+
+      await wait(450);
+      if (cancelled) return;
+      setPlatformReady(true);
+
+      await wait(550);
+      if (cancelled) return;
+      setTypeReady(true);
+
+      await wait(400);
+      if (cancelled) return;
+      for (const value of [2, 24, 240, 1200, 2400]) {
+        if (cancelled) return;
+        setBudget(value);
+        await wait(180);
+      }
+
+      await wait(500);
+      if (cancelled) return;
+      setShowThumb(true);
+
+      await wait(700);
+      if (cancelled) return;
+      setLaunchHot(true);
+
+      await wait(2200);
+      if (cancelled) return;
+      setLaunchHot(false);
+
+      await wait(900);
+      if (!cancelled) setDemoKey((k) => k + 1);
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [demoKey]);
+
+  return (
+    <>
+      {/* FORM MOCKUP */}
+      <div
+        className={cn(
+          "absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]",
+          isLight
+            ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
+            : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
+        )}
+      >
+        {/* Launch */}
+        <div className="absolute right-0 top-3 z-20 sm:top-4">
+          <div className="relative">
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute -inset-2 rounded-lg transition-opacity duration-500",
+                launchHot ? "opacity-100" : "opacity-60",
+                isLight
+                  ? "bg-[radial-gradient(circle,rgba(124,58,237,0.45),transparent_70%)] blur-[8px]"
+                  : "bg-[radial-gradient(circle,rgba(187,0,255,0.55),transparent_70%)] blur-[10px]",
+              )}
+            />
+
+            <div
+              className={cn(
+                "relative overflow-hidden rounded-[5px] px-3 py-1.5 text-[13px] font-medium transition-transform duration-300",
+                launchHot && "animate-form-launch-pulse scale-[1.03]",
+                isLight
+                  ? "border border-black/[0.06] bg-white text-[#7C3AED] shadow-[0_8px_20px_rgba(124,58,237,0.25)]"
+                  : "bg-[#201E1E] text-white",
+              )}
+            >
+              {!isLight ? (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.6)_100%)] blur-[7px]"
+                />
+              ) : null}
+
+              <span className="relative z-10 flex items-center gap-1.5">
+                {isLight ? (
+                  <Rocket
+                    className="h-4 w-4 text-[#7C3AED]"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <Image
+                    src="/images/Frame.png"
+                    alt=""
+                    width={16}
+                    height={16}
+                    className="h-4 w-4 object-contain mix-blend-screen"
+                  />
+                )}
+                Launch
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Form header */}
+        <div className="flex items-center justify-between px-4 pt-4">
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                isLight
+                  ? "bg-[#7C3AED]/15 text-[#7C3AED]"
+                  : "bg-[#292929] text-white",
+              )}
+            >
+              1
+            </span>
+            <span
+              className={cn(
+                "text-[14px] font-medium",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              Details
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 h-[calc(100%-48px)] overflow-hidden px-4">
+          {/* Campaign title */}
+          <div className="flex items-center justify-between">
+            <label
+              className={cn(
+                "text-[10px]",
+                isLight ? "text-black/70" : "text-white/75",
+              )}
+            >
+              Campaign title
+              <span className="text-red-400"> *</span>
+            </label>
+            <span
+              className={cn(
+                "text-[9px]",
+                isLight ? "text-black/35" : "text-white/35",
+              )}
+            >
+              {title.length}/100
+            </span>
+          </div>
+
+          <div
+            className={cn(
+              "mt-1 flex h-[30px] items-center rounded-md border px-3 text-[9px] transition-colors duration-300",
+              isLight
+                ? "border-[#0000000D] bg-white"
+                : "border-white/[0.06] bg-[#292929]",
+              title
+                ? isLight
+                  ? "text-black/80"
+                  : "text-white/85"
+                : isLight
+                  ? "text-black/40"
+                  : "text-white/25",
+            )}
+          >
+            <span className="truncate">
+              {title || "e.g., Create a Viral shorts/video for our New App"}
+            </span>
+            {title.length > 0 && title.length < FORM_DEMO_TITLE.length ? (
+              <span
+                className={cn(
+                  "ml-0.5 inline-block h-3 w-px animate-pulse",
+                  isLight ? "bg-[#7C3AED]" : "bg-white/70",
+                )}
+              />
+            ) : null}
+          </div>
+
+          {/* Platform + Campaign type */}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label
+                className={cn(
+                  "text-[10px]",
+                  isLight ? "text-black/70" : "text-white/75",
+                )}
+              >
+                Platform
+                <span className="text-red-400"> *</span>
+              </label>
+              <div
+                className={cn(
+                  "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px] transition-all duration-300",
+                  isLight
+                    ? "border-[#0000000D] bg-white"
+                    : "border-white/[0.06] bg-[#292929]",
+                  platformReady
+                    ? isLight
+                      ? "text-black/80"
+                      : "text-white/85"
+                    : isLight
+                      ? "text-black/40"
+                      : "text-white/25",
+                )}
+              >
+                {platformReady ? (
+                  <span className="flex items-center gap-1.5">
+                    <SiYoutube className="h-3.5 w-3.5 text-[#FF0000]" />
+                    YouTube
+                  </span>
+                ) : (
+                  <span>Select platform</span>
+                )}
+                <span>⌄</span>
+              </div>
+            </div>
+
+            <div>
+              <label
+                className={cn(
+                  "text-[10px]",
+                  isLight ? "text-black/70" : "text-white/75",
+                )}
+              >
+                Campaign type
+              </label>
+              <div
+                className={cn(
+                  "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px] transition-all duration-300",
+                  isLight
+                    ? "border-[#0000000D] bg-white"
+                    : "border-white/[0.06] bg-[#292929]",
+                  typeReady
+                    ? isLight
+                      ? "text-black/80"
+                      : "text-white/85"
+                    : isLight
+                      ? "text-black/40"
+                      : "text-white/25",
+                )}
+              >
+                <span>{typeReady ? "Leaderboard" : "Select campaign type"}</span>
+                <span>⌄</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload / thumbnail */}
+          <div
+            className={cn(
+              "relative mt-4 flex h-[115px] items-center justify-center overflow-hidden rounded-md border border-dashed transition-all duration-500",
+              isLight
+                ? "border-[#0000001A] bg-white"
+                : "border-white/[0.08] bg-[#242424]",
+            )}
+          >
+            {showThumb ? (
+              <div className="absolute inset-0 animate-form-thumb-in">
+                <Image
+                  src={FORM_DEMO_THUMB}
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="320px"
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-center">
+                <Upload
+                  className={cn(
+                    "h-5 w-5",
+                    isLight ? "text-black/35" : "text-white/30",
+                  )}
+                />
+                <div
+                  className={cn(
+                    "mt-1 text-[10px]",
+                    isLight ? "text-black/50" : "text-white/45",
+                  )}
+                >
+                  Drag, drop or{" "}
+                  <span
+                    className={cn(
+                      "underline",
+                      isLight ? "text-[#7C3AED]" : "",
+                    )}
+                  >
+                    browse
+                  </span>{" "}
+                  thumbnail
+                </div>
+                <div
+                  className={cn(
+                    "mt-1 text-[8px]",
+                    isLight ? "text-black/35" : "text-white/25",
+                  )}
+                >
+                  Max file size: 5MB
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* FLOATING BUDGET */}
+      <div
+        className={cn(
+          "absolute bottom-[20px] left-[29px] z-10 w-[176px] rounded-[15px] border p-3 ",
+          isLight
+            ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
+            : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center gap-2 text-[13px] font-medium",
+            isLight ? "text-black" : "text-white",
+          )}
+        >
+          <Wallet
+            className={cn(
+              "h-4 w-4 shrink-0",
+              isLight ? "text-black/70" : "text-white/90",
+            )}
+            strokeWidth={1.8}
+          />
+          Budget
+        </div>
+
+        <div
+          className={cn(
+            "mt-3 h-[27px] rounded-md border px-3 py-1.5 text-[12px] tabular-nums transition-colors duration-200",
+            isLight
+              ? "border-[#0000000D] bg-white text-black/70"
+              : "border-white/[0.07] bg-[#292929] text-white/80",
+          )}
+        >
+          $ {budget.toLocaleString("en-US")}
+        </div>
+      </div>
+    </>
+  );
+}
+
 const steps = [
   {
     step: 1,
@@ -60,6 +453,18 @@ const steps = [
     image: "/images/f4d15163b849dc0a3621c67aba3032911859d498.avif",
     icon: <Sparkles className="w-6 h-6 text-white" />,
   },
+];
+
+const creatorsCollageTopImages = [
+  "/images/1ad1c9f574ea6d160a89ed07d1b57719736a1741.png",
+  "/images/fa2936792bd0f4aac9c0930fabbd4e09bf1395f3.png",
+  "/images/9ec348288ce12767ffa9907081b7c37124c89470.png",
+];
+
+const creatorsCollageBottomImages = [
+  "/images/ab2f5e265b64dc9fb7ab055b55edf04d30267135.png",
+  "/images/9fdb16697941ae684b84575d2a61602b36d7b034.png",
+  "/images/b03ad3334c0eaa641c588a3a9bfc08a66de184ac.png",
 ];
 // const features = [
 //   {
@@ -225,7 +630,7 @@ export default function HeroContent() {
         )}
       >
         {/* =========================================================
-          BACKGROUND
+          BACKGROUND + CONCENTRIC ORBIT RINGS
       ========================================================= */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {isLight ? (
@@ -237,6 +642,115 @@ export default function HeroContent() {
           ) : (
             <div className="absolute left-1/2 top-[15%] h-[750px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.035),transparent_68%)]" />
           )}
+
+          {/* Two gray orbit circles — purple travels on outer, yellow on inner */}
+          <svg
+            className={cn(
+              "absolute left-1/2 top-[0%] aspect-square w-[min(112vw,1080px)] max-w-none -translate-x-1/2 sm:top-[-4%] sm:w-[min(108vw,1180px)] lg:top-[-10%] lg:w-[min(98vw,1280px)]",
+              isLight ? "opacity-45" : "opacity-100",
+            )}
+            viewBox="0 0 1000 1000"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <defs>
+              {/* Inner circle border */}
+              <linearGradient
+                id="heroCircleBorderInner"
+                x1="500"
+                y1="90"
+                x2="500"
+                y2="910"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop offset="0%" stopColor="rgb(37, 37, 37)" stopOpacity="0.074" />
+                <stop offset="50%" stopColor="rgb(88, 88, 88)" stopOpacity="0.37" />
+                <stop offset="100%" stopColor="rgb(139, 139, 139)" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="heroYellowOrbit" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#c9a016" stopOpacity="0" />
+                <stop offset="30%" stopColor="#e8b820" stopOpacity="0.5" />
+                <stop offset="50%" stopColor="#FFE566" stopOpacity="1" />
+                <stop offset="70%" stopColor="#e8b820" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#c9a016" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="heroPurpleOrbit" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#72129a" stopOpacity="0" />
+                <stop offset="30%" stopColor="#9b1fd4" stopOpacity="0.55" />
+                <stop offset="50%" stopColor="#C84BFF" stopOpacity="1" />
+                <stop offset="70%" stopColor="#9b1fd4" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#72129a" stopOpacity="0" />
+              </linearGradient>
+              <filter
+                id="heroYellowGlow"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <filter
+                id="heroPurpleGlow"
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            {/* Outer circle — no border, purple arc only */}
+            {/* Inner circle — gradient border (5px) */}
+            <circle
+              cx="500"
+              cy="500"
+              r="360"
+              stroke="url(#heroCircleBorderInner)"
+              strokeWidth="5"
+            />
+
+            {/* Traveling glow arcs */}
+            {!prefersReducedMotion ? (
+              <>
+                {/* Outer — purple */}
+                <circle
+                  className="animate-hero-orbit-purple"
+                  cx="500"
+                  cy="500"
+                  r="360"
+                  stroke="url(#heroPurpleOrbit)"
+                  strokeWidth="2.75"
+                  strokeLinecap="round"
+                  strokeDasharray="150 2928"
+                  filter="url(#heroPurpleGlow)"
+                />
+                {/* Inner — yellow */}
+                <circle
+                  className="animate-hero-orbit-yellow"
+                  cx="500"
+                  cy="500"
+                  r="460"
+                  stroke="url(#heroYellowOrbit)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeDasharray="130 2572"
+                  filter="url(#heroYellowGlow)"
+                />
+              </>
+            ) : null}
+          </svg>
         </div>
 
         {/* =========================================================
@@ -398,133 +912,6 @@ export default function HeroContent() {
       ========================================================= */}
         <section className="relative mx-auto mt-8 w-full max-w-[1400px] px-4 pb-12 sm:mt-10 sm:px-6 sm:pb-16 lg:mt-[55px] lg:h-[620px] lg:px-0 lg:pb-0">
           {/* =====================================================
-            ANIMATED ORBIT
-        ===================================================== */}
-          <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-            <svg
-              className="absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 opacity-70 sm:h-[700px] sm:w-[1100px] lg:h-[900px] lg:w-[1400px] lg:opacity-100"
-              viewBox="0 0 1400 900"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              preserveAspectRatio="xMidYMid meet"
-            >
-              <defs>
-                {/* Orange gradient */}
-                <linearGradient id="orangeOrbit" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#b56b17" stopOpacity="0" />
-
-                  <stop offset="35%" stopColor="#c87817" stopOpacity="0.5" />
-
-                  <stop offset="50%" stopColor="#e69a2d" stopOpacity="1" />
-
-                  <stop offset="65%" stopColor="#b56b17" stopOpacity="0.35" />
-
-                  <stop offset="100%" stopColor="#b56b17" stopOpacity="0" />
-                </linearGradient>
-
-                {/* Purple gradient */}
-                <linearGradient id="purpleOrbit" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#72129a" stopOpacity="0" />
-
-                  <stop offset="35%" stopColor="#8617ae" stopOpacity="0.5" />
-
-                  <stop offset="50%" stopColor="#a526d1" stopOpacity="1" />
-
-                  <stop offset="65%" stopColor="#72129a" stopOpacity="0.35" />
-
-                  <stop offset="100%" stopColor="#72129a" stopOpacity="0" />
-                </linearGradient>
-
-                {/* Orange glow */}
-                <filter
-                  id="orangeGlow"
-                  x="-100%"
-                  y="-100%"
-                  width="300%"
-                  height="300%"
-                >
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-
-                {/* Purple glow */}
-                <filter
-                  id="purpleGlow"
-                  x="-100%"
-                  y="-100%"
-                  width="300%"
-                  height="300%"
-                >
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-
-              {/* Main orbit */}
-              <ellipse
-                cx="700"
-                cy="450"
-                rx="575"
-                ry="395"
-                stroke="white"
-                strokeOpacity="0.035"
-                strokeWidth="1"
-              />
-
-              {/* Inner orbit */}
-              <ellipse
-                cx="700"
-                cy="450"
-                rx="455"
-                ry="315"
-                stroke="white"
-                strokeOpacity="0.025"
-                strokeWidth="1"
-              />
-
-              {/* =================================================
-                ORANGE MOVING ARC
-            ================================================= */}
-              <ellipse
-                className="orbit-orange"
-                cx="700"
-                cy="450"
-                rx="575"
-                ry="395"
-                stroke="url(#orangeOrbit)"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray="150 3450"
-                filter="url(#orangeGlow)"
-              />
-
-              {/* =================================================
-                PURPLE MOVING ARC
-            ================================================= */}
-              <ellipse
-                className="orbit-purple"
-                cx="700"
-                cy="450"
-                rx="575"
-                ry="395"
-                stroke="url(#purpleOrbit)"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeDasharray="150 3450"
-                filter="url(#purpleGlow)"
-              />
-            </svg>
-          </div>
-
-          {/* =====================================================
             LEFT CAMPAIGN CARD
         ===================================================== */}
           <div
@@ -614,13 +1001,25 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "absolute left-[6%] top-[340px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic xl:left-[9%] lg:block",
+              "absolute left-[6%] top-[260px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic xl:left-[9%] lg:block",
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
+             <div className="relative ml-[70px] mt-0.5">
+              <Image
+                src="/images/Vector 945.png"
+                alt=""
+                width={46}
+                height={79}
+                className={cn(
+                  "h-[78px] w-auto object-contain",
+                  isLight && "invert",
+                )}
+              />
+            </div>
             <div>Brands launch campaigns</div>
 
-            <div className="ml-[75px] mt-1 text-[27px]">↘</div>
+           
           </div>
 
           {/* =====================================================
@@ -767,14 +1166,25 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "absolute right-[6%] top-[25px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] xl:right-[10%] lg:block",
+              "absolute right-[6%] top-[10px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] xl:right-[10%] lg:block",
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
             Performance drives
             <br />
             real results
-            <div className="mt-1 text-[27px]">↙</div>
+            <div className="mt-0.5 flex justify-center">
+              <Image
+                src="/images/Vector 946.png"
+                alt=""
+                width={42}
+                height={81}
+                className={cn(
+                  "h-[78px] w-auto object-contain",
+                  isLight && "invert",
+                )}
+              />
+            </div>
           </div>
         </section>
 
@@ -782,44 +1192,6 @@ export default function HeroContent() {
           CONTACT ANCHOR
       ========================================================= */}
         <div id="contact" className="absolute bottom-0 left-0" />
-
-        {/* =========================================================
-          ANIMATION STYLES
-      ========================================================= */}
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-          .orbit-orange {
-            transform-box: fill-box;
-            transform-origin: center;
-            animation: orbitOrange 12s linear infinite;
-          }
-
-          .orbit-purple {
-            transform-box: fill-box;
-            transform-origin: center;
-            animation: orbitPurple 12s linear infinite;
-          }
-
-          @keyframes orbitOrange {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-
-          @keyframes orbitPurple {
-            from { transform: rotate(180deg); }
-            to { transform: rotate(540deg); }
-          }
-
-          @media (prefers-reduced-motion: reduce) {
-            .orbit-orange,
-            .orbit-purple {
-              animation: none;
-            }
-          }
-        `,
-          }}
-        />
       </main>
 
       <main
@@ -918,272 +1290,7 @@ export default function HeroContent() {
                 performance.
               </p>
 
-              {/* ================================================
-                FORM MOCKUP
-            ================================================= */}
-              <div
-                className={cn(
-                  "absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]",
-                  isLight
-                    ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
-                    : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
-                )}
-              >
-                {/* Launch — pinned to the right edge of the form card */}
-                <div className="absolute right-0 top-3 z-20 sm:top-4">
-                  <div className="relative">
-                    {isLight ? (
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute -inset-1 rounded-lg bg-[radial-gradient(circle,rgba(124,58,237,0.35),transparent_70%)] blur-[6px]"
-                      />
-                    ) : (
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute inset-x-1 -bottom-0.5 h-2 rounded-full bg-black/70 blur-[4px]"
-                      />
-                    )}
-
-                    <div
-                      className={cn(
-                        "relative overflow-hidden rounded-[5px] px-3 py-1.5 text-[13px] font-medium",
-                        isLight
-                          ? "border border-black/[0.06] bg-white text-[#7C3AED] shadow-[0_8px_20px_rgba(124,58,237,0.25)]"
-                          : "bg-[#201E1E] text-white",
-                      )}
-                    >
-                      {!isLight ? (
-                        <div
-                          aria-hidden
-                          className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.6)_100%)] blur-[7px]"
-                        />
-                      ) : null}
-
-                      <span className="relative z-10 flex items-center gap-1.5">
-                        {isLight ? (
-                          <Rocket
-                            className="h-4 w-4 text-[#7C3AED]"
-                            strokeWidth={2}
-                          />
-                        ) : (
-                          <Image
-                            src="/images/Frame.png"
-                            alt=""
-                            width={16}
-                            height={16}
-                            className="h-4 w-4 object-contain mix-blend-screen"
-                          />
-                        )}
-                        Launch
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Form header */}
-                <div className="flex items-center justify-between px-4 pt-4">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
-                        isLight
-                          ? "bg-[#7C3AED]/15 text-[#7C3AED]"
-                          : "bg-[#292929] text-white",
-                      )}
-                    >
-                      1
-                    </span>
-
-                    <span
-                      className={cn(
-                        "text-[14px] font-medium",
-                        isLight ? "text-black" : "text-white",
-                      )}
-                    >
-                      Details
-                    </span>
-                  </div>
-                </div>
-
-                {/* Form — clipped so thumbnail area stays inside card */}
-                <div className="mt-5 h-[calc(100%-48px)] overflow-hidden px-4">
-                  {/* Campaign title */}
-                  <div className="flex items-center justify-between">
-                    <label
-                      className={cn(
-                        "text-[10px]",
-                        isLight ? "text-black/70" : "text-white/75",
-                      )}
-                    >
-                      Campaign title
-                      <span className="text-red-400"> *</span>
-                    </label>
-
-                    <span
-                      className={cn(
-                        "text-[9px]",
-                        isLight ? "text-black/35" : "text-white/35",
-                      )}
-                    >
-                      0/100
-                    </span>
-                  </div>
-
-                  <div
-                    className={cn(
-                      "mt-1 h-[30px] rounded-md border px-3 py-2 text-[9px]",
-                      isLight
-                        ? "border-[#0000000D] bg-white text-black/40"
-                        : "border-white/[0.06] bg-[#292929] text-white/25",
-                    )}
-                  >
-                    e.g., Create a Viral shorts/video for our New App
-                  </div>
-
-                  {/* Platform + Content type */}
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div>
-                      <label
-                        className={cn(
-                          "text-[10px]",
-                          isLight ? "text-black/70" : "text-white/75",
-                        )}
-                      >
-                        Platform
-                        <span className="text-red-400"> *</span>
-                      </label>
-
-                      <div
-                        className={cn(
-                          "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px]",
-                          isLight
-                            ? "border-[#0000000D] bg-white text-black/40"
-                            : "border-white/[0.06] bg-[#292929] text-white/25",
-                        )}
-                      >
-                        <span>Select platform</span>
-                        <span>⌄</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label
-                        className={cn(
-                          "text-[10px]",
-                          isLight ? "text-black/70" : "text-white/75",
-                        )}
-                      >
-                        Content Type
-                        <span
-                          className={cn(
-                            isLight ? "text-black/40" : "text-white/40",
-                          )}
-                        >
-                          {" "}
-                          (optional)
-                        </span>
-                      </label>
-
-                      <div
-                        className={cn(
-                          "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px]",
-                          isLight
-                            ? "border-[#0000000D] bg-white text-black/40"
-                            : "border-white/[0.06] bg-[#292929] text-white/25",
-                        )}
-                      >
-                        <span>Select content type</span>
-                        <span>⌄</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Upload */}
-                  <div
-                    className={cn(
-                      "mt-4 flex h-[115px] items-center justify-center rounded-md border border-dashed",
-                      isLight
-                        ? "border-[#0000001A] bg-white"
-                        : "border-white/[0.08] bg-[#242424]",
-                    )}
-                  >
-                    <div className="flex flex-col items-center text-center">
-                      <Upload
-                        className={cn(
-                          "h-5 w-5",
-                          isLight ? "text-black/35" : "text-white/30",
-                        )}
-                      />
-
-                      <div
-                        className={cn(
-                          "mt-1 text-[10px]",
-                          isLight ? "text-black/50" : "text-white/45",
-                        )}
-                      >
-                        Drag, drop or{" "}
-                        <span
-                          className={cn(
-                            "underline",
-                            isLight ? "text-[#7C3AED]" : "",
-                          )}
-                        >
-                          browse
-                        </span>{" "}
-                        thumbnail
-                      </div>
-
-                      <div
-                        className={cn(
-                          "mt-1 text-[8px]",
-                          isLight ? "text-black/35" : "text-white/25",
-                        )}
-                      >
-                        Max file size: 5MB
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ================================================
-                FLOATING BUDGET
-            ================================================= */}
-              <div
-                className={cn(
-                  "absolute bottom-[34px] left-[29px] z-10 w-[176px] rounded-[15px] border p-3",
-                  isLight
-                    ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
-                    : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex items-center gap-2 text-[13px] font-medium",
-                    isLight ? "text-black" : "text-white",
-                  )}
-                >
-                  <Wallet
-                    className={cn(
-                      "h-4 w-4 shrink-0",
-                      isLight ? "text-black/70" : "text-white/90",
-                    )}
-                    strokeWidth={1.8}
-                  />
-                  Budget
-                </div>
-
-                <div
-                  className={cn(
-                    "mt-3 h-[27px] rounded-md border px-3 py-1.5 text-[12px]",
-                    isLight
-                      ? "border-[#0000000D] bg-white text-black/50"
-                      : "border-white/[0.07] bg-[#292929] text-white/30",
-                  )}
-                >
-                  $ 24000
-                </div>
-              </div>
+              <BrandFormMockup isLight={isLight} />
             </div>
 
             {/* =================================================
@@ -1360,23 +1467,50 @@ export default function HeroContent() {
             ================================================= */}
               <div className="absolute bottom-0 left-0 right-0 h-[245px] overflow-hidden">
                 <div className="absolute inset-0 flex flex-col gap-[2px]">
-                  <div className="relative min-h-0 flex-[135]">
-                    <Image
-                      src="/images/Frame 2147243801.png"
-                      alt=""
-                      fill
-                      className="object-cover object-center"
-                      sizes="(max-width: 1024px) 90vw, 560px"
-                    />
+                  <div className="relative min-h-0 flex-[135] overflow-hidden">
+                    <div className="flex h-full animate-creators-collage-left">
+                      {[0, 1].map((copy) => (
+                        <div
+                          key={`creators-collage-top-copy-${copy}`}
+                          className="flex h-full shrink-0 gap-2 pr-2"
+                        >
+                          {creatorsCollageTopImages.map((src, index) => (
+                            <Image
+                              key={`creators-collage-top-${copy}-${index}`}
+                              src={src}
+                              alt=""
+                              width={1280}
+                              height={720}
+                              className="h-full w-auto max-w-none shrink-0 object-cover"
+                              sizes="320px"
+                              priority={copy === 0 && index === 0}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="relative min-h-0 flex-[115]">
-                    <Image
-                      src="/images/Frame 2147243800.png"
-                      alt=""
-                      fill
-                      className="object-cover object-center"
-                      sizes="(max-width: 1024px) 90vw, 560px"
-                    />
+                  <div className="relative min-h-0 flex-[115] overflow-hidden">
+                    <div className="flex h-full animate-creators-collage-right">
+                      {[0, 1].map((copy) => (
+                        <div
+                          key={`creators-collage-bot-copy-${copy}`}
+                          className="flex h-full shrink-0 gap-2 pr-2"
+                        >
+                          {creatorsCollageBottomImages.map((src, index) => (
+                            <Image
+                              key={`creators-collage-bot-${copy}-${index}`}
+                              src={src}
+                              alt=""
+                              width={1280}
+                              height={720}
+                              className="h-full w-auto max-w-none shrink-0 object-cover"
+                              sizes="320px"
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
