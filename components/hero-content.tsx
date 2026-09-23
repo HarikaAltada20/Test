@@ -36,24 +36,54 @@ import NumbersSection from "./NumberSection";
 import { useThemeMode } from "@/hooks/use-theme-mode";
 
 const FORM_DEMO_TITLE = "Podcasts Clipping Challenge (Dual Rewards)";
-const FORM_DEMO_THUMB =
-  "/images/9ec348288ce12767ffa9907081b7c37124c89470.png";
+const FORM_DEMO_THUMB = "/images/9ec348288ce12767ffa9907081b7c37124c89470.png";
+const FORM_DEMO_CURSOR = "/images/Frame (5).png";
+
+type FormCursorTarget = "title" | "budget" | "launch";
 
 function BrandFormMockup({ isLight }: { isLight: boolean }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const budgetRef = useRef<HTMLDivElement>(null);
+  const launchRef = useRef<HTMLDivElement>(null);
+
   const [title, setTitle] = useState("");
   const [platformReady, setPlatformReady] = useState(false);
   const [typeReady, setTypeReady] = useState(false);
-  const [budget, setBudget] = useState(0);
+  const [budgetText, setBudgetText] = useState("$0");
+  const [budgetTyping, setBudgetTyping] = useState(false);
   const [showThumb, setShowThumb] = useState(false);
-  const [launchHot, setLaunchHot] = useState(false);
+  const [rocketFlying, setRocketFlying] = useState(false);
   const [demoKey, setDemoKey] = useState(0);
+
+  const [cursorVisible, setCursorVisible] = useState(false);
+  const [cursorClicking, setCursorClicking] = useState(false);
+  const [cursorPos, setCursorPos] = useState({ x: 40, y: 320 });
+  const [showClickBurst, setShowClickBurst] = useState(false);
+
+  const getTargetPos = (target: FormCursorTarget) => {
+    const root = rootRef.current;
+    const el =
+      target === "title"
+        ? titleRef.current
+        : target === "budget"
+          ? budgetRef.current
+          : launchRef.current;
+    if (!root || !el) return null;
+    const rootRect = root.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width * 0.55 - rootRect.left,
+      y: rect.top + rect.height * 0.55 - rootRect.top,
+    };
+  };
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setTitle(FORM_DEMO_TITLE);
       setPlatformReady(true);
       setTypeReady(true);
-      setBudget(2400);
+      setBudgetText("$2400");
       setShowThumb(true);
       return;
     }
@@ -66,52 +96,99 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
     let cancelled = false;
 
+    const moveCursorTo = async (target: FormCursorTarget) => {
+      const pos = getTargetPos(target);
+      if (!pos) return;
+      setCursorVisible(true);
+      setCursorPos(pos);
+      await wait(650);
+    };
+
+    const clickCursor = async () => {
+      setCursorClicking(true);
+      setShowClickBurst(true);
+      await wait(220);
+      setCursorClicking(false);
+      setShowClickBurst(false);
+      await wait(120);
+    };
+
     const run = async () => {
       setTitle("");
       setPlatformReady(false);
       setTypeReady(false);
-      setBudget(0);
+      setBudgetText("$0");
+      setBudgetTyping(false);
       setShowThumb(false);
-      setLaunchHot(false);
+      setRocketFlying(false);
+      setCursorVisible(false);
+      setCursorClicking(false);
+      setShowClickBurst(false);
+      setCursorPos({ x: 48, y: 300 });
 
-      await wait(500);
+      await wait(450);
+      if (cancelled) return;
+
+      // Cursor clicks title field, then typing starts
+      await moveCursorTo("title");
+      if (cancelled) return;
+      await clickCursor();
       if (cancelled) return;
 
       for (let i = 1; i <= FORM_DEMO_TITLE.length; i++) {
         if (cancelled) return;
         setTitle(FORM_DEMO_TITLE.slice(0, i));
-        await wait(38);
+        await wait(36);
       }
 
-      await wait(450);
+      await wait(350);
       if (cancelled) return;
       setPlatformReady(true);
 
-      await wait(550);
+      await wait(450);
       if (cancelled) return;
       setTypeReady(true);
 
       await wait(400);
       if (cancelled) return;
-      for (const value of [2, 24, 240, 1200, 2400]) {
+
+      // Cursor clicks budget, then types digit-by-digit
+      await moveCursorTo("budget");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setBudgetTyping(true);
+      setBudgetText("$");
+      await wait(200);
+      for (const ch of "2400") {
         if (cancelled) return;
-        setBudget(value);
+        setBudgetText((prev) => prev + ch);
         await wait(180);
       }
+      await wait(260);
+      setBudgetTyping(false);
 
-      await wait(500);
+      await wait(350);
       if (cancelled) return;
       setShowThumb(true);
 
+      await wait(450);
+      if (cancelled) return;
+
+      // Cursor clicks Launch → rocket slides right inside the colored button
+      await moveCursorTo("launch");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setRocketFlying(true);
+      await wait(1100);
+      if (cancelled) return;
+      setCursorVisible(false);
+      setRocketFlying(false);
+
       await wait(700);
-      if (cancelled) return;
-      setLaunchHot(true);
-
-      await wait(2200);
-      if (cancelled) return;
-      setLaunchHot(false);
-
-      await wait(900);
       if (!cancelled) setDemoKey((k) => k + 1);
     };
 
@@ -124,7 +201,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
   }, [demoKey]);
 
   return (
-    <>
+    <div ref={rootRef} className="pointer-events-none absolute inset-0 z-30">
       {/* FORM MOCKUP */}
       <div
         className={cn(
@@ -135,51 +212,56 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
         )}
       >
         {/* Launch */}
-        <div className="absolute right-0 top-3 z-20 sm:top-4">
+        <div
+          ref={launchRef}
+          className="absolute right-0 top-3 z-20 sm:top-4"
+        >
           <div className="relative">
-            <div
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute -inset-2 rounded-lg transition-opacity duration-500",
-                launchHot ? "opacity-100" : "opacity-60",
-                isLight
-                  ? "bg-[radial-gradient(circle,rgba(124,58,237,0.45),transparent_70%)] blur-[8px]"
-                  : "bg-[radial-gradient(circle,rgba(187,0,255,0.55),transparent_70%)] blur-[10px]",
-              )}
-            />
+            {!isLight ? (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-2 rounded-lg bg-[radial-gradient(circle,rgba(187,0,255,0.45)_0%,transparent_70%)] opacity-55 blur-[10px]"
+              />
+            ) : null}
 
             <div
               className={cn(
-                "relative overflow-hidden rounded-[5px] px-3 py-1.5 text-[13px] font-medium transition-transform duration-300",
-                launchHot && "animate-form-launch-pulse scale-[1.03]",
+                "relative w-[88px] overflow-hidden rounded-[5px] px-3 py-1.5 text-[13px] font-medium",
                 isLight
-                  ? "border border-black/[0.06] bg-white text-[#7C3AED] shadow-[0_8px_20px_rgba(124,58,237,0.25)]"
+                  ? "border border-black/[0.06] bg-white text-[#7C3AED]"
                   : "bg-[#201E1E] text-white",
               )}
             >
               {!isLight ? (
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.6)_100%)] blur-[7px]"
+                  className="pointer-events-none absolute bottom-[-6px] left-1/2 h-[14px] w-[78%] -translate-x-1/2 rounded-[100%] bg-[linear-gradient(180deg,rgba(187,0,255,0.6)_0%,rgba(217,217,217,0.55)_100%)] blur-[7px]"
                 />
               ) : null}
 
-              <span className="relative z-10 flex items-center gap-1.5">
-                {isLight ? (
-                  <Rocket
-                    className="h-4 w-4 text-[#7C3AED]"
-                    strokeWidth={2}
-                  />
-                ) : (
-                  <Image
-                    src="/images/Frame.png"
-                    alt=""
-                    width={16}
-                    height={16}
-                    className="h-4 w-4 object-contain mix-blend-screen"
-                  />
-                )}
-                Launch
+              <span className="relative z-10 flex h-4 items-center gap-1.5">
+                <span
+                  className={cn(
+                    "inline-flex h-4 w-4 shrink-0 items-center justify-center",
+                    rocketFlying && "animate-form-rocket-fly",
+                  )}
+                >
+                  {isLight ? (
+                    <Rocket
+                      className="h-4 w-4 text-[#7C3AED]"
+                      strokeWidth={2}
+                    />
+                  ) : (
+                    <Image
+                      src="/images/Frame.png"
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="h-4 w-4 object-contain mix-blend-screen"
+                    />
+                  )}
+                </span>
+                {!rocketFlying ? <span>Launch</span> : null}
               </span>
             </div>
           </div>
@@ -232,6 +314,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           </div>
 
           <div
+            ref={titleRef}
             className={cn(
               "mt-1 flex h-[30px] items-center rounded-md border px-3 text-[9px] transition-colors duration-300",
               isLight
@@ -252,7 +335,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
             {title.length > 0 && title.length < FORM_DEMO_TITLE.length ? (
               <span
                 className={cn(
-                  "ml-0.5 inline-block h-3 w-px animate-pulse",
+                  "ml-0.5 inline-block h-3 w-px animate-form-caret",
                   isLight ? "bg-[#7C3AED]" : "bg-white/70",
                 )}
               />
@@ -322,7 +405,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                       : "text-white/25",
                 )}
               >
-                <span>{typeReady ? "Leaderboard" : "Select campaign type"}</span>
+                <span>
+                  {typeReady ? "Leaderboard" : "Select campaign type"}
+                </span>
                 <span>⌄</span>
               </div>
             </div>
@@ -363,10 +448,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                 >
                   Drag, drop or{" "}
                   <span
-                    className={cn(
-                      "underline",
-                      isLight ? "text-[#7C3AED]" : "",
-                    )}
+                    className={cn("underline", isLight ? "text-[#7C3AED]" : "")}
                   >
                     browse
                   </span>{" "}
@@ -388,8 +470,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       {/* FLOATING BUDGET */}
       <div
+        ref={budgetRef}
         className={cn(
-          "absolute bottom-[20px] left-[29px] z-10 w-[176px] rounded-[15px] border p-3 ",
+          "absolute bottom-[8px] left-[24px] z-10 w-[176px] rounded-[16px] border p-4",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
             : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
@@ -397,13 +480,13 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       >
         <div
           className={cn(
-            "flex items-center gap-2 text-[13px] font-medium",
+            "flex items-center gap-2 text-[14px] font-medium",
             isLight ? "text-black" : "text-white",
           )}
         >
           <Wallet
             className={cn(
-              "h-4 w-4 shrink-0",
+              "h-[18px] w-[18px] shrink-0",
               isLight ? "text-black/70" : "text-white/90",
             )}
             strokeWidth={1.8}
@@ -413,16 +496,56 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
         <div
           className={cn(
-            "mt-3 h-[27px] rounded-md border px-3 py-1.5 text-[12px] tabular-nums transition-colors duration-200",
+            "mt-3.5 flex h-[34px] items-center rounded-md border px-3.5 text-[13px] tabular-nums transition-all duration-200",
             isLight
-              ? "border-[#0000000D] bg-white text-black/70"
-              : "border-white/[0.07] bg-[#292929] text-white/80",
+              ? budgetTyping
+                ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
+                : "border-[#0000000D] bg-white text-black/70"
+              : budgetTyping
+                ? "border-white/35 bg-[#292929] text-white shadow-[0_0_0_2px_rgba(255,255,255,0.06)]"
+                : "border-white/[0.07] bg-[#292929] text-white/80",
           )}
         >
-          $ {budget.toLocaleString("en-US")}
+          <span>{budgetText}</span>
+          {budgetTyping ? (
+            <span
+              className={cn(
+                "ml-0.5 inline-block h-4 w-[1.5px] animate-form-caret",
+                isLight ? "bg-[#7C3AED]" : "bg-white",
+              )}
+            />
+          ) : null}
         </div>
       </div>
-    </>
+
+      {/* Animated cursor arrow — clicks fields then Launch */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute z-50 transition-[left,top,opacity,transform] duration-700 ease-in-out",
+          cursorVisible ? "opacity-100" : "opacity-0",
+          cursorClicking && "scale-90",
+        )}
+        style={{
+          left: cursorPos.x,
+          top: cursorPos.y,
+          width: 28,
+          height: 28,
+        }}
+      >
+        {showClickBurst ? (
+          <span className="pointer-events-none absolute -left-1 -top-1 h-5 w-5 animate-ping rounded-full bg-white/45" />
+        ) : null}
+        <Image
+          src={FORM_DEMO_CURSOR}
+          alt=""
+          width={28}
+          height={28}
+          className="relative h-[28px] w-[28px] object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)]"
+          priority
+        />
+      </div>
+    </div>
   );
 }
 
@@ -665,9 +788,21 @@ export default function HeroContent() {
                 y2="910"
                 gradientUnits="userSpaceOnUse"
               >
-                <stop offset="0%" stopColor="rgb(37, 37, 37)" stopOpacity="0.074" />
-                <stop offset="50%" stopColor="rgb(88, 88, 88)" stopOpacity="0.37" />
-                <stop offset="100%" stopColor="rgb(139, 139, 139)" stopOpacity="0" />
+                <stop
+                  offset="0%"
+                  stopColor="rgb(37, 37, 37)"
+                  stopOpacity="0.074"
+                />
+                <stop
+                  offset="50%"
+                  stopColor="rgb(88, 88, 88)"
+                  stopOpacity="0.37"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="rgb(139, 139, 139)"
+                  stopOpacity="0"
+                />
               </linearGradient>
               <linearGradient id="heroYellowOrbit" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#c9a016" stopOpacity="0" />
@@ -1005,7 +1140,7 @@ export default function HeroContent() {
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
-             <div className="relative ml-[70px] mt-0.5">
+            <div className="relative ml-[70px] mt-0.5">
               <Image
                 src="/images/Vector 945.png"
                 alt=""
@@ -1018,8 +1153,6 @@ export default function HeroContent() {
               />
             </div>
             <div>Brands launch campaigns</div>
-
-           
           </div>
 
           {/* =====================================================
