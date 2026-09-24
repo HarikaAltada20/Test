@@ -27,6 +27,7 @@ import {
   User,
   Users2,
   Wallet,
+  ChevronDown,
 } from "lucide-react";
 import { SiYoutube } from "react-icons/si";
 import { useSwipeable } from "react-swipeable";
@@ -38,18 +39,29 @@ import { useThemeMode } from "@/hooks/use-theme-mode";
 const FORM_DEMO_TITLE = "Podcasts Clipping Challenge (Dual Rewards)";
 const FORM_DEMO_THUMB = "/images/9ec348288ce12767ffa9907081b7c37124c89470.png";
 const FORM_DEMO_CURSOR = "/images/Frame (5).png";
+const FORM_DEMO_CAMPAIGN_TYPES = [
+  "Leaderboard",
+  "CPM",
+  "Milestone",
+  "Dual Rewards",
+] as const;
 
-type FormCursorTarget = "title" | "budget" | "launch";
+type FormCursorTarget = "title" | "budget" | "launch" | "campaignType";
 
 function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
   const budgetRef = useRef<HTMLDivElement>(null);
   const launchRef = useRef<HTMLDivElement>(null);
+  const campaignTypeRef = useRef<HTMLDivElement>(null);
 
   const [title, setTitle] = useState("");
   const [platformReady, setPlatformReady] = useState(false);
   const [typeReady, setTypeReady] = useState(false);
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [selectedCampaignType, setSelectedCampaignType] = useState<
+    (typeof FORM_DEMO_CAMPAIGN_TYPES)[number] | null
+  >(null);
   const [budgetText, setBudgetText] = useState("$0");
   const [budgetTyping, setBudgetTyping] = useState(false);
   const [showThumb, setShowThumb] = useState(false);
@@ -68,7 +80,9 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
         ? titleRef.current
         : target === "budget"
           ? budgetRef.current
-          : launchRef.current;
+          : target === "campaignType"
+            ? campaignTypeRef.current
+            : launchRef.current;
     if (!root || !el) return null;
     const rootRect = root.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
@@ -83,6 +97,8 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       setTitle(FORM_DEMO_TITLE);
       setPlatformReady(true);
       setTypeReady(true);
+      setSelectedCampaignType("Leaderboard");
+      setTypeDropdownOpen(false);
       setBudgetText("$2400");
       setShowThumb(true);
       return;
@@ -117,6 +133,8 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       setTitle("");
       setPlatformReady(false);
       setTypeReady(false);
+      setTypeDropdownOpen(false);
+      setSelectedCampaignType(null);
       setBudgetText("$0");
       setBudgetTyping(false);
       setShowThumb(false);
@@ -145,9 +163,23 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       if (cancelled) return;
       setPlatformReady(true);
 
-      await wait(450);
+      // Cursor opens campaign type dropdown, then picks Leaderboard
+      await wait(350);
       if (cancelled) return;
+      await moveCursorTo("campaignType");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+      setTypeDropdownOpen(true);
+
+      await wait(550);
+      if (cancelled) return;
+      setSelectedCampaignType("Leaderboard");
       setTypeReady(true);
+
+      await wait(420);
+      if (cancelled) return;
+      setTypeDropdownOpen(false);
 
       await wait(400);
       if (cancelled) return;
@@ -205,17 +237,14 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       {/* FORM MOCKUP */}
       <div
         className={cn(
-          "absolute left-4 right-4 top-[260px] h-[390px] overflow-visible rounded-t-[18px] border sm:left-[40px] sm:right-[40px] sm:top-[280px] md:left-[68px] md:right-[68px]",
+          "absolute left-2 right-2 top-[248px] h-[440px] overflow-visible rounded-t-[20px] border sm:left-[24px] sm:right-[24px] sm:top-[266px] md:left-[44px] md:right-[44px]",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] text-black shadow-[inset_0_0_4.43px_0_#0000001A]"
             : "border-white/[0.10] bg-[#121212] text-white shadow-[0_-10px_40px_rgba(0,0,0,.15)]",
         )}
       >
         {/* Launch */}
-        <div
-          ref={launchRef}
-          className="absolute right-0 top-3 z-20 sm:top-4"
-        >
+        <div ref={launchRef} className="absolute right-0 top-3 z-20 sm:top-4">
           <div className="relative">
             {!isLight ? (
               <div
@@ -226,7 +255,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
             <div
               className={cn(
-                "relative w-[88px] overflow-hidden rounded-[5px] px-3 py-1.5 text-[13px] font-medium",
+                "relative w-[100px] overflow-hidden rounded-[6px] px-3.5 py-2 text-[14px] font-medium",
                 isLight
                   ? "border border-black/[0.06] bg-white text-[#7C3AED]"
                   : "bg-[#201E1E] text-white",
@@ -268,11 +297,11 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
         </div>
 
         {/* Form header */}
-        <div className="flex items-center justify-between px-4 pt-4">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-5 pt-5">
+          <div className="flex items-center gap-2.5">
             <span
               className={cn(
-                "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                "flex h-6 w-6 items-center justify-center rounded-full text-[11px]",
                 isLight
                   ? "bg-[#7C3AED]/15 text-[#7C3AED]"
                   : "bg-[#292929] text-white",
@@ -282,7 +311,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
             </span>
             <span
               className={cn(
-                "text-[14px] font-medium",
+                "text-[16px] font-medium",
                 isLight ? "text-black" : "text-white",
               )}
             >
@@ -291,12 +320,12 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           </div>
         </div>
 
-        <div className="mt-5 h-[calc(100%-48px)] overflow-hidden px-4">
+        <div className="mt-5 h-[calc(100%-54px)] overflow-hidden px-5">
           {/* Campaign title */}
           <div className="flex items-center justify-between">
             <label
               className={cn(
-                "text-[10px]",
+                "text-[11px]",
                 isLight ? "text-black/70" : "text-white/75",
               )}
             >
@@ -305,7 +334,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
             </label>
             <span
               className={cn(
-                "text-[9px]",
+                "text-[10px]",
                 isLight ? "text-black/35" : "text-white/35",
               )}
             >
@@ -316,7 +345,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           <div
             ref={titleRef}
             className={cn(
-              "mt-1 flex h-[30px] items-center rounded-md border px-3 text-[9px] transition-colors duration-300",
+              "mt-1.5 flex h-[34px] items-center rounded-md border px-3.5 text-[10.5px] transition-colors duration-300",
               isLight
                 ? "border-[#0000000D] bg-white"
                 : "border-white/[0.06] bg-[#292929]",
@@ -335,7 +364,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
             {title.length > 0 && title.length < FORM_DEMO_TITLE.length ? (
               <span
                 className={cn(
-                  "ml-0.5 inline-block h-3 w-px animate-form-caret",
+                  "ml-0.5 inline-block h-3.5 w-px animate-form-caret",
                   isLight ? "bg-[#7C3AED]" : "bg-white/70",
                 )}
               />
@@ -343,11 +372,11 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           </div>
 
           {/* Platform + Campaign type */}
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-3.5">
             <div>
               <label
                 className={cn(
-                  "text-[10px]",
+                  "text-[11px]",
                   isLight ? "text-black/70" : "text-white/75",
                 )}
               >
@@ -356,7 +385,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               </label>
               <div
                 className={cn(
-                  "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px] transition-all duration-300",
+                  "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3.5 text-[11px] transition-all duration-300",
                   isLight
                     ? "border-[#0000000D] bg-white"
                     : "border-white/[0.06] bg-[#292929]",
@@ -371,7 +400,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               >
                 {platformReady ? (
                   <span className="flex items-center gap-1.5">
-                    <SiYoutube className="h-3.5 w-3.5 text-[#FF0000]" />
+                    <SiYoutube className="h-4 w-4 text-[#737373]" />
                     YouTube
                   </span>
                 ) : (
@@ -381,10 +410,10 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               </div>
             </div>
 
-            <div>
+            <div className="relative" ref={campaignTypeRef}>
               <label
                 className={cn(
-                  "text-[10px]",
+                  "text-[11px]",
                   isLight ? "text-black/70" : "text-white/75",
                 )}
               >
@@ -392,11 +421,15 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               </label>
               <div
                 className={cn(
-                  "mt-1 flex h-[30px] items-center justify-between rounded-md border px-3 text-[10px] transition-all duration-300",
+                  "mt-1.5 flex h-[34px] items-center justify-between rounded-md border px-3.5 text-[11px] transition-all duration-300",
                   isLight
                     ? "border-[#0000000D] bg-white"
                     : "border-white/[0.06] bg-[#292929]",
-                  typeReady
+                  typeDropdownOpen &&
+                    (isLight
+                      ? "border-[#7C3AED]/35 ring-1 ring-[#7C3AED]/20"
+                      : "border-white/20 ring-1 ring-white/10"),
+                  typeReady || selectedCampaignType
                     ? isLight
                       ? "text-black/80"
                       : "text-white/85"
@@ -405,18 +438,55 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                       : "text-white/25",
                 )}
               >
-                <span>
-                  {typeReady ? "Leaderboard" : "Select campaign type"}
-                </span>
-                <span>⌄</span>
+                <span>{selectedCampaignType ?? "Select campaign type"}</span>
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out",
+                    typeDropdownOpen && "rotate-180",
+                    isLight ? "text-black/45" : "text-white/45",
+                  )}
+                  strokeWidth={2.2}
+                />
               </div>
+
+              {typeDropdownOpen ? (
+                <div
+                  className={cn(
+                    "absolute left-0 right-0 top-[calc(100%+4px)] z-40 origin-top overflow-hidden rounded-md border py-1 shadow-[0_12px_28px_rgba(0,0,0,0.18)] animate-form-dropdown-in",
+                    isLight
+                      ? "border-[#0000000D] bg-white"
+                      : "border-white/[0.08] bg-[#292929]",
+                  )}
+                >
+                  {FORM_DEMO_CAMPAIGN_TYPES.map((type) => {
+                    const isSelected = selectedCampaignType === type;
+                    return (
+                      <div
+                        key={type}
+                        className={cn(
+                          "flex h-[32px] items-center px-3.5 text-[11px] transition-colors duration-200",
+                          isSelected
+                            ? isLight
+                              ? "bg-[#7C3AED]/10 text-[#7C3AED]"
+                              : "bg-white/10 text-white"
+                            : isLight
+                              ? "text-black/70"
+                              : "text-white/70",
+                        )}
+                      >
+                        {type}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </div>
 
           {/* Upload / thumbnail */}
           <div
             className={cn(
-              "relative mt-4 flex h-[115px] items-center justify-center overflow-hidden rounded-md border border-dashed transition-all duration-500",
+              "relative mt-5 flex h-[132px] items-center justify-center overflow-hidden rounded-md border border-dashed transition-all duration-500",
               isLight
                 ? "border-[#0000001A] bg-white"
                 : "border-white/[0.08] bg-[#242424]",
@@ -436,13 +506,13 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
               <div className="flex flex-col items-center text-center">
                 <Upload
                   className={cn(
-                    "h-5 w-5",
+                    "h-6 w-6",
                     isLight ? "text-black/35" : "text-white/30",
                   )}
                 />
                 <div
                   className={cn(
-                    "mt-1 text-[10px]",
+                    "mt-1.5 text-[11px]",
                     isLight ? "text-black/50" : "text-white/45",
                   )}
                 >
@@ -456,7 +526,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
                 </div>
                 <div
                   className={cn(
-                    "mt-1 text-[8px]",
+                    "mt-1 text-[9px]",
                     isLight ? "text-black/35" : "text-white/25",
                   )}
                 >
@@ -472,7 +542,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       <div
         ref={budgetRef}
         className={cn(
-          "absolute bottom-[8px] left-[24px] z-10 w-[176px] rounded-[16px] border p-4",
+          "absolute bottom-[8px] left-[20px] z-10 w-[180px] rounded-[18px] border p-4",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
             : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
@@ -480,13 +550,13 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       >
         <div
           className={cn(
-            "flex items-center gap-2 text-[14px] font-medium",
+            "flex items-center gap-2 text-[15px] font-medium",
             isLight ? "text-black" : "text-white",
           )}
         >
           <Wallet
             className={cn(
-              "h-[18px] w-[18px] shrink-0",
+              "h-[20px] w-[20px] shrink-0",
               isLight ? "text-black/70" : "text-white/90",
             )}
             strokeWidth={1.8}
@@ -496,7 +566,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
         <div
           className={cn(
-            "mt-3.5 flex h-[34px] items-center rounded-md border px-3.5 text-[13px] tabular-nums transition-all duration-200",
+            "mt-3.5 flex h-[38px] items-center rounded-md border px-3.5 text-[14px] tabular-nums transition-all duration-200",
             isLight
               ? budgetTyping
                 ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
@@ -589,6 +659,15 @@ const creatorsCollageBottomImages = [
   "/images/9fdb16697941ae684b84575d2a61602b36d7b034.png",
   "/images/b03ad3334c0eaa641c588a3a9bfc08a66de184ac.png",
 ];
+
+const brandImages: string[] = [
+  "/images/ba54cd16167abac1d45d63109c16d6999d67e552.png",
+  "/images/image 277.png",
+  "/images/7e659d660283b02da97f42ede238f8b03b35cb37.png",
+  "/images/image 276.png",
+  "/images/Frame 2147243949.png",
+  "/images/0046b3171bb1d05ed8f26833e71c449ca7073d81.png",
+];
 // const features = [
 //   {
 //     title: "Authentic Content",
@@ -630,7 +709,102 @@ const creatorsCollageBottomImages = [
 //     description: "Our gaming experts are always ready to help you win big!",
 //     icon: "/images/support-icon.png",
 //   },
-// ];
+const CREATORS_NETWORK_NUMBERS = [
+  "1,000+",
+  "4,500+",
+  "8,200+",
+  "12,000+",
+  "14,800+",
+  "16,700+",
+];
+const VIEWS_GENERATED_NUMBERS = [
+  "10M+",
+  "40M+",
+  "75M+",
+  "110M+",
+  "140M+",
+  "160M+",
+];
+
+function HeroStatBlock({
+  numbers,
+  label,
+  isLight,
+}: {
+  numbers: string[];
+  label: string;
+  isLight: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [step, setStep] = useState(0);
+  const [animate, setAnimate] = useState(false);
+
+  const maxSteps = numbers.length - 1;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setAnimate(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (animate && step < maxSteps) {
+      const timeout = setTimeout(() => {
+        setStep((prev) => prev + 1);
+      }, 400);
+      return () => clearTimeout(timeout);
+    }
+  }, [animate, step, maxSteps]);
+
+  const translateYPercent = (step * 100) / numbers.length;
+
+  return (
+    <div className="flex flex-col items-center text-center" ref={containerRef}>
+      <div className="h-[64px] overflow-hidden sm:h-[76px] md:h-[92px] lg:h-[112px]">
+        <div
+          className="flex flex-col transition-transform duration-500 ease-out"
+          style={{
+            transform: `translateY(-${translateYPercent}%)`,
+          }}
+        >
+          {numbers.map((num, i) => (
+            <h2
+              key={i}
+              className={cn(
+                "flex h-[64px] shrink-0 items-center justify-center bg-clip-text text-[64px] font-extrabold leading-none tracking-[-0.055em] text-transparent sm:h-[76px] sm:text-[76px] md:h-[92px] md:text-[92px] lg:h-[112px] lg:text-[112px]",
+                isLight
+                  ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+                  : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
+              )}
+            >
+              {num}
+            </h2>
+          ))}
+        </div>
+      </div>
+
+      <p
+        className={cn(
+          "mt-5 text-[22px] font-semibold tracking-[-0.02em] sm:text-[25px] md:text-[29px]",
+          isLight ? "text-black/45" : "text-[#969696]",
+        )}
+      >
+        {label}
+      </p>
+    </div>
+  );
+}
 
 export default function HeroContent() {
   const router = useRouter();
@@ -1322,6 +1496,56 @@ export default function HeroContent() {
         </section>
 
         {/* =========================================================
+          BRAND LOGOS STRIP
+      ========================================================= */}
+        <section
+          className={cn(
+            "overflow-hidden pb-14 pt-2 transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1]" : "bg-black",
+          )}
+        >
+          <p
+            className={cn(
+              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              isLight ? "text-black/45" : "text-zinc-500",
+            )}
+          >
+            Work with Top Brands and Creators
+          </p>
+
+          <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">
+            <div className="flex w-max animate-scroll-left items-center gap-10 py-3 sm:gap-14 md:gap-16">
+              {[...brandImages, ...brandImages].map((image, index) => {
+                const isCircle = image.includes("image 276");
+                return (
+                  <div
+                    key={`${image}-${index}`}
+                    className={cn(
+                      "flex shrink-0 items-center justify-center",
+                      isCircle
+                        ? "h-12 w-12 sm:h-14 sm:w-14"
+                        : "h-10 w-[120px] sm:h-12 sm:w-[150px] md:h-14 md:w-[180px]",
+                    )}
+                  >
+                    <Image
+                      src={image}
+                      alt={`Brand logo ${index + 1}`}
+                      width={isCircle ? 50 : 180}
+                      height={isCircle ? 56 : 56}
+                      className={cn(
+                        "h-full w-full object-contain",
+                        isCircle && "rounded-full",
+                        isLight && !isCircle && "brightness-0",
+                      )}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* =========================================================
           CONTACT ANCHOR
       ========================================================= */}
         <div id="contact" className="absolute bottom-0 left-0" />
@@ -1357,7 +1581,7 @@ export default function HeroContent() {
           ================================================= */}
             <div
               className={cn(
-                "relative min-h-[480px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0",
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
                 isLight
                   ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
@@ -1431,7 +1655,7 @@ export default function HeroContent() {
           ================================================= */}
             <div
               className={cn(
-                "relative min-h-[480px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[520px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[545px] md:min-h-0",
+                "relative min-h-[510px] overflow-hidden rounded-[20px] px-5 pt-7 sm:min-h-[555px] sm:rounded-[25px] sm:px-9 sm:pt-9 md:h-[580px] md:min-h-0",
                 isLight
                   ? "border border-black/[0.04] bg-[#f5f5f7] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
@@ -1500,7 +1724,7 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute left-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[258px] sm:w-[225px] sm:px-3",
+                  "absolute left-3 top-[252px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[286px] sm:w-[225px] sm:px-3",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
@@ -1550,7 +1774,7 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute right-3 top-[230px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[258px] sm:w-[220px] sm:px-3",
+                  "absolute right-3 top-[252px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[286px] sm:w-[220px] sm:px-3",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
@@ -1598,7 +1822,7 @@ export default function HeroContent() {
               {/* =================================================
                 CREATOR CONTENT GRID
             ================================================= */}
-              <div className="absolute bottom-0 left-0 right-0 h-[245px] overflow-hidden">
+              <div className="absolute bottom-0 left-0 right-0 h-[272px] overflow-hidden">
                 <div className="absolute inset-0 flex flex-col gap-[2px]">
                   <div className="relative min-h-0 flex-[135] overflow-hidden">
                     <div className="flex h-full animate-creators-collage-left">
@@ -1681,51 +1905,16 @@ export default function HeroContent() {
         )}
       >
         <div className="flex w-full max-w-5xl flex-col items-center justify-center gap-12 sm:gap-16 md:flex-row md:gap-40">
-          {/* Creators Network */}
-          <div className="text-center">
-            <h2
-              className={cn(
-                "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
-                isLight
-                  ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
-                  : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
-              )}
-            >
-              16,700+
-            </h2>
-
-            <p
-              className={cn(
-                "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
-                isLight ? "text-black/45" : "text-[#969696]",
-              )}
-            >
-              Creators Network
-            </p>
-          </div>
-
-          {/* Views Generated */}
-          <div className="text-center">
-            <h2
-              className={cn(
-                "text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px] leading-none font-extrabold tracking-[-0.055em] bg-clip-text text-transparent",
-                isLight
-                  ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
-                  : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
-              )}
-            >
-              160M+
-            </h2>
-
-            <p
-              className={cn(
-                "mt-5 text-[22px] sm:text-[25px] md:text-[29px] font-semibold tracking-[-0.02em]",
-                isLight ? "text-black/45" : "text-[#969696]",
-              )}
-            >
-              Views Generated
-            </p>
-          </div>
+          <HeroStatBlock
+            numbers={CREATORS_NETWORK_NUMBERS}
+            label="Creators Network"
+            isLight={isLight}
+          />
+          <HeroStatBlock
+            numbers={VIEWS_GENERATED_NUMBERS}
+            label="Views Generated"
+            isLight={isLight}
+          />
         </div>
       </section>
 

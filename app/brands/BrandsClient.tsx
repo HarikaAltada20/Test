@@ -71,18 +71,12 @@ import { cn } from "@/lib/utils";
 //   },
 // ];
 const brandImages: string[] = [
-  "/images/song-gpt.logo.avif",
-  "/images/vows-streams-logo.avif",
-  "/images/catch-phrase.avif",
-  "/images/deepvid.avif",
-  "/images/warner-music.avif",
-  "/images/sony.avif",
-  "/images/10k-projects.avif",
-  "/images/ada.avif",
-  "/images/artistpg.avif",
-  "/images/capital-music.avif",
-  "/images/create-music-group.avif",
-  "/images/empire-distribution.avif",
+  "/images/ba54cd16167abac1d45d63109c16d6999d67e552.png",
+  "/images/image 277.png",
+  "/images/7e659d660283b02da97f42ede238f8b03b35cb37.png",
+  "/images/image 276.png",
+  "/images/Frame 2147243949.png",
+  "/images/0046b3171bb1d05ed8f26833e71c449ca7073d81.png",
 ];
 interface BrandsClientProps {
   totalViews: number;
@@ -559,7 +553,7 @@ export default function BrandsClient({
 
               <p
                 className={cn(
-                  "mx-auto mt-4 max-w-[680px] text-[14px] leading-6 sm:mt-5 sm:text-[15px] md:text-[20px] font-['Inter'] font-normal leading-[30px] tracking-[-0.4px] text-center",
+                  "mx-auto mt-4 max-w-[680px] text-[12px] leading-6 sm:mt-5 sm:text-[14px] md:text-[20px] font-['Inter'] font-normal leading-[30px] tracking-[-0.4px] text-center",
                   isLight ? "text-black/50" : "text-[#8E8E8E]",
                 )}
               >
@@ -574,7 +568,7 @@ export default function BrandsClient({
                   onClick={handleLaunchCampaign}
                   disabled={isLaunchingCampaign}
                   className={cn(
-                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[14px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
+                    "group inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto",
                     isLight
                       ? "bg-black text-white hover:bg-black/90"
                       : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10",
@@ -597,7 +591,7 @@ export default function BrandsClient({
                     })
                   }
                   className={cn(
-                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[14px] font-semibold transition sm:w-auto",
+                    "group flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[13px] font-semibold transition sm:w-auto",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
                       : "bg-[#DEDEDE] text-black hover:bg-white/90",
@@ -764,63 +758,79 @@ export default function BrandsClient({
 
         {/* Infinite Scroll Images Section */}
         <section
-          className={cn(
-            "pb-12 overflow-hidden transition-colors duration-300",
-            isLight ? "bg-[#F1F1F1]" : "bg-black",
-          )}
-        >
-          <div className="overflow-hidden relative scroll-container-testimonials">
-            <div className="flex justify-center items-center gap-6 animate-scroll-left">
+  className={cn(
+    "min-h-[300px] overflow-hidden pt-16 pb-8 transition-colors duration-300",
+    isLight ? "bg-[#F1F1F1]" : "bg-black",
+  )}
+>
+          <p
+            className={cn(
+              "mb-6 px-4 text-center text-sm sm:mb-8 sm:text-base",
+              isLight ? "text-black/45" : "text-zinc-500",
+            )}
+          >
+            Work with Top Brands and Creators
+          </p>
+          <div className="relative mx-auto w-full max-w-[1100px] overflow-hidden">
+            {/* Logos scroll sideways only inside this clipped band */}
+            <div
+              className="flex w-max animate-scroll-left items-center gap-10 py-3 sm:gap-14 md:gap-16"
+              // style={{
+              //   WebkitMaskImage:
+              //     "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
+              //   maskImage:
+              //     "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
+              // }}
+            >
               {[...brandImages, ...brandImages].map((image, index) => {
-                const isLarge =
-                  image === "/images/vows-streams-logo.avif" ||
-                  image === "/images/song-gpt.logo.avif";
-                const isCatchPhrase = image === "/images/catch-phrase.avif";
-                const allImages = [...brandImages, ...brandImages];
-                const nextImage =
-                  index < allImages.length - 1 ? allImages[index + 1] : null;
-                const isNextToLarge =
-                  (isLarge || isCatchPhrase) &&
-                  nextImage &&
-                  (nextImage === "/images/vows-streams-logo.avif" ||
-                    nextImage === "/images/song-gpt.logo.avif" ||
-                    nextImage === "/images/catch-phrase.avif");
+                const isCircle = image.includes("image 276");
                 return (
                   <div
-                    key={index}
-                    className={`flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center ${
-                      isCatchPhrase
-                        ? "w-[160px] h-[96px] md:w-[200px] md:h-[120px]"
-                        : isLarge
-                          ? "w-[180px] h-[108px] md:w-[240px] md:h-[190px]"
-                          : "w-[120px] h-[72px] md:w-[150px] md:h-[90px]"
-                    } ${isNextToLarge ? "-mr-4 md:-mr-8" : ""}`}
+                    key={`${image}-${index}`}
+                    className={cn(
+                      "flex shrink-0 items-center justify-center",
+                      isCircle
+                        ? "h-12 w-12 sm:h-14 sm:w-14"
+                        : "h-10 w-[120px] sm:h-12 sm:w-[150px] md:h-14 md:w-[180px]",
+                    )}
                   >
                     <Image
                       src={image}
-                      alt={`Brand image ${index + 1}`}
-                      width={isCatchPhrase ? 200 : isLarge ? 235 : 150}
-                      height={isCatchPhrase ? 120 : isLarge ? 190 : 90}
+                      alt={`Brand logo ${index + 1}`}
+                      width={isCircle ? 50 : 180}
+                      height={isCircle ? 56 : 56}
                       className={cn(
-                        "w-full h-full object-contain",
-                        isLight && !isCatchPhrase && "brightness-0 opacity-80",
+                        "h-full w-full object-contain",
+                        isCircle && "rounded-full",
+                        isLight && !isCircle && "brightness-0",
                       )}
                     />
                   </div>
                 );
               })}
             </div>
-          </div>
-          <div
-            className={cn(
-              "flex justify-center items-center text-base",
-              isLight ? "text-black/50" : "text-slate-300",
-            )}
-          >
-            <span className="font-medium">Trusted by leading brands</span>
+
+            {/* Black blur edges */}
+            {/* <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-y-0 left-0 z-10 w-28 sm:w-40 md:w-52",
+                isLight
+                  ? "bg-gradient-to-r from-[#F1F1F1] via-[#F1F1F1]/70 to-transparent"
+                  : "bg-gradient-to-r from-black via-black/70 to-transparent backdrop-blur-[2px]",
+              )}
+            /> */}
+            {/* <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-y-0 right-0 z-10 w-28 sm:w-40 md:w-52",
+                isLight
+                  ? "bg-gradient-to-l from-[#F1F1F1] via-[#F1F1F1]/70 to-transparent"
+                  : "bg-gradient-to-l from-black via-black/70 to-transparent backdrop-blur-[2px]",
+              )}
+            /> */}
           </div>
         </section>
-
         <section
           className={cn(
             "relative overflow-hidden px-4 py-14 sm:px-5 sm:py-20 md:px-10 lg:px-20 transition-colors duration-300",
@@ -2993,7 +3003,7 @@ export default function BrandsClient({
           <h2
   className={cn(
     "font-['Inter'] font-bold tracking-[-3%] text-center sm:text-4xl md:text-5xl md:text-[52px]",
-    isLight ? "text-black" : "text-white",
+    isLight ? "text-black" : "text-[#EFEFEF]",
   )}
 >
   <span className="block">The results gets sharper</span>
@@ -3077,7 +3087,7 @@ export default function BrandsClient({
                   key={`connector-${person.name}-${index}`}
                   d={connectionPath(person)}
                   fill="none"
-                  stroke={isLight ? "#7c3aed" : "white"}
+                  stroke={isLight ? "#7c3aed" : "#A3A3A3"}
                   strokeOpacity={isLight ? 0.35 : 0.35}
                   strokeWidth={1}
                   strokeDasharray="5 5"

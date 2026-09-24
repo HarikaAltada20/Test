@@ -222,18 +222,18 @@ export default function CtcBanner() {
 
               <h2
   className={cn(
-    `relative z-10 text-center text-3xl font-semibold leading-[1.15] tracking-tight sm:text-4xl md:text-5xl ${
-      inView ? "slide-up" : "translate-y-10 opacity-0"
+    `relative z-10 flex flex-col items-center text-center text-3xl font-['Inter'] font-bold md:text-[52px] leading-[110%] tracking-[-4%] text-center ${
+      inView ? "" : "opacity-0 translate-y-10"
     }`,
-    isLight ? "text-black" : "text-white",
+    isLight ? "text-black" : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
   )}
-  style={{ fontFamily: "Montserrat, sans-serif" }}
+
 >
   <span className="block">Brands Get Results.</span>
-  <span className="mt-3 block">Creators Get Rewarded.</span>
+  <span className="mt-1 block">Creators Get Rewarded.</span>
 </h2>
 
-              <div className="relative z-10 mt-5 sm:mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <div className="relative z-10 mt-5 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -242,10 +242,10 @@ export default function CtcBanner() {
                   }}
                   disabled={isNavigating}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
                     isLight
                       ? "bg-black text-white hover:bg-black/90"
-                      : "border border-white/25 bg-black text-white hover:bg-white/10",
+                      : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white hover:bg-white/10",
                   )}
                 >
                   {isNavigating ? <ButtonLoadingSpinner /> : null}
@@ -259,10 +259,10 @@ export default function CtcBanner() {
                   }}
                   disabled={isNavigating}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
-                      : "bg-white text-black hover:bg-zinc-100",
+                      : "bg-[#F0E6F6] text-black hover:bg-zinc-100",
                   )}
                 >
                   {isNavigating ? <ButtonLoadingSpinner /> : null}
@@ -342,39 +342,36 @@ export default function CtcBanner() {
                 />
               </div>
 
-              <h2
-                className={cn(
-                  `relative z-10 text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-center leading-[1.15] ${
-                    inView ? "slide-up" : "opacity-0 translate-y-10"
-                  }`,
-                  isLight ? "text-black" : "text-white",
-                )}
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                {isBrands ? (
-                  <>
-                    Run campaigns
-                    <br />
-                    that drive results.
-                  </>
-                ) : (
-                  <>
-                    Start Earning as a Creator
-                  </>
-                )}
-              </h2>
+             <h2
+  className={cn(
+    `relative z-10 flex flex-col items-center text-center text-3xl font-['Inter'] font-bold md:text-[52px] leading-[110%] tracking-[-4%] text-center ${
+      inView ? "" : "opacity-0 translate-y-10"
+    }`,
+    isLight ? "text-black" : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
+  )}
 
-              <div className="relative z-10 mt-5 sm:mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+>
+  {isBrands ? (
+    <>
+      <span>Run campaigns</span>
+      <span className="mt-1">that drive results.</span>
+    </>
+  ) : (
+    <span>Start Earning as a Creator</span>
+  )}
+</h2>
+
+              <div className="relative z-10 mt-5 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
                 {isBrands ? (
                   <button
                     type="button"
                     onClick={handleMainCtaClick}
                     disabled={isNavigating || isCheckingAccount}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
-                        : "border border-white/25 bg-black text-white hover:bg-white/10",
+                        : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
                     )}
                   >
                     {isNavigating || isCheckingAccount ? (
@@ -390,11 +387,11 @@ export default function CtcBanner() {
                       router.push("/dashboard/opportunities");
                     }}
                     disabled={isNavigating || isCheckingAccount}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
+                   className={cn(
+                      "inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm sm:text-base font-medium transition-colors disabled:opacity-70",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
-                        : "border border-white/25 bg-transparent text-white hover:bg-white/10",
+                        : "border border-white/25 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)]  text-white hover:bg-white/10",
                     )}
                   >
                     {isNavigating || isCheckingAccount ? (
@@ -408,10 +405,10 @@ export default function CtcBanner() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm sm:text-base font-medium transition-colors",
+                    "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
-                      : "bg-white text-black hover:bg-zinc-100",
+                      : "bg-[#F0E6F6] text-black hover:bg-zinc-100",
                   )}
                 >
                   Talk to team →

@@ -284,28 +284,28 @@ export function Footer() {
       <p
         className={cn(
           "relative z-10 mt-6 text-center text-xs sm:text-sm",
-          isLight ? "text-black/40" : "text-zinc-500",
+          isLight ? "text-black/40" : "text-[#8E8E8E]",
         )}
       >
         © {new Date().getFullYear()} Game of Creators. All rights reserved.
       </p>
 
-      {/* Purple shade from the bottom edge (light mode) */}
+      {/* Purple shade from the bottom edge (light mode) / White shade (dark mode) */}
       {isLight ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-40 sm:h-52"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-80 sm:h-[50px]"
         >
-          <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(167,139,250,0.45)_0%,rgba(186,155,255,0.22)_35%,transparent_75%)]" />
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#c4b5fd]/35 via-[#ddd6fe]/15 to-transparent sm:h-28" />
+          <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(167,139,250,0.55)_0%,rgba(186,155,255,0.28)_40%,transparent_80%)]" />
+          <div className="absolute inset-x-0 bottom-0 h-48 sm:h-64 bg-gradient-to-t from-[#c4b5fd]/45 via-[#ddd6fe]/20 to-transparent" />
         </div>
       ) : (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-28 sm:h-36"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-80 sm:h-[400px] backdrop-blur-[400px] "
         >
-          <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_35%,transparent_70%)]" />
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white/[0.12] via-white/[0.04] to-transparent sm:h-20" />
+          <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.35)_0%,rgba(255,255,255,0.12)_40%,transparent_80%)]" />
+          {/* <div className="absolute inset-x-0 bottom-0 h-48 sm:h-64 bg-gradient-to-t from-white/[0.20] via-white/[0.06] to-transparent" /> */}
         </div>
       )}
     </footer>

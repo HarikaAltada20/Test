@@ -214,11 +214,27 @@ body {
   animation: form-thumb-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes form-dropdown-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.animate-form-dropdown-in {
+  animation: form-dropdown-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-form-launch-glow,
   .animate-form-thumb-in,
   .animate-form-caret,
-  .animate-form-rocket-fly {
+  .animate-form-rocket-fly,
+  .animate-form-dropdown-in {
     animation: none;
   }
 }
