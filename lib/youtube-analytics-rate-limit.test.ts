@@ -4,10 +4,12 @@ import {
   acquireAnalyticsRateLimit,
   getYoutubeAnalyticsRedisKeyForTests,
   resetYoutubeAnalyticsRateLimitForTests,
+  setYoutubeAnalyticsAcquireMaxWaitMsForTests,
   setYoutubeAnalyticsRedisForTests,
   setYoutubeAnalyticsRateLimitForTests,
   setYoutubeAnalyticsRateLimitForceLocalForTests,
   YoutubeAnalyticsRateLimitError,
+  YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS,
   YT_ANALYTICS_DEFAULT_RATE_LIMIT,
 } from "./youtube-analytics-rate-limit";
 
@@ -23,6 +25,10 @@ describe("youtube-analytics-rate-limit", () => {
 
   it("exposes a default cap under Google's 720 QPM quota", () => {
     assert.equal(YT_ANALYTICS_DEFAULT_RATE_LIMIT, 600);
+  });
+
+  it("exposes a bounded acquire wait under typical serverless budgets", () => {
+    assert.equal(YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS, 10_000);
   });
 
   it("allows up to the configured local sliding-window limit", async () => {
@@ -109,6 +115,40 @@ describe("youtube-analytics-rate-limit", () => {
     assert.equal(calls[0].args[1], "60000");
     assert.equal(calls[0].args[2], "600");
     assert.equal(calls[0].args[4], "100");
+  });
+
+  it("waits briefly for pacing then acquires within the wait budget", async () => {
+    setYoutubeAnalyticsRateLimitForceLocalForTests(false);
+    setYoutubeAnalyticsAcquireMaxWaitMsForTests(500);
+    let attempts = 0;
+    setYoutubeAnalyticsRedisForTests({
+      eval: async () => {
+        attempts += 1;
+        if (attempts <= 2) return [0, 20];
+        return [1, 0];
+      },
+    } as any);
+
+    await acquireAnalyticsRateLimit();
+    assert.equal(attempts, 3);
+  });
+
+  it("fails fast once the Redis acquire wait budget is exhausted", async () => {
+    setYoutubeAnalyticsRateLimitForceLocalForTests(false);
+    setYoutubeAnalyticsAcquireMaxWaitMsForTests(50);
+    setYoutubeAnalyticsRedisForTests({
+      eval: async () => [0, 5_000],
+    } as any);
+
+    await assert.rejects(
+      () => acquireAnalyticsRateLimit(),
+      (err: unknown) => {
+        assert.ok(err instanceof YoutubeAnalyticsRateLimitError);
+        assert.equal(err.status, 429);
+        assert.equal(err.retryAfterMs, 5_000);
+        return true;
+      },
+    );
   });
 
   it("never allows an environment override above the safe default", async () => {

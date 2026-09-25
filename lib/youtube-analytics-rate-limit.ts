@@ -5,9 +5,11 @@
  * minute-bucket can admit nearly 2× that limit across a boundary; this module
  * uses a true rolling 60s window instead.
  *
- * Fail-fast when the cap is hit — serverless handlers must not sleep until
- * the next minute. In production, Redis is required (fail closed); locally we
- * fall back to an in-process sliding window for single-worker dev.
+ * Redis acquires may briefly wait for pacing / short backoff, then fail fast
+ * once the per-acquire wait budget is exhausted so serverless handlers do not
+ * sleep until Vercel kills them. In production, Redis is required (fail
+ * closed); locally we fall back to an in-process sliding window for
+ * single-worker dev.
  */
 
 import { Redis } from "@upstash/redis";
@@ -15,6 +17,8 @@ import { Redis } from "@upstash/redis";
 /** Stay below Google's 720 QPM Analytics quota with room for other callers. */
 export const YT_ANALYTICS_DEFAULT_RATE_LIMIT = 600;
 export const YT_ANALYTICS_RATE_WINDOW_MS = 60_000;
+/** Max time one acquire may sleep before throwing (pacing + short backoff). */
+export const YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS = 10_000;
 
 const YT_ANALYTICS_RATE_REDIS_KEY_PREFIX = "youtube_analytics_rate_limit:v3";
 
@@ -63,9 +67,15 @@ return {1, 0}
 const analyticsCallTimestamps: number[] = [];
 let analyticsRedisClient: AnalyticsRedisClient | null | undefined;
 let rateLimitForTests: number | null = null;
+let maxWaitMsForTests: number | null = null;
 let forceLocalForTests = false;
 let redisClientForTests: AnalyticsRedisClient | null | undefined;
 let hasRedisClientOverrideForTests = false;
+
+function getAcquireMaxWaitMs(): number {
+  if (maxWaitMsForTests !== null) return maxWaitMsForTests;
+  return YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS;
+}
 
 export class YoutubeAnalyticsRateLimitError extends Error {
   readonly status: 429 | 503;
@@ -211,6 +221,7 @@ async function acquireRedisSlidingWindow(
   const key = getRedisKey();
   const limit = getLimit();
   const minimumIntervalMs = Math.ceil(YT_ANALYTICS_RATE_WINDOW_MS / limit);
+  const deadline = Date.now() + getAcquireMaxWaitMs();
 
   while (true) {
     const now = Date.now();
@@ -232,15 +243,23 @@ async function acquireRedisSlidingWindow(
     }
     if (parsed.ok) return;
 
-    // The queue workers may safely wait for a shared slot. This preserves a
-    // run instead of marking valid submissions as failed merely due to quota.
-    await new Promise<void>((resolve) => setTimeout(resolve, parsed.retryAfterMs));
+    const remainingMs = deadline - Date.now();
+    // Wait briefly for pacing / short backlog; fail fast once the budget is gone
+    // so serverless handlers are not killed mid-sleep.
+    if (remainingMs <= 0 || parsed.retryAfterMs > remainingMs) {
+      throw new YoutubeAnalyticsRateLimitError(parsed.retryAfterMs);
+    }
+
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, parsed.retryAfterMs),
+    );
   }
 }
 
 /**
  * Acquire one YouTube Analytics API query slot for the rolling window.
- * Throws YoutubeAnalyticsRateLimitError when the shared cap is exhausted.
+ * May briefly wait within YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS, then throws
+ * YoutubeAnalyticsRateLimitError when the shared cap remains exhausted.
  */
 export async function acquireAnalyticsRateLimit(): Promise<void> {
   const redis = getAnalyticsRedis();
@@ -274,6 +293,13 @@ export function setYoutubeAnalyticsRateLimitForTests(limit: number | null): void
   rateLimitForTests = limit;
 }
 
+/** Test helper: override the per-acquire wait budget (null restores default). */
+export function setYoutubeAnalyticsAcquireMaxWaitMsForTests(
+  maxWaitMs: number | null,
+): void {
+  maxWaitMsForTests = maxWaitMs;
+}
+
 /** Test helper: force the in-process sliding window (skip Redis). */
 export function setYoutubeAnalyticsRateLimitForceLocalForTests(
   force: boolean,
@@ -298,6 +324,7 @@ export function getYoutubeAnalyticsRedisKeyForTests(): string {
 export function resetYoutubeAnalyticsRateLimitForTests(): void {
   analyticsCallTimestamps.length = 0;
   rateLimitForTests = null;
+  maxWaitMsForTests = null;
   forceLocalForTests = false;
   redisClientForTests = undefined;
   hasRedisClientOverrideForTests = false;
