@@ -337,7 +337,24 @@ export async function POST(
     const creatorIdList = Object.keys(submissionsByCreator);
     const usageAccumulator: MetaGraphUsageAccumulator = {};
 
+    let cancelCached: { at: number; cancelled: boolean } | null = null;
+    const isRunCancelled = async (): Promise<boolean> => {
+      const t = Date.now();
+      if (cancelCached && t - cancelCached.at < 2000) {
+        return cancelCached.cancelled;
+      }
+      const { data } = await supabaseAdmin
+        .from("instagram_insights_refresh_runs")
+        .select("status")
+        .eq("id", runId)
+        .maybeSingle();
+      const cancelled = !data || data.status !== "running";
+      cancelCached = { at: t, cancelled };
+      return cancelled;
+    };
+
     await mapLimit(creatorIdList, 3, async (creatorId) => {
+      if (await isRunCancelled()) return;
       const creator = creatorsById.get(creatorId);
       const allSubsForCreator = submissionsByCreator[creatorId] as BatchRow[];
 
@@ -610,6 +627,20 @@ export async function POST(
       permanentFailure: permanentTransitions,
       skipped: skippedRecentCount,
     });
+
+    if (await isRunCancelled()) {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+        reviewedCount: reviewedInBatch,
+        processedCount: processedInBatch,
+        successCount: successTransitions,
+        permanentFailureCount: permanentTransitions,
+        temporaryFailureCount: temporaryTransitions,
+        skippedRecentCount,
+      });
+    }
 
     await insertMetaGraphUsageLogRow({
       source: "instagram_insights_batch",

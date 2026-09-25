@@ -65,6 +65,11 @@ export async function POST(
       );
     }
 
+    const { removeTikTokJobsForRunId } = await import(
+      "@/lib/queue/tiktok-metrics-queue"
+    );
+    await removeTikTokJobsForRunId(run.id).catch(() => undefined);
+
     return NextResponse.json({ runId: run.id, status: run.status });
   } catch (e) {
     console.error("[tiktok-metrics-refresh cancel]", e);

@@ -1387,11 +1387,15 @@ function InstagramRefreshProgressCard({
   completed,
   isAdminView,
   elapsedSeconds,
+  onCancel,
+  cancelling = false,
 }: {
   run: InstagramInsightsRefreshRunSummary;
   completed: boolean;
   isAdminView: boolean;
   elapsedSeconds: number | null;
+  onCancel?: () => void;
+  cancelling?: boolean;
 }) {
   const isActive = run.status === "pending" || run.status === "running";
   const isTerminalSummary =
@@ -1418,11 +1422,8 @@ function InstagramRefreshProgressCard({
       {(isActive || isTerminalSummary) && (
         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
           <div
-            className={cn(
-              "h-full bg-emerald-500 transition-all duration-500",
-              isActive && pct === 0 && "animate-pulse",
-            )}
-            style={{ width: `${isActive && pct === 0 ? 12 : pct}%` }}
+            className="h-full bg-emerald-500 transition-all duration-500"
+            style={{ width: `${pct}%` }}
           />
         </div>
       )}
@@ -1456,16 +1457,40 @@ function InstagramRefreshProgressCard({
       {elapsedSeconds != null && (
         <>
           <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
-            <Clock className="h-3 w-3 shrink-0" />
-            <span>
-              {run.status === "running" ? "Elapsed" : "Duration"}:{" "}
-              <strong className="text-slate-700 dark:text-slate-300">
-                {formatDurationSeconds(elapsedSeconds)}
-              </strong>
-            </span>
+          <div className="flex items-center justify-between gap-2 text-[10px] text-slate-600 dark:text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span>
+                {run.status === "running" ? "Elapsed" : "Duration"}:{" "}
+                <strong className="text-slate-700 dark:text-slate-300">
+                  {formatDurationSeconds(elapsedSeconds)}
+                </strong>
+              </span>
+            </div>
+            {isActive && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={cancelling}
+                className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {cancelling ? "Cancelling…" : "Cancel refresh"}
+              </button>
+            )}
           </div>
         </>
+      )}
+      {elapsedSeconds == null && isActive && onCancel && (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={cancelling}
+            className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {cancelling ? "Cancelling…" : "Cancel refresh"}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -1476,11 +1501,15 @@ function YoutubeRefreshProgressCard({
   completed,
   isAdminView,
   elapsedSeconds,
+  onCancel,
+  cancelling = false,
 }: {
   run: YouTubeMetricsRefreshRunSummary;
   completed: boolean;
   isAdminView: boolean;
   elapsedSeconds: number | null;
+  onCancel?: () => void;
+  cancelling?: boolean;
 }) {
   const isActive = run.status === "pending" || run.status === "running";
   const isTerminalSummary =
@@ -1515,11 +1544,8 @@ function YoutubeRefreshProgressCard({
       {(isActive || isTerminalSummary) && (
         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
           <div
-            className={cn(
-              "h-full bg-[#6C43D0] transition-all duration-500",
-              isActive && pct === 0 && "animate-pulse",
-            )}
-            style={{ width: `${isActive && pct === 0 ? 12 : pct}%` }}
+            className="h-full bg-[#6C43D0] transition-all duration-500"
+            style={{ width: `${pct}%` }}
           />
         </div>
       )}
@@ -1551,16 +1577,40 @@ function YoutubeRefreshProgressCard({
       {elapsedSeconds != null && (
         <>
           <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
-            <Clock className="h-3 w-3 shrink-0" />
-            <span>
-              {run.status === "running" ? "Elapsed" : "Duration"}:{" "}
-              <strong className="text-slate-700 dark:text-slate-300">
-                {formatDurationSeconds(elapsedSeconds)}
-              </strong>
-            </span>
+          <div className="flex items-center justify-between gap-2 text-[10px] text-slate-600 dark:text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span>
+                {run.status === "running" ? "Elapsed" : "Duration"}:{" "}
+                <strong className="text-slate-700 dark:text-slate-300">
+                  {formatDurationSeconds(elapsedSeconds)}
+                </strong>
+              </span>
+            </div>
+            {isActive && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={cancelling}
+                className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {cancelling ? "Cancelling…" : "Cancel refresh"}
+              </button>
+            )}
           </div>
         </>
+      )}
+      {elapsedSeconds == null && isActive && onCancel && (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={cancelling}
+            className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {cancelling ? "Cancelling…" : "Cancel refresh"}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -3171,9 +3221,164 @@ export default function ContestDetailClient({
     isRefreshingDemographics ||
     isRefreshingAll ||
     isRefreshingAllStandard;
-  /** Lock All/YouTube/IG/TT (and status) tabs while metrics refresh/reload is in flight — admin + brand. */
+  /** Keep refresh action buttons locked while a run is in flight; browse tabs stay enabled. */
   const platformTabsLocked =
     anyYtRefreshInProgress || hasRecentRunningRun || postRefreshReloadPending;
+  const [cancellingYoutubeRefresh, setCancellingYoutubeRefresh] =
+    useState(false);
+  const [cancellingInstagramRefresh, setCancellingInstagramRefresh] =
+    useState(false);
+  const [cancellingTiktokRefresh, setCancellingTiktokRefresh] =
+    useState(false);
+
+  const clearLocalRefreshInFlightFlags = useCallback(() => {
+    setIsRefreshingMetrics(false);
+    setIsRefreshingCore(false);
+    setIsRefreshingTraffic(false);
+    setIsRefreshingDemographics(false);
+    setIsRefreshingAll(false);
+    setIsRefreshingAllStandard(false);
+    setPostRefreshReloadPending(false);
+    postRefreshReloadPendingRef.current = false;
+    metricsRefreshManualPollStopRef.current?.();
+    metricsRefreshManualPollStopRef.current = null;
+  }, []);
+
+  const cancelYoutubeRefresh = useCallback(async () => {
+    if (cancellingYoutubeRefresh) return;
+    setCancellingYoutubeRefresh(true);
+    try {
+      const res = await fetch(
+        `/api/contests/${contestId}/youtube-metrics-refresh/cancel`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to cancel YouTube refresh");
+      }
+      const now = new Date().toISOString();
+      setYoutubeRun((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "cancelled",
+              finished_at: now,
+              updated_at: now,
+            }
+          : prev,
+      );
+      setYoutubeRunCompleted(true);
+      clearLocalRefreshInFlightFlags();
+      toast({
+        title: "YouTube refresh cancelled",
+        description: "You can start a new refresh now.",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not cancel refresh",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingYoutubeRefresh(false);
+    }
+  }, [
+    cancellingYoutubeRefresh,
+    clearLocalRefreshInFlightFlags,
+    contestId,
+    toast,
+  ]);
+
+  const cancelInstagramRefresh = useCallback(async () => {
+    if (cancellingInstagramRefresh) return;
+    setCancellingInstagramRefresh(true);
+    try {
+      const res = await fetch(
+        `/api/contests/${contestId}/instagram-insights-refresh/cancel`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to cancel Instagram refresh");
+      }
+      const now = new Date().toISOString();
+      setInstagramRun((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "cancelled",
+              finished_at: now,
+              updated_at: now,
+            }
+          : prev,
+      );
+      setInstagramRunCompleted(true);
+      clearLocalRefreshInFlightFlags();
+      toast({
+        title: "Instagram refresh cancelled",
+        description: "You can start a new refresh now.",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not cancel refresh",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingInstagramRefresh(false);
+    }
+  }, [
+    cancellingInstagramRefresh,
+    clearLocalRefreshInFlightFlags,
+    contestId,
+    toast,
+  ]);
+
+  const cancelTiktokRefresh = useCallback(async () => {
+    if (cancellingTiktokRefresh) return;
+    setCancellingTiktokRefresh(true);
+    try {
+      const res = await fetch(
+        `/api/contests/${contestId}/tiktok-metrics-refresh/cancel`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to cancel TikTok refresh");
+      }
+      const now = new Date().toISOString();
+      setTiktokRun((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "cancelled",
+              finished_at: now,
+              updated_at: now,
+            }
+          : prev,
+      );
+      setTiktokRunCompleted(true);
+      clearLocalRefreshInFlightFlags();
+      toast({
+        title: "TikTok refresh cancelled",
+        description: "You can start a new refresh now.",
+      });
+    } catch (err) {
+      toast({
+        title: "Could not cancel refresh",
+        description: err instanceof Error ? err.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingTiktokRefresh(false);
+    }
+  }, [
+    cancellingTiktokRefresh,
+    clearLocalRefreshInFlightFlags,
+    contestId,
+    toast,
+  ]);
+
   // Admin controls modal (YouTube analytics visibility for brand)
   const [adminControlsModalOpen, setAdminControlsModalOpen] = useState(false);
   const [adminControlsSaving, setAdminControlsSaving] = useState(false);
@@ -15993,7 +16198,7 @@ export default function ContestDetailClient({
                     active={overviewPlatformTab}
                     onChange={setOverviewPlatformTab}
                     isDark={isDark}
-                    disabled={platformTabsLocked}
+                    disabled={false} /* browse unlocked during refresh */
                   />
                 )}
                 <Button
@@ -19997,9 +20202,7 @@ export default function ContestDetailClient({
                                   getRefreshButtonState();
                                 const syncDisabled =
                                   isLoadingPostCampaignMetrics ||
-                                  isRefreshingMetrics ||
-                                  hasRecentRunningRun ||
-                                  postRefreshReloadPending;
+                                  platformTabsLocked;
                                 return (
                                   <>
                                     {isPostCampaignLeaderboard && (
@@ -20333,9 +20536,7 @@ export default function ContestDetailClient({
                           const showYoutubeAdminControls =
                             showYoutubeDetailedRefreshSuite;
                           const youtubeAdminControlsDisabled =
-                            anyYtRefreshInProgress ||
-                            hasRecentRunningRun ||
-                            postRefreshReloadPending;
+                            platformTabsLocked;
                           const youtubeAdminControlsButton =
                             showYoutubeAdminControls ? (
                               <button
@@ -20363,9 +20564,7 @@ export default function ContestDetailClient({
                             }
                             const syncDisabled =
                               isLoadingPostCampaignMetrics ||
-                              isRefreshingMetrics ||
-                              hasRecentRunningRun ||
-                              postRefreshReloadPending;
+                              platformTabsLocked;
                             return (
                               <>
                                 {isPostCampaignLeaderboard && (
@@ -20461,10 +20660,7 @@ export default function ContestDetailClient({
                             isRefreshingAll ||
                             isRefreshingAllStandard;
                           const anyRefreshInProgress =
-                            isRefreshingMetrics ||
-                            disabledDetail ||
-                            hasRecentRunningRun ||
-                            postRefreshReloadPending;
+                            platformTabsLocked || disabledDetail;
                           const cooldownDisabled = !cooldownInfo.canRefresh;
                           const reloadPendingLabel = "Updating...";
                           const coreCooldownInfo =
@@ -20915,6 +21111,8 @@ export default function ContestDetailClient({
                             completed={instagramRunCompleted}
                             isAdminView={isAdminView}
                             elapsedSeconds={refreshElapsedSeconds}
+                            onCancel={() => void cancelInstagramRefresh()}
+                            cancelling={cancellingInstagramRefresh}
                           />
                         )}
                       {currentContest.platform
@@ -20927,6 +21125,8 @@ export default function ContestDetailClient({
                             completed={youtubeRunCompleted}
                             isAdminView={isAdminView}
                             elapsedSeconds={youtubeRefreshElapsedSeconds}
+                            onCancel={() => void cancelYoutubeRefresh()}
+                            cancelling={cancellingYoutubeRefresh}
                           />
                         )}
                       {(currentContest.platform?.toLowerCase() === "twitter" ||
@@ -21090,17 +21290,11 @@ export default function ContestDetailClient({
                               {(() => {
                                 const pct =
                                   metricsRunProgressPercent(tiktokRun);
-                                const isActive =
-                                  tiktokRun.status === "pending" ||
-                                  tiktokRun.status === "running";
                                 return (
                                   <div
-                                    className={cn(
-                                      "h-full bg-emerald-500 transition-all duration-500",
-                                      isActive && pct === 0 && "animate-pulse",
-                                    )}
+                                    className="h-full bg-emerald-500 transition-all duration-500"
                                     style={{
-                                      width: `${isActive && pct === 0 ? 12 : pct}%`,
+                                      width: `${pct}%`,
                                     }}
                                   />
                                 );
@@ -21136,6 +21330,21 @@ export default function ContestDetailClient({
                                     {tiktokRun.temporary_failure_count}
                                   </strong>
                                 </span>
+                              </div>
+                            )}
+                            {(tiktokRun.status === "pending" ||
+                              tiktokRun.status === "running") && (
+                              <div className="mt-1 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => void cancelTiktokRefresh()}
+                                  disabled={cancellingTiktokRefresh}
+                                  className="shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                                >
+                                  {cancellingTiktokRefresh
+                                    ? "Cancelling…"
+                                    : "Cancel refresh"}
+                                </button>
                               </div>
                             )}
                             {tiktokRefreshElapsedSeconds != null && (
@@ -21314,7 +21523,7 @@ export default function ContestDetailClient({
                       <Tabs
                         value={activeStatusTab}
                         onValueChange={(value) => {
-                          if (isHydratingSubmissions || platformTabsLocked)
+                          if (isHydratingSubmissions)
                             return;
                           setActiveStatusTab(value as any);
                         }}
@@ -21324,7 +21533,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="all"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21354,7 +21563,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="not_rejected"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21384,7 +21593,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="verified_or_paid"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21419,7 +21628,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="pending"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21449,7 +21658,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="verified"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21479,7 +21688,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="rejected"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21509,7 +21718,7 @@ export default function ContestDetailClient({
                           <TabsTrigger
                             value="paid"
                             disabled={
-                              isHydratingSubmissions || platformTabsLocked
+                              isHydratingSubmissions
                             }
                             className={cn(
                               "flex-1 gap-2 items-center px-2 border disabled:opacity-100 whitespace-nowrap",
@@ -21552,7 +21761,7 @@ export default function ContestDetailClient({
                       isDark={isDark}
                       fullWidth
                       counts={submissionsPlatformTabCounts}
-                      disabled={platformTabsLocked}
+                      disabled={false} /* browse unlocked during refresh */
                     />
                   </div>
                 )}
@@ -30743,7 +30952,7 @@ export default function ContestDetailClient({
                       isDark={isDark}
                       fullWidth
                       counts={analyticsPlatformTabCounts}
-                      disabled={platformTabsLocked}
+                      disabled={false} /* browse unlocked during refresh */
                     />
                   </div>
                 )}
