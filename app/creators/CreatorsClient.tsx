@@ -1268,7 +1268,7 @@ export default function CreatorsClient({
               <div
                 className={cn(
                   "relative rounded-2xl overflow-hidden",
-                  isAnimated ? "slide-left" : "hide-before-animate",
+                  // isAnimated ? "slide-left" : "hide-before-animate",
                   isLight
                     ? "border border-[#0000000D] bg-[#ECECEC]"
                     : "border border-white/10 bg-[#0a0a0a]",
@@ -1307,10 +1307,10 @@ export default function CreatorsClient({
 
               {/* Right: interactive steps */}
               <div
-                className={`flex flex-col justify-center ${
-                  isAnimated ? "slide-right" : "hide-before-animate"
-                }`}
-                style={{ animationDelay: "0.45s" }}
+                className="flex flex-col justify-center" 
+                  // isAnimated ? "slide-right" : "hide-before-animate"
+                // }`}
+                // style={{ animationDelay: "0.45s" }}
               >
                 <ul className="space-y-1">
                   {creatorEasySteps.map((step, index) => {

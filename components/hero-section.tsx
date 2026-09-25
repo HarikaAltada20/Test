@@ -12,7 +12,7 @@ export function HeroSection() {
     <div
       className={cn(
         "relative min-h-screen overflow-x-hidden transition-colors duration-300",
-        isLight ? "bg-[#F1F1F1] text-black" : "bg-[#000825] text-white",
+        isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >
       <div className="relative z-20 w-full">

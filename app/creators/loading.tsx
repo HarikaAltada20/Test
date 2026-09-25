@@ -2,7 +2,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default function CreatorsLoading() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center bg-[#000825]">
+    <div className="flex min-h-screen w-full items-center justify-center bg-black">
       <PageLoadingSpinner mode="dark" />
     </div>
   );
