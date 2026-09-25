@@ -1269,7 +1269,7 @@ export default function HeroContent() {
 
             {/* Tags */}
             <div className="mt-3 flex flex-wrap gap-[7px]">
-              {["Clipping", "UGC", "Beauty"].map((tag) => (
+              {["Clipping", "UGC"].map((tag) => (
                 <span
                   key={tag}
                   className={cn(

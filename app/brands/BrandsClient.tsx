@@ -2567,8 +2567,8 @@ export default function BrandsClient({
                   {/* Extra padding so badges aren't clipped at top / left / right */}
                   <div className="absolute left-1/2 top-[68%] h-[396px] w-[396px] -translate-x-1/2 -translate-y-1/2">
                     <div className="absolute left-1/2 top-1/2 h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
-                      {/* Rings — hard clip at hub midline */}
-                      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1/2 overflow-hidden">
+                      {/* Rings — extend to hub midline & touch badges */}
+                      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[calc(50%+32px)] overflow-hidden">
                         <div className="absolute left-1/2 top-[170px] h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
                           <div
                             className={cn(
@@ -2600,20 +2600,36 @@ export default function BrandsClient({
                                 <div
                                   className={cn(
                                     "flex h-14 w-14 animate-source-orbit-outer-counter items-center justify-center rounded-full",
-                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                    isLight
+                                      ? "bg-[#DEDEDE]"
+                                      : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
                                   )}
                                 >
-                                  <SiInstagram className="h-6 w-6 text-[#E1306C]" />
+                                  <Image
+                                    src="/images/Frame (3).png"
+                                    alt="Instagram"
+                                    width={24}
+                                    height={24}
+                                    className="h-6 w-6 object-contain"
+                                  />
                                 </div>
                               </div>
                               <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2">
                                 <div
                                   className={cn(
                                     "flex h-14 w-14 animate-source-orbit-outer-counter items-center justify-center rounded-full",
-                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                    isLight
+                                      ? "bg-[#DEDEDE]"
+                                      : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
                                   )}
                                 >
-                                  <SiYoutube className="h-6 w-6 text-[#FF0000]" />
+                                  <Image
+                                    src="/images/Frame (2).png"
+                                    alt="YouTube"
+                                    width={24}
+                                    height={24}
+                                    className="h-6 w-6 object-contain"
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -2626,7 +2642,9 @@ export default function BrandsClient({
                                 <div
                                   className={cn(
                                     "flex h-14 w-14 animate-source-orbit-inner-counter items-center justify-center rounded-full",
-                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                    isLight
+                                      ? "bg-[#DEDEDE]"
+                                      : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
                                   )}
                                 >
                                   <SiTiktok
@@ -2641,14 +2659,17 @@ export default function BrandsClient({
                                 <div
                                   className={cn(
                                     "flex h-14 w-14 animate-source-orbit-inner-counter items-center justify-center rounded-full",
-                                    isLight ? "bg-[#DEDEDE]" : "bg-[#2b2b2b]",
+                                    isLight
+                                      ? "bg-[#DEDEDE]"
+                                      : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
                                   )}
                                 >
-                                  <FaXTwitter
-                                    className={cn(
-                                      "h-5 w-5",
-                                      isLight ? "text-black" : "text-white",
-                                    )}
+                                  <Image
+                                    src="/images/Frame (4).png"
+                                    alt="X"
+                                    width={20}
+                                    height={20}
+                                    className="h-5 w-5 object-contain"
                                   />
                                 </div>
                               </div>
@@ -2660,10 +2681,10 @@ export default function BrandsClient({
                       {/* Center logo */}
                       <div
                         className={cn(
-                          "absolute left-1/2 top-[40%] z-30 flex h-[80px] w-[80px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                          "absolute left-1/2 top-[40%] z-30 flex h-[90px] w-[90px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
                           isLight
                             ? "bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
-                            : "bg-[#1c1c1c] shadow-[0_22px_40px_rgba(109,70,255,0.55)]",
+                            : "bg-[#1c1c1c]",
                         )}
                       >
                         {!isLight ? (
@@ -3344,7 +3365,7 @@ export default function BrandsClient({
                   "absolute left-1/2 top-full mt-1 -translate-x-1/2 overflow-hidden rounded-full px-3 py-1 text-center text-[10px] font-medium shadow-lg sm:mt-2 sm:px-5 sm:py-2 sm:text-sm",
                   isLight
                     ? "border border-black/10 bg-white text-black"
-                    : "border border-black/30 bg-white/80 text-black backdrop-blur",
+                    : "bg-[linear-gradient(180deg,#DEDEDE_0%,#787878_100%)] border border-[#BABABA] text-black backdrop-blur",
                   "[perspective:480px]",
                 )}
               >

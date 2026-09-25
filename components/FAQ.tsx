@@ -331,10 +331,10 @@ export default function FAQ() {
       <div className="mx-auto w-full max-w-5xl text-center">
         <h2
           className={cn(
-            "text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl",
-            useLightFaq ? "text-black" : "text-white",
+            "text-3xl  sm:text-4xl font-['Inter'] font-bold md:text-[52px] leading-[110%] tracking-[-3%] text-center",
+            useLightFaq ? "text-black" : "text-[#EFEFEF]",
           )}
-          style={{ fontFamily: "Montserrat, sans-serif" }}
+          // style={{ fontFamily: "Montserrat, sans-serif" }}
         >
           Get your answers now
         </h2>

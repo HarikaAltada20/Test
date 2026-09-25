@@ -251,14 +251,24 @@ export function Nav({
   return (
     <header className="sticky top-0 z-50 w-full">
       {isDarkMarketingNav ? (
-        <div
-          className={cn(
-            "absolute inset-0 backdrop-blur-md transition-colors duration-300",
-            isLightMarketingNav
-              ? "bg-[#F1F1F1]"
-              : "bg-black",
-          )}
-        />
+        <>
+          <div
+            className={cn(
+              "absolute inset-0 backdrop-blur-lg transition-colors duration-300",
+              isLightMarketingNav
+                ? "bg-[#F1F1F1]"
+                : "bg-black",
+            )}
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 z-0 h-28 sm:h-70 overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent z-10" />
+            <div className="absolute inset-x-0 top-0 h-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_35%,transparent_70%)]" />
+            {/* <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/[0.12] via-white/[0.04] to-transparent sm:h-20" /> */}
+          </div>
+        </>
       ) : (
         <>
           {/* Premium Background with Strategic Gradients */}
@@ -334,7 +344,7 @@ export function Nav({
                           "inline-flex items-center gap-2 px-3 lg:px-4 py-2 text-sm lg:text-[15px] font-medium transition-colors duration-200 whitespace-nowrap",
                           isLightMarketingNav
                             ? "text-black/55 hover:text-black"
-                            : "text-zinc-400 hover:text-white",
+                            : "text-[#8E8E8E] hover:text-white",
                           isLinkLoading && "opacity-70 cursor-not-allowed"
                         )}
                       >
@@ -348,7 +358,7 @@ export function Nav({
                 <nav
                   className={cn(
                     "flex items-center gap-6 lg:gap-8 text-[15px] lg:text-[16px]",
-                    isLightMarketingNav ? "text-black/50" : "text-white/50",
+                    isLightMarketingNav ? "text-black/50" : "text-[#8E8E8E]",
                   )}
                 >
                   {homeNavLinks.map((link) => {
@@ -384,7 +394,7 @@ export function Nav({
                       "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
                       pathname === "/brands"
                         ? "text-purple-400"
-                        : "text-slate-300 hover:text-purple-400",
+                        : "text-[#8E8E8E] hover:text-purple-400",
                       brandsLoading && "opacity-70 cursor-not-allowed"
                     )}
                   >
