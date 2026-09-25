@@ -186,26 +186,68 @@ export async function retryOrDeadLetterFromProcessingYouTube(options: {
   }
 }
 
-export async function recoverProcessingJobsToQueueYouTube(options?: {
+export type YouTubeProcessingRecoveryDecision = "recover" | "remove" | "keep";
+
+/**
+ * Recover only jobs whose run is known to be stale. A processing list also
+ * contains healthy, currently executing jobs; moving those when the main queue
+ * is momentarily empty runs the same batch twice and multiplies API calls.
+ */
+export async function recoverProcessingJobsToQueueYouTube(options: {
   maxToMove?: number;
-}): Promise<{ moved: number; error?: string }> {
+  classifyJob: (
+    job: YouTubeMetricsJob,
+  ) => Promise<YouTubeProcessingRecoveryDecision>;
+}): Promise<{ moved: number; removed: number; error?: string }> {
   const redis = getRedis();
-  if (!redis) return { moved: 0, error: "Redis not configured" };
-  const maxToMove = Math.max(1, Math.min(options?.maxToMove ?? 25, 200));
+  if (!redis) return { moved: 0, removed: 0, error: "Redis not configured" };
+  const maxToMove = Math.max(1, Math.min(options.maxToMove ?? 25, 200));
   try {
+    // Processing is LIFO at the head, so inspect the oldest jobs at the tail.
+    const rawItems = await redis.lrange(REDIS_PROCESSING_KEY, -maxToMove, -1);
+    if (!rawItems?.length) return { moved: 0, removed: 0 };
+
     let moved = 0;
-    for (let i = 0; i < maxToMove; i++) {
-      const raw = await redis.lmove(REDIS_PROCESSING_KEY, REDIS_QUEUE_KEY, "right", "left");
-      if (raw === null || raw === undefined) break;
-      moved += 1;
+    let removed = 0;
+    for (const item of rawItems) {
+      const raw = typeof item === "string" ? item : JSON.stringify(item);
+      let job: YouTubeMetricsJob | null = null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.contestId && parsed?.runId && parsed?.scope) {
+          job = parsed as YouTubeMetricsJob;
+        }
+      } catch {
+        // Invalid entries cannot be resumed safely.
+      }
+
+      const decision = job ? await options.classifyJob(job) : "remove";
+      if (decision === "keep") continue;
+
+      if (decision === "remove") {
+        const count = await redis.lrem(REDIS_PROCESSING_KEY, 1, raw);
+        if (Number(count) > 0) removed += 1;
+        continue;
+      }
+
+      // Atomically remove the inspected stale entry and place it back on the
+      // queue. A healthy worker's item remains in processing.
+      const count = await redis.eval(
+        "local removed = redis.call('LREM', KEYS[1], 1, ARGV[1]); if removed > 0 then redis.call('LPUSH', KEYS[2], ARGV[1]); end; return removed",
+        [REDIS_PROCESSING_KEY, REDIS_QUEUE_KEY],
+        [raw],
+      );
+      if (Number(count) > 0) moved += 1;
     }
-    if (moved > 0) {
-      console.warn(`[youtube-metrics-queue] Re-queued ${moved} job(s) from processing`);
+    if (moved > 0 || removed > 0) {
+      console.warn(
+        `[youtube-metrics-queue] Re-queued ${moved} stale job(s); removed ${removed} terminal/invalid job(s)`,
+      );
     }
-    return { moved };
+    return { moved, removed };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[youtube-metrics-queue] recoverProcessingJobsToQueue failed:", message);
-    return { moved: 0, error: message };
+    return { moved: 0, removed: 0, error: message };
   }
 }

@@ -22,7 +22,7 @@ describe("youtube-analytics-rate-limit", () => {
   });
 
   it("exposes a default cap under Google's 720 QPM quota", () => {
-    assert.equal(YT_ANALYTICS_DEFAULT_RATE_LIMIT, 710);
+    assert.equal(YT_ANALYTICS_DEFAULT_RATE_LIMIT, 600);
   });
 
   it("allows up to the configured local sliding-window limit", async () => {
@@ -66,18 +66,16 @@ describe("youtube-analytics-rate-limit", () => {
     }
   });
 
-  it("derives a project-and-environment namespace on Vercel", () => {
+  it("derives a namespace from the Google OAuth client so deployments share a quota", () => {
     const previousNamespace = process.env.YT_ANALYTICS_RATE_LIMIT_NAMESPACE;
-    const previousVercelEnvironment = process.env.VERCEL_ENV;
-    const previousProjectId = process.env.VERCEL_PROJECT_ID;
+    const previousGoogleClientId = process.env.GOOGLE_CLIENT_ID;
     delete process.env.YT_ANALYTICS_RATE_LIMIT_NAMESPACE;
-    process.env.VERCEL_ENV = "preview";
-    process.env.VERCEL_PROJECT_ID = "project-123";
+    process.env.GOOGLE_CLIENT_ID = "project-123.apps.googleusercontent.com";
 
     try {
       assert.equal(
         getYoutubeAnalyticsRedisKeyForTests(),
-        "youtube_analytics_rate_limit:v3:preview-project-123",
+        "youtube_analytics_rate_limit:v3:project-123-apps-googleusercontent-com",
       );
     } finally {
       if (previousNamespace === undefined) {
@@ -85,15 +83,10 @@ describe("youtube-analytics-rate-limit", () => {
       } else {
         process.env.YT_ANALYTICS_RATE_LIMIT_NAMESPACE = previousNamespace;
       }
-      if (previousVercelEnvironment === undefined) {
-        delete process.env.VERCEL_ENV;
+      if (previousGoogleClientId === undefined) {
+        delete process.env.GOOGLE_CLIENT_ID;
       } else {
-        process.env.VERCEL_ENV = previousVercelEnvironment;
-      }
-      if (previousProjectId === undefined) {
-        delete process.env.VERCEL_PROJECT_ID;
-      } else {
-        process.env.VERCEL_PROJECT_ID = previousProjectId;
+        process.env.GOOGLE_CLIENT_ID = previousGoogleClientId;
       }
     }
   });
@@ -111,10 +104,11 @@ describe("youtube-analytics-rate-limit", () => {
     await acquireAnalyticsRateLimit();
 
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].keys.length, 1);
+    assert.equal(calls[0].keys.length, 2);
     assert.match(calls[0].keys[0], /^youtube_analytics_rate_limit:v3:/);
     assert.equal(calls[0].args[1], "60000");
-    assert.equal(calls[0].args[2], "710");
+    assert.equal(calls[0].args[2], "600");
+    assert.equal(calls[0].args[4], "100");
   });
 
   it("never allows an environment override above the safe default", async () => {
@@ -131,7 +125,7 @@ describe("youtube-analytics-rate-limit", () => {
 
     try {
       await acquireAnalyticsRateLimit();
-      assert.equal(calls[0][2], "710");
+      assert.equal(calls[0][2], "600");
     } finally {
       if (previousLimit === undefined) {
         delete process.env.YT_ANALYTICS_RATE_LIMIT_QPM;

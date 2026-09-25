@@ -12,8 +12,8 @@
 
 import { Redis } from "@upstash/redis";
 
-/** Stay under Google's typical 720 QPM Analytics quota. */
-export const YT_ANALYTICS_DEFAULT_RATE_LIMIT = 710;
+/** Stay below Google's 720 QPM Analytics quota with room for other callers. */
+export const YT_ANALYTICS_DEFAULT_RATE_LIMIT = 600;
 export const YT_ANALYTICS_RATE_WINDOW_MS = 60_000;
 
 const YT_ANALYTICS_RATE_REDIS_KEY_PREFIX = "youtube_analytics_rate_limit:v3";
@@ -23,14 +23,19 @@ type RateLimitFailureReason = "quota_exceeded" | "redis_unavailable";
 
 /**
  * Atomic sliding-window acquire via ZSET.
- * Returns {1, 0} on success, or {0, retryAfterMs} when limited.
+ * The shared pace key spaces accepted queries evenly across the minute. A
+ * count-only window permits a burst of hundreds of requests at once, which
+ * can still trip Google's upstream quota before the window cap is reached.
+ * Returns {1, 0} on success, or {0, retryAfterMs} when the caller should wait.
  */
 const SLIDING_WINDOW_LUA = `
 local key = KEYS[1]
+local pace_key = KEYS[2]
 local now = tonumber(ARGV[1])
 local window = tonumber(ARGV[2])
 local limit = tonumber(ARGV[3])
 local member = ARGV[4]
+local minimum_interval = tonumber(ARGV[5])
 local window_start = now - window
 
 redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
@@ -44,8 +49,14 @@ if count >= limit then
   return {0, retry_after}
 end
 
+local next_allowed = tonumber(redis.call('GET', pace_key) or '0')
+if next_allowed > now then
+  return {0, next_allowed - now}
+end
+
 redis.call('ZADD', key, now, member)
 redis.call('PEXPIRE', key, window)
+redis.call('SET', pace_key, now + minimum_interval, 'PX', window)
 return {1, 0}
 `;
 
@@ -108,6 +119,7 @@ function normalizeRedisKeyPart(value: string): string {
 function getRedisKey(): string {
   const explicitNamespace =
     process.env.YT_ANALYTICS_RATE_LIMIT_NAMESPACE?.trim();
+  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const environment =
     process.env.VERCEL_ENV?.trim() ||
     process.env.NODE_ENV?.trim() ||
@@ -116,7 +128,9 @@ function getRedisKey(): string {
     process.env.VERCEL_PROJECT_ID?.trim() ||
     process.env.VERCEL_GIT_REPO_SLUG?.trim() ||
     "app";
-  const namespace = explicitNamespace || `${environment}-${project}`;
+  // Quotas belong to the Google OAuth project, not the deployment. Using the
+  // client ID ensures preview/production deployments share one safe budget.
+  const namespace = explicitNamespace || googleClientId || `${environment}-${project}`;
   return `${YT_ANALYTICS_RATE_REDIS_KEY_PREFIX}:${normalizeRedisKeyPart(namespace)}`;
 }
 
@@ -194,26 +208,34 @@ function parseEvalResult(
 async function acquireRedisSlidingWindow(
   redis: AnalyticsRedisClient,
 ): Promise<void> {
-  const now = Date.now();
-  const member = `${now}:${Math.random().toString(36).slice(2, 10)}`;
-  const result = await redis.eval(
-    SLIDING_WINDOW_LUA,
-    [getRedisKey()],
-    [
-      String(now),
-      String(YT_ANALYTICS_RATE_WINDOW_MS),
-      String(getLimit()),
-      member,
-    ],
-  );
-  const parsed = parseEvalResult(result);
-  if (!parsed) {
-    throw new Error("Unexpected Redis rate-limit response");
+  const key = getRedisKey();
+  const limit = getLimit();
+  const minimumIntervalMs = Math.ceil(YT_ANALYTICS_RATE_WINDOW_MS / limit);
+
+  while (true) {
+    const now = Date.now();
+    const member = `${now}:${Math.random().toString(36).slice(2, 10)}`;
+    const result = await redis.eval(
+      SLIDING_WINDOW_LUA,
+      [key, `${key}:pace`],
+      [
+        String(now),
+        String(YT_ANALYTICS_RATE_WINDOW_MS),
+        String(limit),
+        member,
+        String(minimumIntervalMs),
+      ],
+    );
+    const parsed = parseEvalResult(result);
+    if (!parsed) {
+      throw new Error("Unexpected Redis rate-limit response");
+    }
+    if (parsed.ok) return;
+
+    // The queue workers may safely wait for a shared slot. This preserves a
+    // run instead of marking valid submissions as failed merely due to quota.
+    await new Promise<void>((resolve) => setTimeout(resolve, parsed.retryAfterMs));
   }
-  if (parsed.ok) {
-    return;
-  }
-  throw new YoutubeAnalyticsRateLimitError(parsed.retryAfterMs);
 }
 
 /**
