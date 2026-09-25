@@ -785,7 +785,7 @@ function HeroStatBlock({
                 "flex h-[64px] shrink-0 items-center justify-center bg-clip-text text-[64px] font-extrabold leading-none tracking-[-0.055em] text-transparent sm:h-[76px] sm:text-[76px] md:h-[92px] md:text-[92px] lg:h-[112px] lg:text-[112px]",
                 isLight
                   ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
-                  : "bg-gradient-to-b from-white via-[#d8d8d8] to-[#777777]",
+                  : "bg-[linear-gradient(180deg,#555555_0%,#D8D8D8_45%,#FFFFFF_90%)]",
               )}
             >
               {num}
@@ -1120,7 +1120,7 @@ export default function HeroContent() {
                 "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[52px] font-['Inter'] font-bold leading-[110%] tracking-[-4%] text-center",
                 isLight
                   ? "text-black/75"
-                  : "bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,#FFFFFF_0%,#999999_100%)] bg-clip-text text-transparent",
+                  : "bg-[linear-gradient(180deg,#555555_0%,#D8D8D8_45%,#FFFFFF_90%)] bg-clip-text text-transparent",
               )}
             >
               Creators earn on{" "}

@@ -310,6 +310,14 @@ const creators = [
       "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop",
   },
 ];
+
+const oldWaySteps = [
+  { id: "01", title: "Pick a creator" },
+  { id: "02", title: "Pay upfront" },
+  { id: "03", title: "Content goes live" },
+  { id: "04", title: "Wait for results" },
+];
+
 export default function BrandsClient({
   totalViews,
   initialTheme,
@@ -338,6 +346,63 @@ export default function BrandsClient({
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInView, setMapInView] = useState(false);
   const [mapStage, setMapStage] = useState(0);
+
+  const oldWayRef = useRef<HTMLDivElement>(null);
+  const [oldWayStep, setOldWayStep] = useState(0);
+  const lastStepTimeRef = useRef<number>(0);
+
+  // Window scroll listener driving the sticky "The Old way of promoting your brand" step animation
+  useEffect(() => {
+    const handleScroll = () => {
+      const section = oldWayRef.current;
+      if (!section) return;
+
+      const rect = section.getBoundingClientRect();
+      const scrollDistance = Math.max(
+        section.offsetHeight - window.innerHeight,
+        1
+      );
+
+      /*
+       * Progress:
+       * 0 = sticky section starts (rect.top <= 0)
+       * 1 = sticky section ends (rect.top <= -scrollDistance)
+       */
+      const progress = Math.min(
+        1,
+        Math.max(0, -rect.top / scrollDistance)
+      );
+
+      const step = Math.min(
+        oldWaySteps.length - 1,
+        Math.floor(progress * oldWaySteps.length)
+      );
+
+      setOldWayStep(step);
+    };
+
+    handleScroll();
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, []);
+
+  const handleOldWayStepClick = (stepIndex: number) => {
+    setOldWayStep(stepIndex);
+    const section = oldWayRef.current;
+    if (!section) return;
+    const rect = section.getBoundingClientRect();
+    const sectionTop = window.scrollY + rect.top;
+    const scrollDistance = section.offsetHeight - window.innerHeight;
+    const stepProgress = (stepIndex + 0.5) / oldWaySteps.length;
+    const targetScroll = sectionTop + stepProgress * scrollDistance;
+    window.scrollTo({ top: targetScroll, behavior: "smooth" });
+  };
 
   useEffect(() => {
     setIsLaunchingCampaign(false);
@@ -525,7 +590,7 @@ export default function BrandsClient({
   return (
     <div
       className={cn(
-        "min-h-screen overflow-x-hidden transition-colors duration-300",
+        "min-h-screen overflow-x-clip transition-colors duration-300",
         isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >
@@ -533,7 +598,7 @@ export default function BrandsClient({
         {/* Floating Gaming Elements */}
         <main
           className={cn(
-            "min-h-screen overflow-x-hidden transition-colors duration-300",
+            "min-h-screen overflow-x-clip transition-colors duration-300",
             isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
           )}
         >
@@ -695,7 +760,7 @@ export default function BrandsClient({
                     onClick={handleLaunchCampaign}
                     disabled={isLaunchingCampaign}
                     className={cn(
-                      "mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit",
+                      "mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit",
                       isLight
                         ? "bg-black text-white hover:bg-black/90"
                         : "bg-white text-black hover:bg-white/90",
@@ -831,289 +896,442 @@ export default function BrandsClient({
             /> */}
           </div>
         </section>
+        {/* "The Old way of promoting your brand" Sticky Section */}
         <section
+          id="old-way"
+          ref={oldWayRef}
           className={cn(
-            "relative overflow-hidden px-4 py-14 sm:px-5 sm:py-20 md:px-10 lg:px-20 transition-colors duration-300",
-            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
+            "relative h-[300vh] w-full transition-colors duration-300",
+            isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white"
           )}
         >
-          <div className="mx-auto max-w-[1280px]">
-            {/* ================= HEADING ================= */}
-            <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px] lg:text-[56px]">
-              The Old way of promoting
-              <br />
-              your brand
-            </h2>
-
-            {/* ================= MAIN CONTENT ================= */}
-            <div className="relative mx-auto mt-12 max-w-[1150px] sm:mt-16 lg:mt-24 lg:h-[450px]">
-              {/* =================================================
-              CREATOR DEAL CARD
-          ================================================= */}
-              <div
-                className={cn(
-                  "relative z-10 mx-auto w-full max-w-[420px] rotate-[-3deg] rounded-[25px] p-5 sm:rotate-[-7deg] sm:p-6 lg:absolute lg:left-[2%] lg:top-[25px]",
-                  isLight
-                    ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000000D]"
-                    : "border border-white/[0.13] bg-[#171717] shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]",
-                )}
-              >
-                {/* Top labels */}
-                <div className="flex items-center justify-between">
-                  <span
-                    className={cn(
-                      "rounded-full px-3 py-1.5 text-[12px]",
-                      isLight
-                        ? "border border-[#0000000D] bg-white text-black/70"
-                        : "border border-white/[0.20] bg-white/[0.01] text-white/65",
-                    )}
-                  >
-                    Typical Creator Deal
-                  </span>
-
-                  <span
-                    className={cn(
-                      "rounded-full px-3 py-1.5 text-[12px]",
-                      isLight
-                        ? "border border-orange-500/25 bg-orange-500/15 text-orange-500"
-                        : "border border-orange-500/[0.35] bg-orange-500/[0.18] text-orange-400",
-                    )}
-                  >
-                    Fixed Pay
-                  </span>
-                </div>
-
-                {/* Creator */}
-                <div className="mt-5 flex items-center gap-3">
-                  <img
-                    src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png"
-                    alt="Creator"
-                    className="h-[72px] w-[72px] rounded-md object-cover"
-                  />
-
-                  <div>
-                    <p
-                      className={cn(
-                        "text-[15px]",
-                        isLight ? "text-black/45" : "text-white/50",
-                      )}
-                    >
-                      @sarahcreates
-                    </p>
-
-                    <p
-                      className={cn(
-                        "text-[18px] font-medium",
-                        isLight ? "text-black" : "text-white/80",
-                      )}
-                    >
-                      500k followers
-                    </p>
-
-                    <p
-                      className={cn(
-                        "mt-1 text-[14px]",
-                        isLight ? "text-black/40" : "text-white/40",
-                      )}
-                    >
-                      Life · Tech
-                    </p>
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="mt-7 grid grid-cols-2 gap-5">
-                  <div className="flex items-start gap-3">
-                    <Image
-                      src="/images/Frame (1).png"
-                      alt=""
-                      width={24}
-                      height={24}
-                      className={cn(
-                        "mt-1 h-6 w-6 shrink-0 object-contain",
-                        isLight ? "opacity-60 brightness-0" : "opacity-40",
-                      )}
-                    />
-
-                    <div>
-                      <p
-                        className={cn(
-                          "text-[14px]",
-                          isLight ? "text-black/40" : "text-white/40",
-                        )}
-                      >
-                        Content
-                      </p>
-
-                      <p
-                        className={cn(
-                          "mt-1 text-[15px]",
-                          isLight ? "text-black" : "text-white/80",
-                        )}
-                      >
-                        1 Instagram Reel
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3">
-                    <CalendarDays
-                      size={24}
-                      strokeWidth={1.5}
-                      className={cn(
-                        "mt-1",
-                        isLight ? "text-black/40" : "text-white/40",
-                      )}
-                    />
-
-                    <div>
-                      <p
-                        className={cn(
-                          "text-[14px]",
-                          isLight ? "text-black/40" : "text-white/40",
-                        )}
-                      >
-                        Timeline
-                      </p>
-
-                      <p
-                        className={cn(
-                          "mt-1 text-[15px]",
-                          isLight ? "text-black" : "text-white/80",
-                        )}
-                      >
-                        1 week
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Price */}
-                <div
-                  className={cn(
-                    "mt-6 flex items-center justify-between rounded-lg px-4 py-4",
-                    isLight ? "bg-[#F1F1F1]" : "bg-[#202020]",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "text-[14px]",
-                      isLight ? "text-black/45" : "text-white/40",
-                    )}
-                  >
-                    Creators Fee
-                  </span>
-
-                  <span
-                    className={cn(
-                      "text-[17px] font-medium",
-                      isLight ? "text-black" : "text-white",
-                    )}
-                  >
-                    $4,000
-                  </span>
-                </div>
+          {/* STICKY VIEWPORT CONTAINER */}
+          <div
+            className={cn(
+              "sticky top-0 flex h-screen w-full items-center justify-center overflow-hidden transition-colors duration-300",
+              isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white"
+            )}
+          >
+            <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col justify-between px-6 py-10 sm:px-10 lg:px-16">
+              {/* Heading */}
+              <div className="pt-4 text-center sm:pt-8 shrink-0">
+                <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px] lg:text-[56px]">
+                  The Old way of promoting
+                  <br />
+                  your brand
+                </h2>
               </div>
 
-              {/* =================================================
-              DOTTED CONNECTOR
-          ================================================= */}
-              <div
-                className={cn(
-                  "absolute left-[44%] top-[175px] z-0 hidden w-[205px] border-t border-dotted lg:block",
-                  isLight ? "border-black/25" : "border-white/30",
-                )}
-              />
+              {/* CONTENT GRID */}
+              <div className="grid flex-1 items-center gap-8 lg:grid-cols-[360px_1fr] my-auto">
+                {/* LEFT TIMELINE */}
+                <div className="relative mx-auto w-full max-w-[340px] lg:ml-[120px]">
+                  {/* Grey line background */}
+                  <div
+                    className={cn(
+                      "absolute left-[21px] top-[22px] h-[calc(100%-44px)] w-px",
+                      isLight ? "bg-black/15" : "bg-white/15"
+                    )}
+                  />
 
-              {/* =================================================
-              HANDWRITTEN TEXT
-          ================================================= */}
-              <p
-                className={cn(
-                  "relative mx-auto mt-12 w-fit -rotate-[2deg] text-center text-[18px] font-medium italic sm:mt-20 sm:text-[22px] lg:absolute lg:right-[7%] lg:top-[0px] lg:mt-0 lg:text-left",
-                  isLight ? "text-black/60" : "text-white/75",
-                )}
-                style={{
-                  fontFamily: "cursive",
-                }}
-              >
-                What you are paying for
-              </p>
+                  {/* Purple progress line */}
+                  <div
+                    className="absolute left-[21px] top-[22px] w-px bg-violet-500 transition-all duration-500"
+                    style={{
+                      height: `calc((100% - 44px) * ${Math.min(oldWayStep / (oldWaySteps.length - 1), 1)})`,
+                    }}
+                  />
 
-              {/* =================================================
-              RIGHT SIDE CARDS
-          ================================================= */}
-              <div
-                className="
-              relative mx-auto
-              mt-10
-              w-full max-w-[390px]
+                  <div className="relative flex flex-col gap-6 sm:gap-7">
+                    {oldWaySteps.map((step, index) => {
+                      const active = index === oldWayStep;
+                      const passed = index < oldWayStep;
+                      return (
+                        <div
+                          key={step.id}
+                          onClick={() => handleOldWayStepClick(index)}
+                          className="flex min-h-[64px] items-center gap-4 cursor-pointer select-none group"
+                        >
+                          {/* Number Circle Badge */}
+                          <div
+                            className={cn(
+                              "relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-bold transition-all duration-500",
+                              active
+                                ? isLight
+                                  ? "border-2 border-violet-600 bg-white text-violet-600 shadow-[0_0_0_5px_rgba(124,58,237,0.16),0_0_28px_rgba(124,58,237,0.35)] scale-105"
+                                  : "border-2 border-violet-500 bg-black text-white shadow-[0_0_0_5px_rgba(124,58,237,0.16),0_0_28px_rgba(124,58,237,0.55)] scale-105"
+                                : passed
+                                ? isLight
+                                  ? "border border-violet-500/70 bg-white text-violet-600"
+                                  : "border border-violet-500/70 bg-black text-white"
+                                : isLight
+                                ? "border border-black/20 bg-[#F1F1F1] text-black/35 group-hover:border-black/40 group-hover:text-black/60"
+                                : "border border-white/20 bg-black text-white/35 group-hover:border-white/40 group-hover:text-white/60"
+                            )}
+                          >
+                            {step.id}
+                          </div>
 
-              lg:absolute
-              lg:right-[1%]
-              lg:top-[90px]
-              lg:mt-0
-            "
-              >
-                {comparisonItems.map((item, index) => {
-                  const Icon = "icon" in item ? item.icon : null;
+                          {/* Step Title */}
+                          <span
+                            className={cn(
+                              "text-[18px] sm:text-[20px] font-medium transition-all duration-500",
+                              active
+                                ? isLight
+                                  ? "translate-x-1 font-semibold text-black"
+                                  : "translate-x-1 font-semibold text-white"
+                                : isLight
+                                ? "text-black/35 group-hover:text-black/60"
+                                : "text-white/25 group-hover:text-white/50"
+                            )}
+                          >
+                            {step.title}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                  return (
+                {/* RIGHT ANIMATION STAGE */}
+                <div className="relative flex h-[420px] sm:h-[480px] items-center justify-end">
+                  <div className="relative h-full w-full max-w-[600px]">
+                    {/* STEP 0: PICK A CREATOR */}
                     <div
-                      key={item.text}
                       className={cn(
-                        "relative flex h-[58px] items-center justify-between rounded-full px-5 transition-transform duration-300 hover:translate-x-1",
-                        item.rotate,
-                        index !== 0 && "mt-[15px]",
-                        isLight
-                          ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[0_13.12px_26.25px_0_#9A9A9A1A]"
-                          : "border border-white/[0.14] bg-[#18181a] shadow-[0_8px_22px_rgba(255,255,255,0.055),0_12px_25px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.08)]",
+                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
+                        oldWayStep === 0
+                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
+                          : "-translate-x-10 scale-95 opacity-0 pointer-events-none"
                       )}
                     >
-                      {/* Left content */}
                       <div
                         className={cn(
-                          "flex items-center gap-3",
-                          isLight ? "text-black/60" : "text-white/55",
+                          "relative z-10 w-full max-w-[420px] rotate-[-3deg] rounded-[25px] p-5 sm:rotate-[-7deg] sm:p-6",
+                          isLight
+                            ? "border-[0.69px] border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000000D]"
+                            : "border border-white/[0.13] bg-[#171717] shadow-[-10px_0_65px_-10px_rgba(255,255,255,0.28),-12px_0_32px_-12px_rgba(255,255,255,0.14),-18px_14px_55px_-22px_rgba(255,140,0,0.18)]",
                         )}
                       >
-                        {"image" in item && item.image ? (
-                          <Image
-                            src={item.image}
-                            alt=""
-                            width={25}
-                            height={25}
+                        <div className="flex items-center justify-between">
+                          <span
                             className={cn(
-                              "h-[25px] w-[25px] shrink-0 object-contain",
+                              "rounded-full px-3 py-1.5 text-[12px]",
                               isLight
-                                ? "opacity-70 brightness-0"
-                                : "opacity-55",
+                                ? "border border-[#0000000D] bg-white text-black/70"
+                                : "border border-white/[0.20] bg-white/[0.01] text-white/65",
+                            )}
+                          >
+                            Typical Creator Deal
+                          </span>
+                          <span
+                            className={cn(
+                              "rounded-full px-3 py-1.5 text-[12px]",
+                              isLight
+                                ? "border border-orange-500/25 bg-orange-500/15 text-orange-500"
+                                : "border border-orange-500/[0.35] bg-orange-500/[0.18] text-orange-400",
+                            )}
+                          >
+                            Fixed Pay
+                          </span>
+                        </div>
+
+                        <div className="mt-5 flex items-center gap-3">
+                          <img
+                            src="/images/b7df36a6062b7711918a958fcd444794e0abf80b.png"
+                            alt="Creator"
+                            className="h-[72px] w-[72px] rounded-md object-cover"
+                          />
+                          <div>
+                            <p
+                              className={cn(
+                                "text-[15px]",
+                                isLight ? "text-black/45" : "text-white/50",
+                              )}
+                            >
+                              @sarahcreates
+                            </p>
+                            <p
+                              className={cn(
+                                "text-[18px] font-medium",
+                                isLight ? "text-black" : "text-white/80",
+                              )}
+                            >
+                              500k followers
+                            </p>
+                            <p
+                              className={cn(
+                                "mt-1 text-[14px]",
+                                isLight ? "text-black/40" : "text-white/40",
+                              )}
+                            >
+                              Life · Tech
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-7 grid grid-cols-2 gap-5">
+                          <div className="flex items-start gap-3">
+                            <Image
+                              src="/images/Frame (1).png"
+                              alt=""
+                              width={24}
+                              height={24}
+                              className={cn(
+                                "mt-1 h-6 w-6 shrink-0 object-contain",
+                                isLight ? "opacity-60 brightness-0" : "opacity-40",
+                              )}
+                            />
+                            <div>
+                              <p
+                                className={cn(
+                                  "text-[14px]",
+                                  isLight ? "text-black/40" : "text-white/40",
+                                )}
+                              >
+                                Content
+                              </p>
+                              <p
+                                className={cn(
+                                  "mt-1 text-[15px]",
+                                  isLight ? "text-black" : "text-white/80",
+                                )}
+                              >
+                                1 Instagram Reel
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            <CalendarDays
+                              size={24}
+                              strokeWidth={1.5}
+                              className={cn(
+                                "mt-1",
+                                isLight ? "text-black/40" : "text-white/40",
+                              )}
+                            />
+                            <div>
+                              <p
+                                className={cn(
+                                  "text-[14px]",
+                                  isLight ? "text-black/40" : "text-white/40",
+                                )}
+                              >
+                                Timeline
+                              </p>
+                              <p
+                                className={cn(
+                                  "mt-1 text-[15px]",
+                                  isLight ? "text-black" : "text-white/80",
+                                )}
+                              >
+                                1 week
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* STEP 1: PAY UPFRONT */}
+                    <div
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
+                        oldWayStep === 1
+                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
+                          : "translate-x-10 scale-95 opacity-0 pointer-events-none"
+                      )}
+                    >
+                      <div className="relative flex items-center justify-center w-full min-h-[160px] sm:min-h-[180px]">
+                        {/* Purple glow behind cards */}
+                        <div className="absolute inset-0 z-0">
+                          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[220px] w-[420px] rounded-full bg-violet-600/30 blur-[70px]" />
+                        </div>
+
+                        {/* Back card 2 (furthest - rotated left) */}
+                        <div
+                          className="
+                            absolute z-[1]
+                            w-[310px] sm:w-[410.41px]
+                            h-[95px] sm:h-[123.12px] 
+                            -rotate-[7.98deg]
+                            opacity-[0.64]
+                            rounded-[24px] sm:rounded-[32.83px]
+                            bg-[#171717]
+                            border border-white/10
+                            shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]
+                          "
+                          style={{ backdropFilter: "blur(8px)" }}
+                        />
+
+                        {/* Back card 1 (middle - rotated right) */}
+                        <div
+                          className="
+                            absolute z-[2]
+                            w-[310px] sm:w-[410.41px]
+                            h-[95px] sm:h-[123.12px]
+                            rotate-[15.92deg]
+                            opacity-60
+                            rounded-[24px] sm:rounded-[32.83px]
+                            bg-[#171717]
+                            border border-white/10
+                            shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]
+                          "
+                          style={{ backdropFilter: "blur(8px)" }}
+                        />
+
+                        {/* Main Payment Sent card */}
+                        <div
+                          className={cn(
+                            "relative z-[3] flex items-center opacity-100",
+                            "w-[310px] sm:w-[410.41px]",
+                            "h-[95px] sm:h-[123.12px]",
+                            "rotate-[2.5deg]",
+                            "rounded-[24px] sm:rounded-[32.83px]",
+                            "pl-[24px] sm:pl-[53.94px] pr-[20px] sm:pr-[32.83px]",
+                            "gap-[16px] sm:gap-[21.11px]",
+                            "shadow-[0px_3.52px_16.42px_0px_#6847E84D,0px_0px_4.69px_0px_#FFFFFF40_inset]",
+                            isLight
+                              ? "border border-black/10 bg-[#e8e8e8]"
+                              : "border border-white/15 bg-[#171717]"
+                          )}
+                        >
+                          {/* Purple checkmark circle */}
+                          <div className="flex h-[48px] w-[48px] sm:h-[56px] sm:w-[56px] shrink-0 items-center justify-center rounded-full bg-[#8b5cf6] shadow-[0_0_20px_rgba(139,92,246,0.5)]">
+                            <svg
+                              width="24"
+                              height="24"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="white"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="h-5 w-5 sm:h-6 sm:w-6"
+                            >
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                          </div>
+
+                          {/* Text */}
+                          <div>
+                            <p
+                              className={cn(
+                                "text-[20px] sm:text-[24px] font-bold tracking-[-0.5px]",
+                                isLight ? "text-black" : "text-white"
+                              )}
+                            >
+                              Payment sent
+                            </p>
+                            <p
+                              className={cn(
+                                "mt-0.5 text-[14px] sm:text-[16px]",
+                                isLight ? "text-black/50" : "text-white/50"
+                              )}
+                            >
+                              $4,000 paid upfront
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* STEP 2: CONTENT GOES LIVE */}
+                    <div
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
+                        oldWayStep === 2
+                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
+                          : "translate-x-10 scale-95 opacity-0 pointer-events-none"
+                      )}
+                    >
+                      <div className="relative flex items-center justify-center w-full h-full">
+                        {/* Container for three overlapping phone images */}
+                        <div className="relative h-[420px] w-[420px] sm:h-[460px] sm:w-[500px]">
+
+                          {/* Left image (behind) */}
+                          <div
+                            className="absolute z-[4] h-[310px] w-[175px] sm:h-[370px] sm:w-[200px] overflow-hidden rounded-[16px] shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
+                            style={{ left: "10%", top: "40px" }}
+                          >
+                            <img
+                              src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
+                              alt="Instagram Reel"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+
+                          {/* Center image (main, in front) */}
+                          <div
+                            className="absolute z-10 h-[370px] w-[210px] sm:h-[430px] sm:w-[240px] overflow-hidden rounded-[16px] shadow-[0_25px_70px_rgba(0,0,0,0.6)]"
+                            style={{ left: "50%", top: "10px", transform: "translateX(-50%)" }}
+                          >
+                            <img
+                              src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
+                              alt="Instagram Reel"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+
+                          {/* Right image (behind) */}
+                          <div
+                            className="absolute z-[5] h-[310px] w-[175px] sm:h-[370px] sm:w-[200px] overflow-hidden rounded-[16px] shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
+                            style={{ right: "10%", top: "40px" }}
+                          >
+                            <img
+                              src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
+                              alt="Instagram Reel"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* STEP 3: WAIT FOR RESULTS */}
+                    <div
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center transition-all duration-700 transform",
+                        oldWayStep === 3
+                          ? "translate-x-0 scale-100 opacity-100 pointer-events-auto"
+                          : "translate-x-10 scale-95 opacity-0 pointer-events-none"
+                      )}
+                    >
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="relative h-[160px] w-[160px] sm:h-[180px] sm:w-[180px] flex items-center justify-center">
+                          {/* Background Track Circle */}
+                          <div
+                            className={cn(
+                              "absolute inset-0 rounded-full border-[13px]",
+                              isLight ? "border-black/10" : "border-white/15"
                             )}
                           />
-                        ) : Icon ? (
-                          <Icon
-                            size={25}
-                            strokeWidth={1.5}
-                            className="shrink-0"
-                          />
-                        ) : null}
 
-                        <span className="text-[16px]">{item.text}</span>
+                          {/* Purple Moving Spinner */}
+                          <div className="absolute inset-0 animate-spin rounded-full border-[13px] border-transparent border-l-violet-500 border-t-violet-500 [animation-duration:1.8s]" />
+
+                          {/* <div className="flex flex-col items-center justify-center">
+                            <span className={cn("text-[10px] font-bold uppercase tracking-widest", isLight ? "text-black/40" : "text-white/40")}>
+                              Status
+                            </span>
+                            <span className="mt-1 text-sm font-extrabold text-violet-500">
+                              Pending
+                            </span>
+                          </div> */}
+                        </div>
+
+                        <p
+                          className={cn(
+                            "mt-7 text-center font-serif text-[22px] sm:text-[25px] italic tracking-wide",
+                            isLight ? "text-black/75" : "text-white/80"
+                          )}
+                        >
+                          Results are still loading
+                        </p>
                       </div>
-
-                      {/* Status */}
-                      {item.status === "success" ? (
-                        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#4ade52] text-black">
-                          <Check size={13} strokeWidth={3} />
-                        </span>
-                      ) : (
-                        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#ff4141] text-black">
-                          <X size={13} strokeWidth={3} />
-                        </span>
-                      )}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

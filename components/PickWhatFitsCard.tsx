@@ -81,7 +81,7 @@ export default function PickWhatFitsCard({
     });
 
     if (!best) return null;
-    const chipRect = best.getBoundingClientRect();
+    const chipRect = (best as HTMLElement).getBoundingClientRect();
     return {
       x: chipRect.left + chipRect.width * 0.62 - cardRect.left,
       y: chipRect.top + chipRect.height * 0.55 - cardRect.top,

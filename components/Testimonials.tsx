@@ -275,6 +275,7 @@ export default function Testimonials() {
   const headingRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const [headingAnimated, setHeadingAnimated] = useState(false);
+  const [resizeKey, setResizeKey] = useState(0);
 
   const key = (
     pathname in config ? pathname : "default"
@@ -298,6 +299,37 @@ export default function Testimonials() {
   useEffect(() => {
     setIsNavigating(false);
   }, [pathname]);
+
+  useEffect(() => {
+    let resizeTimer: NodeJS.Timeout;
+
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        setResizeKey((prev) => prev + 1);
+      }, 100);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (boardRef.current) {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            handleResize();
+          }
+        }
+      });
+      resizeObserver.observe(boardRef.current);
+    }
+
+    return () => {
+      clearTimeout(resizeTimer);
+      window.removeEventListener("resize", handleResize);
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }, []);
 
   const isBrandsPage = pathname?.includes("brands") || pathname === "/brands";
   const href = isBrandsPage ? "/reviews?tab=brands" : "/reviews";
@@ -339,7 +371,7 @@ export default function Testimonials() {
         >
           {testimonials.map((testimonial, index) => (
             <DraggableTestimonialCard
-              key={testimonial.name}
+              key={`${testimonial.name}-${resizeKey}`}
               testimonial={testimonial}
               isLight={isLight}
               constraintsRef={boardRef}

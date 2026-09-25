@@ -17,6 +17,60 @@ import {
 import { useThemeMode } from "@/hooks/use-theme-mode";
 import { cn } from "@/lib/utils";
 
+function AnimatedBackgroundArcs({ isLight }: { isLight: boolean }) {
+  return (
+    <>
+      {/* Concentric circle borders */}
+      <div
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
+          isLight ? "border-black/[0.08]" : "border-white/[0.08]",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border",
+          isLight ? "border-black/[0.06]" : "border-white/[0.06]",
+        )}
+      />
+      <div
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border",
+          isLight ? "border-black/[0.04]" : "border-white/[0.04]",
+        )}
+      />
+
+      {/* Single animated glowing arc highlight */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px]">
+        {/* Glow backdrop */}
+        <div
+          className="absolute inset-0 w-full h-full rounded-full animate-spin-slow opacity-70 blur-[3px]"
+          style={{
+            background:
+              "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.9) 70deg, rgba(168,85,247,0.9) 110deg, transparent 140deg, transparent 360deg)",
+            maskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px))",
+            WebkitMaskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 2px))",
+          }}
+        />
+        {/* Main sharp arc */}
+        <div
+          className="w-full h-full rounded-full animate-spin-slow"
+          style={{
+            background:
+              "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.95) 70deg, rgba(168,85,247,0.95) 110deg, transparent 140deg, transparent 360deg)",
+            maskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+            WebkitMaskImage:
+              "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
+          }}
+        />
+      </div>
+    </>
+  );
+}
+
 export default function CtcBanner() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const [inView, setInView] = useState(false);
@@ -173,36 +227,7 @@ export default function CtcBanner() {
             </div>
 
             <div className="relative mt-3 flex flex-col items-center justify-center w-full max-w-[780px] py-10 sm:py-12 md:py-14">
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
-                  isLight ? "border-black/[0.08]" : "border-white/[0.08]",
-                )}
-              />
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border",
-                  isLight ? "border-black/[0.06]" : "border-white/[0.06]",
-                )}
-              />
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border",
-                  isLight ? "border-black/[0.04]" : "border-white/[0.04]",
-                )}
-              />
-
-              <div
-                className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full"
-                style={{
-                  background:
-                    "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.85) 70deg, rgba(168,85,247,0.85) 110deg, transparent 140deg, transparent 360deg)",
-                  maskImage:
-                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
-                  WebkitMaskImage:
-                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
-                }}
-              />
+              <AnimatedBackgroundArcs isLight={isLight} />
 
               <div
                 className={cn(
@@ -294,37 +319,7 @@ export default function CtcBanner() {
 
             {/* Static circles around heading + buttons */}
             <div className="relative mt-3 flex flex-col items-center justify-center w-full max-w-[780px] py-10 sm:py-12 md:py-14">
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
-                  isLight ? "border-black/[0.08]" : "border-white/[0.08]",
-                )}
-              />
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border",
-                  isLight ? "border-black/[0.06]" : "border-white/[0.06]",
-                )}
-              />
-              <div
-                className={cn(
-                  "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border",
-                  isLight ? "border-black/[0.04]" : "border-white/[0.04]",
-                )}
-              />
-
-              {/* Static orange→purple arc highlight */}
-              <div
-                className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full"
-                style={{
-                  background:
-                    "conic-gradient(from 10deg, transparent 0deg, transparent 40deg, rgba(255,106,26,0.85) 70deg, rgba(168,85,247,0.85) 110deg, transparent 140deg, transparent 360deg)",
-                  maskImage:
-                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
-                  WebkitMaskImage:
-                    "radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px))",
-                }}
-              />
+              <AnimatedBackgroundArcs isLight={isLight} />
 
               <div
                 className={cn(

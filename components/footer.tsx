@@ -30,22 +30,22 @@ export function Footer() {
             : "bg-[#141414] border-white/5",
         )}
       >
-        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8">
+        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8 pb-2 md:pb-8">
           {/* Brand */}
           <div className="lg:col-span-3 space-y-5">
-            <Link href={MARKETING_HOME_AS_GUEST} className="inline-block">
+            <Link href={MARKETING_HOME_AS_GUEST} className="inline-block -ml-4">
               <Image
                 src={isLight ? logoLight : logoWhite}
                 alt="Game Of Creators Logo"
                 width={160}
                 height={40}
-                className="w-[150px] h-auto"
+                className="w-[150px] h-auto block"
               />
             </Link>
             <p
               className={cn(
-                "text-sm leading-relaxed max-w-[240px]",
-                isLight ? "text-black/50" : "text-zinc-400",
+                "text-[15px] leading-relaxed max-w-[260px]",
+                isLight ? "text-black/50" : "text-[#8E8E8E]",
               )}
             >
               Performance-based creator marketing for brands and creators
@@ -103,16 +103,16 @@ export function Footer() {
           <nav className="lg:col-span-2">
             <h3
               className={cn(
-                "text-sm mb-4",
-                isLight ? "font-semibold text-black" : "font-medium text-zinc-400",
+                "text-[17px] mb-4",
+                isLight ? "font-semibold text-black" : "font-medium text-[#8E8E8E]",
               )}
             >
               For Brands
             </h3>
             <ul
               className={cn(
-                "space-y-3 text-sm",
-                isLight ? "text-black/55" : "text-zinc-300",
+                "space-y-3 text-[15px]",
+                isLight ? "text-black/55" : "text-[#8E8E8E]",
               )}
             >
               {[
@@ -146,16 +146,16 @@ export function Footer() {
           <nav className="lg:col-span-2">
             <h3
               className={cn(
-                "text-sm mb-4",
-                isLight ? "font-semibold text-black" : "font-medium text-zinc-400",
+                "text-[17px] mb-4",
+                isLight ? "font-semibold text-black" : "font-medium text-[#8E8E8E]",
               )}
             >
               For Creators
             </h3>
             <ul
               className={cn(
-                "space-y-3 text-sm",
-                isLight ? "text-black/55" : "text-zinc-300",
+                "space-y-3 text-[15px]",
+                isLight ? "text-black/55" : "text-[#8E8E8E]",
               )}
             >
               {[
@@ -188,16 +188,16 @@ export function Footer() {
           <nav className="lg:col-span-2">
             <h3
               className={cn(
-                "text-sm mb-4",
-                isLight ? "font-semibold text-black" : "font-medium text-zinc-400",
+                "text-[17px] mb-4",
+                isLight ? "font-semibold text-black" : "font-medium text-[#8E8E8E]",
               )}
             >
               Company
             </h3>
             <ul
               className={cn(
-                "space-y-3 text-sm",
-                isLight ? "text-black/55" : "text-zinc-300",
+                "space-y-3 text-[15px]",
+                isLight ? "text-black/55" : "text-[#8E8E8E]",
               )}
             >
               {[
@@ -233,16 +233,16 @@ export function Footer() {
           <div className="lg:col-span-3">
             <h3
               className={cn(
-                "text-sm mb-4",
-                isLight ? "font-semibold text-black" : "font-medium text-zinc-400",
+                "text-[17px] mb-4",
+                isLight ? "font-semibold text-black" : "font-medium text-[#8E8E8E]",
               )}
             >
               Contact Information
             </h3>
             <ul
               className={cn(
-                "space-y-4 text-sm",
-                isLight ? "text-black/55" : "text-zinc-300",
+                "space-y-4 text-[15px]",
+                isLight ? "text-black/55" : "text-[#8E8E8E]",
               )}
             >
               <li className="flex items-start gap-2.5">
@@ -294,7 +294,7 @@ export function Footer() {
       {isLight ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-80 sm:h-[50px]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-80 sm:h-[350px]"
         >
           <div className="absolute inset-x-0 bottom-0 h-full bg-[radial-gradient(ellipse_at_bottom,rgba(167,139,250,0.55)_0%,rgba(186,155,255,0.28)_40%,transparent_80%)]" />
           <div className="absolute inset-x-0 bottom-0 h-48 sm:h-64 bg-gradient-to-t from-[#c4b5fd]/45 via-[#ddd6fe]/20 to-transparent" />
