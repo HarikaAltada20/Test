@@ -26,7 +26,9 @@ import {
 } from "@/lib/post-campaign-enqueue-guards";
 import { claimMultiPlatformChainPlatform } from "@/lib/queue/multi-platform-metrics-chain";
 
-const BATCH_SIZE = 100;
+// Keep refresh jobs small so a slow creator/API response cannot hold a large
+// amount of work in one serverless invocation.
+const BATCH_SIZE = 25;
 
 export async function POST(
   request: Request,

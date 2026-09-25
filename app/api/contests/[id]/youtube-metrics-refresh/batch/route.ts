@@ -74,7 +74,10 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const runId = body.runId as string | undefined;
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
-    const batchSize = typeof body.batchSize === "number" ? body.batchSize : 25;
+    const batchSize =
+      typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
+        ? Math.max(1, Math.min(25, Math.floor(body.batchSize)))
+        : 25;
     const cursor = body.cursor as { id: string } | undefined;
     const metricsTarget: MetricsRefreshTarget =
       body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
