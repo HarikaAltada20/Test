@@ -1,6 +1,8 @@
 /**
- * Serializes mid-batch progress writes for metrics refresh runs so the UI can
- * poll Processed X/N while a single batch is still RUNNING (N ≤ batch size).
+ * Serializes metrics refresh run progress. Counts are accumulated in memory
+ * during a batch; processed/success totals are written on finalize so the UI
+ * jumps by batch size (e.g. 25 → 50). Occasional updated_at heartbeats keep
+ * stale-run recovery healthy without mid-batch counter flicker.
  */
 
 export type MetricsRefreshRunProgressBase = {
@@ -16,6 +18,9 @@ export type MetricsRefreshRunProgressTable =
   | "youtube_metrics_refresh_runs"
   | "instagram_insights_refresh_runs"
   | "tiktok_metrics_refresh_runs";
+
+/** Heartbeat at most this often while recording mid-batch outcomes. */
+export const METRICS_REFRESH_HEARTBEAT_MIN_MS = 15_000;
 
 type ProgressClient = {
   from: (table: string) => {
@@ -40,9 +45,13 @@ export function createMetricsRefreshRunProgressWriter(options: {
   base: MetricsRefreshRunProgressBase;
   /** Omit skipped_recent_count column (TikTok runs table). Default true. */
   writeSkippedRecent?: boolean;
+  /** Min ms between heartbeat-only writes. Default 15s. */
+  heartbeatMinMs?: number;
 }) {
   const { supabase, table, runId, base } = options;
   const writeSkippedRecent = options.writeSkippedRecent !== false;
+  const heartbeatMinMs =
+    options.heartbeatMinMs ?? METRICS_REFRESH_HEARTBEAT_MIN_MS;
 
   let processed = 0;
   let reviewed = 0;
@@ -51,27 +60,15 @@ export function createMetricsRefreshRunProgressWriter(options: {
   let permanentFailure = 0;
   let skipped = 0;
   let writeChain: Promise<void> = Promise.resolve();
+  // Start "fresh" so the first mid-batch record does not immediately heartbeat.
+  let lastHeartbeatAt = Date.now();
 
   const write = (
-    patchExtra?: Record<string, unknown>,
+    patch: Record<string, unknown>,
     matchBatchIndex?: number,
   ) => {
     writeChain = writeChain
       .then(async () => {
-        const patch: Record<string, unknown> = {
-          processed_submissions: base.processed_submissions + processed,
-          reviewed_count: base.reviewed_count + reviewed,
-          success_count: base.success_count + success,
-          temporary_failure_count:
-            base.temporary_failure_count + temporaryFailure,
-          permanent_failure_count:
-            base.permanent_failure_count + permanentFailure,
-          updated_at: new Date().toISOString(),
-          ...patchExtra,
-        };
-        if (writeSkippedRecent) {
-          patch.skipped_recent_count = base.skipped_recent_count + skipped;
-        }
         const q = supabase.from(table).update(patch).eq("id", runId);
         if (matchBatchIndex != null) {
           await q.eq("current_batch_index", matchBatchIndex);
@@ -85,38 +82,49 @@ export function createMetricsRefreshRunProgressWriter(options: {
     return writeChain;
   };
 
+  const maybeHeartbeat = () => {
+    const now = Date.now();
+    if (now - lastHeartbeatAt < heartbeatMinMs) {
+      return writeChain;
+    }
+    lastHeartbeatAt = now;
+    return write({ updated_at: new Date().toISOString() });
+  };
+
+  const bumpAndHeartbeat = () => maybeHeartbeat();
+
   return {
     /** Bump processed (+ optional reviewed) without classifying outcome. */
     addProcessed: (count = 1, alsoReviewed = true) => {
       const n = Math.max(0, count);
       processed += n;
       if (alsoReviewed) reviewed += n;
-      return write();
+      return bumpAndHeartbeat();
     },
     recordSuccess: () => {
       success += 1;
       processed += 1;
       reviewed += 1;
-      return write();
+      return bumpAndHeartbeat();
     },
     recordTemporaryFailure: () => {
       temporaryFailure += 1;
       processed += 1;
       reviewed += 1;
-      return write();
+      return bumpAndHeartbeat();
     },
     recordPermanentFailure: () => {
       permanentFailure += 1;
       processed += 1;
       reviewed += 1;
-      return write();
+      return bumpAndHeartbeat();
     },
     recordSkipped: (count = 1, countAsProcessed = true) => {
       const n = Math.max(0, count);
       skipped += n;
       reviewed += n;
       if (countAsProcessed) processed += n;
-      return write();
+      return bumpAndHeartbeat();
     },
     /**
      * Replace batch deltas with final accounting and advance current_batch_index.
@@ -139,14 +147,23 @@ export function createMetricsRefreshRunProgressWriter(options: {
       temporaryFailure = final.temporaryFailure;
       permanentFailure = final.permanentFailure;
       skipped = final.skipped;
-      return write(
-        {
-          current_batch_index: batchIndex + 1,
-          last_batch_completed_at: now,
-          updated_at: now,
-        },
-        batchIndex,
-      );
+      lastHeartbeatAt = Date.now();
+      const patch: Record<string, unknown> = {
+        processed_submissions: base.processed_submissions + processed,
+        reviewed_count: base.reviewed_count + reviewed,
+        success_count: base.success_count + success,
+        temporary_failure_count:
+          base.temporary_failure_count + temporaryFailure,
+        permanent_failure_count:
+          base.permanent_failure_count + permanentFailure,
+        current_batch_index: batchIndex + 1,
+        last_batch_completed_at: now,
+        updated_at: now,
+      };
+      if (writeSkippedRecent) {
+        patch.skipped_recent_count = base.skipped_recent_count + skipped;
+      }
+      return write(patch, batchIndex);
     },
     awaitIdle: () => writeChain,
     getBatchCounts: () => ({

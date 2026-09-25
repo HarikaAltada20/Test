@@ -128,6 +128,38 @@ export async function removeFromProcessing(rawJobString: string): Promise<void> 
   }
 }
 
+/** Best-effort drop queued/processing jobs for a cancelled run. */
+export async function removeInstagramJobsForRunId(
+  runId: string,
+): Promise<{ removed: number }> {
+  const redis = getRedis();
+  if (!redis || !runId) return { removed: 0 };
+  let removed = 0;
+  try {
+    for (const key of [REDIS_QUEUE_KEY, REDIS_PROCESSING_KEY]) {
+      const items = await redis.lrange(key, 0, -1);
+      if (!items?.length) continue;
+      for (const item of items) {
+        const raw = typeof item === "string" ? item : JSON.stringify(item);
+        try {
+          const parsed = JSON.parse(raw) as { runId?: string };
+          if (parsed?.runId !== runId) continue;
+          const count = await redis.lrem(key, 0, raw);
+          removed += Number(count) || 0;
+        } catch {
+          // skip invalid entries
+        }
+      }
+    }
+  } catch (e) {
+    console.error(
+      "[instagram-insights-queue] removeInstagramJobsForRunId failed:",
+      e,
+    );
+  }
+  return { removed };
+}
+
 export type InstagramProcessingRecoveryDecision = "recover" | "remove" | "keep";
 
 /**

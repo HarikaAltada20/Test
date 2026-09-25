@@ -65,6 +65,11 @@ export async function POST(
       );
     }
 
+    const { removeInstagramJobsForRunId } = await import(
+      "@/lib/queue/instagram-insights-queue"
+    );
+    await removeInstagramJobsForRunId(run.id).catch(() => undefined);
+
     return NextResponse.json({ runId: run.id, status: run.status });
   } catch (e) {
     console.error("[instagram-insights-refresh cancel]", e);

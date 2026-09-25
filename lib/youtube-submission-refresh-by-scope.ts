@@ -22,6 +22,7 @@ import {
   hasNonEmptyRecord,
 } from "@/lib/youtube-other-stats";
 import { patchYouTubeMetrics } from "@/lib/youtube-metrics-patch";
+import { buildLastOkScopesPatch } from "@/lib/youtube-skip-recent-ok";
 
 type SubRow = {
   id: string;
@@ -674,6 +675,8 @@ export async function updateYouTubeSubmissionForScope(
 
   const newViews =
     typeof updates.views === "number" ? updates.views : sub.views ?? 0;
+
+  updates.last_ok_scopes = buildLastOkScopesPatch(scope, now, existingStats);
 
   const patch = {
     ...(needsBasic && typeof updates.views === "number" ? { views: newViews } : {}),

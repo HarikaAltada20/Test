@@ -301,6 +301,13 @@ export async function POST(
     });
 
     await mapLimit(creatorIds, 3, async (creatorId) => {
+      const { data: runStatus } = await supabaseAdmin
+        .from("tiktok_metrics_refresh_runs")
+        .select("status")
+        .eq("id", runId)
+        .maybeSingle();
+      if (!runStatus || runStatus.status !== "running") return;
+
       const subs = submissionsByCreator[creatorId];
       const result = await syncCreatorTikTokDisplayMetrics(
         supabaseAdmin,
@@ -425,6 +432,25 @@ export async function POST(
       permanentFailure: permanentTransitions,
       skipped: 0,
     });
+
+    const { data: runAfter } = await supabaseAdmin
+      .from("tiktok_metrics_refresh_runs")
+      .select("status")
+      .eq("id", runId)
+      .maybeSingle();
+    if (!runAfter || runAfter.status !== "running") {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: runAfter?.status ?? "cancelled",
+        reviewedCount: reviewedInBatch,
+        processedCount: processedInBatch,
+        successCount: successTransitions,
+        permanentFailureCount: permanentTransitions,
+        temporaryFailureCount: temporaryTransitions,
+        skippedRecentCount: 0,
+      });
+    }
 
     return NextResponse.json({
       hasMore,
