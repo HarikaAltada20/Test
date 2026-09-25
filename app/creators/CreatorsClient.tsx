@@ -160,7 +160,7 @@ const creatorEasySteps = [
   {
     title: "Create video & publish",
     description:
-      "Film your video, post it on your socials, and submit the link to the campaign.",
+      "Create content your way, follow the brief, and publish it on your social channels.",
   },
   {
     title: "Track your performance",
@@ -170,13 +170,15 @@ const creatorEasySteps = [
   {
     title: "Get rewarded",
     description:
-      "Get paid based on views or ranking — no follower count required.",
+      "Earn based on the verified performance your content generates.",
   },
 ] as const;
 
-const easyCollageImages = [
-  "/images/Frame 2147243801.png",
-  "/images/Frame 2147243800.png",
+const easyStepImages: readonly (readonly string[])[] = [
+  ["/images/Frame 2147243801.png", "/images/Frame 2147243800.png"],
+  ["/images/Frame 2147243895.png"],
+  ["/images/Frame 2147243895 (1).png"],
+  ["/images/Frame 2147243895 (2).png"],
 ] as const;
 
 const images: string[] = [
@@ -314,9 +316,8 @@ export default function CreatorsClient({
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-advance "As easy as you think" steps while section is in view
+  // Auto-advance "As easy as you think" steps
   useEffect(() => {
-    if (!isAnimated) return;
     setEasyStepProgress(0);
     const tickMs = 50;
     const stepDurationMs = 4000;
@@ -324,14 +325,21 @@ export default function CreatorsClient({
       setEasyStepProgress((prev) => {
         const next = prev + tickMs / stepDurationMs;
         if (next >= 1) {
-          setEasyStep((s) => (s + 1) % creatorEasySteps.length);
-          return 0;
+          return 1;
         }
         return next;
       });
     }, tickMs);
-    return () => clearInterval(interval);
-  }, [isAnimated, easyStep]);
+
+    const stepTimeout = setTimeout(() => {
+      setEasyStep((s) => (s + 1) % creatorEasySteps.length);
+    }, stepDurationMs);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(stepTimeout);
+    };
+  }, [easyStep]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -1275,19 +1283,27 @@ export default function CreatorsClient({
                 style={{ animationDelay: "0.3s" }}
               >
                 <div className="relative h-[320px] sm:h-[400px] md:h-[460px]">
-                  <div className="absolute inset-0 flex flex-col gap-1">
-                    {easyCollageImages.map((src) => (
-                      <div key={src} className="relative flex-1 min-h-0">
-                        <Image
-                          src={src}
-                          alt=""
-                          fill
-                          className="object-cover object-center"
-                          sizes="(max-width: 1024px) 90vw, 560px"
-                          priority
-                        />
-                      </div>
-                    ))}
+                  <div
+                    key={easyStep}
+                    className="absolute inset-0 flex flex-col gap-1 transition-opacity duration-300"
+                  >
+                    {(easyStepImages[easyStep] || easyStepImages[0]).map(
+                      (src, idx) => (
+                        <div
+                          key={`${easyStep}-${src}-${idx}`}
+                          className="relative flex-1 min-h-0"
+                        >
+                          <Image
+                            src={src}
+                            alt=""
+                            fill
+                            className="object-cover object-center transition-all duration-300"
+                            sizes="(max-width: 1024px) 90vw, 560px"
+                            priority
+                          />
+                        </div>
+                      ),
+                    )}
                   </div>
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
                   <div className="absolute inset-x-0 bottom-5 flex justify-center z-10">
@@ -1313,10 +1329,7 @@ export default function CreatorsClient({
                       <li key={step.title}>
                         <button
                           type="button"
-                          onClick={() => {
-                            setEasyStep(index);
-                            setEasyStepProgress(0);
-                          }}
+                          onClick={() => setEasyStep(index)}
                           className="w-full text-left py-4 group"
                         >
                           <h3
@@ -1769,11 +1782,42 @@ export default function CreatorsClient({
             {/* Number */}
             <h1
               className={cn(
-                "text-[52px] font-bold leading-none tracking-[-0.04em] sm:text-[100px] md:text-[120px] lg:text-[124px]",
+                "flex items-center justify-center text-[52px] font-bold leading-none tracking-[-0.04em] sm:text-[100px] md:text-[120px] lg:text-[124px]",
                 isLight ? "text-black" : "text-white",
               )}
             >
-              16,700+
+              {"16,700+".split("").map((ch, idx) => {
+                const isDigit = /^[0-9]$/.test(ch);
+                if (!isDigit) {
+                  return <span key={idx}>{ch}</span>;
+                }
+                const val = parseInt(ch, 10);
+                const targetIdx = val === 0 ? 10 : val;
+                const digitItems = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+                return (
+                  <span
+                    key={idx}
+                    className="relative inline-block h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] overflow-hidden align-top select-none"
+                  >
+                    <span
+                      className="flex flex-col transition-transform duration-1000 ease-[cubic-bezier(0.12,0.8,0.2,1)]"
+                      style={{
+                        transform: `translateY(-${(targetIdx * 100) / digitItems.length}%)`,
+                        transitionDelay: `${idx * 75}ms`,
+                      }}
+                    >
+                      {digitItems.map((d, dIdx) => (
+                        <span
+                          key={dIdx}
+                          className="flex h-[52px] sm:h-[100px] md:h-[120px] lg:h-[124px] shrink-0 items-center justify-center"
+                        >
+                          {d}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                );
+              })}
             </h1>
 
             {/* Subtitle */}

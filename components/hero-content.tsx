@@ -46,7 +46,13 @@ const FORM_DEMO_CAMPAIGN_TYPES = [
   "Dual Rewards",
 ] as const;
 
-type FormCursorTarget = "title" | "budget" | "launch" | "campaignType";
+type FormCursorTarget =
+  | "title"
+  | "budget"
+  | "launch"
+  | "campaignType"
+  | "thumbnail"
+  | "creatorCard";
 
 function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -54,6 +60,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const budgetRef = useRef<HTMLDivElement>(null);
   const launchRef = useRef<HTMLDivElement>(null);
   const campaignTypeRef = useRef<HTMLDivElement>(null);
+  const thumbnailRef = useRef<HTMLDivElement>(null);
 
   const [title, setTitle] = useState("");
   const [platformReady, setPlatformReady] = useState(false);
@@ -65,6 +72,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const [budgetText, setBudgetText] = useState("$0");
   const [budgetTyping, setBudgetTyping] = useState(false);
   const [showThumb, setShowThumb] = useState(false);
+  const [isDraggingThumb, setIsDraggingThumb] = useState(false);
   const [rocketFlying, setRocketFlying] = useState(false);
   const [demoKey, setDemoKey] = useState(0);
 
@@ -75,6 +83,14 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
   const getTargetPos = (target: FormCursorTarget) => {
     const root = rootRef.current;
+    if (!root) return null;
+    if (target === "creatorCard") {
+      const rootRect = root.getBoundingClientRect();
+      return {
+        x: rootRect.width + 180,
+        y: 350,
+      };
+    }
     const el =
       target === "title"
         ? titleRef.current
@@ -82,8 +98,10 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           ? budgetRef.current
           : target === "campaignType"
             ? campaignTypeRef.current
-            : launchRef.current;
-    if (!root || !el) return null;
+            : target === "thumbnail"
+              ? thumbnailRef.current
+              : launchRef.current;
+    if (!el) return null;
     const rootRect = root.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
     return {
@@ -138,6 +156,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       setBudgetText("$0");
       setBudgetTyping(false);
       setShowThumb(false);
+      setIsDraggingThumb(false);
       setRocketFlying(false);
       setCursorVisible(false);
       setCursorClicking(false);
@@ -203,8 +222,21 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
       await wait(350);
       if (cancelled) return;
-      setShowThumb(true);
 
+      // Cursor moves across to the 2nd Creator Card on the right, grabs it and drags to thumbnail box
+      await moveCursorTo("creatorCard");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setIsDraggingThumb(true);
+      await moveCursorTo("thumbnail");
+      if (cancelled) return;
+      await clickCursor();
+      if (cancelled) return;
+
+      setIsDraggingThumb(false);
+      setShowThumb(true);
       await wait(450);
       if (cancelled) return;
 
@@ -485,6 +517,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
           {/* Upload / thumbnail */}
           <div
+            ref={thumbnailRef}
             className={cn(
               "relative mt-5 flex h-[132px] items-center justify-center overflow-hidden rounded-md border border-dashed transition-all duration-500",
               isLight
@@ -542,7 +575,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       <div
         ref={budgetRef}
         className={cn(
-          "absolute bottom-[8px] left-[20px] z-10 w-[180px] rounded-[18px] border p-4",
+          "absolute bottom-[8px] left-[20px] z-10 w-[176px] rounded-[18px] border p-4",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
             : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
@@ -588,7 +621,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
         </div>
       </div>
 
-      {/* Animated cursor arrow — clicks fields then Launch */}
+      {/* Animated cursor arrow — clicks fields, drags thumbnail from 2nd card, then Launch */}
       <div
         aria-hidden
         className={cn(
@@ -603,6 +636,17 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
           height: 28,
         }}
       >
+        {isDraggingThumb ? (
+          <div className="pointer-events-none absolute -left-12 -top-10 h-14 w-24 overflow-hidden rounded-md border border-white/40 shadow-2xl rotate-[-6deg] animate-pulse">
+            <Image
+              src={FORM_DEMO_THUMB}
+              alt=""
+              fill
+              className="object-cover"
+            />
+          </div>
+        ) : null}
+
         {showClickBurst ? (
           <span className="pointer-events-none absolute -left-1 -top-1 h-5 w-5 animate-ping rounded-full bg-white/45" />
         ) : null}
@@ -726,6 +770,60 @@ const VIEWS_GENERATED_NUMBERS = [
   "160M+",
 ];
 
+function RollingDigitChar({
+  char,
+  isLight,
+  delay = 0,
+}: {
+  char: string;
+  isLight: boolean;
+  delay?: number;
+}) {
+  const isDigit = /^[0-9]$/.test(char);
+  const textGradient = isLight
+    ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
+    : "bg-[linear-gradient(180deg,#555555_0%,#D8D8D8_45%,#FFFFFF_90%)]";
+
+  if (!isDigit) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center justify-center bg-clip-text text-transparent select-none px-[0.02em]",
+          textGradient,
+        )}
+      >
+        {char}
+      </span>
+    );
+  }
+
+  const numericValue = parseInt(char, 10);
+
+  return (
+    <span className="relative inline-block h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] overflow-hidden align-top select-none">
+      <span
+        className="flex flex-col transition-transform duration-450 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          transform: `translateY(-${numericValue * 10}%)`,
+          transitionDelay: `${delay}ms`,
+        }}
+      >
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((val) => (
+          <span
+            key={val}
+            className={cn(
+              "flex h-[64px] sm:h-[76px] md:h-[92px] lg:h-[112px] shrink-0 items-center justify-center bg-clip-text text-transparent",
+              textGradient,
+            )}
+          >
+            {val}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 function HeroStatBlock({
   numbers,
   label,
@@ -748,7 +846,7 @@ function HeroStatBlock({
           setAnimate(true);
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.05 },
     );
 
     if (containerRef.current) {
@@ -762,36 +860,24 @@ function HeroStatBlock({
     if (animate && step < maxSteps) {
       const timeout = setTimeout(() => {
         setStep((prev) => prev + 1);
-      }, 400);
+      }, 300);
       return () => clearTimeout(timeout);
     }
   }, [animate, step, maxSteps]);
 
-  const translateYPercent = (step * 100) / numbers.length;
+  const currentStr = numbers[step] || numbers[0];
 
   return (
     <div className="flex flex-col items-center text-center" ref={containerRef}>
-      <div className="h-[64px] overflow-hidden sm:h-[76px] md:h-[92px] lg:h-[112px]">
-        <div
-          className="flex flex-col transition-transform duration-500 ease-out"
-          style={{
-            transform: `translateY(-${translateYPercent}%)`,
-          }}
-        >
-          {numbers.map((num, i) => (
-            <h2
-              key={i}
-              className={cn(
-                "flex h-[64px] shrink-0 items-center justify-center bg-clip-text text-[64px] font-extrabold leading-none tracking-[-0.055em] text-transparent sm:h-[76px] sm:text-[76px] md:h-[92px] md:text-[92px] lg:h-[112px] lg:text-[112px]",
-                isLight
-                  ? "bg-gradient-to-b from-black via-[#3a3a3a] to-[#9a9a9a]"
-                  : "bg-[linear-gradient(180deg,#555555_0%,#D8D8D8_45%,#FFFFFF_90%)]",
-              )}
-            >
-              {num}
-            </h2>
-          ))}
-        </div>
+      <div className="flex items-center justify-center font-extrabold leading-none tracking-[-0.055em] text-[64px] sm:text-[76px] md:text-[92px] lg:text-[112px]">
+        {currentStr.split("").map((ch, i) => (
+          <RollingDigitChar
+            key={`${i}-${currentStr.length}`}
+            char={ch}
+            isLight={isLight}
+            delay={i * 25}
+          />
+        ))}
       </div>
 
       <p
@@ -1118,12 +1204,12 @@ export default function HeroContent() {
             <h1
               className={cn(
                 "text-[42px] font-semibold leading-[1.05] tracking-[-0.05em] sm:text-[50px] md:text-[52px] font-['Inter'] font-bold leading-[110%] tracking-[-4%] text-center",
-                isLight
-                  ? "text-black/75"
-                  : "bg-[linear-gradient(180deg,#555555_0%,#D8D8D8_45%,#FFFFFF_90%)] bg-clip-text text-transparent",
+                isLight ? "text-black/75" : "text-white",
               )}
             >
-              Creators earn on{" "}
+              <span className={isLight ? "text-black/60" : "text-[#757575]"}>
+                Creators earn on{" "}
+              </span>
               <span className="inline-flex items-center gap-2">
                 {/* Performance icon — opt out of text fill so the badge stays visible */}
                 <span
@@ -1150,10 +1236,17 @@ export default function HeroContent() {
                     className="h-[32px] w-[32px] object-contain"
                   />
                 </span>
-                performance
-              </span>
+                <span className={isLight ? "text-black" : "text-white"}>
+                  performance
+                </span>
+              </span>{" "}
               <br />
-              Brands grow on results.
+              <span className={isLight ? "text-black/60" : "text-[#757575]"}>
+                Brands grow on{" "}
+              </span>
+              <span className={isLight ? "text-black" : "text-white"}>
+                results.
+              </span>
             </h1>
 
             {/* Description */}
@@ -1171,7 +1264,7 @@ export default function HeroContent() {
               CTA BUTTONS
           ====================================================== */}
 
-            <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:mt-8 sm:flex-row">
               <Link
                 href="/brands"
                 className={cn(
@@ -1219,7 +1312,7 @@ export default function HeroContent() {
         {/* =========================================================
           VISUAL / ORBIT AREA
       ========================================================= */}
-        <section className="relative mx-auto mt-8 w-full max-w-[1400px] px-4 pb-12 sm:mt-10 sm:px-6 sm:pb-16 lg:mt-[55px] lg:h-[620px] lg:px-0 lg:pb-0">
+        <section className="relative mx-auto mt-4 w-full max-w-[1400px] px-4 pb-8 sm:mt-6 sm:px-6 sm:pb-12 lg:mt-6 lg:h-[550px] lg:px-0 lg:pb-0">
           {/* =====================================================
             LEFT CAMPAIGN CARD
         ===================================================== */}
@@ -1269,7 +1362,7 @@ export default function HeroContent() {
 
             {/* Tags */}
             <div className="mt-3 flex flex-wrap gap-[7px]">
-              {["Clipping", "UGC"].map((tag) => (
+              {["Clipping", "Paid","Podcast"].map((tag) => (
                 <span
                   key={tag}
                   className={cn(
@@ -1348,9 +1441,9 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[105px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
+              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[60px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
               isLight
-                ? "border border-black/[0.06] bg-white shadow-[inset_0px_5px_4px_2px_#575757CC]"
+                ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
                 : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
             )}
           >
@@ -1661,7 +1754,7 @@ export default function HeroContent() {
                   : "border border-white/[0.10] bg-gradient-to-b from-[#191919] to-[#151515] shadow-[inset_0_1px_0_rgba(255,255,255,.025)]",
               )}
             >
-              {/* Bottom white shade */}
+              {/* Bottom shade */}
               <div
                 aria-hidden
                 className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-24 sm:h-28"
@@ -1671,7 +1764,7 @@ export default function HeroContent() {
                     "absolute inset-x-0 bottom-0 h-full",
                     isLight
                       ? "bg-[radial-gradient(ellipse_at_bottom,rgba(124,58,237,0.06)_0%,transparent_70%)]"
-                      : "bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_40%,transparent_72%)]",
+                      : "bg-[radial-gradient(ellipse_at_bottom,rgba(0,0,0,0.4)_0%,transparent_72%)]",
                   )}
                 />
                 <div
@@ -1679,10 +1772,11 @@ export default function HeroContent() {
                     "absolute inset-x-0 bottom-0 h-14 sm:h-16",
                     isLight
                       ? "bg-gradient-to-t from-white/70 via-transparent to-transparent"
-                      : "bg-gradient-to-t from-white/[0.10] via-white/[0.03] to-transparent",
+                      : "",
                   )}
                 />
               </div>
+
 
               {/* Badge */}
               <div
@@ -1724,7 +1818,7 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute left-3 top-[252px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[286px] sm:w-[225px] sm:px-3",
+                  "absolute left-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:left-[25px] sm:top-[256px] sm:w-[225px] sm:px-3 rotate-[-3.78deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
@@ -1754,7 +1848,7 @@ export default function HeroContent() {
                     <div
                       className={cn(
                         "text-[8px] leading-[10px]",
-                        isLight ? "text-black/40" : "text-white/35",
+                        isLight ? "text-black/40" : "text-[#8E8E93]",
                       )}
                     >
                       You can withdraw your
@@ -1774,7 +1868,7 @@ export default function HeroContent() {
             ================================================= */}
               <div
                 className={cn(
-                  "absolute right-3 top-[252px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[286px] sm:w-[220px] sm:px-3",
+                  "absolute right-3 top-[222px] z-30 flex w-[min(200px,48%)] items-center justify-between rounded-[30px] border px-2 py-2 sm:right-[25px] sm:top-[256px] sm:w-[220px] sm:px-3 rotate-[2.85deg]",
                   isLight
                     ? "border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(20,16,40,0.12)]"
                     : "border-white/[0.08] bg-[#191919] shadow-[0_12px_35px_rgba(0,0,0,.45)]",
@@ -1804,7 +1898,7 @@ export default function HeroContent() {
                     <div
                       className={cn(
                         "text-[8px] leading-[10px]",
-                        isLight ? "text-black/40" : "text-white/35",
+                        isLight ? "text-black/40" : "text-[#8E8E93]",
                       )}
                     >
                       Your rank 1st in Leader board
@@ -1823,13 +1917,13 @@ export default function HeroContent() {
                 CREATOR CONTENT GRID
             ================================================= */}
               <div className="absolute bottom-0 left-0 right-0 h-[272px] overflow-hidden">
-                <div className="absolute inset-0 flex flex-col gap-[2px]">
+                <div className="absolute inset-0 flex flex-col gap-2.5">
                   <div className="relative min-h-0 flex-[135] overflow-hidden">
                     <div className="flex h-full animate-creators-collage-left">
                       {[0, 1].map((copy) => (
                         <div
                           key={`creators-collage-top-copy-${copy}`}
-                          className="flex h-full shrink-0 gap-2 pr-2"
+                          className="flex h-full shrink-0 gap-2.5 pr-2.5"
                         >
                           {creatorsCollageTopImages.map((src, index) => (
                             <Image
@@ -1838,7 +1932,7 @@ export default function HeroContent() {
                               alt=""
                               width={1280}
                               height={720}
-                              className="h-full w-auto max-w-none shrink-0 object-cover"
+                              className="h-full w-auto max-w-none shrink-0 rounded-lg object-cover"
                               sizes="320px"
                               priority={copy === 0 && index === 0}
                             />
@@ -1852,7 +1946,7 @@ export default function HeroContent() {
                       {[0, 1].map((copy) => (
                         <div
                           key={`creators-collage-bot-copy-${copy}`}
-                          className="flex h-full shrink-0 gap-2 pr-2"
+                          className="flex h-full shrink-0 gap-2.5 pr-2.5"
                         >
                           {creatorsCollageBottomImages.map((src, index) => (
                             <Image
@@ -1861,7 +1955,7 @@ export default function HeroContent() {
                               alt=""
                               width={1280}
                               height={720}
-                              className="h-full w-auto max-w-none shrink-0 object-cover"
+                              className="h-full w-auto max-w-none shrink-0 rounded-lg object-cover"
                               sizes="320px"
                             />
                           ))}
@@ -1875,22 +1969,23 @@ export default function HeroContent() {
                 <div
                   aria-hidden
                   className={cn(
-                    "pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-20",
+                    "pointer-events-none absolute inset-y-0 left-0 z-10 w-16 sm:w-24",
                     isLight
-                      ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0)_100%)]"
-                      : "bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)]",
+                      ? "bg-[linear-gradient(90deg,#f5f5f7_0%,rgba(245,245,247,0)_100%)]"
+                      : "bg-[linear-gradient(90deg,#151515_0%,rgba(21,21,21,0)_100%)]",
                   )}
                 />
                 <div
                   aria-hidden
                   className={cn(
-                    "pointer-events-none absolute inset-y-0 right-0 z-10 w-16 scale-x-[-1] sm:w-20",
+                    "pointer-events-none absolute inset-y-0 right-0 z-10 w-16 scale-x-[-1] sm:w-24",
                     isLight
-                      ? "bg-[linear-gradient(90deg,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0)_100%)]"
-                      : "bg-[linear-gradient(90deg,rgba(0,0,0,0.87)_0%,rgba(57,57,57,0)_100%)]",
+                      ? "bg-[linear-gradient(90deg,#f5f5f7_0%,rgba(245,245,247,0)_100%)]"
+                      : "bg-[linear-gradient(90deg,#151515_0%,rgba(21,21,21,0)_100%)]",
                   )}
                 />
               </div>
+
             </div>
           </div>
         </section>

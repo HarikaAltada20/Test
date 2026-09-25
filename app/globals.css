@@ -185,18 +185,23 @@ body {
 
 @keyframes form-rocket-fly {
   0% {
-    transform: translateX(0);
+    transform: translateX(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  25% {
+    /* Rotate right first */
+    transform: translateX(4px) rotate(45deg) scale(1.1);
     opacity: 1;
   }
   100% {
-    /* Slide fully past the right edge of the button */
-    transform: translateX(96px);
+    /* Slide fully past the right edge of the button while facing right */
+    transform: translateX(96px) rotate(45deg) scale(1);
     opacity: 1;
   }
 }
 
 .animate-form-rocket-fly {
-  animation: form-rocket-fly 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: form-rocket-fly 0.85s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 @keyframes form-thumb-in {

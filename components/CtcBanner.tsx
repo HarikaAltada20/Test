@@ -199,7 +199,7 @@ export default function CtcBanner() {
   return (
     <section
       className={cn(
-        "relative flex flex-col items-center justify-center min-h-[320px] md:min-h-[380px] text-center overflow-hidden transition-colors duration-300",
+        "relative flex flex-col items-center justify-center min-h-[260px] md:min-h-[300px] text-center overflow-hidden transition-colors duration-300",
         isLight
           ? "bg-[#F1F1F1] text-black"
           : "bg-black text-white",
@@ -220,13 +220,13 @@ export default function CtcBanner() {
               <ShieldCheck
                 className={cn(
                   "h-4 w-4",
-                  isLight ? "text-black/45" : "text-zinc-200",
+                  isLight ? "text-black/45" : "text-[#353535]",
                 )}
               />
               Pay for Performance
             </div>
 
-            <div className="relative mt-3 flex flex-col items-center justify-center w-full max-w-[780px] py-10 sm:py-12 md:py-14">
+            <div className="relative mt-2 flex flex-col items-center justify-center w-full max-w-[780px] pt-6 pb-4 sm:pt-8 sm:pb-6 md:pt-8 md:pb-6">
               <AnimatedBackgroundArcs isLight={isLight} />
 
               <div
@@ -311,14 +311,14 @@ export default function CtcBanner() {
               <ShieldCheck
                 className={cn(
                   "h-4 w-4",
-                  isLight ? "text-black/45" : "text-zinc-200",
+                  isLight ? "text-black/45" : "text-[#353535]",
                 )}
               />
               Pay for Performance
             </div>
 
             {/* Static circles around heading + buttons */}
-            <div className="relative mt-3 flex flex-col items-center justify-center w-full max-w-[780px] py-10 sm:py-12 md:py-14">
+            <div className="relative mt-2 flex flex-col items-center justify-center w-full max-w-[780px] pt-6 pb-4 sm:pt-8 sm:pb-6 md:pt-8 md:pb-6">
               <AnimatedBackgroundArcs isLight={isLight} />
 
               <div
