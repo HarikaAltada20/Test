@@ -581,7 +581,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       <div
         ref={budgetRef}
         className={cn(
-          "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[14px] sm:rounded-[18px] border p-3 sm:p-4",
+          "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[12px] sm:rounded-[14px] border p-3",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
             : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
@@ -589,23 +589,23 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       >
         <div
           className={cn(
-            "flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium",
+            "flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[14px] font-medium",
             isLight ? "text-black" : "text-white",
           )}
         >
-          <Wallet
-            className={cn(
-              "h-[16px] w-[16px] sm:h-[20px] sm:w-[20px] shrink-0",
-              isLight ? "text-black/70" : "text-white/90",
-            )}
-            strokeWidth={1.8}
+          <Image
+            src="/images/Clip%20path%20group%20(2).png"
+            alt="Budget icon"
+            width={20}
+            height={20}
+            className="h-[16px] w-[16px] shrink-0 object-contain sm:h-[18px] sm:w-[18px]"
           />
           Budget
         </div>
 
         <div
           className={cn(
-            "mt-2 sm:mt-3.5 flex h-[32px] sm:h-[38px] items-center rounded-md border px-2.5 sm:px-3.5 text-[12px] sm:text-[14px] tabular-nums transition-all duration-200",
+            "mt-2.5 flex h-[32px] sm:h-[38px] items-center rounded-md border px-2.5 sm:px-3.5 text-[12px] sm:text-[14px] tabular-nums transition-all duration-200",
             isLight
               ? budgetTyping
                 ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
@@ -1035,7 +1035,7 @@ export default function HeroContent() {
           {/* Two gray orbit circles — purple travels on outer, yellow on inner */}
           <svg
             className={cn(
-              "absolute left-1/2 top-[0%] aspect-square w-[min(112vw,1080px)] max-w-none -translate-x-1/2 sm:top-[-4%] sm:w-[min(108vw,1180px)] lg:top-[-10%] lg:w-[min(98vw,1280px)]",
+              "absolute left-1/2 top-[0%] aspect-square w-[min(112vw,1080px)] max-w-none -translate-x-1/2 sm:top-[-4%] sm:w-[min(108vw,1180px)] lg:top-[-20%] lg:w-[min(98vw,1280px)]",
               isLight ? "opacity-45" : "opacity-100",
             )}
             viewBox="0 0 1000 1000"
@@ -1117,7 +1117,7 @@ export default function HeroContent() {
             <circle
               cx="500"
               cy="500"
-              r="360"
+              r="420"
               stroke="url(#heroCircleBorderInner)"
               strokeWidth="5"
             />
@@ -1130,7 +1130,7 @@ export default function HeroContent() {
                   className="animate-hero-orbit-purple"
                   cx="500"
                   cy="500"
-                  r="360"
+                  r="420"
                   stroke="url(#heroPurpleOrbit)"
                   strokeWidth="2.75"
                   strokeLinecap="round"
@@ -1142,11 +1142,11 @@ export default function HeroContent() {
                   className="animate-hero-orbit-yellow"
                   cx="500"
                   cy="500"
-                  r="460"
+                  r="490"
                   stroke="url(#heroYellowOrbit)"
                   strokeWidth="2.5"
                   strokeLinecap="round"
-                  strokeDasharray="130 2572"
+                  strokeDasharray="130 3100"
                   filter="url(#heroYellowGlow)"
                 />
               </>
