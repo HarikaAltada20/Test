@@ -14150,6 +14150,53 @@ export default function ContestDetailClient({
     }
   };
 
+  /** Status before a Review Mode action, so Undo restores it instead of forcing pending. */
+  const reviewUndoStateRef = useRef(
+    new Map<
+      string,
+      { status: string; qualityScore: number | null; reason: string | null }
+    >(),
+  );
+
+  const rememberReviewUndoState = (ids: string[]) => {
+    ids.forEach((id) => {
+      const s = reviewSubmissionLookup.byId.get(id);
+      if (!s) return;
+      reviewUndoStateRef.current.set(id, {
+        status: String(s.status),
+        qualityScore: s.quality_score ?? null,
+        reason: getFullRejectionDetails((s as any).metadata)?.reason ?? null,
+      });
+    });
+  };
+
+  const undoReviewModeration = async (ids: string[]) => {
+    for (const id of ids) {
+      const prev = reviewUndoStateRef.current.get(id);
+      reviewUndoStateRef.current.delete(id);
+      const status = prev?.status ?? "pending";
+      if (status === "verified" || status === "approved") {
+        const prevScore = parseQualityScore(prev?.qualityScore);
+        await handleBulkUpdateSubmissionStatus([id], "verified", undefined, {
+          skipQualityPrompt: true,
+          qualityScore:
+            prevScore ??
+            (isVideoContestFormat
+              ? resolveReversalVerifyQualityScore([id])
+              : undefined),
+        });
+      } else if (status === "rejected") {
+        await handleBulkUpdateSubmissionStatus(
+          [id],
+          "rejected",
+          prev?.reason || "Restored previous rejection",
+        );
+      } else {
+        await handleBulkUpdateSubmissionStatus([id], "pending");
+      }
+    }
+  };
+
   const canModerateInReview = (id: string) => {
     const s = reviewSubmissionLookup.byId.get(id);
     return (
@@ -35158,11 +35205,13 @@ export default function ContestDetailClient({
           selectedIds={normalViewSelectedSubmissions}
           onToggleSelect={handleNormalViewCheckboxChange}
           onClearSelection={() => setNormalViewSelectedSubmissions(new Set())}
-          onModerate={(action, ids) =>
-            void runSubmissionModeration(action, ids, { clearSelection: false })
-          }
+          onModerate={(action, ids) => {
+            rememberReviewUndoState(ids);
+            void runSubmissionModeration(action, ids, { clearSelection: false });
+          }}
           onRejectWithReason={async (ids, reason) => {
             if (!assertSubmissionModerationAllowed()) return;
+            rememberReviewUndoState(ids);
             await handleBulkUpdateSubmissionStatus(ids, "rejected", reason);
           }}
           onBulkModerate={(action, ids) =>
@@ -35170,7 +35219,7 @@ export default function ContestDetailClient({
           }
           onUndo={async (ids) => {
             if (!assertSubmissionModerationAllowed()) return;
-            await handleBulkUpdateSubmissionStatus(ids, "pending");
+            await undoReviewModeration(ids);
           }}
           isBusy={(id) => !!isLoadingSubmission[id]}
           bulkBusyAction={normalViewBulkActiveAction}

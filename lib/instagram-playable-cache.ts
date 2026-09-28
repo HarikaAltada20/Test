@@ -111,8 +111,11 @@ async function hitLimit(key: string, limit: number): Promise<boolean> {
   if (redis) {
     try {
       const fullKey = `${KEY_PREFIX}:${bucketKey}`;
-      const count = await redis.incr(fullKey);
-      if (count === 1) await redis.pexpire(fullKey, WINDOW_MS);
+      const [count] = await redis
+        .multi()
+        .incr(fullKey)
+        .pexpire(fullKey, WINDOW_MS)
+        .exec<[number, number]>();
       return count <= limit;
     } catch (error) {
       console.warn("[instagram-playable-cache] Redis limit failed", error);
