@@ -10,9 +10,24 @@ import React, {
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import {
+  CONTEST_VIRTUAL_BODY_CLASS,
+  CONTEST_VIRTUAL_ROW_CLASS,
   CONTEST_VIRTUAL_SPACER_CLASS,
   useContestSubmissionsVirtualTable,
 } from "@/components/contest/use-contest-submissions-virtual-table";
+import {
+  CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+  CONTEST_DETAILED_ROW_ESTIMATE,
+} from "@/lib/contest-submissions-virtual-table";
+import { ReviewMode } from "@/components/contest/review-mode/ReviewMode";
+import { readReviewParam } from "@/components/contest/review-mode/use-review-feed";
+import type {
+  ReviewCreatorCampaignCounts,
+  ReviewCreatorStats,
+  ReviewMetricsSource,
+  ReviewRewardSummary,
+  ReviewSubmission,
+} from "@/components/contest/review-mode/types";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   getMetricsRefreshCooldownInfoBrand,
@@ -449,6 +464,7 @@ import {
   Star,
   Globe,
   Columns2,
+  PlaySquare,
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import {
@@ -3647,6 +3663,7 @@ export default function ContestDetailClient({
   // Creator-wise view + optional inline video playback (Detailed View checkbox)
   const [viewMode, setViewMode] = useState<"normal" | "creator-wise">("normal");
   const [detailedViewEnabled, setDetailedViewEnabled] = useState(false);
+  const preserveSelectionAfterModerationRef = useRef(false);
 
   const isSubmissionTableView = viewMode === "normal";
   const supportsInlineContentEmbed =
@@ -4304,7 +4321,7 @@ export default function ContestDetailClient({
   const submissionsVirtualTable = useContestSubmissionsVirtualTable(
     paginatedSubmissions,
     {
-      estimateSize: useInlineContentPlayer ? 200 : 52,
+      estimateSize: useInlineContentPlayer ? CONTEST_DETAILED_ROW_ESTIMATE : 52,
       enabled:
         detailedViewEnabled &&
         isSubmissionTableView &&
@@ -4499,11 +4516,21 @@ export default function ContestDetailClient({
     setNormalViewSelectedSubmissions(newSet);
   };
 
-  const handleNormalViewBulkAction = async (
+  /**
+   * Shared verify/reject/pending flow for the bulk bar and Review Mode.
+   * `clearSelection: false` keeps the user's ticks (single-clip actions from
+   * Review Mode), including after the rejection / reversal dialogs confirm.
+   */
+  const runSubmissionModeration = async (
     action: "verify" | "reject" | "pending",
+    selectedIds: string[],
+    { clearSelection }: { clearSelection: boolean },
   ) => {
-    const selectedIds = Array.from(normalViewSelectedSubmissions);
     if (selectedIds.length === 0) return;
+    preserveSelectionAfterModerationRef.current = !clearSelection;
+    const clearSelectionIfNeeded = () => {
+      if (clearSelection) setNormalViewSelectedSubmissions(new Set());
+    };
 
     if (action === "verify") {
       if (!assertSubmissionModerationAllowed()) return;
@@ -4534,7 +4561,7 @@ export default function ContestDetailClient({
       setNormalViewBulkActiveAction("verify");
       try {
         await handleBulkUpdateSubmissionStatus(selectedIds, "verified");
-        setNormalViewSelectedSubmissions(new Set());
+        clearSelectionIfNeeded();
       } finally {
         setNormalViewBulkActiveAction(null);
       }
@@ -4569,11 +4596,20 @@ export default function ContestDetailClient({
     setNormalViewBulkActiveAction("pending");
     try {
       await handleBulkUpdateSubmissionStatus(selectedIds, "pending");
-      setNormalViewSelectedSubmissions(new Set());
+      clearSelectionIfNeeded();
     } finally {
       setNormalViewBulkActiveAction(null);
     }
   };
+
+  const handleNormalViewBulkAction = (
+    action: "verify" | "reject" | "pending",
+  ) =>
+    runSubmissionModeration(
+      action,
+      Array.from(normalViewSelectedSubmissions),
+      { clearSelection: true },
+    );
 
   const orderedNormalViewDownloadIds = useMemo(() => {
     const selected = normalViewSelectedSubmissions;
@@ -9244,8 +9280,12 @@ export default function ContestDetailClient({
 
     setRejectionModalOpen(false);
     setPendingRejectionSubmissionIds([]);
-    setNormalViewSelectedSubmissions(new Set());
-    setCreatorWiseSelectedCreators(new Set());
+    if (preserveSelectionAfterModerationRef.current) {
+      preserveSelectionAfterModerationRef.current = false;
+    } else {
+      setNormalViewSelectedSubmissions(new Set());
+      setCreatorWiseSelectedCreators(new Set());
+    }
   };
 
   const handleMarkAsPaid = (submissionId: string) => {
@@ -10421,8 +10461,12 @@ export default function ContestDetailClient({
         setNormalViewBulkActiveAction(null);
       }
     }
-    setNormalViewSelectedSubmissions(new Set());
-    setCreatorWiseSelectedCreators(new Set());
+    if (preserveSelectionAfterModerationRef.current) {
+      preserveSelectionAfterModerationRef.current = false;
+    } else {
+      setNormalViewSelectedSubmissions(new Set());
+      setCreatorWiseSelectedCreators(new Set());
+    }
   };
 
   const handleSyncCreatorViews = async () => {
@@ -13120,6 +13164,1048 @@ export default function ContestDetailClient({
       };
     }
   }
+
+  /** Expected reward for a submission row (table + Review Mode). */
+  const getSubmissionExpectedReward = (submission: Submission) => {
+    const isTwitterTweet = (submission as any).is_twitter_tweet === true;
+    const payoutAdjustmentPercentage = Number(
+      (currentContest as any)
+        ?.payout_adjustment_percentage ?? 0,
+    );
+    const payoutAdjustmentMode = (
+      currentContest as any
+    )?.payout_adjustment_mode as
+      | "cpm_only"
+      | "milestone_only"
+      | "bonus_only"
+      | "combined"
+      | "cpm_and_milestone"
+      | "dual_rewards_only"
+      | "bonus"
+      | null;
+    const hasPayoutAdjustment =
+      payoutAdjustmentPercentage > 0 &&
+      !!payoutAdjustmentMode;
+    const payoutAdjCpmOrLeaderboardPrize =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode ===
+          "cpm_and_milestone" ||
+        payoutAdjustmentMode === "cpm_only" ||
+        payoutAdjustmentMode ===
+          "dual_rewards_only");
+    const payoutAdjMilestonePortion =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode ===
+          "cpm_and_milestone" ||
+        payoutAdjustmentMode ===
+          "dual_rewards_only" ||
+        payoutAdjustmentMode ===
+          "milestone_only");
+
+    if (
+      currentContest.contest_type ===
+      "leaderboard"
+    ) {
+      const contestDetails =
+        currentContest.contest_based_details
+          ?.leaderboard_contest;
+      if (
+        contestDetails?.prizes &&
+        Array.isArray(contestDetails.prizes)
+      ) {
+        // For Twitter leaderboard campaigns, use creator rank instead of submission rank
+        const isTwitterLeaderboard =
+          isTwitterTweet &&
+          (currentContest.platform?.toLowerCase() ===
+            "twitter" ||
+            currentContest.platform?.toLowerCase() ===
+              "x") &&
+          currentContest.contest_format ===
+            "text_image";
+
+        const submissionStatusRaw = String(
+          isTwitterTweet
+            ? (submission as any)
+                .moderation_status ||
+                submission.status ||
+                ""
+            : submission.status || "",
+        ).toLowerCase();
+        const isRejectedSubmission =
+          submissionStatusRaw === "rejected";
+
+        // Rejected never earns a prize — show No Prize even if
+        // display rank / creator rank would otherwise map to one.
+        if (isRejectedSubmission) {
+          return {
+            amount: 0,
+            label: "No Prize",
+            className: "text-slate-500",
+          };
+        }
+
+        if (isTwitterLeaderboard) {
+          const currentRank =
+            creatorRankingMap.get(
+              submission.creator_id || "",
+            ) || 0;
+          if (currentRank > 0) {
+            const prizeForRank =
+              contestDetails.prizes.find(
+                (prize: any) =>
+                  prize.position ===
+                  currentRank,
+              );
+            if (prizeForRank) {
+              const preCents = Number(
+                prizeForRank.amount || 0,
+              );
+              const postCents =
+                payoutAdjCpmOrLeaderboardPrize
+                  ? applyPayoutAdjustment(
+                      preCents,
+                      payoutAdjustmentPercentage,
+                    )
+                  : preCents;
+              const preDollars =
+                centsToDollars(preCents);
+              const postDollars =
+                centsToDollars(postCents);
+              return {
+                amount: preDollars,
+                label: "Expected",
+                className:
+                  "text-slate-700 font-semibold",
+                preAdjustmentAmountDollars:
+                  preDollars,
+                postAdjustmentAmountDollars:
+                  postDollars,
+              };
+            }
+          }
+          return {
+            amount: 0,
+            label: "No Prize",
+            className: "text-slate-500",
+          };
+        }
+
+        // Non-Twitter: views rank among verified/approved/paid
+        // (All-tab when prizes match; per-platform when they differ).
+        // Do not apply % payout adjustment — server pays fixed rank prizes.
+        const preCents =
+          leaderboardPrizeCentsBySubmissionId.get(
+            String(submission.id),
+          ) ?? 0;
+        if (preCents > 0) {
+          const preDollars =
+            centsToDollars(preCents);
+          return {
+            amount: preDollars,
+            label: "Expected",
+            className:
+              "text-slate-700 font-semibold",
+            preAdjustmentAmountDollars:
+              preDollars,
+            postAdjustmentAmountDollars:
+              preDollars,
+          };
+        }
+        return {
+          amount: 0,
+          label: "No Prize",
+          className: "text-slate-500",
+        };
+      }
+      return {
+        amount: 0,
+        label: "N/A",
+        className: "text-slate-500",
+      };
+    }
+    if (
+      isCpmContestType(
+        currentContest.contest_type,
+      ) ||
+      isMilestoneContestType(
+        currentContest.contest_type,
+      )
+    ) {
+      const milestoneCentsUncapped =
+        isMilestoneContestType(
+          currentContest.contest_type,
+        )
+          ? (milestoneSubmissionExpectedPayoutCents.get(
+              submission.id,
+            ) ?? 0)
+          : 0;
+      const milestoneCentsExpected =
+        isDualRewardsContestType(
+          currentContest.contest_type,
+        )
+          ? (cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+              submission.id,
+            ) ?? milestoneCentsUncapped)
+          : milestoneCentsUncapped;
+      const cpmConfig =
+        currentContest.contest_based_details
+          ?.cpm_contest;
+      let cpmCentsExpected = 0;
+      let dualCreatorCapWarning = false;
+      let dualMilestoneCapWarning = false;
+      let dualUncappedCpmCents:
+        | number
+        | undefined;
+      let dualUncappedTotalCents:
+        | number
+        | undefined;
+      let dualUncappedMilestoneCents:
+        | number
+        | undefined;
+      if (
+        isCpmContestType(
+          currentContest.contest_type,
+        ) &&
+        cpmConfig?.cpm_rate_usd
+      ) {
+        const isTwitterCpm =
+          isTwitterTweet &&
+          (currentContest.platform?.toLowerCase() ===
+            "twitter" ||
+            currentContest.platform?.toLowerCase() ===
+              "x") &&
+          currentContest.contest_format ===
+            "text_image";
+
+        if (isTwitterCpm) {
+          const totalPoints =
+            (submission.other_stats
+              ?.base_points || 0) +
+            ((submission as any)
+              .manual_points_adjustment || 0);
+          // Calculate expected reward: total points * cpm rate / 1000
+          const calculatedEarnings =
+            (totalPoints *
+              cpmConfig.cpm_rate_usd) /
+            1000;
+          cpmCentsExpected = Math.round(
+            calculatedEarnings * 100,
+          );
+          if (
+            !isDualRewardsContestType(
+              currentContest.contest_type,
+            )
+          ) {
+            const preCents = cpmCentsExpected;
+            const postCents =
+              payoutAdjCpmOrLeaderboardPrize
+                ? applyPayoutAdjustment(
+                    preCents,
+                    payoutAdjustmentPercentage,
+                  )
+                : preCents;
+            return {
+              amount: calculatedEarnings,
+              label: "Expected",
+              className:
+                "text-slate-700 font-semibold",
+              preAdjustmentAmountDollars:
+                calculatedEarnings,
+              postAdjustmentAmountDollars:
+                centsToDollars(postCents),
+            };
+          }
+        } else {
+          const preCents =
+            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              submission.id,
+            ) ?? 0;
+          const preUncappedCents =
+            cappedExpectedRewardBySubmissionId.preAdjustmentUncappedMap.get(
+              submission.id,
+            ) ?? 0;
+          const uncappedAdjusted =
+            payoutAdjCpmOrLeaderboardPrize
+              ? applyPayoutAdjustment(
+                  preUncappedCents,
+                  payoutAdjustmentPercentage,
+                )
+              : preUncappedCents;
+          const postCents =
+            payoutAdjCpmOrLeaderboardPrize
+              ? applyPayoutAdjustment(
+                  preCents,
+                  payoutAdjustmentPercentage,
+                )
+              : preCents;
+          const isCappedToZeroWithPotential =
+            preCents === 0 &&
+            uncappedAdjusted > 0;
+          const activeCreatorCapCents = Number(
+            resolveMaxEarningsCentsForSubmission(
+              currentContest as any,
+              submission.platform,
+            ) ??
+              (currentContest as any)
+                ?.contest_based_details
+                ?.cpm_contest
+                ?.max_earnings_per_creator ??
+              0,
+          );
+          const dualCapReducesExpected =
+            isDualRewardsContestType(
+              currentContest.contest_type,
+            ) &&
+            activeCreatorCapCents > 0 &&
+            preCents + milestoneCentsExpected <
+              preUncappedCents +
+                milestoneCentsUncapped;
+          if (dualCapReducesExpected) {
+            dualCreatorCapWarning = true;
+            dualUncappedCpmCents =
+              uncappedAdjusted;
+            const milestonePostAdj =
+              payoutAdjMilestonePortion
+                ? applyPayoutAdjustment(
+                    milestoneCentsUncapped,
+                    payoutAdjustmentPercentage,
+                  )
+                : milestoneCentsUncapped;
+            dualUncappedTotalCents =
+              uncappedAdjusted +
+              milestonePostAdj;
+          }
+          if (
+            !isDualRewardsContestType(
+              currentContest.contest_type,
+            )
+          ) {
+            return {
+              amount: centsToDollars(preCents),
+              label: isCappedToZeroWithPotential
+                ? "Capped"
+                : "Expected",
+              className:
+                "text-slate-700 font-semibold",
+              cappedFromCreatorLimit:
+                isCappedToZeroWithPotential,
+              uncappedAmount:
+                centsToDollars(
+                  uncappedAdjusted,
+                ),
+              preAdjustmentAmountDollars:
+                centsToDollars(preCents),
+              postAdjustmentAmountDollars:
+                centsToDollars(postCents),
+            };
+          }
+          cpmCentsExpected = preCents;
+        }
+      }
+      const activeCreatorCapForDualMs = Number(
+        resolveMaxEarningsCentsForSubmission(
+          currentContest as any,
+          submission.platform,
+        ) ??
+          (currentContest as any)
+            ?.contest_based_details?.cpm_contest
+            ?.max_earnings_per_creator ??
+          0,
+      );
+      if (
+        isDualRewardsContestType(
+          currentContest.contest_type,
+        ) &&
+        activeCreatorCapForDualMs > 0 &&
+        milestoneCentsUncapped > 0 &&
+        milestoneCentsExpected <
+          milestoneCentsUncapped
+      ) {
+        dualMilestoneCapWarning = true;
+        dualUncappedMilestoneCents =
+          payoutAdjMilestonePortion
+            ? applyPayoutAdjustment(
+                milestoneCentsUncapped,
+                payoutAdjustmentPercentage,
+              )
+            : milestoneCentsUncapped;
+      }
+      const totalCentsExpected =
+        cpmCentsExpected +
+        milestoneCentsExpected;
+      if (totalCentsExpected > 0) {
+        if (
+          !isDualRewardsContestType(
+            currentContest.contest_type,
+          ) &&
+          cpmCentsExpected === 0 &&
+          milestoneCentsExpected > 0
+        ) {
+          const preMs = milestoneCentsExpected;
+          const postMs =
+            payoutAdjMilestonePortion
+              ? applyPayoutAdjustment(
+                  preMs,
+                  payoutAdjustmentPercentage,
+                )
+              : preMs;
+          return {
+            amount:
+              centsToDollars(
+                totalCentsExpected,
+              ),
+            label: "Expected",
+            className:
+              "text-slate-700 font-semibold",
+            preAdjustmentAmountDollars:
+              centsToDollars(preMs),
+            postAdjustmentAmountDollars:
+              centsToDollars(postMs),
+            dualCreatorCapWarning,
+            dualMilestoneCapWarning,
+            dualUncappedCpmCents,
+            dualUncappedTotalCents,
+            dualUncappedMilestoneCents,
+          };
+        }
+        return {
+          amount:
+            centsToDollars(totalCentsExpected),
+          label: "Expected",
+          className:
+            "text-slate-700 font-semibold",
+          cpmCents: isDualRewardsContestType(
+            currentContest.contest_type,
+          )
+            ? cpmCentsExpected
+            : undefined,
+          milestoneCents:
+            isDualRewardsContestType(
+              currentContest.contest_type,
+            )
+              ? milestoneCentsExpected
+              : undefined,
+          dualCreatorCapWarning,
+          dualMilestoneCapWarning,
+          dualUncappedCpmCents,
+          dualUncappedTotalCents,
+          dualUncappedMilestoneCents,
+        };
+      }
+      if (cpmConfig?.cpm_rate_usd) {
+        return {
+          amount: 0,
+          label: "Expected",
+          className:
+            "text-slate-700 font-semibold",
+          cpmCents: isDualRewardsContestType(
+            currentContest.contest_type,
+          )
+            ? 0
+            : undefined,
+          milestoneCents:
+            isDualRewardsContestType(
+              currentContest.contest_type,
+            )
+              ? milestoneCentsExpected
+              : undefined,
+          dualCreatorCapWarning,
+          dualMilestoneCapWarning,
+          dualUncappedCpmCents,
+          dualUncappedTotalCents,
+          dualUncappedMilestoneCents,
+        };
+      }
+      if (
+        isMilestoneContestType(
+          currentContest.contest_type,
+        )
+      ) {
+        return {
+          amount: 0,
+          label: "Expected",
+          className: "text-slate-500",
+        };
+      }
+      return {
+        amount: 0,
+        label: "N/A",
+        className: "text-slate-500",
+      };
+    }
+    if (
+      isMilestoneContestType(
+        currentContest.contest_type,
+      )
+    ) {
+      const cents =
+        milestoneSubmissionExpectedPayoutCents.get(
+          submission.id,
+        ) ?? 0;
+      if (cents > 0) {
+        const postCents =
+          payoutAdjMilestonePortion
+            ? applyPayoutAdjustment(
+                cents,
+                payoutAdjustmentPercentage,
+              )
+            : cents;
+        const preDollars =
+          centsToDollars(cents);
+        const postDollars =
+          centsToDollars(postCents);
+        return {
+          amount: preDollars,
+          label: "Expected",
+          className:
+            "text-slate-700 font-semibold",
+          preAdjustmentAmountDollars:
+            preDollars,
+          postAdjustmentAmountDollars:
+            postDollars,
+        };
+      }
+      return {
+        amount: 0,
+        label: "N/A",
+        className: "text-slate-500",
+      };
+    }
+    return {
+      amount: 0,
+      label: "N/A",
+      className: "text-slate-500",
+    };
+  };
+
+  /** Granted / paid reward for a submission row (table + Review Mode). */
+  const getSubmissionGrantedReward = (submission: Submission) => {
+    const isTwitterTweet = (submission as any).is_twitter_tweet === true;
+    if (submission.status === "rejected") {
+      return {
+        amount: 0,
+        label: "No Reward",
+        className: "text-red-600 font-semibold",
+      };
+    }
+
+    if (
+      isDualRewardsContestType(
+        currentContest.contest_type,
+      )
+    ) {
+      const cpmConfig =
+        currentContest.contest_based_details
+          ?.cpm_contest;
+      let cpmCentsExpected = 0;
+      if (cpmConfig?.cpm_rate_usd) {
+        const isTwitterCpm =
+          isTwitterTweet &&
+          (currentContest.platform?.toLowerCase() ===
+            "twitter" ||
+            currentContest.platform?.toLowerCase() ===
+              "x") &&
+          currentContest.contest_format ===
+            "text_image";
+        if (isTwitterCpm) {
+          const totalPoints =
+            (submission.other_stats
+              ?.base_points || 0) +
+            ((submission as any)
+              .manual_points_adjustment || 0);
+          cpmCentsExpected = Math.round(
+            (totalPoints *
+              cpmConfig.cpm_rate_usd *
+              100) /
+              1000,
+          );
+        } else {
+          cpmCentsExpected =
+            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              submission.id,
+            ) ?? 0;
+        }
+      }
+
+      const milestoneCentsUncappedForGrant =
+        milestoneSubmissionExpectedPayoutCents.get(
+          submission.id,
+        ) ?? 0;
+      const milestoneCentsExpected =
+        cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+          submission.id,
+        ) ?? milestoneCentsUncappedForGrant;
+      const adjCpmCentsExpected =
+        dualAdjustCpmForDisplay
+          ? applyPayoutAdjustment(
+              cpmCentsExpected,
+              contestPayoutAdjPct,
+            )
+          : cpmCentsExpected;
+      const adjMilestoneCentsExpected =
+        dualAdjustMilestoneForDisplay
+          ? applyPayoutAdjustment(
+              milestoneCentsExpected,
+              contestPayoutAdjPct,
+            )
+          : milestoneCentsExpected;
+      const storedCents =
+        Number(submission.earnings) || 0;
+      const grantedBreakdown =
+        getDualGrantedBreakdown(
+          submission as any,
+          adjCpmCentsExpected,
+          adjMilestoneCentsExpected,
+        );
+      const grantedCents =
+        grantedBreakdown.totalCents;
+      const cpmGrantedCents =
+        grantedBreakdown.cpmCents;
+      const milestoneGrantedCents =
+        grantedBreakdown.milestoneCents;
+      const isPaid = grantedBreakdown.isPaid;
+
+      if (isPaid) {
+        return {
+          amount: centsToDollars(grantedCents),
+          label:
+            grantedCents > 0 ? "Paid" : "—",
+          className:
+            grantedCents > 0
+              ? "text-blue-600 font-semibold"
+              : "text-slate-500",
+          cpmCents: cpmGrantedCents,
+          milestoneCents: milestoneGrantedCents,
+        };
+      }
+
+      if (storedCents > 0) {
+        return {
+          amount: centsToDollars(storedCents),
+          label: "Pending",
+          className:
+            "text-amber-600 font-semibold",
+          cpmCents: storedCents,
+          milestoneCents: 0,
+        };
+      }
+
+      return {
+        amount: 0,
+        label: "—",
+        className: "text-slate-500",
+        cpmCents: 0,
+        milestoneCents: 0,
+      };
+    }
+
+    if (
+      currentContest.contest_type ===
+      "milestone"
+    ) {
+      const milestoneCents =
+        milestoneSubmissionExpectedPayoutCents.get(
+          submission.id,
+        ) ?? 0;
+      const storedCents =
+        Number(submission.earnings) || 0;
+      const isPaid =
+        submission.status === "paid" ||
+        (submission as any).paid === true;
+
+      if (isPaid) {
+        const grantedCents =
+          storedCents > 0
+            ? storedCents
+            : milestoneCents;
+        return {
+          amount: centsToDollars(grantedCents),
+          label:
+            grantedCents > 0 ? "Paid" : "—",
+          className:
+            grantedCents > 0
+              ? "text-blue-600 font-semibold"
+              : "text-slate-500",
+        };
+      }
+
+      if (storedCents > 0) {
+        return {
+          amount: centsToDollars(storedCents),
+          label: "Pending",
+          className:
+            "text-amber-600 font-semibold",
+        };
+      }
+
+      return {
+        amount: 0,
+        label: "—",
+        className: "text-slate-500",
+      };
+    }
+
+    // For Twitter leaderboard campaigns, use creator's prize amount
+    const isTwitterLeaderboard =
+      isTwitterTweet &&
+      currentContest.contest_type ===
+        "leaderboard" &&
+      (currentContest.platform?.toLowerCase() ===
+        "twitter" ||
+        currentContest.platform?.toLowerCase() ===
+          "x") &&
+      currentContest.contest_format ===
+        "text_image";
+
+    if (submission.status === "paid") {
+      let dollars = 0;
+
+      if (isTwitterLeaderboard) {
+        // For Twitter leaderboard, use creator's prize amount based on rank
+        const creatorRank =
+          creatorRankingMap.get(
+            submission.creator_id || "",
+          );
+        if (creatorRank) {
+          const contestDetails =
+            currentContest.contest_based_details
+              ?.leaderboard_contest;
+          const prizeForRank =
+            contestDetails?.prizes?.find(
+              (p: any) =>
+                p.position === creatorRank,
+            );
+          if (prizeForRank) {
+            dollars = centsToDollars(
+              prizeForRank.amount,
+            );
+          }
+        }
+        // Fallback to submission.earnings if rank lookup fails
+        if (
+          dollars === 0 &&
+          submission.earnings
+        ) {
+          dollars = centsToDollars(
+            submission.earnings,
+          );
+        }
+      } else {
+        // For other contests, use submission.earnings directly
+        dollars = submission.earnings
+          ? centsToDollars(submission.earnings)
+          : 0;
+      }
+
+      return {
+        amount: dollars,
+        label: "Paid",
+        className:
+          "text-blue-600 font-semibold",
+      };
+    }
+
+    if (
+      submission.earnings !== null &&
+      submission.earnings !== undefined &&
+      submission.earnings > 0
+    ) {
+      return {
+        amount: centsToDollars(
+          submission.earnings,
+        ),
+        label: "Pending",
+        className:
+          "text-amber-600 font-semibold",
+      };
+    }
+    return {
+      amount: 0,
+      label: "—",
+      className: "text-slate-500",
+    };
+  };
+
+  // --- Review Mode (full-screen, one clip at a time) ---
+  const [reviewModeSession, setReviewModeSession] = useState<{
+    queueIds: string[];
+    initialId: string | null;
+    creator?: { id: string; label: string } | null;
+  } | null>(null);
+  const reviewUrlCheckedRef = useRef(false);
+
+  const reviewSubmissionLookup = useMemo(() => {
+    const byId = new Map<string, Submission>();
+    currentSubmissions.forEach((s) => byId.set(s.id, s));
+    const rankById = new Map<string, number>();
+    sortedSubmissions.forEach((s, index) => {
+      byId.set(s.id, s as Submission);
+      rankById.set(s.id, index + 1);
+    });
+    const campaignByCreator = new Map<string, ReviewCreatorCampaignCounts>();
+    byId.forEach((s) => {
+      if (!s.creator_id) return;
+      const counts = campaignByCreator.get(s.creator_id) ?? {
+        total: 0,
+        approved: 0,
+        rejected: 0,
+        pending: 0,
+      };
+      counts.total += 1;
+      const status = String(s.status);
+      if (status === "rejected") counts.rejected += 1;
+      else if (status === "pending") counts.pending += 1;
+      else counts.approved += 1;
+      campaignByCreator.set(s.creator_id, counts);
+    });
+    return { byId, rankById, campaignByCreator };
+  }, [currentSubmissions, sortedSubmissions]);
+
+  const canOpenReviewMode =
+    supportsInlineContentEmbed &&
+    isSubmissionTableView &&
+    !isHydratingSubmissions &&
+    sortedSubmissions.length > 0;
+
+  const openReviewMode = (
+    initialId: string | null = null,
+    onlyIds?: string[],
+  ) => {
+    if (!canOpenReviewMode) return;
+    const queueIds = onlyIds?.length
+      ? sortedSubmissions
+          .map((s) => s.id)
+          .filter((id) => onlyIds.includes(id))
+      : sortedSubmissions.map((s) => s.id);
+    if (queueIds.length === 0) return;
+    setReviewModeSession({ queueIds, initialId: initialId ?? queueIds[0] });
+  };
+
+  const canOpenCreatorReviewMode =
+    supportsInlineContentEmbed && !isHydratingSubmissions;
+
+  const isReviewableVideoSubmission = (s: Submission) =>
+    !(s as any).is_twitter_tweet &&
+    ["youtube", "instagram", "tiktok"].some((p) =>
+      String(s.platform || currentContest?.platform || "")
+        .toLowerCase()
+        .includes(p),
+    );
+
+  const getCreatorReviewIds = (creatorId: string): string[] =>
+    (qualityFilteredSubmissions || [])
+      .filter(
+        (s) =>
+          s.creator_id === creatorId &&
+          isReviewableVideoSubmission(s) &&
+          (submissionsPlatformTab === ALL_PLATFORM_TAB ||
+            String(s.platform || "")
+              .toLowerCase()
+              .includes(submissionsPlatformTab)),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.created_at ?? 0).getTime() -
+          new Date(a.created_at ?? 0).getTime(),
+      )
+      .map((s) => s.id);
+
+  const getCreatorReviewLabel = (creatorId: string) => {
+    const s = (currentSubmissions || []).find(
+      (sub) => sub.creator_id === creatorId,
+    );
+    const name =
+      (s as any)?.creator?.username ||
+      s?.creator_username ||
+      s?.user_username ||
+      s?.creator_display_name ||
+      "creator";
+    return String(name).replace(/^@/, "");
+  };
+
+  const openCreatorReviewMode = (
+    creatorId: string,
+    orderedIds?: string[],
+    initialId?: string | null,
+  ) => {
+    if (!canOpenCreatorReviewMode) return;
+    const queueIds = (orderedIds ?? getCreatorReviewIds(creatorId)).filter(
+      (id) => {
+        const s = reviewSubmissionLookup.byId.get(id);
+        return !!s && isReviewableVideoSubmission(s);
+      },
+    );
+    if (queueIds.length === 0) return;
+    setReviewModeSession({
+      queueIds,
+      initialId:
+        initialId && queueIds.includes(initialId) ? initialId : queueIds[0],
+      creator: { id: creatorId, label: getCreatorReviewLabel(creatorId) },
+    });
+  };
+
+  const reviewableCreatorIds = useMemo(() => {
+    const ids = new Set<string>();
+    (qualityFilteredSubmissions || []).forEach((s) => {
+      if (
+        s.creator_id &&
+        isReviewableVideoSubmission(s) &&
+        (submissionsPlatformTab === ALL_PLATFORM_TAB ||
+          String(s.platform || "")
+            .toLowerCase()
+            .includes(submissionsPlatformTab))
+      ) {
+        ids.add(s.creator_id);
+      }
+    });
+    return ids;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qualityFilteredSubmissions, submissionsPlatformTab, currentContest?.platform]);
+
+  const creatorHasReviewableSubmission = (creatorId: string) =>
+    canOpenCreatorReviewMode && reviewableCreatorIds.has(creatorId);
+
+  const closeReviewMode = () => {
+    preserveSelectionAfterModerationRef.current = false;
+    setReviewModeSession(null);
+  };
+
+  useEffect(() => {
+    if (reviewUrlCheckedRef.current || !canOpenReviewMode) return;
+    reviewUrlCheckedRef.current = true;
+    const id = readReviewParam();
+    if (id && reviewSubmissionLookup.rankById.has(id)) {
+      setReviewModeSession({
+        queueIds: sortedSubmissions.map((s) => s.id),
+        initialId: id,
+      });
+    }
+    // Resume from ?review= once, as soon as submissions are hydrated.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canOpenReviewMode]);
+
+  const getReviewSubmission = (id: string): ReviewSubmission | undefined => {
+    const s = reviewSubmissionLookup.byId.get(id);
+    if (!s) return undefined;
+    return {
+      id: s.id,
+      status: String(s.status),
+      contentLink: s.content_link ?? null,
+      platform: s.platform ?? currentContest?.platform ?? null,
+      videoId: s.video_id ?? null,
+      videoThumbnailUrl: s.video_thumbnail_url ?? null,
+      videoTitle: s.video_title ?? null,
+      creatorDisplayName: s.creator_display_name,
+      creatorUsername:
+        s.creator_username || s.user_username || s.creator?.username || null,
+      appUsername: s.user_username ?? null,
+      creatorAvatarUrl:
+        s.creator?.profile_picture_url || s.creator_avatar_url || null,
+      createdAt: s.created_at ?? null,
+      rank: reviewSubmissionLookup.rankById.get(id) ?? null,
+      qualityScore: s.quality_score ?? null,
+      metricsUpdatedAt: s.last_insights_update ?? null,
+      insightsStatus: s.insights_status ?? null,
+      creatorCampaign:
+        isAdminView && s.creator_id
+          ? (reviewSubmissionLookup.campaignByCreator.get(s.creator_id) ?? null)
+          : null,
+      creatorStats: isAdminView ? getReviewCreatorStats(s) : null,
+    };
+  };
+
+  const getReviewCreatorStats = (s: Submission): ReviewCreatorStats => {
+    const creator = (s.creator ?? {}) as Record<string, unknown>;
+    const num = (value: unknown) => {
+      const n = value == null ? NaN : Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+    return {
+      trustScore: num((s as any).trust_score ?? creator.trust_score),
+      avgQuality: num(creator.avg_quality_score),
+      totalEarnedCents: num(creator.total_money_won),
+      totalViews: num(creator.total_views),
+    };
+  };
+
+  const getReviewMetrics = (id: string): ReviewMetricsSource | null => {
+    const s = reviewSubmissionLookup.byId.get(id);
+    return s ? (extractPlatformMetrics(s) as ReviewMetricsSource) : null;
+  };
+
+  const getReviewReward = (id: string): ReviewRewardSummary | null => {
+    const s = reviewSubmissionLookup.byId.get(id);
+    if (!s) return null;
+    try {
+      const expected = getSubmissionExpectedReward(s);
+      const granted = getSubmissionGrantedReward(s);
+      return {
+        expected: { amount: expected.amount, label: expected.label },
+        granted: { amount: granted.amount, label: granted.label },
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  /** Status before a Review Mode action, so Undo restores it instead of forcing pending. */
+  const reviewUndoStateRef = useRef(
+    new Map<
+      string,
+      { status: string; qualityScore: number | null; reason: string | null }
+    >(),
+  );
+
+  const rememberReviewUndoState = (ids: string[]) => {
+    ids.forEach((id) => {
+      const s = reviewSubmissionLookup.byId.get(id);
+      if (!s) return;
+      reviewUndoStateRef.current.set(id, {
+        status: String(s.status),
+        qualityScore: s.quality_score ?? null,
+        reason: getFullRejectionDetails((s as any).metadata)?.reason ?? null,
+      });
+    });
+  };
+
+  const undoReviewModeration = async (ids: string[]) => {
+    for (const id of ids) {
+      const prev = reviewUndoStateRef.current.get(id);
+      reviewUndoStateRef.current.delete(id);
+      const status = prev?.status ?? "pending";
+      if (status === "verified" || status === "approved") {
+        const prevScore = parseQualityScore(prev?.qualityScore);
+        await handleBulkUpdateSubmissionStatus([id], "verified", undefined, {
+          skipQualityPrompt: true,
+          qualityScore:
+            prevScore ??
+            (isVideoContestFormat
+              ? resolveReversalVerifyQualityScore([id])
+              : undefined),
+        });
+      } else if (status === "rejected") {
+        await handleBulkUpdateSubmissionStatus(
+          [id],
+          "rejected",
+          prev?.reason || "Restored previous rejection",
+        );
+      } else {
+        await handleBulkUpdateSubmissionStatus([id], "pending");
+      }
+    }
+  };
+
+  const canModerateInReview = (id: string) => {
+    const s = reviewSubmissionLookup.byId.get(id);
+    return (
+      !!s &&
+      showNormalViewBulkModeration &&
+      !submissionModerationLocked &&
+      showSubmissionRowModeration(s)
+    );
+  };
 
   const getInsightsStatusMeta = useCallback(
     (status: Submission["insights_status"], errorMsg?: string | null) => {
@@ -22443,6 +23529,19 @@ export default function ContestDetailClient({
                                 </Label>
                               </div>
                             )}
+                          {supportsInlineContentEmbed &&
+                            isSubmissionTableView && (
+                              <Button
+                                size="sm"
+                                disabled={!canOpenReviewMode}
+                                onClick={() => openReviewMode()}
+                                className="h-12 gap-2 bg-[#7F39EC] text-white hover:bg-[#6d2fd4] disabled:opacity-60"
+                                title="Watch submissions one at a time and approve, reject or select them"
+                              >
+                                <PlaySquare className="h-4 w-4 shrink-0" />
+                                Review Mode
+                              </Button>
+                            )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -22680,6 +23779,23 @@ export default function ContestDetailClient({
                                   </Button>
                                 </>
                               )}
+                              {canOpenReviewMode && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    openReviewMode(
+                                      null,
+                                      Array.from(normalViewSelectedSubmissions),
+                                    )
+                                  }
+                                  className="h-8 shrink-0 gap-1 whitespace-nowrap rounded-md"
+                                >
+                                  <PlaySquare className="h-4 w-4" />
+                                  Review selected (
+                                  {normalViewSelectedSubmissions.size})
+                                </Button>
+                              )}
                               {canNormalViewBulkDownload && (
                                 <Button
                                   size="sm"
@@ -22742,7 +23858,14 @@ export default function ContestDetailClient({
                                 )}
                                 <TableHead className="w-12">#</TableHead>
                                 {useInlineContentPlayer && (
-                                  <TableHead className="w-[400px] min-w-[400px] text-center">
+                                  <TableHead
+                                    className="text-center"
+                                    style={{
+                                      width: CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                                      minWidth:
+                                        CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                                    }}
+                                  >
                                     Video
                                   </TableHead>
                                 )}
@@ -23197,7 +24320,10 @@ export default function ContestDetailClient({
                                 </TableHead>
                               </TableRow>
                             </TableHeader>
-                            <TableBody ref={submissionsVirtualTable.listRef}>
+                            <TableBody
+                              ref={submissionsVirtualTable.listRef}
+                              className={CONTEST_VIRTUAL_BODY_CLASS}
+                            >
                               {submissionsVirtualTable.paddingTop > 0 && (
                                 <TableRow
                                   aria-hidden
@@ -23265,764 +24391,10 @@ export default function ContestDetailClient({
                                     );
 
                                   // Compute expected and granted rewards separately
-                                  const getExpectedReward = () => {
-                                    const payoutAdjustmentPercentage = Number(
-                                      (currentContest as any)
-                                        ?.payout_adjustment_percentage ?? 0,
-                                    );
-                                    const payoutAdjustmentMode = (
-                                      currentContest as any
-                                    )?.payout_adjustment_mode as
-                                      | "cpm_only"
-                                      | "milestone_only"
-                                      | "bonus_only"
-                                      | "combined"
-                                      | "cpm_and_milestone"
-                                      | "dual_rewards_only"
-                                      | "bonus"
-                                      | null;
-                                    const hasPayoutAdjustment =
-                                      payoutAdjustmentPercentage > 0 &&
-                                      !!payoutAdjustmentMode;
-                                    const payoutAdjCpmOrLeaderboardPrize =
-                                      hasPayoutAdjustment &&
-                                      (payoutAdjustmentMode === "combined" ||
-                                        payoutAdjustmentMode ===
-                                          "cpm_and_milestone" ||
-                                        payoutAdjustmentMode === "cpm_only" ||
-                                        payoutAdjustmentMode ===
-                                          "dual_rewards_only");
-                                    const payoutAdjMilestonePortion =
-                                      hasPayoutAdjustment &&
-                                      (payoutAdjustmentMode === "combined" ||
-                                        payoutAdjustmentMode ===
-                                          "cpm_and_milestone" ||
-                                        payoutAdjustmentMode ===
-                                          "dual_rewards_only" ||
-                                        payoutAdjustmentMode ===
-                                          "milestone_only");
-
-                                    if (
-                                      currentContest.contest_type ===
-                                      "leaderboard"
-                                    ) {
-                                      const contestDetails =
-                                        currentContest.contest_based_details
-                                          ?.leaderboard_contest;
-                                      if (
-                                        contestDetails?.prizes &&
-                                        Array.isArray(contestDetails.prizes)
-                                      ) {
-                                        // For Twitter leaderboard campaigns, use creator rank instead of submission rank
-                                        const isTwitterLeaderboard =
-                                          isTwitterTweet &&
-                                          (currentContest.platform?.toLowerCase() ===
-                                            "twitter" ||
-                                            currentContest.platform?.toLowerCase() ===
-                                              "x") &&
-                                          currentContest.contest_format ===
-                                            "text_image";
-
-                                        const submissionStatusRaw = String(
-                                          isTwitterTweet
-                                            ? (submission as any)
-                                                .moderation_status ||
-                                                submission.status ||
-                                                ""
-                                            : submission.status || "",
-                                        ).toLowerCase();
-                                        const isRejectedSubmission =
-                                          submissionStatusRaw === "rejected";
-
-                                        // Rejected never earns a prize — show No Prize even if
-                                        // display rank / creator rank would otherwise map to one.
-                                        if (isRejectedSubmission) {
-                                          return {
-                                            amount: 0,
-                                            label: "No Prize",
-                                            className: "text-slate-500",
-                                          };
-                                        }
-
-                                        if (isTwitterLeaderboard) {
-                                          const currentRank =
-                                            creatorRankingMap.get(
-                                              submission.creator_id || "",
-                                            ) || 0;
-                                          if (currentRank > 0) {
-                                            const prizeForRank =
-                                              contestDetails.prizes.find(
-                                                (prize: any) =>
-                                                  prize.position ===
-                                                  currentRank,
-                                              );
-                                            if (prizeForRank) {
-                                              const preCents = Number(
-                                                prizeForRank.amount || 0,
-                                              );
-                                              const postCents =
-                                                payoutAdjCpmOrLeaderboardPrize
-                                                  ? applyPayoutAdjustment(
-                                                      preCents,
-                                                      payoutAdjustmentPercentage,
-                                                    )
-                                                  : preCents;
-                                              const preDollars =
-                                                centsToDollars(preCents);
-                                              const postDollars =
-                                                centsToDollars(postCents);
-                                              return {
-                                                amount: preDollars,
-                                                label: "Expected",
-                                                className:
-                                                  "text-slate-700 font-semibold",
-                                                preAdjustmentAmountDollars:
-                                                  preDollars,
-                                                postAdjustmentAmountDollars:
-                                                  postDollars,
-                                              };
-                                            }
-                                          }
-                                          return {
-                                            amount: 0,
-                                            label: "No Prize",
-                                            className: "text-slate-500",
-                                          };
-                                        }
-
-                                        // Non-Twitter: views rank among verified/approved/paid
-                                        // (All-tab when prizes match; per-platform when they differ).
-                                        // Do not apply % payout adjustment — server pays fixed rank prizes.
-                                        const preCents =
-                                          leaderboardPrizeCentsBySubmissionId.get(
-                                            String(submission.id),
-                                          ) ?? 0;
-                                        if (preCents > 0) {
-                                          const preDollars =
-                                            centsToDollars(preCents);
-                                          return {
-                                            amount: preDollars,
-                                            label: "Expected",
-                                            className:
-                                              "text-slate-700 font-semibold",
-                                            preAdjustmentAmountDollars:
-                                              preDollars,
-                                            postAdjustmentAmountDollars:
-                                              preDollars,
-                                          };
-                                        }
-                                        return {
-                                          amount: 0,
-                                          label: "No Prize",
-                                          className: "text-slate-500",
-                                        };
-                                      }
-                                      return {
-                                        amount: 0,
-                                        label: "N/A",
-                                        className: "text-slate-500",
-                                      };
-                                    }
-                                    if (
-                                      isCpmContestType(
-                                        currentContest.contest_type,
-                                      ) ||
-                                      isMilestoneContestType(
-                                        currentContest.contest_type,
-                                      )
-                                    ) {
-                                      const milestoneCentsUncapped =
-                                        isMilestoneContestType(
-                                          currentContest.contest_type,
-                                        )
-                                          ? (milestoneSubmissionExpectedPayoutCents.get(
-                                              submission.id,
-                                            ) ?? 0)
-                                          : 0;
-                                      const milestoneCentsExpected =
-                                        isDualRewardsContestType(
-                                          currentContest.contest_type,
-                                        )
-                                          ? (cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
-                                              submission.id,
-                                            ) ?? milestoneCentsUncapped)
-                                          : milestoneCentsUncapped;
-                                      const cpmConfig =
-                                        currentContest.contest_based_details
-                                          ?.cpm_contest;
-                                      let cpmCentsExpected = 0;
-                                      let dualCreatorCapWarning = false;
-                                      let dualMilestoneCapWarning = false;
-                                      let dualUncappedCpmCents:
-                                        | number
-                                        | undefined;
-                                      let dualUncappedTotalCents:
-                                        | number
-                                        | undefined;
-                                      let dualUncappedMilestoneCents:
-                                        | number
-                                        | undefined;
-                                      if (
-                                        isCpmContestType(
-                                          currentContest.contest_type,
-                                        ) &&
-                                        cpmConfig?.cpm_rate_usd
-                                      ) {
-                                        const isTwitterCpm =
-                                          isTwitterTweet &&
-                                          (currentContest.platform?.toLowerCase() ===
-                                            "twitter" ||
-                                            currentContest.platform?.toLowerCase() ===
-                                              "x") &&
-                                          currentContest.contest_format ===
-                                            "text_image";
-
-                                        if (isTwitterCpm) {
-                                          const totalPoints =
-                                            (submission.other_stats
-                                              ?.base_points || 0) +
-                                            ((submission as any)
-                                              .manual_points_adjustment || 0);
-                                          // Calculate expected reward: total points * cpm rate / 1000
-                                          const calculatedEarnings =
-                                            (totalPoints *
-                                              cpmConfig.cpm_rate_usd) /
-                                            1000;
-                                          cpmCentsExpected = Math.round(
-                                            calculatedEarnings * 100,
-                                          );
-                                          if (
-                                            !isDualRewardsContestType(
-                                              currentContest.contest_type,
-                                            )
-                                          ) {
-                                            const preCents = cpmCentsExpected;
-                                            const postCents =
-                                              payoutAdjCpmOrLeaderboardPrize
-                                                ? applyPayoutAdjustment(
-                                                    preCents,
-                                                    payoutAdjustmentPercentage,
-                                                  )
-                                                : preCents;
-                                            return {
-                                              amount: calculatedEarnings,
-                                              label: "Expected",
-                                              className:
-                                                "text-slate-700 font-semibold",
-                                              preAdjustmentAmountDollars:
-                                                calculatedEarnings,
-                                              postAdjustmentAmountDollars:
-                                                centsToDollars(postCents),
-                                            };
-                                          }
-                                        } else {
-                                          const preCents =
-                                            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                                              submission.id,
-                                            ) ?? 0;
-                                          const preUncappedCents =
-                                            cappedExpectedRewardBySubmissionId.preAdjustmentUncappedMap.get(
-                                              submission.id,
-                                            ) ?? 0;
-                                          const uncappedAdjusted =
-                                            payoutAdjCpmOrLeaderboardPrize
-                                              ? applyPayoutAdjustment(
-                                                  preUncappedCents,
-                                                  payoutAdjustmentPercentage,
-                                                )
-                                              : preUncappedCents;
-                                          const postCents =
-                                            payoutAdjCpmOrLeaderboardPrize
-                                              ? applyPayoutAdjustment(
-                                                  preCents,
-                                                  payoutAdjustmentPercentage,
-                                                )
-                                              : preCents;
-                                          const isCappedToZeroWithPotential =
-                                            preCents === 0 &&
-                                            uncappedAdjusted > 0;
-                                          const activeCreatorCapCents = Number(
-                                            resolveMaxEarningsCentsForSubmission(
-                                              currentContest as any,
-                                              submission.platform,
-                                            ) ??
-                                              (currentContest as any)
-                                                ?.contest_based_details
-                                                ?.cpm_contest
-                                                ?.max_earnings_per_creator ??
-                                              0,
-                                          );
-                                          const dualCapReducesExpected =
-                                            isDualRewardsContestType(
-                                              currentContest.contest_type,
-                                            ) &&
-                                            activeCreatorCapCents > 0 &&
-                                            preCents + milestoneCentsExpected <
-                                              preUncappedCents +
-                                                milestoneCentsUncapped;
-                                          if (dualCapReducesExpected) {
-                                            dualCreatorCapWarning = true;
-                                            dualUncappedCpmCents =
-                                              uncappedAdjusted;
-                                            const milestonePostAdj =
-                                              payoutAdjMilestonePortion
-                                                ? applyPayoutAdjustment(
-                                                    milestoneCentsUncapped,
-                                                    payoutAdjustmentPercentage,
-                                                  )
-                                                : milestoneCentsUncapped;
-                                            dualUncappedTotalCents =
-                                              uncappedAdjusted +
-                                              milestonePostAdj;
-                                          }
-                                          if (
-                                            !isDualRewardsContestType(
-                                              currentContest.contest_type,
-                                            )
-                                          ) {
-                                            return {
-                                              amount: centsToDollars(preCents),
-                                              label: isCappedToZeroWithPotential
-                                                ? "Capped"
-                                                : "Expected",
-                                              className:
-                                                "text-slate-700 font-semibold",
-                                              cappedFromCreatorLimit:
-                                                isCappedToZeroWithPotential,
-                                              uncappedAmount:
-                                                centsToDollars(
-                                                  uncappedAdjusted,
-                                                ),
-                                              preAdjustmentAmountDollars:
-                                                centsToDollars(preCents),
-                                              postAdjustmentAmountDollars:
-                                                centsToDollars(postCents),
-                                            };
-                                          }
-                                          cpmCentsExpected = preCents;
-                                        }
-                                      }
-                                      const activeCreatorCapForDualMs = Number(
-                                        resolveMaxEarningsCentsForSubmission(
-                                          currentContest as any,
-                                          submission.platform,
-                                        ) ??
-                                          (currentContest as any)
-                                            ?.contest_based_details?.cpm_contest
-                                            ?.max_earnings_per_creator ??
-                                          0,
-                                      );
-                                      if (
-                                        isDualRewardsContestType(
-                                          currentContest.contest_type,
-                                        ) &&
-                                        activeCreatorCapForDualMs > 0 &&
-                                        milestoneCentsUncapped > 0 &&
-                                        milestoneCentsExpected <
-                                          milestoneCentsUncapped
-                                      ) {
-                                        dualMilestoneCapWarning = true;
-                                        dualUncappedMilestoneCents =
-                                          payoutAdjMilestonePortion
-                                            ? applyPayoutAdjustment(
-                                                milestoneCentsUncapped,
-                                                payoutAdjustmentPercentage,
-                                              )
-                                            : milestoneCentsUncapped;
-                                      }
-                                      const totalCentsExpected =
-                                        cpmCentsExpected +
-                                        milestoneCentsExpected;
-                                      if (totalCentsExpected > 0) {
-                                        if (
-                                          !isDualRewardsContestType(
-                                            currentContest.contest_type,
-                                          ) &&
-                                          cpmCentsExpected === 0 &&
-                                          milestoneCentsExpected > 0
-                                        ) {
-                                          const preMs = milestoneCentsExpected;
-                                          const postMs =
-                                            payoutAdjMilestonePortion
-                                              ? applyPayoutAdjustment(
-                                                  preMs,
-                                                  payoutAdjustmentPercentage,
-                                                )
-                                              : preMs;
-                                          return {
-                                            amount:
-                                              centsToDollars(
-                                                totalCentsExpected,
-                                              ),
-                                            label: "Expected",
-                                            className:
-                                              "text-slate-700 font-semibold",
-                                            preAdjustmentAmountDollars:
-                                              centsToDollars(preMs),
-                                            postAdjustmentAmountDollars:
-                                              centsToDollars(postMs),
-                                            dualCreatorCapWarning,
-                                            dualMilestoneCapWarning,
-                                            dualUncappedCpmCents,
-                                            dualUncappedTotalCents,
-                                            dualUncappedMilestoneCents,
-                                          };
-                                        }
-                                        return {
-                                          amount:
-                                            centsToDollars(totalCentsExpected),
-                                          label: "Expected",
-                                          className:
-                                            "text-slate-700 font-semibold",
-                                          cpmCents: isDualRewardsContestType(
-                                            currentContest.contest_type,
-                                          )
-                                            ? cpmCentsExpected
-                                            : undefined,
-                                          milestoneCents:
-                                            isDualRewardsContestType(
-                                              currentContest.contest_type,
-                                            )
-                                              ? milestoneCentsExpected
-                                              : undefined,
-                                          dualCreatorCapWarning,
-                                          dualMilestoneCapWarning,
-                                          dualUncappedCpmCents,
-                                          dualUncappedTotalCents,
-                                          dualUncappedMilestoneCents,
-                                        };
-                                      }
-                                      if (cpmConfig?.cpm_rate_usd) {
-                                        return {
-                                          amount: 0,
-                                          label: "Expected",
-                                          className:
-                                            "text-slate-700 font-semibold",
-                                          cpmCents: isDualRewardsContestType(
-                                            currentContest.contest_type,
-                                          )
-                                            ? 0
-                                            : undefined,
-                                          milestoneCents:
-                                            isDualRewardsContestType(
-                                              currentContest.contest_type,
-                                            )
-                                              ? milestoneCentsExpected
-                                              : undefined,
-                                          dualCreatorCapWarning,
-                                          dualMilestoneCapWarning,
-                                          dualUncappedCpmCents,
-                                          dualUncappedTotalCents,
-                                          dualUncappedMilestoneCents,
-                                        };
-                                      }
-                                      if (
-                                        isMilestoneContestType(
-                                          currentContest.contest_type,
-                                        )
-                                      ) {
-                                        return {
-                                          amount: 0,
-                                          label: "Expected",
-                                          className: "text-slate-500",
-                                        };
-                                      }
-                                      return {
-                                        amount: 0,
-                                        label: "N/A",
-                                        className: "text-slate-500",
-                                      };
-                                    }
-                                    if (
-                                      isMilestoneContestType(
-                                        currentContest.contest_type,
-                                      )
-                                    ) {
-                                      const cents =
-                                        milestoneSubmissionExpectedPayoutCents.get(
-                                          submission.id,
-                                        ) ?? 0;
-                                      if (cents > 0) {
-                                        const postCents =
-                                          payoutAdjMilestonePortion
-                                            ? applyPayoutAdjustment(
-                                                cents,
-                                                payoutAdjustmentPercentage,
-                                              )
-                                            : cents;
-                                        const preDollars =
-                                          centsToDollars(cents);
-                                        const postDollars =
-                                          centsToDollars(postCents);
-                                        return {
-                                          amount: preDollars,
-                                          label: "Expected",
-                                          className:
-                                            "text-slate-700 font-semibold",
-                                          preAdjustmentAmountDollars:
-                                            preDollars,
-                                          postAdjustmentAmountDollars:
-                                            postDollars,
-                                        };
-                                      }
-                                      return {
-                                        amount: 0,
-                                        label: "N/A",
-                                        className: "text-slate-500",
-                                      };
-                                    }
-                                    return {
-                                      amount: 0,
-                                      label: "N/A",
-                                      className: "text-slate-500",
-                                    };
-                                  };
-
-                                  const getGrantedReward = () => {
-                                    if (submission.status === "rejected") {
-                                      return {
-                                        amount: 0,
-                                        label: "No Reward",
-                                        className: "text-red-600 font-semibold",
-                                      };
-                                    }
-
-                                    if (
-                                      isDualRewardsContestType(
-                                        currentContest.contest_type,
-                                      )
-                                    ) {
-                                      const cpmConfig =
-                                        currentContest.contest_based_details
-                                          ?.cpm_contest;
-                                      let cpmCentsExpected = 0;
-                                      if (cpmConfig?.cpm_rate_usd) {
-                                        const isTwitterCpm =
-                                          isTwitterTweet &&
-                                          (currentContest.platform?.toLowerCase() ===
-                                            "twitter" ||
-                                            currentContest.platform?.toLowerCase() ===
-                                              "x") &&
-                                          currentContest.contest_format ===
-                                            "text_image";
-                                        if (isTwitterCpm) {
-                                          const totalPoints =
-                                            (submission.other_stats
-                                              ?.base_points || 0) +
-                                            ((submission as any)
-                                              .manual_points_adjustment || 0);
-                                          cpmCentsExpected = Math.round(
-                                            (totalPoints *
-                                              cpmConfig.cpm_rate_usd *
-                                              100) /
-                                              1000,
-                                          );
-                                        } else {
-                                          cpmCentsExpected =
-                                            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
-                                              submission.id,
-                                            ) ?? 0;
-                                        }
-                                      }
-
-                                      const milestoneCentsUncappedForGrant =
-                                        milestoneSubmissionExpectedPayoutCents.get(
-                                          submission.id,
-                                        ) ?? 0;
-                                      const milestoneCentsExpected =
-                                        cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
-                                          submission.id,
-                                        ) ?? milestoneCentsUncappedForGrant;
-                                      const adjCpmCentsExpected =
-                                        dualAdjustCpmForDisplay
-                                          ? applyPayoutAdjustment(
-                                              cpmCentsExpected,
-                                              contestPayoutAdjPct,
-                                            )
-                                          : cpmCentsExpected;
-                                      const adjMilestoneCentsExpected =
-                                        dualAdjustMilestoneForDisplay
-                                          ? applyPayoutAdjustment(
-                                              milestoneCentsExpected,
-                                              contestPayoutAdjPct,
-                                            )
-                                          : milestoneCentsExpected;
-                                      const storedCents =
-                                        Number(submission.earnings) || 0;
-                                      const grantedBreakdown =
-                                        getDualGrantedBreakdown(
-                                          submission as any,
-                                          adjCpmCentsExpected,
-                                          adjMilestoneCentsExpected,
-                                        );
-                                      const grantedCents =
-                                        grantedBreakdown.totalCents;
-                                      const cpmGrantedCents =
-                                        grantedBreakdown.cpmCents;
-                                      const milestoneGrantedCents =
-                                        grantedBreakdown.milestoneCents;
-                                      const isPaid = grantedBreakdown.isPaid;
-
-                                      if (isPaid) {
-                                        return {
-                                          amount: centsToDollars(grantedCents),
-                                          label:
-                                            grantedCents > 0 ? "Paid" : "—",
-                                          className:
-                                            grantedCents > 0
-                                              ? "text-blue-600 font-semibold"
-                                              : "text-slate-500",
-                                          cpmCents: cpmGrantedCents,
-                                          milestoneCents: milestoneGrantedCents,
-                                        };
-                                      }
-
-                                      if (storedCents > 0) {
-                                        return {
-                                          amount: centsToDollars(storedCents),
-                                          label: "Pending",
-                                          className:
-                                            "text-amber-600 font-semibold",
-                                          cpmCents: storedCents,
-                                          milestoneCents: 0,
-                                        };
-                                      }
-
-                                      return {
-                                        amount: 0,
-                                        label: "—",
-                                        className: "text-slate-500",
-                                        cpmCents: 0,
-                                        milestoneCents: 0,
-                                      };
-                                    }
-
-                                    if (
-                                      currentContest.contest_type ===
-                                      "milestone"
-                                    ) {
-                                      const milestoneCents =
-                                        milestoneSubmissionExpectedPayoutCents.get(
-                                          submission.id,
-                                        ) ?? 0;
-                                      const storedCents =
-                                        Number(submission.earnings) || 0;
-                                      const isPaid =
-                                        submission.status === "paid" ||
-                                        (submission as any).paid === true;
-
-                                      if (isPaid) {
-                                        const grantedCents =
-                                          storedCents > 0
-                                            ? storedCents
-                                            : milestoneCents;
-                                        return {
-                                          amount: centsToDollars(grantedCents),
-                                          label:
-                                            grantedCents > 0 ? "Paid" : "—",
-                                          className:
-                                            grantedCents > 0
-                                              ? "text-blue-600 font-semibold"
-                                              : "text-slate-500",
-                                        };
-                                      }
-
-                                      if (storedCents > 0) {
-                                        return {
-                                          amount: centsToDollars(storedCents),
-                                          label: "Pending",
-                                          className:
-                                            "text-amber-600 font-semibold",
-                                        };
-                                      }
-
-                                      return {
-                                        amount: 0,
-                                        label: "—",
-                                        className: "text-slate-500",
-                                      };
-                                    }
-
-                                    // For Twitter leaderboard campaigns, use creator's prize amount
-                                    const isTwitterLeaderboard =
-                                      isTwitterTweet &&
-                                      currentContest.contest_type ===
-                                        "leaderboard" &&
-                                      (currentContest.platform?.toLowerCase() ===
-                                        "twitter" ||
-                                        currentContest.platform?.toLowerCase() ===
-                                          "x") &&
-                                      currentContest.contest_format ===
-                                        "text_image";
-
-                                    if (submission.status === "paid") {
-                                      let dollars = 0;
-
-                                      if (isTwitterLeaderboard) {
-                                        // For Twitter leaderboard, use creator's prize amount based on rank
-                                        const creatorRank =
-                                          creatorRankingMap.get(
-                                            submission.creator_id || "",
-                                          );
-                                        if (creatorRank) {
-                                          const contestDetails =
-                                            currentContest.contest_based_details
-                                              ?.leaderboard_contest;
-                                          const prizeForRank =
-                                            contestDetails?.prizes?.find(
-                                              (p: any) =>
-                                                p.position === creatorRank,
-                                            );
-                                          if (prizeForRank) {
-                                            dollars = centsToDollars(
-                                              prizeForRank.amount,
-                                            );
-                                          }
-                                        }
-                                        // Fallback to submission.earnings if rank lookup fails
-                                        if (
-                                          dollars === 0 &&
-                                          submission.earnings
-                                        ) {
-                                          dollars = centsToDollars(
-                                            submission.earnings,
-                                          );
-                                        }
-                                      } else {
-                                        // For other contests, use submission.earnings directly
-                                        dollars = submission.earnings
-                                          ? centsToDollars(submission.earnings)
-                                          : 0;
-                                      }
-
-                                      return {
-                                        amount: dollars,
-                                        label: "Paid",
-                                        className:
-                                          "text-blue-600 font-semibold",
-                                      };
-                                    }
-
-                                    if (
-                                      submission.earnings !== null &&
-                                      submission.earnings !== undefined &&
-                                      submission.earnings > 0
-                                    ) {
-                                      return {
-                                        amount: centsToDollars(
-                                          submission.earnings,
-                                        ),
-                                        label: "Pending",
-                                        className:
-                                          "text-amber-600 font-semibold",
-                                      };
-                                    }
-                                    return {
-                                      amount: 0,
-                                      label: "—",
-                                      className: "text-slate-500",
-                                    };
-                                  };
+                                  const getExpectedReward = () =>
+                                    getSubmissionExpectedReward(submission);
+                                  const getGrantedReward = () =>
+                                    getSubmissionGrantedReward(submission);
 
                                   const expectedInfo = getExpectedReward();
                                   const storedGrantedInfo = getGrantedReward();
@@ -24107,6 +24479,7 @@ export default function ContestDetailClient({
                                       }
                                       data-index={virtualIndex}
                                       className={cn(
+                                        CONTEST_VIRTUAL_ROW_CLASS,
                                         "transition-colors duration-200",
                                         isDeleted && "opacity-60",
                                         isDark
@@ -24157,20 +24530,42 @@ export default function ContestDetailClient({
                                         </div>
                                       </TableCell>
                                       {useInlineContentPlayer && (
-                                        <TableCell className="align-top p-4 w-[400px] min-w-[400px]">
-                                          <LazyInlineSubmissionVideoPlayer
-                                            submissionId={submission.id}
-                                            contentLink={
-                                              submission.content_link
-                                            }
-                                            platform={submission.platform}
-                                            videoId={submission.video_id}
-                                            videoThumbnailUrl={
-                                              submission.video_thumbnail_url
-                                            }
-                                            isDark={isDark}
-                                            className="mx-auto"
-                                          />
+                                        <TableCell
+                                          className="align-middle p-3"
+                                          style={{
+                                            width:
+                                              CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                                            minWidth:
+                                              CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                                          }}
+                                        >
+                                          <div className="relative isolate mx-auto w-fit">
+                                            <LazyInlineSubmissionVideoPlayer
+                                              submissionId={submission.id}
+                                              contentLink={
+                                                submission.content_link
+                                              }
+                                              platform={submission.platform}
+                                              videoId={submission.video_id}
+                                              videoThumbnailUrl={
+                                                submission.video_thumbnail_url
+                                              }
+                                              isDark={isDark}
+                                            />
+                                            {canOpenReviewMode && (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  openReviewMode(submission.id)
+                                                }
+                                                className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-[#7F39EC]"
+                                                title="Open in Review Mode"
+                                              >
+                                                <PlaySquare className="h-3.5 w-3.5" />
+                                                Review
+                                              </button>
+                                            )}
+                                          </div>
                                         </TableCell>
                                       )}
                                       <TableCell>
@@ -27762,7 +28157,10 @@ export default function ContestDetailClient({
                                   </TableHead>
                                 </TableRow>
                               </TableHeader>
-                              <TableBody ref={creatorWiseVirtualTable.listRef}>
+                              <TableBody
+                                ref={creatorWiseVirtualTable.listRef}
+                                className={CONTEST_VIRTUAL_BODY_CLASS}
+                              >
                                 {paginatedCreatorGroups.length === 0 ? (
                                   <TableRow>
                                     <TableCell
@@ -28047,6 +28445,9 @@ export default function ContestDetailClient({
                                               creatorWiseVirtualTable.measureElement
                                             }
                                             data-index={virtualIndex}
+                                            className={
+                                              CONTEST_VIRTUAL_ROW_CLASS
+                                            }
                                           >
                                             {showCreatorWiseSelectionUi && (
                                               <TableCell className="text-center">
@@ -29859,6 +30260,23 @@ export default function ContestDetailClient({
                                                     View All ({group.totalCount}
                                                     )
                                                   </Button>
+                                                  {creatorHasReviewableSubmission(
+                                                    group.creator.id,
+                                                  ) && (
+                                                    <Button
+                                                      size="sm"
+                                                      onClick={() =>
+                                                        openCreatorReviewMode(
+                                                          group.creator.id,
+                                                        )
+                                                      }
+                                                      className="gap-1.5 bg-[#7F39EC] text-white hover:bg-[#6d2fd4]"
+                                                      title="Watch this creator's clips one at a time"
+                                                    >
+                                                      <PlaySquare className="h-4 w-4" />
+                                                      Review
+                                                    </Button>
+                                                  )}
                                                   {isAdminView &&
                                                     creatorGroupHasVideoPlatform(
                                                       group,
@@ -33887,6 +34305,7 @@ export default function ContestDetailClient({
         youtubeSubmissionIds={normalViewDownloadSplit.youtubeIds}
         instagramSubmissionIds={normalViewDownloadSplit.instagramIds}
         hasInstagramSelection={normalViewDownloadSplit.instagramIds.length > 0}
+        selectedCount={normalViewSelectedSubmissions.size}
       />
 
       <BulkVideoDownloadContestStatus
@@ -34487,8 +34906,15 @@ export default function ContestDetailClient({
       {/* Creator Submissions Modal - use currentSubmissions so hydrated bonus_paid/bonus_amount are included */}
       {selectedCreatorForModal && (
         <CreatorSubmissionsModal
-          isOpen={!!selectedCreatorForModal}
+          isOpen={!!selectedCreatorForModal && !reviewModeSession?.creator}
           onClose={() => setSelectedCreatorForModal(null)}
+          supportsInlineContentEmbed={supportsInlineContentEmbed}
+          onOpenReviewMode={
+            canOpenCreatorReviewMode
+              ? (ids: string[], initialId?: string) =>
+                  openCreatorReviewMode(selectedCreatorForModal, ids, initialId)
+              : undefined
+          }
           creator={
             creatorForSubmissionsModal ?? {
               id: selectedCreatorForModal,
@@ -34724,12 +35150,16 @@ export default function ContestDetailClient({
               );
             }
 
-            setNormalViewSelectedSubmissions((prev) => {
-              const next = new Set(prev);
-              pendingVerifySubmissionIds.forEach((id) => next.delete(id));
-              return next;
-            });
-            setCreatorWiseSelectedCreators(new Set());
+            if (preserveSelectionAfterModerationRef.current) {
+              preserveSelectionAfterModerationRef.current = false;
+            } else {
+              setNormalViewSelectedSubmissions((prev) => {
+                const next = new Set(prev);
+                pendingVerifySubmissionIds.forEach((id) => next.delete(id));
+                return next;
+              });
+              setCreatorWiseSelectedCreators(new Set());
+            }
             setVerifyQualityDialogOpen(false);
             setPendingVerifySubmissionIds([]);
           } catch (error: unknown) {
@@ -34744,6 +35174,62 @@ export default function ContestDetailClient({
           }
         }}
       />
+
+      {reviewModeSession && (
+        <ReviewMode
+          queueIds={reviewModeSession.queueIds}
+          initialId={reviewModeSession.initialId}
+          campaignTitle={currentContest.title}
+          contextLabel={
+            reviewModeSession.creator
+              ? `@${reviewModeSession.creator.label} · ${reviewModeSession.queueIds.length} ${
+                  reviewModeSession.queueIds.length === 1 ? "clip" : "clips"
+                }`
+              : `${sortedSubmissions.length} submissions in current view`
+          }
+          dataVersion={reviewSubmissionLookup}
+          getSubmission={getReviewSubmission}
+          getMetrics={getReviewMetrics}
+          getReward={getReviewReward}
+          canSeeCore={canSeeCore}
+          canModerate={(id) =>
+            !(reviewModeSession.creator && isPostCampaignLeaderboard) &&
+            canModerateInReview(id)
+          }
+          canBulkModerate={
+            !reviewModeSession.creator &&
+            showNormalViewBulkModeration &&
+            !submissionModerationLocked
+          }
+          canSelect={!reviewModeSession.creator && showNormalViewSelectionUi}
+          selectedIds={normalViewSelectedSubmissions}
+          onToggleSelect={handleNormalViewCheckboxChange}
+          onClearSelection={() => setNormalViewSelectedSubmissions(new Set())}
+          onModerate={(action, ids) => {
+            rememberReviewUndoState(ids);
+            void runSubmissionModeration(action, ids, { clearSelection: false });
+          }}
+          onRejectWithReason={async (ids, reason) => {
+            if (!assertSubmissionModerationAllowed()) return;
+            rememberReviewUndoState(ids);
+            await handleBulkUpdateSubmissionStatus(ids, "rejected", reason);
+          }}
+          onBulkModerate={(action, ids) =>
+            void runSubmissionModeration(action, ids, { clearSelection: true })
+          }
+          onUndo={async (ids) => {
+            if (!assertSubmissionModerationAllowed()) return;
+            await undoReviewModeration(ids);
+          }}
+          isBusy={(id) => !!isLoadingSubmission[id]}
+          bulkBusyAction={normalViewBulkActiveAction}
+          canDownload={!reviewModeSession.creator && canNormalViewBulkDownload}
+          downloading={normalViewBulkDownloading}
+          onDownloadSelected={() => void handleNormalViewBulkDownload()}
+          isDark={isDark}
+          onExit={closeReviewMode}
+        />
+      )}
     </div>
   );
 }

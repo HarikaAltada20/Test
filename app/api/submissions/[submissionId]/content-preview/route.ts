@@ -17,6 +17,7 @@ import {
   fetchTikTokOembedThumbnail,
 } from "@/lib/tiktok-preview-media";
 import { isValidHttpsImageUrl } from "@/lib/submission-thumbnail";
+import { getPlayableInstagramVideo } from "@/lib/instagram-playable-cache";
 
 function submissionPlatformIncludes(
   platform: string | null | undefined,
@@ -70,9 +71,12 @@ async function resolveTikTokThumbnail(
   return null;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { submissionId } = await context.params;
+    // Review Mode needs a real video file; this enables the (unofficial, rate-limited)
+    // public lookup, so table thumbnails don't trigger it for every visible row.
+    const wantPlayable = new URL(request.url).searchParams.get("playable") === "1";
     if (!submissionId) {
       return NextResponse.json({ error: "Submission ID required" }, { status: 400 });
     }
@@ -112,10 +116,10 @@ export async function GET(_request: Request, context: RouteContext) {
       .single();
 
     if (subError || !submission) {
-      return NextResponse.json(
-        { error: subError?.message || "Submission not found" },
-        { status: 404 },
-      );
+      if (subError) {
+        console.error("[content-preview] submission lookup failed", subError);
+      }
+      return NextResponse.json({ error: "Submission not found" }, { status: 404 });
     }
 
     const advertiserId = (submission.contests as { advertiser_id?: string })
@@ -174,6 +178,19 @@ export async function GET(_request: Request, context: RouteContext) {
       }
 
       const ig = extractInstagramShortcode(contentLink);
+
+      if (wantPlayable && ig?.shortcode) {
+        const playable = await getPlayableInstagramVideo(ig.shortcode, user.id);
+        if (playable.ok) {
+          return NextResponse.json({
+            mode: "direct",
+            platform: "instagram",
+            mediaUrl: playable.videoUrl,
+            thumbnailUrl: playable.thumbnailUrl || undefined,
+          });
+        }
+      }
+
       const embedUrl =
         embed.embedUrl ??
         (ig ? buildInstagramEmbedUrl(ig.shortcode, ig.pathKind) : null);
@@ -246,7 +263,7 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 400 },
     );
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Preview failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[content-preview] failed", e);
+    return NextResponse.json({ error: "Preview failed" }, { status: 500 });
   }
 }

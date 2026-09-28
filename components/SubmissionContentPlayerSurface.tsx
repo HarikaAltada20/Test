@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { cn } from "@/lib/utils";
 import { withEmbedAutoplay } from "@/lib/content-embed";
 import { Loader2, Play } from "lucide-react";
@@ -16,6 +22,25 @@ type SubmissionContentPlayerSurfaceProps = {
   isDark?: boolean;
   title?: string;
   className?: string;
+  /** Uncropped media over a blurred copy of the thumbnail (fixed-size tiles). */
+  showcase?: boolean;
+  /** Top-left overlay shown until playback starts. */
+  badge?: ReactNode;
+  /**
+   * Start playback without a click once the preview is ready. Instagram's
+   * iframe embed cannot autoplay, so it still shows the play button.
+   */
+  autoPlay?: boolean;
+  /** Initial mute state; later changes are applied by the caller via `mediaRef`. */
+  muted?: boolean;
+  loop?: boolean;
+  /** YouTube: hide the native control bar (caller renders its own controls). */
+  chromeless?: boolean;
+  /** Receives the live <video> or <iframe> element for imperative control. */
+  mediaRef?: (element: HTMLVideoElement | HTMLIFrameElement | null) => void;
+  onStartedChange?: (started: boolean) => void;
+  /** Direct <video> failed to load (e.g. expired CDN URL). */
+  onMediaError?: () => void;
 };
 
 export function SubmissionContentPlayerSurface({
@@ -28,9 +53,21 @@ export function SubmissionContentPlayerSurface({
   isDark = false,
   title = "Submission video",
   className,
+  showcase = false,
+  badge,
+  autoPlay = false,
+  muted = false,
+  loop = false,
+  chromeless = false,
+  mediaRef,
+  onStartedChange,
+  onMediaError,
 }: SubmissionContentPlayerSurfaceProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [started, setStarted] = useState(false);
+  // Embed URLs bake in mute at start; later toggles must not reload the iframe.
+  const startMutedRef = useRef(muted);
+  if (!started) startMutedRef.current = muted;
   const [mediaReady, setMediaReady] = useState(false);
   const [embedLoaded, setEmbedLoaded] = useState(false);
   const [thumbFailed, setThumbFailed] = useState(false);
@@ -61,7 +98,13 @@ export function SubmissionContentPlayerSurface({
     preview.embedUrl &&
     (isTiktok || started)
       ? started
-        ? withEmbedAutoplay(preview.embedUrl, platform)
+        ? withEmbedAutoplay(
+            preview.embedUrl,
+            platform,
+            autoPlay
+              ? { muted: startMutedRef.current, loop, jsApi: true, chromeless }
+              : undefined,
+          )
         : isTiktok
           ? preview.embedUrl
           : null
@@ -100,22 +143,84 @@ export function SubmissionContentPlayerSurface({
 
   useEffect(() => {
     if (!started || preview?.mode !== "direct" || !videoRef.current) return;
-    void videoRef.current.play().catch(() => {});
+    const el = videoRef.current;
+    void el.play().catch((err: unknown) => {
+      if (
+        err instanceof DOMException &&
+        err.name === "NotAllowedError" &&
+        !el.muted
+      ) {
+        el.muted = true;
+        void el.play().catch(() => {});
+      }
+    });
   }, [started, preview?.mode, previewKey]);
+
+  const canAutoStart =
+    autoPlay &&
+    !!preview &&
+    !error &&
+    !(isInstagram && preview.mode === "iframe");
+
+  useEffect(() => {
+    if (canAutoStart) setStarted(true);
+  }, [canAutoStart, previewKey]);
+
+  useEffect(() => {
+    onStartedChange?.(started);
+  }, [started, onStartedChange]);
+
+  const setVideoElement = useCallback(
+    (element: HTMLVideoElement | null) => {
+      videoRef.current = element;
+      if (element) element.muted = startMutedRef.current;
+      mediaRef?.(element);
+    },
+    [mediaRef],
+  );
+
+  const setIframeElement = useCallback(
+    (element: HTMLIFrameElement | null) => {
+      mediaRef?.(element);
+    },
+    [mediaRef],
+  );
 
   return (
     <div className={cn("relative h-full w-full", className)}>
+      {showcase && thumbnailUrl && !thumbFailed && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbnailUrl}
+          alt=""
+          aria-hidden
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 h-full w-full scale-125 object-cover opacity-70 blur-2xl"
+          loading="eager"
+          decoding="async"
+        />
+      )}
+
       {showThumbnail && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={thumbnailUrl!}
           alt=""
           referrerPolicy="no-referrer"
-          className="absolute inset-0 h-full w-full object-cover"
+          className={cn(
+            "absolute inset-0 h-full w-full",
+            showcase ? "object-contain" : "object-cover",
+          )}
           loading="eager"
           decoding="async"
           onError={() => setThumbFailed(true)}
         />
+      )}
+
+      {badge && !started && (
+        <div className="pointer-events-none absolute left-2 top-2 z-40">
+          {badge}
+        </div>
       )}
 
       {showInstagramPlaceholder && (
@@ -157,14 +262,17 @@ export function SubmissionContentPlayerSurface({
 
       {showPlayer && preview.mode === "direct" && (
         <video
-          ref={videoRef}
+          ref={setVideoElement}
           src={preview.mediaUrl}
           controls
           playsInline
+          loop={loop}
           onLoadedData={onMediaReady}
           onCanPlay={onMediaReady}
+          onError={onMediaError}
           className={cn(
-            "absolute inset-0 h-full w-full object-contain bg-black z-10",
+            "absolute inset-0 h-full w-full object-contain z-10",
+            showcase ? "bg-black/40" : "bg-black",
             !mediaReady && "opacity-0",
           )}
         />
@@ -172,6 +280,7 @@ export function SubmissionContentPlayerSurface({
 
       {showIframe && preview.mode === "iframe" && iframeSrc && (
         <iframe
+          ref={setIframeElement}
           src={iframeSrc}
           title={title}
           onLoad={onMediaReady}
@@ -203,8 +312,20 @@ export function SubmissionContentPlayerSurface({
           className="absolute inset-0 z-30 flex items-center justify-center bg-black/25 transition-colors hover:bg-black/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 cursor-pointer"
           aria-label="Play video"
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-sm pointer-events-none">
-            <Play className="h-7 w-7 fill-current pl-0.5" />
+          <span
+            className={cn(
+              "flex items-center justify-center rounded-full text-white shadow-lg backdrop-blur-sm pointer-events-none",
+              showcase
+                ? "h-11 w-11 bg-white/25 ring-1 ring-white/40"
+                : "h-14 w-14 bg-black/60",
+            )}
+          >
+            <Play
+              className={cn(
+                "fill-current pl-0.5",
+                showcase ? "h-5 w-5" : "h-7 w-7",
+              )}
+            />
           </span>
         </button>
       )}

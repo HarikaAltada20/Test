@@ -32,6 +32,8 @@ export type SubmissionContentPreviewInput = {
   videoId?: string | null;
   videoThumbnailUrl?: string | null;
   enabled?: boolean;
+  /** Ask the server to find a playable video file even without the creator's token. */
+  playable?: boolean;
 };
 
 const PREVIEW_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -43,18 +45,20 @@ const previewInFlight = new Map<string, Promise<SubmissionContentPreview>>();
 
 async function fetchContentPreviewCached(
   submissionId: string,
+  playable = false,
 ): Promise<SubmissionContentPreview> {
+  const cacheKey = playable ? `${submissionId}:playable` : submissionId;
   const now = Date.now();
-  const cached = previewCache.get(submissionId);
+  const cached = previewCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     return cached.data;
   }
 
-  const existing = previewInFlight.get(submissionId);
+  const existing = previewInFlight.get(cacheKey);
   if (existing) return existing;
 
   const promise = fetch(
-    `/api/submissions/${submissionId}/content-preview`,
+    `/api/submissions/${submissionId}/content-preview${playable ? "?playable=1" : ""}`,
     { cache: "no-store" },
   )
     .then(async (res) => {
@@ -65,17 +69,17 @@ async function fetchContentPreviewCached(
       return data as SubmissionContentPreview;
     })
     .then((data) => {
-      previewCache.set(submissionId, {
+      previewCache.set(cacheKey, {
         data,
         expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS,
       });
       return data;
     })
     .finally(() => {
-      previewInFlight.delete(submissionId);
+      previewInFlight.delete(cacheKey);
     });
 
-  previewInFlight.set(submissionId, promise);
+  previewInFlight.set(cacheKey, promise);
   return promise;
 }
 
@@ -100,6 +104,7 @@ export function useSubmissionContentPreview({
   videoId,
   videoThumbnailUrl,
   enabled = true,
+  playable = false,
 }: SubmissionContentPreviewInput) {
   const instantPreview = useMemo(
     () => buildInstantPreview(contentLink, platform, videoId),
@@ -160,7 +165,7 @@ export function useSubmissionContentPreview({
     let cancelled = false;
     setPlayerLoading(true);
 
-    void fetchContentPreviewCached(submissionId)
+    void fetchContentPreviewCached(submissionId, playable)
       .then((data) => {
         if (cancelled) return;
         setPreview(data);
@@ -204,6 +209,7 @@ export function useSubmissionContentPreview({
     platform,
     videoId,
     videoThumbnailUrl,
+    playable,
     fallbackEmbed.embedUrl,
     fallbackEmbed.platform,
   ]);

@@ -1,3 +1,18 @@
+/** Fixed media tile (layout px) for Detailed View rows, independent of video orientation. */
+export const CONTEST_DETAILED_MEDIA_WIDTH = 200;
+export const CONTEST_DETAILED_MEDIA_HEIGHT = 320;
+
+/** `p-3` padding on the Detailed View video cell. */
+export const CONTEST_DETAILED_MEDIA_CELL_PADDING = 12;
+
+/** Video column width: tile + horizontal cell padding. */
+export const CONTEST_DETAILED_MEDIA_COLUMN_WIDTH =
+  CONTEST_DETAILED_MEDIA_WIDTH + CONTEST_DETAILED_MEDIA_CELL_PADDING * 2;
+
+/** Detailed View row height: tile + vertical cell padding + 1px row border. */
+export const CONTEST_DETAILED_ROW_ESTIMATE =
+  CONTEST_DETAILED_MEDIA_HEIGHT + CONTEST_DETAILED_MEDIA_CELL_PADDING * 2 + 1;
+
 export type VirtualTableItem = {
   start: number;
   end: number;

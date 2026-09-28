@@ -41,7 +41,11 @@ import {
   CircleHelp,
   AlertTriangle,
   Star,
+  PlaySquare,
 } from "lucide-react";
+import { LazyInlineSubmissionVideoPlayer } from "@/components/LazyInlineSubmissionVideoPlayer";
+import { CONTEST_DETAILED_MEDIA_COLUMN_WIDTH } from "@/lib/contest-submissions-virtual-table";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -149,6 +153,7 @@ interface Submission {
   creator_id: string | null;
   video_title: string | null;
   video_thumbnail_url: string | null;
+  video_id?: string | null;
   views: number;
   content_link: string;
   status: string;
@@ -269,7 +274,14 @@ interface CreatorSubmissionsModalProps {
     qualityScoreSum: number | null;
     qualityScoreCounts?: QualityScoreCounts;
   }) => void;
+  /** Opens full-screen Review Mode for the given ordered submission ids. */
+  onOpenReviewMode?: (submissionIds: string[], initialId?: string) => void;
+  /** Campaign platform supports inline players (YouTube / Instagram / TikTok). */
+  supportsInlineContentEmbed?: boolean;
 }
+
+const CREATOR_MODAL_DETAILED_VIEW_STORAGE_KEY =
+  "goviral_creator_modal_detailed_view";
 
 export function CreatorSubmissionsModal({
   isOpen,
@@ -297,7 +309,29 @@ export function CreatorSubmissionsModal({
   bulkModerationJob = null,
   isPostCampaignView = false,
   onQualityScoreUpdated,
+  onOpenReviewMode,
+  supportsInlineContentEmbed = false,
 }: CreatorSubmissionsModalProps) {
+  const [detailedViewEnabled, setDetailedViewEnabled] = useState(false);
+  useEffect(() => {
+    try {
+      setDetailedViewEnabled(
+        localStorage.getItem(CREATOR_MODAL_DETAILED_VIEW_STORAGE_KEY) ===
+          "true",
+      );
+    } catch (_) {}
+  }, []);
+  const toggleDetailedView = (enabled: boolean) => {
+    setDetailedViewEnabled(enabled);
+    try {
+      if (enabled) {
+        localStorage.setItem(CREATOR_MODAL_DETAILED_VIEW_STORAGE_KEY, "true");
+      } else {
+        localStorage.removeItem(CREATOR_MODAL_DETAILED_VIEW_STORAGE_KEY);
+      }
+    } catch (_) {}
+  };
+  const showInlinePlayers = supportsInlineContentEmbed && detailedViewEnabled;
   const {
     isBusy: isBulkPaymentQueueBusy,
     startTracking: startBulkPaymentTracking,
@@ -1761,6 +1795,11 @@ export function CreatorSubmissionsModal({
     return 0;
   });
 
+  const reviewQueueIds = sortedSubmissions
+    .filter((s) => s.is_twitter_tweet !== true)
+    .map((s) => s.id);
+  const canOpenReview = !!onOpenReviewMode && reviewQueueIds.length > 0;
+
   const orderedSelectedDownloadIds = useMemo(() => {
     const selected = selectedSubmissions;
     const ordered = sortedSubmissions
@@ -1942,23 +1981,23 @@ export function CreatorSubmissionsModal({
             {/* Header */}
             <div
               className={cn(
-                "flex items-center justify-between p-6 border-b flex-shrink-0",
+                "flex items-center justify-between gap-3 p-4 sm:p-6 border-b flex-shrink-0",
                 isDark
                   ? "bg-[#170337] "
                   : "bg-gradient-to-r from-purple-50 to-blue-50",
               )}
             >
-              <div className="flex items-center gap-4">
-                <Avatar className="h-12 w-12">
+              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                <Avatar className="h-10 w-10 shrink-0 sm:h-12 sm:w-12">
                   <AvatarImage src={creator.profile_picture_url || undefined} />
                   <AvatarFallback>
                     {creatorDisplayName[0]?.toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="min-w-0">
                   <h2
                     className={cn(
-                      "text-2xl font-bold text-gray-900 dark:text-white",
+                      "truncate text-lg font-bold text-gray-900 dark:text-white sm:text-2xl",
                       isDark ? "text-white" : "text-gray-900",
                     )}
                   >
@@ -1977,17 +2016,32 @@ export function CreatorSubmissionsModal({
                   </p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                disabled={showProcessingOverlay}
-                className={cn(
-                  isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
+              <div className="flex shrink-0 items-center gap-2">
+                {onOpenReviewMode && (
+                  <Button
+                    size="sm"
+                    disabled={!canOpenReview}
+                    onClick={() => onOpenReviewMode(reviewQueueIds)}
+                    className="h-9 gap-2 bg-[#7F39EC] text-white hover:bg-[#6d2fd4] disabled:opacity-60"
+                    title="Watch this creator's clips one at a time (respects the status filter and sort)"
+                    aria-label="Review Mode"
+                  >
+                    <PlaySquare className="h-4 w-4 shrink-0" />
+                    <span className="hidden sm:inline">Review Mode</span>
+                  </Button>
                 )}
-              >
-                <X className="h-6 w-6" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  disabled={showProcessingOverlay}
+                  className={cn(
+                    isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
+                  )}
+                >
+                  <X className="h-6 w-6" />
+                </Button>
+              </div>
             </div>
 
             {/* Status Filter Tabs */}
@@ -2122,6 +2176,26 @@ export function CreatorSubmissionsModal({
                 </Button>
               </div>
               <div className="flex items-center gap-2 w-full flex-wrap justify-between sm:w-auto sm:flex-nowrap sm:justify-end">
+                {supportsInlineContentEmbed && (
+                  <div className="mr-2 flex items-center gap-2">
+                    <Checkbox
+                      id="creator-modal-detailed-view"
+                      checked={detailedViewEnabled}
+                      onCheckedChange={(checked) =>
+                        toggleDetailedView(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="creator-modal-detailed-view"
+                      className={cn(
+                        "cursor-pointer whitespace-nowrap text-sm font-medium",
+                        isDark ? "text-white" : "text-slate-700",
+                      )}
+                    >
+                      Detailed View
+                    </Label>
+                  </div>
+                )}
                 <span
                   className={cn(
                     "text-sm",
@@ -2488,6 +2562,20 @@ export function CreatorSubmissionsModal({
                     >
                       #
                     </TableHead>
+                    {showInlinePlayers && (
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                        style={{
+                          width: CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                          minWidth: CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                        }}
+                      >
+                        Preview
+                      </TableHead>
+                    )}
                     {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
                     {isTwitterTextImageContest ? (
                       <TableHead
@@ -3261,6 +3349,7 @@ export function CreatorSubmissionsModal({
                                 ? 1
                                 : 0) // Milestone column
                             : 3 + // Checkbox, #, Content
+                              (showInlinePlayers ? 1 : 0) + // Preview
                               (showModalPlatformColumn ? 1 : 0) +
                               3 + // Views, Likes, Comments
                               ((isInstagramContest || isTikTokContest) ? 1 : 0) +
@@ -3717,6 +3806,46 @@ export function CreatorSubmissionsModal({
                           >
                             {index + 1}
                           </TableCell>
+                          {showInlinePlayers && (
+                            <TableCell
+                              className="p-3 align-middle"
+                              style={{
+                                width: CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                                minWidth: CONTEST_DETAILED_MEDIA_COLUMN_WIDTH,
+                              }}
+                            >
+                              {!isTwitterTweet && submission.content_link && (
+                                <div className="relative isolate mx-auto w-fit">
+                                  <LazyInlineSubmissionVideoPlayer
+                                    submissionId={submission.id}
+                                    contentLink={submission.content_link}
+                                    platform={submission.platform}
+                                    videoId={submission.video_id}
+                                    videoThumbnailUrl={
+                                      submission.video_thumbnail_url
+                                    }
+                                    isDark={isDark}
+                                  />
+                                  {canOpenReview && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onOpenReviewMode?.(
+                                          reviewQueueIds,
+                                          submission.id,
+                                        )
+                                      }
+                                      className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-[#7F39EC]"
+                                      title="Open in Review Mode"
+                                    >
+                                      <PlaySquare className="h-3.5 w-3.5" />
+                                      Review
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+                          )}
                           {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
                           {isTwitterTextImageContest && isTwitterTweet ? (
                             <>
@@ -4221,16 +4350,18 @@ export function CreatorSubmissionsModal({
                               {/* Content Column for non-Twitter submissions */}
                               <TableCell>
                                 <div className="flex items-center gap-3">
-                                  {submission.video_thumbnail_url && (
-                                    <img
-                                      src={submission.video_thumbnail_url}
-                                      alt={
-                                        submission.video_title ||
-                                        "Video thumbnail"
-                                      }
-                                      className="w-16 h-9 object-cover rounded"
-                                    />
-                                  )}
+                                  {submission.video_thumbnail_url &&
+                                    !showInlinePlayers && (
+                                      <img
+                                        src={submission.video_thumbnail_url}
+                                        alt=""
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = "none";
+                                        }}
+                                        className="w-16 h-9 shrink-0 object-cover rounded"
+                                      />
+                                    )}
                                   <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate max-w-xs">
                                       {submission.video_title || "Untitled"}
@@ -5545,6 +5676,7 @@ export function CreatorSubmissionsModal({
         youtubeSubmissionIds={selectedDownloadSplit.youtubeIds}
         instagramSubmissionIds={selectedDownloadSplit.instagramIds}
         hasInstagramSelection={selectedDownloadSplit.instagramIds.length > 0}
+        selectedCount={selectedSubmissions.size}
       />
 
       <VerifyQualityDialog

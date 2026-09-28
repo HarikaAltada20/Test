@@ -57,6 +57,20 @@ function isValidVideosPerZipInput(raw: string): boolean {
 const DESKTOP_DOWNLOAD_ENABLED = isDesktopDownloadEnabled();
 const INSTALL_URL = getDesktopDownloaderInstallUrl() || "";
 
+/** e.g. 11 videos at 10 per ZIP → "2 ZIPs (10 + 1)". */
+function describeZipSplit(count: number, perZip: number): string {
+  if (count <= 0 || perZip <= 0) return "";
+  const zips = Math.ceil(count / perZip);
+  if (zips === 1) return "1 ZIP";
+  const full = Math.floor(count / perZip);
+  const rest = count % perZip;
+  const parts =
+    full <= 3
+      ? [...Array(full).fill(String(perZip)), ...(rest ? [String(rest)] : [])].join(" + ")
+      : `${full} × ${perZip}${rest ? ` + ${rest}` : ""}`;
+  return `${zips} ZIPs (${parts})`;
+}
+
 async function downloadDesktopManifest(options: {
   submissionIds: string[];
   contestId?: string;
@@ -168,6 +182,7 @@ export function BulkVideoDownloadDialog({
   instagramSubmissionIds,
   contestId,
   hasInstagramSelection = false,
+  selectedCount,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -189,6 +204,8 @@ export function BulkVideoDownloadDialog({
   contestId?: string;
   /** When true and no explicit ID lists, treat selection as including Instagram. */
   hasInstagramSelection?: boolean;
+  /** Full selection size, including clips that can't be downloaded (e.g. TikTok). */
+  selectedCount?: number;
 }) {
   const { hydrateContestJobs } = useBulkVideoDownloadProgress();
   const [pattern, setPattern] = useState<VideoFilenamePattern>(
@@ -247,6 +264,17 @@ export function BulkVideoDownloadDialog({
   const cloudCount = cloudIds.length;
   const desktopCount = useDesktopForYoutube ? youtubeIds.length : 0;
   const zipCount = Math.max(1, Math.ceil(Math.max(cloudCount, 1) / videosPerZip));
+  const desktopSplit = describeZipSplit(desktopCount, videosPerZip);
+  const cloudSplit = describeZipSplit(cloudCount || (desktopCount ? 0 : videoCount), videosPerZip);
+  const downloadableCount = desktopCount + cloudCount || videoCount;
+  const skippedCount =
+    selectedCount != null ? Math.max(0, selectedCount - downloadableCount) : 0;
+  const platformBreakdown = [
+    desktopCount > 0 ? `${desktopCount} YouTube` : null,
+    cloudCount > 0 && desktopEnabled ? `${cloudCount} Instagram` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const exampleZipName = useMemo(() => {
     const prefix =
@@ -261,12 +289,12 @@ export function BulkVideoDownloadDialog({
       return `Enter ${MIN_BULK_VIDEO_DOWNLOADS}–${MAX_BULK_VIDEO_DOWNLOADS} videos per ZIP.`;
     }
     if (isMixed) {
-      return `${desktopCount} YouTube → desktop file · ${cloudCount} Instagram → server ZIP (up to ${videosPerZip} each).`;
+      return `${desktopCount} YouTube → ${desktopSplit} via the desktop app · ${cloudCount} Instagram → ${cloudSplit} from the server.`;
     }
     if (desktopOnly) {
       return desktopCount === 1
         ? "1 YouTube video will download via the desktop app."
-        : `${desktopCount} YouTube videos → signed .gocdownload file for the desktop app.`;
+        : `${desktopCount} YouTube videos → ${desktopSplit} via the desktop app (signed .gocdownload file).`;
     }
     if (cloudCount === 1) {
       return "1 Instagram video will download into a ZIP folder.";
@@ -284,6 +312,8 @@ export function BulkVideoDownloadDialog({
     desktopOnly,
     desktopCount,
     cloudCount,
+    desktopSplit,
+    cloudSplit,
   ]);
 
   const busy = downloading || desktopBusy;
@@ -397,6 +427,27 @@ export function BulkVideoDownloadDialog({
             {description}
           </DialogDescription>
         </DialogHeader>
+
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-3 py-2 text-sm",
+            isDark ? "bg-purple-900/20 text-slate-100" : "bg-purple-50 text-slate-800",
+          )}
+        >
+          <span className="font-semibold tabular-nums">
+            {downloadableCount} video{downloadableCount === 1 ? "" : "s"} to download
+          </span>
+          {platformBreakdown && (
+            <span className={isDark ? "text-slate-400" : "text-slate-500"}>
+              · {platformBreakdown}
+            </span>
+          )}
+          {skippedCount > 0 && (
+            <span className={isDark ? "text-amber-300" : "text-amber-700"}>
+              · {skippedCount} skipped (not downloadable, e.g. TikTok)
+            </span>
+          )}
+        </div>
 
         {useDesktopForYoutube ? (
           <Section isDark={isDark}>
@@ -541,6 +592,18 @@ export function BulkVideoDownloadDialog({
           >
             Each ZIP will contain at most this many videos.
           </p>
+          {videosPerZipValid && downloadableCount > 0 && (
+            <p
+              className={cn(
+                "text-sm font-medium tabular-nums",
+                isDark ? "text-purple-300" : "text-purple-700",
+              )}
+            >
+              {isMixed
+                ? `→ YouTube: ${desktopSplit} · Instagram: ${cloudSplit}`
+                : `→ ${desktopOnly ? desktopSplit : cloudSplit}`}
+            </p>
+          )}
         </Section>
 
         <Section isDark={isDark}>

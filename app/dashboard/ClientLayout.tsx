@@ -999,6 +999,22 @@ function DashboardContent({
         .dashboard-container tr.contest-virtual-spacer * {
           transition: none !important;
         }
+
+        /* Only the virtualizer may correct scroll; native anchoring double-shifts. */
+        .dashboard-container .contest-virtual-body {
+          overflow-anchor: none;
+        }
+
+        /* Animating row padding/size makes virtualizer measurements stale. */
+        .dashboard-container tr.contest-virtual-row,
+        .dashboard-container tr.contest-virtual-row * {
+          transition-property: color, background-color, border-color, opacity !important;
+        }
+
+        /* Review Mode overlay sits below dialogs (z-50); hide the page behind it instead. */
+        html.review-mode-open .dashboard-container {
+          visibility: hidden;
+        }
       `}</style>
 
       {/* Global Theme-Based Scrollbar Styles */}
