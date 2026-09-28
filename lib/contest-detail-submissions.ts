@@ -257,6 +257,8 @@ async function loadCreatorEnrichmentMaps(
      * JSON. Profile-stored metrics remain available for creator-wise display.
      */
     lean?: boolean;
+    /** Load admin-only trust / quality / earnings columns and live RPCs. */
+    includeInsights?: boolean;
   },
 ): Promise<{
   profilesById: Map<string, any>;
@@ -269,12 +271,20 @@ async function loadCreatorEnrichmentMaps(
   let liveTrustById: Record<string, any> = {};
   let liveQualityById: Record<string, any> = {};
   const lean = options?.lean === true;
+  const includeInsights = options?.includeInsights !== false;
 
   if (creatorIds.length === 0) {
     return { profilesById, usersById, liveTrustById, liveQualityById };
   }
 
-  const profileSelect = lean
+  const profileSelect = !includeInsights
+    ? `
+        id,
+        youtube_account,
+        instagram_account,${lean ? "" : "\n        instagram_archive,"}
+        twitter_account
+      `
+    : lean
     ? `
         id,
         youtube_account,
@@ -317,7 +327,7 @@ async function loadCreatorEnrichmentMaps(
 
   // Contest-detail list loads up to ~50k rows in chunks — live trust/quality
   // RPCs per chunk dominate hydrate time and aren't needed for the table.
-  if (isVideoContest && !lean) {
+  if (isVideoContest && !lean && includeInsights) {
     const admin = createAdminClient();
     liveTrustById = await fetchLiveTrustMetricsByCreatorIds(admin, creatorIds);
     liveQualityById = await fetchLiveQualityMetricsByCreatorIds(
@@ -694,7 +704,45 @@ export type LoadContestDetailSubmissionsPageOptions = {
    * and omit bulky creator archive JSON from the payload.
    */
   lean?: boolean;
+  /**
+   * Admin-only creator track record (trust, quality, platform earnings/views).
+   * Defaults to false so brand payloads never carry it.
+   */
+  includeCreatorInsights?: boolean;
 };
+
+const EMPTY_QUALITY_COUNTS = {
+  score1: 0,
+  score2: 0,
+  score3: 0,
+  score4: 0,
+  score5: 0,
+};
+
+/** Blank out admin-only creator fields on a mapped submission row. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function stripCreatorInsights<T extends Record<string, any>>(row: T): T {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const next: Record<string, any> = {
+    ...row,
+    trust_score: null,
+    trust_score_metrics: null,
+  };
+  if (row.creator && typeof row.creator === "object") {
+    next.creator = {
+      ...row.creator,
+      trust_score: null,
+      trust_score_metrics: null,
+      avg_quality_score: null,
+      best_quality_score: null,
+      quality_score_sum: null,
+      quality_score_counts: { ...EMPTY_QUALITY_COUNTS },
+      total_money_won: 0,
+      total_views: 0,
+    };
+  }
+  return next as T;
+}
 
 /**
  * One page of enriched contest-detail submissions (or Twitter tweets).
@@ -717,6 +765,9 @@ export async function loadContestDetailSubmissionsPage(
   const twitter = isTwitterCampaign(contest);
   // Contest detail SSR + hydrate always use the lean list path.
   const lean = options?.lean !== false;
+  const includeInsights = options?.includeCreatorInsights === true;
+  const finalizeRow = <T extends Record<string, unknown>>(row: T): T =>
+    includeInsights ? row : stripCreatorInsights(row);
 
   const countsPromise = options?.counts
     ? Promise.resolve(options.counts)
@@ -784,11 +835,11 @@ export async function loadContestDetailSubmissionsPage(
       supabase,
       creatorIds,
       isVideoContest,
-      { lean },
+      { lean, includeInsights },
     );
 
     const submissions = page.data.map((tweet) =>
-      mapTwitterTweetRow(
+      finalizeRow(mapTwitterTweetRow(
         {
           ...tweet,
           moderation_status: (tweet as any).moderation_status || "pending",
@@ -802,7 +853,7 @@ export async function loadContestDetailSubmissionsPage(
           contestBasedDetails: contest.contest_based_details,
           creatorModerationData: options?.creatorModerationData,
         },
-      ),
+      )),
     );
 
     return {
@@ -857,11 +908,11 @@ export async function loadContestDetailSubmissionsPage(
     supabase,
     creatorIds,
     isVideoContest,
-    { lean },
+    { lean, includeInsights },
   );
 
   const submissions = page.data.map((sub) =>
-    mapSubmissionRow(sub, { ...enrichment, isVideoContest }),
+    finalizeRow(mapSubmissionRow(sub, { ...enrichment, isVideoContest })),
   );
 
   return {
