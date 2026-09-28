@@ -110,32 +110,34 @@ const config = {
 };
 
 const desktopCardPositions = [
-  // Kabir — mid left
-  { left: "0%", top: "28%" },
-  // Aarav — top center
-  { left: "32%", top: "0%" },
-  // Riya — mid right (slightly higher than Kabir)
-  { left: "64%", top: "25%" },
-  // Ananya — bottom mid-left
-  { left: "12%", top: "64%" },
-  // Dev — bottom right
-  { left: "55%", top: "58%" },
+  // Kabir
+  { left: "-75px", top: "33px" },
+  // Aarav
+  { left: "384px", top: "115px" },
+  // Riya
+  { left: "855px", top: "-9px" },
+  // Ananya
+  { left: "188px", top: "480px" },
+  // Dev
+  { left: "770px", top: "395px" },
 ] as const;
 
 function Rivets({ isLight }: { isLight: boolean }) {
   const rivet = cn(
-    "pointer-events-none absolute h-[5px] w-[5px] rounded-full sm:h-1.5 sm:w-1.5",
-    isLight ? "bg-[#BDBDBD]" : "bg-[#555555]",
+    "pointer-events-none absolute size-2.5 rounded-full shadow-[inset_0px_0.2px_0.5px_0px_rgba(0,0,0,1.00),inset_0px_1px_2px_0px_rgba(0,0,0,1.00)]",
+    isLight ? "bg-[#BDBDBD]" : "bg-[#252525]", // Replacing Foundation-Grey-grey-10 with a generic grey for dark mode
   );
 
   return (
     <>
-      <span className={cn(rivet, "left-3 top-3 sm:left-3.5 sm:top-3.5")} />
-      <span className={cn(rivet, "right-3 top-3 sm:right-3.5 sm:top-3.5")} />
-      <span className={cn(rivet, "bottom-3 left-3 sm:bottom-3.5 sm:left-3.5")} />
-      <span
-        className={cn(rivet, "bottom-3 right-3 sm:bottom-3.5 sm:right-3.5")}
-      />
+      <div className="absolute left-4 top-[15px] right-4 flex justify-between pointer-events-none">
+        <div className={rivet} style={{ position: 'relative' }} />
+        <div className={rivet} style={{ position: 'relative' }} />
+      </div>
+      <div className="absolute left-4 bottom-[15px] right-4 flex justify-between pointer-events-none">
+        <div className={rivet} style={{ position: 'relative' }} />
+        <div className={rivet} style={{ position: 'relative' }} />
+      </div>
     </>
   );
 }
@@ -151,46 +153,48 @@ function TestimonialCardContent({
     <>
       <Rivets isLight={isLight} />
 
-      <div className="flex items-center gap-3">
-        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[10px] sm:h-12 sm:w-12">
-          <Image
-            src={testimonial.image}
-            alt={testimonial.name}
-            fill
-            draggable={false}
-            className="pointer-events-none object-cover"
-            sizes="48px"
-          />
+      <div className="flex flex-col gap-8">
+        <div className="flex items-center gap-4">
+          <div className="relative size-12 shrink-0 overflow-hidden rounded-lg">
+            <Image
+              src={testimonial.image}
+              alt={testimonial.name}
+              fill
+              draggable={false}
+              className="pointer-events-none object-cover"
+              sizes="48px"
+            />
+          </div>
+
+          <div className="flex flex-col items-start gap-[5px]">
+            <h3
+              className={cn(
+                "text-lg font-medium font-['Inter'] leading-5",
+                isLight ? "text-black" : "text-white",
+              )}
+            >
+              {testimonial.name}
+            </h3>
+            <p
+              className={cn(
+                "text-base font-normal font-['Inter'] leading-4",
+                isLight ? "text-black/50" : "text-zinc-400",
+              )}
+            >
+              {testimonial.role}
+            </p>
+          </div>
         </div>
 
-        <div className="min-w-0">
-          <h3
-            className={cn(
-              "truncate text-[15px] font-semibold leading-tight sm:text-[16px]",
-              isLight ? "text-black" : "text-white",
-            )}
-          >
-            {testimonial.name}
-          </h3>
-          <p
-            className={cn(
-              "mt-0.5 text-[13px]",
-              isLight ? "text-black/45" : "text-white/45",
-            )}
-          >
-            {testimonial.role}
-          </p>
-        </div>
+        <p
+          className={cn(
+            "text-lg font-medium font-['Inter'] leading-7",
+            isLight ? "text-black/80" : "text-white",
+          )}
+        >
+          &ldquo;{testimonial.quote}&rdquo;
+        </p>
       </div>
-
-      <p
-        className={cn(
-          "mt-4 text-[14px] italic leading-[1.55] sm:text-[15px]",
-          isLight ? "text-black/70" : "text-white/85",
-        )}
-      >
-        &ldquo;{testimonial.quote}&rdquo;
-      </p>
     </>
   );
 }
@@ -207,10 +211,10 @@ function TestimonialCard({
   return (
     <article
       className={cn(
-        "relative w-full max-w-[340px] rounded-[16px] border px-5 pb-6 pt-5 sm:w-[340px] sm:max-w-none sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
+        "relative w-80 rounded-3xl p-9 inline-flex flex-col overflow-hidden",
         isLight
-          ? "border-[#0000000D] bg-[#ECECEC]"
-          : "bg-[#171717] shadow-[8px_8px_50px_0px_#000000,4px_12px_4px_0px_#00000033,inset_0px_0px_4px_0px_#FFFFFF40]",
+          ? "border-[#0000000D] border bg-[#ECECEC]"
+          : "bg-neutral-900 shadow-[8px_8px_50px_0px_rgba(0,0,0,1.00),4px_12px_4px_0px_rgba(0,0,0,0.20),inset_0px_0px_4px_0px_rgba(255,255,255,0.25)]",
         className,
       )}
     >
@@ -257,10 +261,10 @@ function DraggableTestimonialCard({
         position: "absolute",
       }}
       className={cn(
-        "w-[340px] cursor-grab touch-none select-none rounded-[16px] border px-5 pb-6 pt-5 active:cursor-grabbing sm:px-6 sm:pb-7 sm:pt-6 lg:w-[360px]",
+        "w-80 cursor-grab touch-none select-none rounded-3xl p-9 active:cursor-grabbing inline-flex flex-col overflow-hidden",
         isLight
-          ? "border-[#0000000D] bg-[#ECECEC]"
-          : "bg-[#171717] shadow-[8px_8px_50px_0px_#000000,4px_12px_4px_0px_#00000033,inset_0px_0px_4px_0px_#FFFFFF40]",
+          ? "border-[#0000000D] border bg-[#ECECEC]"
+          : "bg-neutral-900 shadow-[8px_8px_50px_0px_rgba(0,0,0,1.00),4px_12px_4px_0px_rgba(0,0,0,0.20),inset_0px_0px_4px_0px_rgba(255,255,255,0.25)]",
       )}
     >
       <TestimonialCardContent testimonial={testimonial} isLight={isLight} />
@@ -337,7 +341,7 @@ export default function Testimonials() {
   return (
     <section
       className={cn(
-        "px-4 py-14 sm:px-6 sm:py-20 md:py-24 transition-colors duration-300",
+        "px-4 py-14 sm:px-6 sm:py-20  transition-colors duration-300",
         isLight ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >
@@ -367,7 +371,7 @@ export default function Testimonials() {
         {/* Desktop: staggered + draggable */}
         <div
           ref={boardRef}
-          className="relative mx-auto mt-14 hidden h-[640px] w-full max-w-[1120px] md:block lg:h-[700px]"
+          className="relative mx-auto mt-14 hidden w-full h-[740px] max-w-[1100px] md:block"
         >
           {testimonials.map((testimonial, index) => (
             <DraggableTestimonialCard
@@ -381,7 +385,7 @@ export default function Testimonials() {
         </div>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex justify-center pt-12">
         <Link
           href={href}
           onClick={() => setIsNavigating(true)}

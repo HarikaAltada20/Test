@@ -369,6 +369,8 @@ export default function BrandsClient({
   const [oldWayStep, setOldWayStep] = useState(0);
   const lastStepTimeRef = useRef<number>(0);
 
+  const revealImgRef = useRef<HTMLImageElement | null>(null);
+
   // Window scroll listener driving the sticky "The Old way of promoting your brand" step animation
   useEffect(() => {
     const handleScroll = () => {
@@ -694,12 +696,14 @@ export default function BrandsClient({
           <section className="relative z-20 mx-auto mt-12 max-w-[1100px] px-4 sm:mt-16 sm:px-5 md:mt-[105px]">
             <div
               className={cn(
-                "rounded-[20px] p-1.5 sm:rounded-[30px] sm:p-2",
+                "relative rounded-[20px] p-1.5 sm:rounded-[30px] sm:p-2",
                 isLight
                   ? "bg-white"
                   : "bg-[#242424] shadow-[0_30px_100px_rgba(88,54,150,0.25)]",
               )}
             >
+              
+
               {/* Main dashboard card */}
               <div
                 className={cn(
@@ -708,9 +712,29 @@ export default function BrandsClient({
                     ? "border border-black/[0.06] bg-white"
                     : "border border-white/[0.04] bg-[#151515]",
                 )}
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  const el = revealImgRef.current;
+                  if (el) {
+                    el.style.setProperty("--mx", `${x}px`);
+                    el.style.setProperty("--my", `${y}px`);
+                  }
+                }}
+                onMouseLeave={() => {
+                  const el = revealImgRef.current;
+                  if (el) {
+                    el.style.setProperty("--mx", "-9999px");
+                    el.style.setProperty("--my", "-9999px");
+                  }
+                }}
               >
+               
+                
+
                 {/* Dashboard image behind purple glow */}
-                <div className="pointer-events-none absolute inset-0">
+                <div className="pointer-events-none absolute inset-0 z-[1]">
                   <Image
                     src={
                       isLight
@@ -746,6 +770,32 @@ export default function BrandsClient({
                     )}
                   />
                 </div>
+
+                {/* Interactive Reveal Image Overlay */}
+                <img
+                  ref={revealImgRef}
+                  src={
+                    isLight
+                      ? "/images/5c1bc9327aecb9290b3284179d46d09ae2c7635c.png"
+                      : "/images/2398b700eadec2cb27b247febe9b4b7935fa92d0.png"
+                  }
+                  alt="Reveal effect"
+                  className="pointer-events-none absolute inset-0 z-[5] h-full w-full object-cover object-left-top sm:object-[20%_0%]"
+                  style={
+                    {
+                      mixBlendMode: "lighten",
+                      opacity: 0.7,
+                      "--mx": "-9999px",
+                      "--my": "-9999px",
+                      WebkitMaskImage:
+                        "radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 60px, rgba(255,255,255,0.6) 120px, rgba(255,255,255,0.25) 180px, rgba(255,255,255,0) 240px)",
+                      maskImage:
+                        "radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,1) 0px, rgba(255,255,255,0.95) 60px, rgba(255,255,255,0.6) 120px, rgba(255,255,255,0.25) 180px, rgba(255,255,255,0) 240px)",
+                      WebkitMaskRepeat: "no-repeat",
+                      maskRepeat: "no-repeat",
+                    } as React.CSSProperties
+                  }
+                />
 
                 {/* Purple glow */}
                 <div className="absolute bottom-[-160px] right-[-100px] z-[1] h-[400px] w-[650px] rounded-full bg-[#8869ff]/55 blur-[100px]" />
@@ -928,7 +978,7 @@ export default function BrandsClient({
             <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col justify-between px-6 py-10 sm:px-10 lg:px-16">
               {/* Heading */}
               <div className="pt-4 text-center sm:pt-8 shrink-0">
-                <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px] lg:text-[56px]">
+                <h2 className="mx-auto max-w-[720px] text-center text-[28px] font-semibold leading-[1.08] tracking-[-1.5px] sm:text-[36px] sm:tracking-[-2px] md:text-[54px] md:tracking-[-2.5px]">
                   The Old way of promoting
                   <br />
                   your brand
@@ -1424,7 +1474,7 @@ export default function BrandsClient({
             <div className="mb-10 text-center sm:mb-16">
               <h2
                 className={cn(
-                  "text-[28px] font-bold leading-tight sm:text-3xl md:text-5xl lg:text-6xl",
+                  "text-[28px] font-bold leading-tight md:text-[52px]",
                   isLight ? "text-black" : "text-white",
                 )}
               >
@@ -1464,7 +1514,7 @@ export default function BrandsClient({
                     <div
                       data-layer="Frame"
                       className={cn(
-                        "Frame flex h-[244.83px] w-[365.41px] flex-col justify-start gap-[9.72px] rounded-[9.72px] p-[11.66px] transition-colors duration-300",
+                        "Frame flex h-[200px] w-[280px] sm:h-[244.83px] sm:w-[365.41px] flex-col justify-start gap-[9.72px] rounded-[9.72px] p-[11.66px] transition-colors duration-300",
                         isLight
                           ? "bg-white border border-[#A890F9]/40 shadow-sm text-black"
                           : "bg-[#131313] outline-[0.49px] outline-[#A890F9] outline-offset-[-0.49px] text-white",
@@ -1833,7 +1883,7 @@ export default function BrandsClient({
                 <div
                   className={cn(
                     "absolute inset-0",
-                    isLight ? "bg-[#ECECEC]/70" : "bg-[#1b1b1b]/80",
+                    isLight ? "bg-[#ECECEC]/70" : "bg-[#232020]/95",
                   )}
                 />
 
@@ -1886,10 +1936,20 @@ export default function BrandsClient({
 
                 {/* Publish badge */}
                 <div className="absolute right-9 top-7 z-10">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-4 py-2 text-sm font-medium text-white shadow-lg">
-                    {isLight ? <Megaphone size={14} /> : null}
-                    Publish
-                  </span>
+                  <div className="relative inline-flex items-center">
+                    <span className="inline-flex items-center rounded-full bg-gradient-to-r from-[#6840d8] to-[#865de8] px-4 py-2 text-sm font-medium text-white shadow-lg">
+                      Publish
+                    </span>
+                    <div className="pointer-events-none absolute -bottom-3.5 -left-3.5 h-7 w-7">
+                      <Image
+                        src="/images/Icon.png"
+                        alt="Click icon"
+                        width={28}
+                        height={28}
+                        className="h-full w-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Content */}

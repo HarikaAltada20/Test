@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { Caveat } from "next/font/google";
 
 import {
   ArrowRight,
@@ -53,6 +54,11 @@ type FormCursorTarget =
   | "campaignType"
   | "thumbnail"
   | "creatorCard";
+
+const caveat = Caveat({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
 
 function BrandFormMockup({ isLight }: { isLight: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -1403,7 +1409,8 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "absolute left-[6%] top-[260px] z-20 hidden rotate-[-4deg] font-['Comic_Sans_MS'] text-[17px] italic xl:left-[9%] lg:block",
+              "absolute left-[6%] top-[260px] z-20 hidden rotate-[-4deg] text-[26px] xl:left-[9%] lg:block",
+              caveat.className,
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
@@ -1427,7 +1434,8 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "relative z-20 mx-auto mb-8 text-center font-['Comic_Sans_MS'] text-[14px] italic leading-[20px] sm:text-[16px] sm:leading-[22px] lg:absolute lg:left-1/2 lg:top-[0px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[17px] lg:leading-[24px]",
+              "relative z-20 mx-auto mb-8 text-center text-[20px] leading-[24px] sm:text-[26px] sm:leading-[28px] lg:absolute lg:left-1/2 lg:top-[0px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[24px] lg:leading-[28px]",
+              caveat.className,
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
@@ -1566,7 +1574,8 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "absolute right-[6%] top-[10px] z-20 hidden rotate-[3deg] text-center font-['Comic_Sans_MS'] text-[17px] italic leading-[24px] xl:right-[10%] lg:block",
+              "absolute right-[6%] top-[10px] z-20 hidden rotate-[3deg] text-center text-[26px] leading-[28px] xl:right-[10%] lg:block",
+              caveat.className,
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
