@@ -138,7 +138,7 @@ export default function PaidDirectlyCard({
     <div
       ref={cardRef}
       className={cn(
-        "relative w-full overflow-visible rounded-[20px] px-4 pb-5 pt-8 sm:px-6 sm:pb-[22px] sm:pt-[54px]",
+        "relative flex h-[340px] w-full flex-col justify-between overflow-hidden rounded-[20px] px-6 pb-9 pt-12 sm:h-[365px] sm:px-8",
         isLight
           ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A] text-black"
           : "border border-[#303030] bg-[#151515] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]",
@@ -171,12 +171,20 @@ export default function PaidDirectlyCard({
         </div>
       ) : null}
 
-      <div className="relative flex min-h-[120px] flex-col items-start gap-4 sm:min-h-[172px] sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative flex min-h-[120px] flex-col items-start gap-2 sm:min-h-[172px] sm:flex-row sm:items-center sm:justify-between pt-8">
         {/* Account balance card */}
-        <div className="relative ml-3 w-full max-w-[204px] sm:ml-6 sm:h-[172px] sm:w-[204px]">
+        <div className="relative ml-2 w-full max-w-[204px] sm:ml-12 sm:h-[172px] sm:w-[204px]">
+          {/* Background Glow Ellipses - soft backlight behind top of card */}
+          <div className="pointer-events-none absolute left-1/2 top-[31%] h-[100px] w-[140px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#FF8800] opacity-20 blur-[32px]" />
+          <div className="pointer-events-none absolute left-1/2 top-[40%] h-[70px] w-[90px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-15 blur-[24px]" />
+
           <div
+            style={{
+              maskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
+            }}
             className={cn(
-              "relative h-auto w-full rounded-[17px] px-[15px] pb-4 pt-[17px] sm:h-[172px] sm:pb-0",
+              "relative z-10 h-auto w-full rounded-[17px] px-[15px] pb-4 pt-[17px] sm:h-[172px] sm:pb-0",
               isLight
                 ? "border border-[#0000000D] bg-[#F1F1F1]"
                 : "border border-[#2c2c2c] bg-[#151515]",
@@ -205,13 +213,19 @@ export default function PaidDirectlyCard({
               type="button"
               tabIndex={-1}
               className={cn(
-                "mt-[15px] flex h-[34px] items-center gap-2 rounded-[9px] px-[14px] text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] transition-all duration-300",
-                isWithdrawing
-                  ? "scale-[0.96] bg-orange-400/50 opacity-60"
-                  : "bg-gradient-to-b from-[#ff9700] to-[#ee8500] hover:brightness-110",
+                "mt-[15px] flex h-[34px] items-center gap-2 rounded-[9px] px-[14px] text-[13px] font-medium transition-all duration-150",
+                cursorClicking
+                  ? "scale-[0.95] bg-white text-black shadow-none"
+                  : "bg-gradient-to-b from-[#ff9700] to-[#ee8500] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] hover:brightness-110",
               )}
             >
-              <ArrowUpRight className="h-[17px] w-[17px]" strokeWidth={2.2} />
+              <ArrowUpRight
+                className={cn(
+                  "h-[17px] w-[17px]",
+                  cursorClicking ? "text-black" : "text-white",
+                )}
+                strokeWidth={2.2}
+              />
               Withdraw
             </button>
           </div>
@@ -248,7 +262,7 @@ export default function PaidDirectlyCard({
           >
             <div className="relative z-10 h-[43px] w-[43px] overflow-hidden rounded-full">
               <Image
-                src="/images/Frame 2147243912.png"
+                src="/images/Groupq2354.png"
                 alt="Crypto"
                 fill
                 className="object-cover"
@@ -283,8 +297,14 @@ export default function PaidDirectlyCard({
                 : "scale-75 opacity-0 pointer-events-none",
             )}
           >
-            <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-black/40 bg-[#2bea25] shadow-[0_0_25px_rgba(43,234,37,0.22)]">
-              <Check size={27} strokeWidth={2.5} className="text-black" />
+            <div className="relative h-[52px] w-[52px] overflow-hidden rounded-full">
+              <Image
+                src="/images/Frame 2147243983.png"
+                alt="Success"
+                fill
+                className="object-contain"
+                sizes="52px"
+              />
             </div>
           </div>
         </div>

@@ -17,9 +17,11 @@ import {
   Play,
   ShoppingCart,
   X,
+  Wallet,
   WalletCards,
   ArrowUpRight,
   Megaphone,
+  BarChart3,
 } from "lucide-react";
 import { FaXTwitter } from "react-icons/fa6";
 import { SiInstagram, SiTiktok, SiYoutube } from "react-icons/si";
@@ -85,21 +87,37 @@ interface BrandsClientProps {
 
 const features = [
   {
-    icon: UserRound,
+    image: "/images/Frame123456.png",
     title: "Content Before It Goes Live",
-    description:
-      "Review and approve creator content before it reaches your audience.",
+    description: (
+      <>
+        Review and approve creator content
+        <br />
+        before it reaches your audience.
+      </>
+    ),
   },
   {
-    icon: CheckCircle2,
+    image: "/images/Clip path group.png",
     title: "Verified, Not Self-Reported",
-    description: "Real platform data. Verified views. No inflated numbers.",
+    description: (
+      <>
+        Real platform data. Verified views.
+        <br />
+        No inflated numbers.
+      </>
+    ),
   },
   {
-    icon: Eye,
+    image: "/images/Clip path group (1).png",
     title: "One Campaign. Full Visibility.",
-    description:
-      "Track content, creators, spend, and performance from one place.",
+    description: (
+      <>
+        Track content, creators, spend, and
+        <br />
+        performance from one place.
+      </>
+    ),
   },
 ];
 
@@ -776,46 +794,41 @@ export default function BrandsClient({
               {/* Feature cards */}
               <div
                 className={cn(
-                  "mt-3 grid grid-cols-1 gap-6 rounded-[18px] p-5 sm:gap-3 sm:rounded-[22px] sm:p-7 md:grid-cols-3",
+                  "mt-3 grid grid-cols-1 gap-6 rounded-[18px] p-5 sm:gap-6 sm:rounded-[22px] sm:p-7 md:grid-cols-3",
                   isLight ? "bg-[#f7f7f7]" : "bg-[#151515]",
                 )}
               >
-                {features.map((feature) => {
-                  const Icon = feature.icon;
-
-                  return (
-                    <div key={feature.title}>
-                      <div
-                        className={cn(
-                          "mb-4 flex h-7 w-7 items-center justify-center rounded-full",
-                          isLight
-                            ? "bg-black/5 text-black/70"
-                            : "bg-white/10 text-white/80",
-                        )}
-                      >
-                        <Icon size={15} strokeWidth={1.8} />
-                      </div>
-
-                      <h3
-                        className={cn(
-                          "text-[15px] font-semibold",
-                          isLight ? "text-black" : "text-white/90",
-                        )}
-                      >
-                        {feature.title}
-                      </h3>
-
-                      <p
-                        className={cn(
-                          "mt-2 max-w-[230px] text-[13px] leading-5",
-                          isLight ? "text-black/45" : "text-white/40",
-                        )}
-                      >
-                        {feature.description}
-                      </p>
+                {features.map((feature) => (
+                  <div key={feature.title}>
+                    <div
+                      className={cn(
+                       "mb-4 flex h-[35px] w-[35px] items-center justify-center rounded-full",
+                        isLight
+                          ? "bg-black/5 text-black/70"
+                          : "bg-[#535353] shadow-[0px_0.5px_1px_0px_var(--FoundationGreygrey-7)] text-white/80",
+                      )}
+                    >
+                      <img
+                        src={feature.image}
+                        alt={feature.title}
+                        className="h-[20px] w-[20px] object-contain"
+                      />
                     </div>
-                  );
-                })}
+
+                    <h3
+                      className={cn(
+                        "text-[18px] font-semibold leading-snug",
+                        isLight ? "text-black" : "text-white/90",
+                      )}
+                    >
+                      {feature.title}
+                    </h3>
+
+                    <p className="mt-2 text-[15px] leading-relaxed text-[#757575]">
+                      {feature.description}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
@@ -929,16 +942,16 @@ export default function BrandsClient({
                   {/* Grey line background */}
                   <div
                     className={cn(
-                      "absolute left-[21px] top-[22px] h-[calc(100%-44px)] w-px",
+                      "absolute left-5 top-5 h-[calc(100%-40px)] w-px -translate-x-1/2",
                       isLight ? "bg-black/15" : "bg-white/15"
                     )}
                   />
 
                   {/* Purple progress line */}
                   <div
-                    className="absolute left-[21px] top-[22px] w-px bg-violet-500 transition-all duration-500"
+                    className="absolute left-5 top-5 w-px -translate-x-1/2 bg-violet-500 transition-all duration-500"
                     style={{
-                      height: `calc((100% - 44px) * ${Math.min(oldWayStep / (oldWaySteps.length - 1), 1)})`,
+                      height: `calc((100% - 40px) * ${Math.min(oldWayStep / (oldWaySteps.length - 1), 1)})`,
                     }}
                   />
 
@@ -1251,37 +1264,37 @@ export default function BrandsClient({
 
                           {/* Left image (behind) */}
                           <div
-                            className="absolute z-[4] h-[310px] w-[175px] sm:h-[370px] sm:w-[200px] overflow-hidden rounded-[16px] shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
+                            className="absolute z-[4] h-[310px] w-[175px] sm:h-[400px] sm:w-[240px] overflow-hidden rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
                             style={{ left: "10%", top: "40px" }}
                           >
                             <img
                               src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
                               alt="Instagram Reel"
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain opacity-50"
                             />
                           </div>
 
                           {/* Center image (main, in front) */}
                           <div
-                            className="absolute z-10 h-[370px] w-[210px] sm:h-[430px] sm:w-[240px] overflow-hidden rounded-[16px] shadow-[0_25px_70px_rgba(0,0,0,0.6)]"
+                            className="absolute z-10 h-[370px] w-[210px] sm:h-[480px] sm:w-[280px] overflow-hidden rounded-[16px] bg-black shadow-[0_25px_70px_rgba(0,0,0,0.6)]"
                             style={{ left: "50%", top: "10px", transform: "translateX(-50%)" }}
                           >
                             <img
                               src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
                               alt="Instagram Reel"
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain"
                             />
                           </div>
 
                           {/* Right image (behind) */}
                           <div
-                            className="absolute z-[5] h-[310px] w-[175px] sm:h-[370px] sm:w-[200px] overflow-hidden rounded-[16px] shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
+                            className="absolute z-[5] h-[310px] w-[175px] sm:h-[400px] sm:w-[240px] overflow-hidden rounded-[16px] bg-black shadow-[0_15px_40px_rgba(0,0,0,0.4)]"
                             style={{ right: "10%", top: "40px" }}
                           >
                             <img
                               src="/images/b9b2d7bf77d74fb124111c0e7c4f1ca20d43a5fa.png"
                               alt="Instagram Reel"
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain opacity-50"
                             />
                           </div>
                         </div>
@@ -1429,186 +1442,203 @@ export default function BrandsClient({
                   "relative min-h-[460px] overflow-hidden rounded-[20px] sm:min-h-[515px]",
                   isLight
                     ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
-                    : "border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]",
+                    : "border border-[#FFFFFF1A] bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]",
                 )}
               >
                 {/* =========================
     BACKGROUND DETAILS FORM
+=========================                {/* =========================
+    BACKGROUND DETAILS FORM (MASK GROUP)
 ========================== */}
                 <div
-                  className={cn(
-                    "absolute inset-0",
-                    isLight ? "" : "opacity-[0.6] blur-[0.2px]",
-                  )}
+                  className="absolute left-3 right-3 top-3 h-[240px] overflow-hidden sm:left-5 sm:right-5 sm:top-12 sm:h-[240px]"
+                  style={{
+                    WebkitMaskImage:
+                      "radial-gradient(ellipse 75% 75% at 60% 40%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%)",
+                    maskImage:
+                      "radial-gradient(ellipse 75% 75% at 60% 40%, rgba(0,0,0,1) 55%, rgba(0,0,0,0) 100%)",
+                  }}
                 >
-                  <div
-                    className={cn(
-                      "h-full",
-                      isLight ? "bg-[#ECECEC]" : "bg-[#17181d]",
-                    )}
-                  >
-                    {/* Details */}
-                    <div className="px-3 pt-16">
-                      <div className="mb-5 flex items-center gap-2">
-                        <div
-                          className={cn(
-                            "flex h-4 w-4 items-center justify-center rounded-full text-[8px]",
-                            isLight
-                              ? "bg-[#7C3AED]/15 text-[#7C3AED]"
-                              : "bg-white/10 text-white",
-                          )}
-                        >
-                          1
-                        </div>
-
-                        <span
-                          className={cn(
-                            "text-[10px] font-medium",
-                            isLight ? "text-black/80" : "text-white",
-                          )}
-                        >
-                          Details
-                        </span>
-                      </div>
-
-                      {/* Campaign Title */}
-                      <div className="mb-3">
-                        <label
-                          className={cn(
-                            "mb-1 block text-[7px]",
-                            isLight ? "text-black/70" : "text-white",
-                          )}
-                        >
-                          Campaign title <span className="text-red-400">*</span>
-                        </label>
-
-                        <div
-                          className={cn(
-                            "h-[22px] px-2 py-1 text-[7px]",
-                            isLight
-                              ? "rounded-sm border border-[#0000000D] bg-white text-black/45"
-                              : "bg-white/[0.07] text-gray-400",
-                          )}
-                        >
-                          e.g. Create a Viral shorts/video for our New App
-                        </div>
-                      </div>
-
-                      {/* Platform + Content */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label
-                            className={cn(
-                              "mb-1 block text-[7px]",
-                              isLight ? "text-black/70" : "text-white",
-                            )}
-                          >
-                            Platform <span className="text-red-400">*</span>
-                          </label>
-
+                  <div className="relative flex h-full w-full justify-center pt-2">
+                    {/* Details Card Frame */}
+                    <div
+                      data-layer="Frame"
+                      className={cn(
+                        "Frame flex h-[244.83px] w-[365.41px] flex-col justify-start gap-[9.72px] rounded-[9.72px] p-[11.66px] transition-colors duration-300",
+                        isLight
+                          ? "bg-white border border-[#A890F9]/40 shadow-sm text-black"
+                          : "bg-[#131313] outline-[0.49px] outline-[#A890F9] outline-offset-[-0.49px] text-white",
+                      )}
+                    >
+                      {/* Section Header */}
+                      <div className="flex items-center justify-between pb-[5.83px]">
+                        <div className="flex items-center gap-[5.83px]">
                           <div
                             className={cn(
-                              "flex h-[23px] items-center justify-between px-2 text-[7px]",
-                              isLight
-                                ? "rounded-sm border border-[#0000000D] bg-white text-black/60"
-                                : "bg-white/[0.07] text-gray-300",
+                              "flex h-[13.6px] w-[13.6px] items-center justify-center rounded-[5.83px]",
+                              isLight ? "bg-[#7C3AED]/15 text-[#7C3AED]" : "bg-[#2E2E2E] text-white",
                             )}
                           >
-                            <span>◉ YouTube</span>
-                            <span>⌄</span>
+                            <span className="text-[5.83px] font-medium">1</span>
                           </div>
-                        </div>
-
-                        <div>
-                          <label
+                          <span
                             className={cn(
-                              "mb-1 block text-[7px]",
-                              isLight ? "text-black/70" : "text-white",
+                              "text-[9.51px] font-medium",
+                              isLight ? "text-black" : "text-white",
                             )}
                           >
-                            Content Type (optional)
-                          </label>
-
-                          <div
-                            className={cn(
-                              "flex h-[23px] items-center px-2 text-[7px]",
-                              isLight
-                                ? "rounded-sm border border-[#0000000D] bg-white text-black/45"
-                                : "bg-white/[0.07] text-gray-400",
-                            )}
-                          >
-                            Select content type
-                          </div>
+                            Details
+                          </span>
                         </div>
                       </div>
 
-                      {/* Thumbnail */}
-                      <div className="mt-3">
-                        <label
-                          className={cn(
-                            "mb-1 block text-[7px]",
-                            isLight ? "text-black/70" : "text-white",
-                          )}
-                        >
-                          Thumbnail
-                        </label>
-
-                        <div
-                          className={cn(
-                            "flex h-[56px] flex-col items-center justify-center",
-                            isLight
-                              ? "rounded-sm border border-dashed border-[#0000001A] bg-white"
-                              : "bg-white/[0.06]",
-                          )}
-                        >
-                          <Upload
-                            size={10}
-                            className={cn(
-                              "mb-2",
-                              isLight ? "text-black/45" : "text-gray-400",
-                            )}
-                          />
-
-                          <p
-                            className={cn(
-                              "text-[7px]",
-                              isLight ? "text-black/60" : "text-gray-300",
-                            )}
-                          >
-                            Drag, drop or{" "}
-                            <span
-                              className={cn(
-                                "underline",
-                                isLight ? "text-[#7C3AED]" : "",
-                              )}
-                            >
-                              browse thumbnail
+                      {/* Campaign Title Field */}
+                      <div className="flex flex-col gap-[3.89px]">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-[1.94px]">
+                            <span className={cn("text-[6.32px] font-medium", isLight ? "text-black/80" : "text-[#F1EEF5]")}>
+                              Campaign title
                             </span>
-                          </p>
+                            <span className="text-[6.32px] font-medium text-[#EF4444]">*</span>
+                          </div>
+                          <span className={cn("text-[5.83px] font-normal", isLight ? "text-black/50" : "text-[#9E9AA6]")}>
+                            0/100
+                          </span>
+                        </div>
+                        <div
+                          className={cn(
+                            "flex items-center rounded-[3.89px] px-[7.77px] py-[5.83px]",
+                            isLight
+                              ? "bg-black/[0.04] border border-black/10 text-black/60"
+                              : "bg-[#222222] outline-[0.49px] outline-[#353535] outline-offset-[-0.49px] text-[#9E9AA6]",
+                          )}
+                        >
+                          <span className="text-[6.8px] font-normal">
+                            e.g., Create a Viral shorts/video for our New App
+                          </span>
+                        </div>
+                      </div>
 
-                          <p
+                      {/* Platform + Content Type Row */}
+                      <div className="flex gap-[7.77px]">
+                        {/* Platform */}
+                        <div className="flex flex-1 flex-col gap-[3.89px]">
+                          <div className="flex items-start gap-[1.94px]">
+                            <span className={cn("text-[6.32px] font-medium", isLight ? "text-black/80" : "text-[#F1EEF5]")}>
+                              Platform
+                            </span>
+                            <span className="text-[6.32px] font-medium text-[#EF4444]">*</span>
+                          </div>
+                          <div
                             className={cn(
-                              "mt-1 text-[6px]",
-                              isLight ? "text-black/40" : "text-gray-500",
+                              "flex items-center justify-between rounded-[3.89px] px-[7.77px] py-[5.83px]",
+                              isLight
+                                ? "bg-black/[0.04] border border-black/10 text-black"
+                                : "bg-[#222222] outline-[0.49px] outline-[#353535] outline-offset-[-0.49px] text-[#F1EEF5]",
                             )}
                           >
-                            Max file size: 5MB
-                          </p>
+                            <div className="flex items-center gap-[3.89px]">
+                              <div className="flex h-[8px] w-[11px] items-center justify-center rounded-[2.5px] bg-[#737373]">
+                                <span className="text-[4px] leading-none text-white">▶</span>
+                              </div>
+                              <span className={cn("text-[6.8px] font-normal", isLight ? "text-black/60" : "text-[#9E9AA6]")}>YouTube</span>
+                            </div>
+                            <span className="text-[6px] opacity-60">▼</span>
+                          </div>
+                        </div>
+
+                        {/* Content Type (optional) */}
+                        <div className="flex flex-1 flex-col gap-[3.89px]">
+                          <div className="flex items-start gap-[1.94px]">
+                            <span className={cn("text-[6.32px] font-medium", isLight ? "text-black/80" : "text-[#F1EEF5]")}>
+                              Content Type (optional)
+                            </span>
+                          </div>
+                          <div
+                            className={cn(
+                              "flex items-center justify-between rounded-[3.89px] px-[7.77px] py-[5.83px]",
+                              isLight
+                                ? "bg-black/[0.04] border border-black/10 text-black/60"
+                                : "bg-[#222222] outline-[0.49px] outline-[#252332] outline-offset-[-0.49px] text-[#F1EEF5]",
+                            )}
+                          >
+                            <span className="text-[6.8px] font-normal">Select content type</span>
+                            <span className="text-[6px] opacity-60">▼</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Thumbnail Field */}
+                      <div className="flex flex-col gap-[3.89px]">
+                        <span className={cn("text-[6.32px] font-medium", isLight ? "text-black/80" : "text-[#F1EEF5]")}>
+                          Thumbnail
+                        </span>
+                        <div
+                          className={cn(
+                            "flex flex-col items-center justify-center rounded-[3.89px] p-[9.72px]",
+                            isLight
+                              ? "bg-black/[0.04] border border-dashed border-black/15 text-black/60"
+                              : "bg-[#222222] outline-[0.49px] outline-[#353535] outline-offset-[-0.49px]",
+                          )}
+                        >
+                          <div className="flex flex-col items-center gap-[3.89px]">
+                            <Upload size={11.66} className={isLight ? "text-black/60" : "text-[#737373]"} />
+                            <p className="text-[6.8px] font-normal">
+                              <span className={isLight ? "text-black/70" : "text-[#F1EEF5]"}>Drag, drop or </span>
+                              <span className={cn("underline", isLight ? "text-[#7C3AED]" : "text-[#F1EEF5]")}>
+                                browse thumbnail
+                              </span>
+                            </p>
+                            <span className={cn("text-[5.83px] font-normal", isLight ? "text-black/50" : "text-[#9E9AA6]")}>
+                              Max file size: 5MB
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+
+                  {/* Soft edge shade overlays — fades content smoothly on all 4 sides */}
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-y-0 left-0 w-10",
+                      isLight
+                        ? "bg-gradient-to-r from-[#ECECEC] via-[#ECECEC]/70 to-transparent"
+                        : "bg-gradient-to-r from-[#171717] via-[#171717]/70 to-transparent",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-y-0 right-0 w-10",
+                      isLight
+                        ? "bg-gradient-to-l from-[#ECECEC] via-[#ECECEC]/70 to-transparent"
+                        : "bg-gradient-to-l from-[#171717] via-[#171717]/70 to-transparent",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 top-0 h-8",
+                      isLight
+                        ? "bg-gradient-to-b from-[#ECECEC] via-[#ECECEC]/60 to-transparent"
+                        : "bg-gradient-to-b from-[#171717] via-[#171717]/60 to-transparent",
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      "pointer-events-none absolute inset-x-0 bottom-0 h-[35%]",
+                      isLight
+                        ? "bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/85 to-transparent"
+                        : "bg-gradient-to-t from-[#171717] via-[#171717]/85 to-transparent",
+                    )}
+                  />
                 </div>
 
                 {/* =========================
     SHADE / OVERLAY
 ========================== */}
-
                 {isLight ? (
                   <>
-                    {/* Soft frosted shade over details */}
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#ECECEC]/35 via-[#ECECEC]/55 to-[#ECECEC]" />
-                    {/* Soft white haze behind budget / top area */}
                     <div className="pointer-events-none absolute -right-8 -top-8 h-48 w-48 rounded-full bg-white/60 blur-[50px]" />
                     <div className="pointer-events-none absolute left-1/2 top-[40%] h-24 w-[90%] -translate-x-1/2 rounded-full bg-white/50 blur-[40px]" />
                   </>
@@ -1621,52 +1651,66 @@ export default function BrandsClient({
                 )}
 
                 {/* =========================
-    BUDGET CARD
+    BUDGET CARD (Figma Spec)
 ========================== */}
-
                 <div
                   className={cn(
-                    "absolute right-7 top-6 z-10",
-                    isLight ? "opacity-100" : "opacity-[0.85] blur-[0.2px]",
+                    "absolute right-6 top-6 z-10 transition-colors duration-300",
+                    isLight ? "opacity-100" : "opacity-[0.85]",
                   )}
                 >
-                  {/* Purple glow */}
+                  {/* Purple glow behind card */}
                   <div
                     className={cn(
                       "absolute -inset-[2px] rounded-[14px] blur-md",
-                      isLight &&
-                        "bg-[radial-gradient(circle,rgba(124,58,237,0.18),transparent_70%)]",
+                      isLight
+                        ? "bg-[radial-gradient(circle,rgba(124,58,237,0.18),transparent_70%)]"
+                        : "bg-[radial-gradient(circle,rgba(200,145,255,0.25),transparent_75%)]",
                     )}
                   />
 
-                  {/* Budget Card */}
+                  {/* Outer Budget Container */}
                   <div
                     className={cn(
-                      "relative w-[170px] rounded-xl border p-3 backdrop-blur-xl",
+                      "relative flex flex-col justify-start gap-[6px] rounded-[12px] p-[8px] overflow-hidden transition-all duration-300",
                       isLight
-                        ? "border-[#0000000D] bg-[#ECECEC]"
-                        : "border-purple-400/25 border-r-purple-400/60 border-t-purple-400/40 bg-[#16161b]/55 shadow-[8px_0_18px_rgba(124,58,237,0.18)]",
+                        ? "bg-white border border-[#A890F9]/30 shadow-md text-black"
+                        : "bg-[#131313] outline-[0.60px] outline-[#C891FF] outline-offset-[-0.60px] text-white",
                     )}
                   >
-                    <div
-                      className={cn(
-                        "mb-2 flex items-center gap-2 text-xs font-medium",
-                        isLight ? "text-black/60" : "text-gray-300",
-                      )}
-                    >
-                      <WalletCards size={14} />
-                      Budget
+                    {/* Header Row: Wallet Icon + Budget Title */}
+                    <div className="flex items-center gap-[6px]">
+                      <Wallet
+                        size={14}
+                        className={isLight ? "text-black/70" : "text-white"}
+                      />
+                      <span
+                        className={cn(
+                          "text-[12px] font-medium leading-[14.40px]",
+                          isLight ? "text-black/80" : "text-white",
+                        )}
+                      >
+                        Budget
+                      </span>
                     </div>
 
+                    {/* Value Field */}
                     <div
                       className={cn(
-                        "rounded-md px-3 py-2 text-sm font-semibold backdrop-blur-md",
+                        "flex items-center justify-start rounded-[5.72px] px-[12px] py-[4px] w-[150px]",
                         isLight
-                          ? "border border-[#0000000D] bg-white text-black/70"
-                          : "bg-black/25 text-gray-400",
+                          ? "bg-black/[0.04] border border-black/10 text-black/70"
+                          : "bg-[#222222] outline-[0.72px] outline-[#353535] outline-offset-[-0.72px] text-[#757575]",
                       )}
                     >
-                      $ 24000
+                      <span
+                        className={cn(
+                          "text-[12px] font-medium",
+                          isLight ? "text-black/80" : "text-[#757575]",
+                        )}
+                      >
+                        $ 24000
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1762,7 +1806,7 @@ export default function BrandsClient({
                   "relative min-h-[515px] overflow-hidden rounded-[20px]",
                   isLight
                     ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
-                    : "border border-white/10 bg-[#1b1b1b]",
+                    : "border border-[#FFFFFF1A] bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]",
                 )}
               >
                 {/* Campaign thumbnails sitting behind the reel — keep in both modes */}
@@ -1878,17 +1922,33 @@ export default function BrandsClient({
                   "relative min-h-[515px] overflow-hidden rounded-[20px]",
                   isLight
                     ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
-                    : "border border-white/10 bg-gradient-to-br from-[#252525] to-[#171717]",
+                    : "border border-[#FFFFFF1A] bg-[#171717] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]",
                 )}
               >
+                {/* Top background image */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[350px] ">
+                  <Image
+                    src="/images/image 239 (1).png"
+                    alt="Background graphic"
+                    fill
+                    className="object-contain object-top"
+                  />
+                </div>
+
                 {/* Rewards panel */}
                 <div
                   className={cn(
-                    "absolute left-5 right-5 top-16 rounded-2xl p-5",
+                    "absolute left-10 -right-6 top-10 rounded-2xl p-5 sm:left-14 sm:-right-6 sm:top-20 transition-all duration-300",
                     isLight
                       ? "border border-black/[0.06] bg-[#DEDEDE] shadow-[0px_11px_21.99px_0px_#FFFFFF5C]"
-                      : "border border-white/5 bg-[#202020]/90",
+                      : "border border-[#353535] bg-[#1F1F1F]",
                   )}
+                  style={{
+                    WebkitMaskImage:
+                      "linear-gradient(to bottom, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
+                    maskImage:
+                      "linear-gradient(to bottom, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
+                  }}
                 >
                   <h4
                     className={cn(
@@ -1985,11 +2045,12 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "mt-5 text-center text-[9px]",
-                      isLight ? "text-black/40" : "text-gray-500",
+                      "mt-5 flex items-center justify-center gap-1.5 text-center text-[9px] font-medium",
+                      isLight ? "text-black/60" : "text-gray-300",
                     )}
                   >
-                    ▮▮ All payments are based on verified performance
+                    <BarChart3 size={11} className="opacity-80" />
+                    All payments are based on verified performance
                   </p>
                 </div>
 
@@ -2373,144 +2434,32 @@ export default function BrandsClient({
                       </div>
                     ))}
                   </div>
-                </div>
 
-                {/* Fade over profiles */}
-                <div
-                  className={cn(
-                    "pointer-events-none absolute inset-x-0 top-[70px] z-[2] h-[220px] bg-gradient-to-b from-transparent",
-                    isLight
-                      ? "via-[#ECECEC]/40 to-[#ECECEC]"
-                      : "via-[#171717]/35 to-[#171717]",
-                  )}
-                />
-
-                {/* Pinched purple curve */}
-                <div className="pointer-events-none absolute inset-x-0 top-[92px] z-[4] h-[150px] overflow-hidden">
-                  {/* Soft purple glow — clipped so blur can't inflate curve height */}
+                  {/* Bottom fade overlay */}
                   <div
                     className={cn(
-                      "absolute inset-x-0 top-1/2 h-[70%] -translate-y-1/2 blur-[14px]",
-                      isLight ? "opacity-80" : "opacity-55",
+                      "pointer-events-none absolute bottom-0 inset-x-0 h-[45px] z-[2]",
+                      isLight
+                        ? "bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/90 to-transparent"
+                        : "bg-gradient-to-t from-[#171717] via-[#171717]/90 to-transparent",
                     )}
-                    aria-hidden
-                  >
-                    <svg
-                      viewBox="0 0 1000 200"
-                      preserveAspectRatio="none"
-                      className="h-full w-full"
-                    >
-                      <path
-                        d="M0 10 C220 95, 780 95, 1000 10 L1000 190 C780 105, 220 105, 0 190 Z"
-                        fill="#754FF6"
-                      />
-                    </svg>
-                  </div>
+                  />
+                </div>
 
-                  <svg
-                    viewBox="0 0 1000 200"
-                    preserveAspectRatio="none"
-                    className="relative h-full w-full"
-                  >
-                    <defs>
-                      <radialGradient
-                        id="engagementPurple"
-                        cx="50%"
-                        cy="51.5%"
-                        r="50%"
-                        fx="50%"
-                        fy="51.5%"
-                        gradientUnits="objectBoundingBox"
-                        gradientTransform="translate(0.5 0.515) scale(1 0.97) translate(-0.5 -0.515)"
-                      >
-                        <stop offset="0%" stopColor="#754FF6" />
-                        <stop offset="100%" stopColor="#442E90" />
-                      </radialGradient>
-                      <filter
-                        id="engagementNoise"
-                        x="0%"
-                        y="0%"
-                        width="100%"
-                        height="100%"
-                        filterUnits="objectBoundingBox"
-                      >
-                        <feTurbulence
-                          type="fractalNoise"
-                          baseFrequency="0.9"
-                          numOctaves="2"
-                          stitchTiles="stitch"
-                          result="noise"
-                        />
-                        <feColorMatrix
-                          in="noise"
-                          type="saturate"
-                          values="0"
-                          result="desat"
-                        />
-                        <feBlend
-                          in="SourceGraphic"
-                          in2="desat"
-                          mode="overlay"
-                        />
-                      </filter>
-                      <clipPath id="engagementCurveClip" clipPathUnits="userSpaceOnUse">
-                        <path d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z" />
-                      </clipPath>
-                    </defs>
-                    <path
-                      d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
-                      fill="url(#engagementPurple)"
+                {/* Pinched purple curve */}
+                <div className="pointer-events-none absolute inset-x-0 top-[5px] sm:top-[10px] z-[4] flex items-center justify-center">
+                  <img
+                    src="/images/Vector 958.png"
+                    alt=""
+                    className="w-full h-auto object-contain"
+                  />
+
+                  <div className="absolute bottom-[80px] inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
+                    <img
+                      src="/images/Frame (122312).png"
+                      alt=""
+                      className="hidden shrink-0 h-5.5 w-5.5 sm:block object-contain"
                     />
-                    {/* Grain clipped to the curve — no white fringe outside the path */}
-                    <g clipPath="url(#engagementCurveClip)">
-                      <path
-                        d="M0 8 C240 98, 760 98, 1000 8 L1000 192 C760 102, 240 102, 0 192 Z"
-                        fill="#754FF6"
-                        opacity="0.35"
-                        filter="url(#engagementNoise)"
-                      />
-                    </g>
-                  </svg>
-
-                  <div className="absolute inset-0 flex items-center justify-center gap-2 px-4 sm:gap-2.5">
-                    <svg
-                      width="22"
-                      height="22"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      className="hidden shrink-0 sm:block"
-                    >
-                      <path
-                        d="M4 11.5L13.5 9L15.5 15L6 17.5L4 11.5Z"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M13.5 9L15.2 5.8L19.2 7.1L17.8 10.2"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M9 16.5L10.5 21"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M7.5 21H13"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M18.5 2.5V5.5M17 4H20"
-                        stroke="white"
-                        strokeWidth="1.2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
                     <span className="text-center text-[12px] font-medium tracking-[-0.02em] text-white sm:text-[15px]">
                       Authentic Data. Verified Performance
                     </span>
@@ -2521,7 +2470,7 @@ export default function BrandsClient({
                 <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
                   <h3
                     className={cn(
-                      "mb-2 text-lg font-semibold sm:text-xl",
+                      "mb-2 text-[20px] font-semibold",
                       isLight ? "text-black" : "text-white",
                     )}
                   >
@@ -2529,8 +2478,8 @@ export default function BrandsClient({
                   </h3>
                   <p
                     className={cn(
-                      "max-w-[480px] text-[13px] leading-5 sm:text-[15px] sm:leading-6",
-                      isLight ? "text-black/50" : "text-white/50",
+                      "max-w-[480px] text-[15px] leading-[24px]",
+                      isLight ? "text-black/50" : "text-[#8E8E8E]",
                     )}
                   >
                     We scan every view for suspicious activity and filter out
@@ -2567,12 +2516,20 @@ export default function BrandsClient({
                   {/* Extra padding so badges aren't clipped at top / left / right */}
                   <div className="absolute left-1/2 top-[68%] h-[396px] w-[396px] -translate-x-1/2 -translate-y-1/2">
                     <div className="absolute left-1/2 top-1/2 h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
-                      {/* Rings — extend to hub midline & touch badges */}
-                      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[calc(50%+32px)] overflow-hidden">
+                      {/* Rings — extend down smoothly with gradient fade */}
+                      <div
+                        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[340px] overflow-hidden"
+                        style={{
+                          WebkitMaskImage:
+                            "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 75%)",
+                          maskImage:
+                            "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 75%)",
+                        }}
+                      >
                         <div className="absolute left-1/2 top-[170px] h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
                           <div
                             className={cn(
-                              "absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border",
+                              "absolute left-1/2 top-1/2 h-[310px] w-[310px] -translate-x-1/2 -translate-y-1/2 rounded-full border",
                               isLight
                                 ? "border-black/20"
                                 : "border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]",
@@ -2580,7 +2537,7 @@ export default function BrandsClient({
                           />
                           <div
                             className={cn(
-                              "absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2 rounded-full border",
+                              "absolute left-1/2 top-1/2 h-[250px] w-[250px] -translate-x-1/2 -translate-y-1/2 rounded-full border",
                               isLight
                                 ? "border-black/20"
                                 : "border-[0.43px] border-[#2D2D2D] shadow-[0px_2px_0px_0px_#000000]",
@@ -2589,17 +2546,25 @@ export default function BrandsClient({
                         </div>
                       </div>
 
-                      {/* Badges — padded clip so full badge shows on the upper arc;
-                          still hides once they rotate into the bottom half */}
-                      <div className="absolute -inset-x-7 -top-7 z-20 h-[calc(50%+28px+28px)] overflow-hidden">
+                      {/* Badges — 360 orbit smoothly fading on lower arc */}
+                      <div
+                        className="absolute -inset-x-7 -top-7 z-20 h-[396px] overflow-visible"
+                        style={{
+                          WebkitMaskImage:
+                            "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 65%)",
+                          maskImage:
+                            "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 65%)",
+                        }}
+                      >
                         <div className="absolute left-1/2 top-[calc(170px+28px)] h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2">
-                          {/* Outer ring — Instagram + YouTube (opposite) */}
-                          <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2">
+                          {/* Orbiting badges — running between inner (250px) and outer (310px) circle at 280px diameter */}
+                          <div className="absolute left-1/2 top-1/2 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2">
                             <div className="absolute inset-0 animate-source-orbit-outer">
+                              {/* Instagram (Top) */}
                               <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
                                 <div
                                   className={cn(
-                                    "flex h-14 w-14 animate-source-orbit-outer-counter items-center justify-center rounded-full",
+                                    "flex h-16 w-16 animate-source-orbit-outer-counter items-center justify-center rounded-full",
                                     isLight
                                       ? "bg-[#DEDEDE]"
                                       : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
@@ -2608,16 +2573,17 @@ export default function BrandsClient({
                                   <Image
                                     src="/images/Frame (3).png"
                                     alt="Instagram"
-                                    width={24}
-                                    height={24}
-                                    className="h-6 w-6 object-contain"
+                                    width={32}
+                                    height={32}
+                                    className="h-8 w-8 object-contain"
                                   />
                                 </div>
                               </div>
+                              {/* YouTube (Bottom) */}
                               <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2">
                                 <div
                                   className={cn(
-                                    "flex h-14 w-14 animate-source-orbit-outer-counter items-center justify-center rounded-full",
+                                    "flex h-16 w-16 animate-source-orbit-outer-counter items-center justify-center rounded-full",
                                     isLight
                                       ? "bg-[#DEDEDE]"
                                       : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
@@ -2626,22 +2592,17 @@ export default function BrandsClient({
                                   <Image
                                     src="/images/Frame (2).png"
                                     alt="YouTube"
-                                    width={24}
-                                    height={24}
-                                    className="h-6 w-6 object-contain"
+                                    width={32}
+                                    height={32}
+                                    className="h-8 w-8 object-contain"
                                   />
                                 </div>
                               </div>
-                            </div>
-                          </div>
-
-                          {/* Inner ring — TikTok + X (opposite, 90° from outer) */}
-                          <div className="absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2">
-                            <div className="absolute inset-0 animate-source-orbit-inner">
+                              {/* TikTok (Left) */}
                               <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2">
                                 <div
                                   className={cn(
-                                    "flex h-14 w-14 animate-source-orbit-inner-counter items-center justify-center rounded-full",
+                                    "flex h-16 w-16 animate-source-orbit-outer-counter items-center justify-center rounded-full",
                                     isLight
                                       ? "bg-[#DEDEDE]"
                                       : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
@@ -2649,16 +2610,17 @@ export default function BrandsClient({
                                 >
                                   <SiTiktok
                                     className={cn(
-                                      "h-6 w-6",
+                                      "h-8 w-8",
                                       isLight ? "text-black" : "text-white",
                                     )}
                                   />
                                 </div>
                               </div>
+                              {/* X (Right) */}
                               <div className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2">
                                 <div
                                   className={cn(
-                                    "flex h-14 w-14 animate-source-orbit-inner-counter items-center justify-center rounded-full",
+                                    "flex h-16 w-16 animate-source-orbit-outer-counter items-center justify-center rounded-full",
                                     isLight
                                       ? "bg-[#DEDEDE]"
                                       : "bg-[#363636] shadow-[0_8px_24px_rgba(109,70,255,0.55)]",
@@ -2667,9 +2629,9 @@ export default function BrandsClient({
                                   <Image
                                     src="/images/Frame (4).png"
                                     alt="X"
-                                    width={20}
-                                    height={20}
-                                    className="h-5 w-5 object-contain"
+                                    width={28}
+                                    height={28}
+                                    className="h-7 w-7 object-contain"
                                   />
                                 </div>
                               </div>
@@ -2681,7 +2643,7 @@ export default function BrandsClient({
                       {/* Center logo */}
                       <div
                         className={cn(
-                          "absolute left-1/2 top-[40%] z-30 flex h-[90px] w-[90px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
+                          "absolute left-1/2 top-[45%] z-30 flex h-[90px] w-[90px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full",
                           isLight
                             ? "bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
                             : "bg-[#1c1c1c]",
@@ -2707,10 +2669,10 @@ export default function BrandsClient({
                 </div>
 
                 {/* Bottom text */}
-                <div className="absolute bottom-5 left-4 right-4 z-10 sm:bottom-7 sm:left-7 sm:right-7">
+                <div className="absolute bottom-5 left-4 right-4  sm:bottom-7 sm:left-7 sm:right-7">
                   <h3
                     className={cn(
-                      "mb-2 text-lg font-semibold sm:text-xl",
+                      "mb-2 text-[20px] font-semibold",
                       isLight ? "text-black" : "text-white",
                     )}
                   >
@@ -2719,8 +2681,8 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "max-w-[480px] text-[13px] leading-5 sm:text-[15px] sm:leading-6",
-                      isLight ? "text-black/50" : "text-white/50",
+                      "max-w-[480px] text-[15px] leading-[24px]",
+                      isLight ? "text-black/50" : "text-[#8E8E8E]",
                     )}
                   >
                     Campaign data is pulled directly from Instagram and YouTube,
@@ -2754,15 +2716,11 @@ export default function BrandsClient({
 
                   <p
                     className={cn(
-                      "mt-2 max-w-[280px] text-[14px] leading-[22px] sm:max-w-[250px] sm:text-[16px] sm:leading-[24px]",
-                      isLight ? "text-black/50" : "text-white/50",
+                      "mt-2 max-w-[310px] text-[14px] leading-[22px] sm:max-w-[300px] sm:text-[16px] sm:leading-[24px]",
+                      isLight ? "text-black/50" : "text-[#8E8E8E]",
                     )}
                   >
-                    Chose the format that fit your goals -
-                    <br className="hidden sm:block" />
-                    from guaranteed reach to
-                    <br className="hidden sm:block" />
-                    performance-based rewards
+                    Choose the format that fits your goals - from guaranteed reach to performance-based rewards
                   </p>
                 </div>
 
@@ -2774,8 +2732,8 @@ export default function BrandsClient({
                       className="
               absolute left-0 top-[18px] z-[10]
               h-[380px] w-[240px]
-              overflow-hidden rounded-[22px]
-              bg-gradient-to-br from-[#7445ef] to-[#5c36d8]
+              overflow-hidden rounded-t-[20.5px] rounded-b-none
+              bg-[linear-gradient(180deg,#754FF6_0%,#221845_100%)]
               shadow-2xl
               sm:h-[410px] sm:w-[270px]
             "
@@ -2801,7 +2759,7 @@ export default function BrandsClient({
                               viewBox="0 0 11 13"
                               fill="none"
                             >
-                              <path d="M10 6.5L1 1V12L10 6.5Z" fill="#7B4CF2" />
+                              <path d="M10 6.5L1 1V12L10 6.5Z" fill="#754FF6" />
                             </svg>
                           </div>
 
@@ -2851,8 +2809,8 @@ export default function BrandsClient({
                       className="
               absolute left-[160px] top-[28px] z-[20]
               h-[380px] w-[240px]
-              overflow-hidden rounded-[22px]
-              bg-gradient-to-br from-[#ffc743] to-[#d69a28]
+              overflow-hidden rounded-t-[20.5px] rounded-b-none
+              bg-[linear-gradient(180deg,#F6BE4F_0%,#453418_100%)]
               shadow-2xl
               sm:left-[190px] sm:h-[410px] sm:w-[270px]
             "
@@ -2873,6 +2831,10 @@ export default function BrandsClient({
                       {/* Gold decorative circles */}
                       <div className="absolute right-[20px] top-[55px] h-[90px] w-[90px] rounded-full bg-[#d9941d]/50" />
                       <div className="absolute right-[-15px] top-[5px] h-[100px] w-[100px] rounded-full bg-[#ffe17c]/40" />
+
+                      {/* Decorative white accent lines above top-left of white panel */}
+                      <div className="pointer-events-none absolute left-[18px] top-[90px] h-[12px] w-[2px] origin-bottom rotate-[-22deg] rounded-full bg-white opacity-95" />
+                      <div className="pointer-events-none absolute left-[10px] top-[96px] h-[10px] w-[2px] origin-bottom rotate-[-52deg] rounded-full bg-white opacity-95" />
 
                       {/* Leaderboard white panel */}
                       <div className="absolute left-[16px] right-[16px] top-[108px] bottom-0 rounded-t-[13px] bg-white px-4 pt-4">
@@ -2909,7 +2871,7 @@ export default function BrandsClient({
 
                                 <div className="mt-[3px] h-[3px] w-full rounded-full bg-gray-200">
                                   <div
-                                    className="h-full rounded-full bg-[#ff941d]"
+                                    className="h-full rounded-full bg-[#FF8800]"
                                     style={{
                                       width: `${Math.max(
                                         30,
@@ -2930,8 +2892,8 @@ export default function BrandsClient({
                       className="
               absolute left-[310px] top-[42px] z-[30]
               h-[380px] w-[240px]
-              overflow-hidden rounded-[22px]
-              bg-gradient-to-br from-[#ed3fcd] to-[#b832bc]
+              overflow-hidden rounded-t-[20.5px] rounded-b-none
+              bg-[linear-gradient(180deg,#F64FDA_0%,#221845_100%)]
               shadow-2xl
               sm:left-[360px] sm:h-[410px] sm:w-[270px]
             "
@@ -2961,11 +2923,11 @@ export default function BrandsClient({
 
                         {/* Timeline */}
                         <div className="relative mt-5">
-                          <div className="absolute left-[11px] top-[9px] bottom-[24px] w-[2px] bg-[#ff4fc9]" />
+                          <div className="absolute left-[9px] top-[10px] bottom-[46px] w-[2px] bg-[#ff4fc9]" />
 
                           {/* 100K */}
-                          <div className="relative flex gap-5">
-                            <div className="relative z-10 flex h-[20px] w-[20px] items-center justify-center rounded-full bg-[#ff28a8]">
+                          <div className="relative flex gap-3">
+                            <div className="relative z-10 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#ff28a8]">
                               <svg
                                 width="10"
                                 height="10"
@@ -2993,8 +2955,8 @@ export default function BrandsClient({
                           </div>
 
                           {/* 500K */}
-                          <div className="relative mt-3 flex gap-5">
-                            <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
+                          <div className="relative mt-3 flex gap-3">
+                            <div className="relative z-10 h-[20px] w-[20px] shrink-0 rounded-full border-2 border-[#ff8bd6] bg-white" />
 
                             <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
                               <p className="text-[13px] font-semibold text-gray-800">
@@ -3007,8 +2969,8 @@ export default function BrandsClient({
                           </div>
 
                           {/* 1M */}
-                          <div className="relative mt-3 flex gap-5">
-                            <div className="relative z-10 h-[20px] w-[20px] rounded-full border-2 border-[#ff8bd6] bg-white" />
+                          <div className="relative mt-3 flex gap-3">
+                            <div className="relative z-10 h-[20px] w-[20px] shrink-0 rounded-full border-2 border-[#ff8bd6] bg-white" />
 
                             <div className="rounded-[12px] bg-[#fff4fa] px-4 py-3">
                               <p className="text-[13px] font-semibold text-gray-800">
@@ -3028,8 +2990,8 @@ export default function BrandsClient({
                       className="
               absolute left-[460px] top-[58px] z-[40]
               h-[360px] w-[250px]
-              overflow-hidden rounded-[22px]
-              bg-gradient-to-br from-[#36b4eb] to-[#2396d1]
+              overflow-hidden rounded-t-[20.5px] rounded-b-none
+              bg-[linear-gradient(180deg,#4FBEF6_0%,#221845_100%)]
               shadow-2xl
               sm:left-[540px] sm:top-[64px] sm:h-[380px] sm:w-[300px]
             "
@@ -3048,7 +3010,7 @@ export default function BrandsClient({
                       {/* Main reward white panel */}
                       <div className="absolute left-[16px] right-[16px] top-[105px] bottom-0 rounded-t-[13px] bg-white/90 px-3 pt-4">
                         {/* CPM reward */}
-                        <div className="relative rounded-[11px] bg-[#d9f2ff] px-4 py-4">
+                        <div className="relative rounded-[11px] bg-[#CDEDFF] px-4 py-4">
                           <div className="flex items-center gap-3">
                             <div className="flex h-7 w-7 items-center justify-center">
                               <svg
@@ -3059,17 +3021,17 @@ export default function BrandsClient({
                               >
                                 <path
                                   d="M16 10.5L1 2V19L16 10.5Z"
-                                  fill="#069DE2"
+                                  fill="#00A5FF"
                                 />
                               </svg>
                             </div>
 
                             <div>
-                              <div className="text-[17px] font-semibold leading-[19px] text-[#079be0]">
+                              <div className="text-[17px] font-semibold leading-[19px] text-[#00A5FF]">
                                 $1.00
                               </div>
 
-                              <div className="text-[13px] leading-[16px] text-[#079be0]">
+                              <div className="text-[13px] leading-[16px] text-[#00A5FF]">
                                 per 1,000 view
                               </div>
                             </div>
@@ -3078,12 +3040,12 @@ export default function BrandsClient({
 
                         {/* Plus */}
                         <div className="relative z-10 mx-auto my-[-3px] flex h-[40px] w-[40px] items-center justify-center">
-                          <div className="absolute h-[4px] w-[32px] rounded-full bg-[#55b8e9]" />
-                          <div className="absolute h-[32px] w-[4px] rounded-full bg-[#55b8e9]" />
+                          <div className="absolute h-[4px] w-[32px] rounded-full bg-[#00A5FF]" />
+                          <div className="absolute h-[32px] w-[4px] rounded-full bg-[#00A5FF]" />
                         </div>
 
                         {/* Milestone reward */}
-                        <div className="rounded-[11px] bg-[#d9f2ff] px-4 py-4">
+                        <div className="rounded-[11px] bg-[#CDEDFF] px-4 py-4">
                           <div className="flex items-start gap-3">
                             {/* bars icon */}
                             <svg
@@ -3095,13 +3057,13 @@ export default function BrandsClient({
                             >
                               <path
                                 d="M5 19V12M12 19V5M19 19V9"
-                                stroke="#079BE0"
+                                stroke="#00A5FF"
                                 strokeWidth="3"
                                 strokeLinecap="round"
                               />
                             </svg>
 
-                            <div className="text-[#079be0]">
+                            <div className="text-[#00A5FF]">
                               <div className="text-[16px] font-semibold leading-[20px]">
                                 $25
                                 <span className="font-normal">
@@ -3234,7 +3196,10 @@ export default function BrandsClient({
               className="pointer-events-none absolute left-1/2 top-[58%] h-[520px] w-[980px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(186,155,255,0.55)_0%,rgba(196,181,253,0.28)_38%,rgba(241,241,241,0)_72%)] blur-[2px] sm:h-[640px] sm:w-[1100px]"
             />
           ) : (
-            <div className="pointer-events-none absolute inset-x-0 top-[280px] h-[400px] bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.10),transparent_65%)] sm:top-[360px] sm:h-[600px]" />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-[381px] h-[676px] w-[1174px] -translate-x-1/2 rounded-full bg-[#D9D9D933] blur-[148px]"
+            />
           )}
 
           {/* Top content */}

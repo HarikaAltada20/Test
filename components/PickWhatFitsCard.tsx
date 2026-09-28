@@ -292,11 +292,11 @@ export default function PickWhatFitsCard({
             <span className="pointer-events-none absolute -left-1 -top-1 h-5 w-5 animate-ping rounded-full bg-white/50" />
           ) : null}
           <Image
-            src="/images/Frame (5).png"
+            src="/images/Icon.png"
             alt=""
-            width={28}
-            height={28}
-            className="relative h-[28px] w-[28px] object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)]"
+            width={24}
+            height={24}
+            className="relative h-[24px] w-[24px] object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.65)]"
             priority
           />
         </div>

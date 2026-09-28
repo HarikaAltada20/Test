@@ -158,17 +158,30 @@ export default function KnowYourNumbersCard({
     >
       {/* Chart area */}
       <div className="absolute left-4 right-4 top-4 h-[180px] sm:left-6 sm:right-6 sm:top-6 sm:h-[205px]">
-        {/* Grid */}
-        <div
-          className="absolute inset-0 opacity-25"
-          style={{
-            backgroundImage: `
-              linear-gradient(to right, rgba(255,255,255,0.07) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(255,255,255,0.07) 1px, transparent 1px)
-            `,
-            backgroundSize: "34px 34px",
-          }}
-        />
+        {/* Grid — Figma Mask Group implementation with #353535 lines */}
+        <div className="pointer-events-none absolute left-[75px] top-[25px] bottom-[25px] right-[70px] z-0">
+          <div
+            className="absolute inset-0"
+            style={{
+              WebkitMaskImage:
+                "radial-gradient(ellipse 70% 70% at 48% 50%, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
+              maskImage:
+                "radial-gradient(ellipse 70% 70% at 48% 50%, rgba(0,0,0,1) 35%, rgba(0,0,0,0) 100%)",
+            }}
+          >
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `
+                  linear-gradient(to right, #353535 1px, transparent 1px),
+                  linear-gradient(to bottom, #353535 1px, transparent 1px)
+                `,
+                backgroundSize: "34px 34px",
+                backgroundPosition: "31px 27px",
+              }}
+            />
+          </div>
+        </div>
 
         {/* Chart line */}
         <svg
@@ -236,10 +249,30 @@ export default function KnowYourNumbersCard({
           />
         </svg>
 
+        {/* Left side dark shade overlay */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-0 w-24 z-[2]",
+            isLight
+              ? "bg-gradient-to-r from-[#ECECEC] via-[#ECECEC]/80 to-transparent"
+              : "bg-gradient-to-r from-[#171717] via-[#171717]/80 to-transparent",
+          )}
+        />
+
+        {/* Right side dark shade overlay */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-y-0 right-0 w-24 z-[2]",
+            isLight
+              ? "bg-gradient-to-l from-[#ECECEC] via-[#ECECEC]/80 to-transparent"
+              : "bg-gradient-to-l from-[#171717] via-[#171717]/80 to-transparent",
+          )}
+        />
+
         {/* Shares — black pill card */}
         <div
           className={cn(
-            "absolute left-[8px] top-[8px] transition-all duration-500 sm:left-[18px]",
+            "absolute left-[8px] top-[8px] z-10 transition-all duration-500 sm:left-[18px]",
             showShares
               ? "translate-y-0 opacity-100"
               : "pointer-events-none translate-y-2 opacity-0",
@@ -272,7 +305,7 @@ export default function KnowYourNumbersCard({
         {/* Earnings icon */}
         <div
           className={cn(
-            "absolute right-[8px] top-0 transition-all duration-500 sm:right-[15px]",
+            "absolute right-[8px] top-0 z-10 transition-all duration-500 sm:right-[15px]",
             showDollar
               ? "scale-100 opacity-100"
               : "pointer-events-none scale-75 opacity-0",
@@ -302,7 +335,7 @@ export default function KnowYourNumbersCard({
         {/* Views — black pill card */}
         <div
           className={cn(
-            "absolute bottom-[12px] right-[0px] transition-all duration-500 sm:bottom-[18px] sm:right-[3px]",
+            "absolute bottom-[12px] right-[0px] z-10 transition-all duration-500 sm:bottom-[18px] sm:right-[3px]",
             showViews
               ? "translate-y-0 opacity-100"
               : "pointer-events-none translate-y-3 opacity-0",

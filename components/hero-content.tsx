@@ -1312,7 +1312,7 @@ export default function HeroContent() {
         {/* =========================================================
           VISUAL / ORBIT AREA
       ========================================================= */}
-        <section className="relative mx-auto mt-4 w-full max-w-[1400px] px-4 pb-8 sm:mt-6 sm:px-6 sm:pb-12 lg:mt-6 lg:h-[550px] lg:px-0 lg:pb-0">
+        <section className="relative mx-auto w-full max-w-[1400px] px-4 pb-8 mt-6 sm:px-6 sm:pb-12 mt-14 sm:mt-18 lg:mt-24 lg:h-[550px] lg:px-0 lg:pb-0">
           {/* =====================================================
             LEFT CAMPAIGN CARD
         ===================================================== */}
@@ -1427,7 +1427,7 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "relative z-20 mx-auto mb-4 text-center font-['Comic_Sans_MS'] text-[14px] italic leading-[20px] sm:text-[16px] sm:leading-[22px] lg:absolute lg:left-1/2 lg:top-[5px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[17px] lg:leading-[24px]",
+              "relative z-20 mx-auto mb-8 text-center font-['Comic_Sans_MS'] text-[14px] italic leading-[20px] sm:text-[16px] sm:leading-[22px] lg:absolute lg:left-1/2 lg:top-[0px] lg:mb-0 lg:-translate-x-1/2 lg:whitespace-nowrap lg:text-[17px] lg:leading-[24px]",
               isLight ? "text-black/70" : "text-white/85",
             )}
           >
@@ -1441,7 +1441,7 @@ export default function HeroContent() {
         ===================================================== */}
           <div
             className={cn(
-              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[60px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
+              "relative z-20 mx-auto h-[380px] w-[min(100%,280px)] overflow-hidden rounded-[24px] sm:h-[420px] sm:w-[300px] lg:absolute lg:left-1/2 lg:top-[75px] lg:mx-0 lg:h-[455px] lg:w-[335px] lg:-translate-x-1/2",
               isLight
                 ? "border border-black/[0.06] bg-[#FFFFFF] shadow-[inset_0px_5px_4px_2px_#575757CC]"
                 : "border border-white/[0.10] bg-[#191919] shadow-[0_30px_100px_rgba(0,0,0,0.65)]",
@@ -1593,7 +1593,7 @@ export default function HeroContent() {
       ========================================================= */}
         <section
           className={cn(
-            "overflow-hidden pb-14 pt-2 transition-colors duration-300",
+            "overflow-hidden pb-14 pt-16 transition-colors duration-300",
             isLight ? "bg-[#F1F1F1]" : "bg-black",
           )}
         >

@@ -551,13 +551,13 @@ body {
   animation: source-api-pulse 2.2s ease-in-out infinite;
 }
 
-/* Real Engagement card — profiles scroll up behind the scanner */
+/* Real Engagement card — profiles scroll down behind the scanner */
 @keyframes engagement-profiles-scroll {
   0% {
-    transform: translate3d(-50%, 0, 0);
+    transform: translate3d(-50%, -50%, 0);
   }
   100% {
-    transform: translate3d(-50%, -50%, 0);
+    transform: translate3d(-50%, 0, 0);
   }
 }
 

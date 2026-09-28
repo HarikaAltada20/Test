@@ -23,25 +23,25 @@ function AnimatedBackgroundArcs({ isLight }: { isLight: boolean }) {
       {/* Concentric circle borders */}
       <div
         className={cn(
-          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[500px] md:h-[500px] rounded-full border",
+          "pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[280px] h-[280px] sm:w-[380px] sm:h-[380px] md:w-[480px] md:h-[480px] rounded-full border",
           isLight ? "border-black/[0.08]" : "border-white/[0.08]",
         )}
       />
       <div
         className={cn(
-          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px] rounded-full border",
+          "pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[480px] sm:h-[480px] md:w-[600px] md:h-[600px] rounded-full border",
           isLight ? "border-black/[0.06]" : "border-white/[0.06]",
         )}
       />
       <div
         className={cn(
-          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[540px] h-[540px] sm:w-[660px] sm:h-[660px] md:w-[780px] md:h-[780px] rounded-full border",
+          "pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] sm:w-[560px] sm:h-[560px] md:w-[720px] md:h-[720px] rounded-full border",
           isLight ? "border-black/[0.04]" : "border-white/[0.04]",
         )}
       />
 
       {/* Single animated glowing arc highlight */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] h-[440px] sm:w-[540px] sm:h-[540px] md:w-[640px] md:h-[640px]">
+      <div className="pointer-events-none absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[480px] sm:h-[480px] md:w-[600px] md:h-[600px]">
         {/* Glow backdrop */}
         <div
           className="absolute inset-0 w-full h-full rounded-full animate-spin-slow opacity-70 blur-[3px]"
@@ -199,7 +199,7 @@ export default function CtcBanner() {
   return (
     <section
       className={cn(
-        "relative flex flex-col items-center justify-center min-h-[260px] md:min-h-[300px] text-center overflow-hidden transition-colors duration-300",
+        "relative flex flex-col items-center justify-start pt-20 sm:pt-30 md:pt-40 pb-12 sm:pb-16 text-center overflow-hidden transition-colors duration-300",
         isLight
           ? "bg-[#F1F1F1] text-black"
           : "bg-black text-white",
@@ -211,16 +211,16 @@ export default function CtcBanner() {
           <div className="relative z-10 flex flex-col items-center px-4 w-full">
             <div
               className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                "mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
                 isLight
                   ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
-                  : "border-white/10 bg-white/5 text-zinc-200",
+                  : "border-[#434343] bg-[#353535] text-zinc-200",
               )}
             >
               <ShieldCheck
                 className={cn(
                   "h-4 w-4",
-                  isLight ? "text-black/45" : "text-[#353535]",
+                  isLight ? "text-black/45" : "text-zinc-200",
                 )}
               />
               Pay for Performance
@@ -302,23 +302,23 @@ export default function CtcBanner() {
           <div className="relative z-10 flex flex-col items-center px-4 w-full">
             <div
               className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                "mt-4 sm:mt-6 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
                 isLight
                   ? "border-black/[0.06] bg-white text-black/55 shadow-sm"
-                  : "border-white/10 bg-white/5 text-zinc-200",
+                  : "border-[#434343] bg-[#353535] text-zinc-200",
               )}
             >
               <ShieldCheck
                 className={cn(
                   "h-4 w-4",
-                  isLight ? "text-black/45" : "text-[#353535]",
+                  isLight ? "text-black/45" : "text-zinc-200",
                 )}
               />
               Pay for Performance
             </div>
 
             {/* Static circles around heading + buttons */}
-            <div className="relative mt-2 flex flex-col items-center justify-center w-full max-w-[780px] pt-6 pb-4 sm:pt-8 sm:pb-6 md:pt-8 md:pb-6">
+            <div className="relative  flex flex-col items-center justify-center w-full max-w-[780px] pb-4  sm:pb-6 mt-4 md:pb-6">
               <AnimatedBackgroundArcs isLight={isLight} />
 
               <div
@@ -403,7 +403,7 @@ export default function CtcBanner() {
                     "inline-flex items-center gap-2 rounded-xl px-12 py-3 text-sm sm:text-base font-medium transition-colors",
                     isLight
                       ? "border border-black/10 bg-white text-black hover:bg-white shadow-[0_8px_24px_rgba(15,15,30,0.06)]"
-                      : "bg-[#F0E6F6] text-black hover:bg-zinc-100",
+                      : "bg-[#F0E6F6] text-black",
                   )}
                 >
                   Talk to team →

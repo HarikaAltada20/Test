@@ -324,7 +324,7 @@ export default function FAQ() {
     <section
       id="faq"
       className={cn(
-        "scroll-mt-24 px-4 py-16 md:py-24 transition-colors duration-300",
+        "scroll-mt-24 px-4 py-16 md:py-18 transition-colors duration-300",
         useLightFaq ? "bg-[#F1F1F1] text-black" : "bg-black text-white",
       )}
     >

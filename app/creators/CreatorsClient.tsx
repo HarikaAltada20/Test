@@ -1357,8 +1357,8 @@ export default function CreatorsClient({
                             <div className="overflow-hidden">
                               <p
                                 className={cn(
-                                  "text-sm sm:text-base leading-relaxed max-w-md pb-3",
-                                  isLight ? "text-black/50" : "text-zinc-400",
+                                  "text-[16px] leading-relaxed max-w-xl pb-3",
+                                  isLight ? "text-black/50" : "text-[#8E8E8E]",
                                 )}
                               >
                                 {step.description}
@@ -1508,95 +1508,40 @@ export default function CreatorsClient({
                 {/* Create Together */}
                 <div
                   className={cn(
-                    "relative w-full max-w-[570px] overflow-hidden rounded-[20px] px-8 pb-9 pt-12",
+                    "relative flex h-[340px] w-full flex-col justify-between overflow-hidden rounded-[20px] px-6 pb-9 pt-12 sm:h-[365px] sm:px-8",
                     isLight
                       ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A]"
                       : "border border-white/10 bg-[#171717]",
                   )}
                 >
-                  {/* Dotted Curved Lines */}
-                  <svg
+                  {/* Dotted Curved Lines (Commented Out) */}
+                  {/* <svg
                     className="pointer-events-none absolute left-0 top-8 h-[180px] w-full"
                     viewBox="0 0 570 180"
                     fill="none"
                     xmlns="http://www.w3.org/2000/svg"
                   >
-                    {/* Top-left curved lines */}
-                    <path
-                      d="M 95 80 Q 150 35 215 45"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.55"
-                    />
+                    ...
+                  </svg> */}
 
-                    <path
-                      d="M 165 65 Q 215 20 270 40"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.55"
-                    />
-
-                    {/* Top-right curved lines */}
-                    <path
-                      d="M 475 80 Q 420 35 355 45"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.55"
-                    />
-
-                    <path
-                      d="M 405 65 Q 355 20 300 40"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.55"
-                    />
-
-                    {/* Center-left curved connection */}
-                    <path
-                      d="M 270 42 Q 245 75 235 115"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.55"
-                    />
-
-                    {/* Center-right curved connection */}
-                    <path
-                      d="M 300 42 Q 325 75 335 115"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.55"
-                    />
-
-                    {/* Outer-left arc */}
-                    <path
-                      d="M 40 100 Q 110 40 180 35"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.25"
-                    />
-
-                    {/* Outer-right arc */}
-                    <path
-                      d="M 530 100 Q 460 40 390 35"
-                      stroke={isLight ? "#A3A3A3" : "#737373"}
-                      strokeWidth="1"
-                      strokeDasharray="20 16"
-                      opacity="0.25"
-                    />
-                  </svg>
+                  {/* Network Graphic Image */}
+                  <div className="pointer-events-none absolute inset-x-0 top-16 h-[140px] px-6 sm:px-8">
+                    <div className="relative h-full w-full">
+                      <Image
+                        src="/images/Group 29.png"
+                        alt="Creator Network"
+                        fill
+                        className="object-contain object-top"
+                        priority
+                      />
+                    </div>
+                  </div>
 
                   {/* Creator Images */}
                   <div className="relative z-10 flex h-[180px] items-start justify-center">
                     {/* Top Creator */}
                     <div className="absolute left-1/2 top-0 -translate-x-1/2">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border-2 border-orange-400 bg-[#111] p-[2px]">
+                      <div className="h-14 w-14 overflow-hidden rounded-full bg-[#111] p-[2px]">
                         <Image
                           src="/images/Ellipse 2355.avif"
                           alt="Creator"
@@ -1609,7 +1554,7 @@ export default function CreatorsClient({
 
                     {/* Left Creator */}
                     <div className="absolute left-[22%] top-[90px]">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
                         <Image
                           src="/images/Ellipse 2355 (1).avif"
                           alt="Creator"
@@ -1622,7 +1567,7 @@ export default function CreatorsClient({
 
                     {/* Right Creator */}
                     <div className="absolute right-[22%] top-[90px]">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
                         <Image
                           src="/images/Ellipse 2355 (2).avif"
                           alt="Creator"
@@ -1635,7 +1580,7 @@ export default function CreatorsClient({
 
                     {/* Bottom-left Creator */}
                     <div className="absolute left-[35%] top-[130px]">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
                         <Image
                           src="/images/Ellipse 2355 (3).avif"
                           alt="Creator"
@@ -1648,7 +1593,7 @@ export default function CreatorsClient({
 
                     {/* Bottom-right Creator */}
                     <div className="absolute right-[35%] top-[130px]">
-                      <div className="h-12 w-12 overflow-hidden rounded-full border border-white/60 bg-[#222] p-[2px]">
+                      <div className="h-13 w-13 overflow-hidden rounded-full  bg-[#222] p-[2px]">
                         <Image
                           src="/images/Ellipse 2355 (4).avif"
                           alt="Creator"
@@ -1660,12 +1605,12 @@ export default function CreatorsClient({
                     </div>
                   </div>
 
-                  {/* Text */}
-                  <div className="relative z-10 mt-2">
+                  {/* Text — aligned horizontally with PaidDirectlyCard */}
+                  <div className="relative z-10 mt-6 sm:mt-[40px]">
                     <h3
                       className={cn(
-                        "text-[22px] font-semibold",
-                        isLight ? "text-black" : "text-white/80",
+                        "text-[18px] font-semibold leading-[26px] tracking-[-0.5px] sm:text-[22px] sm:leading-[28px]",
+                        isLight ? "text-black" : "text-[#d0d0d0]",
                       )}
                     >
                       Create Together
@@ -1673,8 +1618,8 @@ export default function CreatorsClient({
 
                     <p
                       className={cn(
-                        "mt-2 text-[16px]",
-                        isLight ? "text-black/50" : "text-white/50",
+                        "mt-[7px] text-[14px] font-normal leading-[22px] tracking-[-0.2px] sm:text-[17px] sm:leading-[24px]",
+                        isLight ? "text-black/50" : "text-[#858585]",
                       )}
                     >
                       Connect with creators and share opportunities.
@@ -1700,8 +1645,16 @@ export default function CreatorsClient({
                       : "border border-white/[0.08] bg-[#171717]",
                   )}
                 >
-                  {/* Dashboard image */}
-                  <div className="absolute left-3 right-3 top-3 h-[190px] overflow-hidden sm:left-5 sm:right-5 sm:top-5 sm:h-[210px]">
+                  {/* Dashboard image — Figma Mask Group effect */}
+                  <div
+                    className="absolute left-3 right-3 top-3 h-[190px] overflow-hidden sm:left-5 sm:right-5 sm:top-5 sm:h-[210px]"
+                    style={{
+                      WebkitMaskImage:
+                        "radial-gradient(ellipse 85% 85% at 50% 40%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+                      maskImage:
+                        "radial-gradient(ellipse 85% 85% at 50% 40%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+                    }}
+                  >
                     <img
                       src={
                         isLight
@@ -1711,17 +1664,40 @@ export default function CreatorsClient({
                       alt="Campaign dashboard"
                       className="h-full w-full object-cover object-top"
                     />
-                    {/* Soft edge shade — fades image into card */}
-                    {isLight ? (
-                      <>
-                        <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-[#ECECEC] via-[#ECECEC]/70 to-transparent" />
-                        <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-[#ECECEC] via-[#ECECEC]/70 to-transparent" />
-                        <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-[#ECECEC] via-[#ECECEC]/60 to-transparent" />
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/85 to-transparent" />
-                      </>
-                    ) : (
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#171717] to-transparent" />
-                    )}
+                    {/* Soft edge shade overlays — fades image smoothly on all 4 sides */}
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-inherit via-inherit/70 to-transparent" />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-y-0 left-0 w-12",
+                        isLight
+                          ? "bg-gradient-to-r from-[#ECECEC] via-[#ECECEC]/70 to-transparent"
+                          : "bg-gradient-to-r from-[#171717] via-[#171717]/70 to-transparent",
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-y-0 right-0 w-12",
+                        isLight
+                          ? "bg-gradient-to-l from-[#ECECEC] via-[#ECECEC]/70 to-transparent"
+                          : "bg-gradient-to-l from-[#171717] via-[#171717]/70 to-transparent",
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 top-0 h-10",
+                        isLight
+                          ? "bg-gradient-to-b from-[#ECECEC] via-[#ECECEC]/60 to-transparent"
+                          : "bg-gradient-to-b from-[#171717] via-[#171717]/60 to-transparent",
+                      )}
+                    />
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute inset-x-0 bottom-0 h-[65%]",
+                        isLight
+                          ? "bg-gradient-to-t from-[#ECECEC] via-[#ECECEC]/85 to-transparent"
+                          : "bg-gradient-to-t from-[#171717] via-[#171717]/85 to-transparent",
+                      )}
+                    />
                   </div>
 
                   {/* Card fade into text area */}
