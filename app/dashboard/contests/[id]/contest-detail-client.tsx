@@ -23057,14 +23057,14 @@ export default function ContestDetailClient({
                 {/* Enhanced Submissions Table */}
                 <div
                   className={cn(
-                    "p-4 rounded-xl shadow-xl",
+                    "min-w-0 max-w-full p-4 rounded-xl shadow-xl",
                     isDark ? "bg-[#170337]" : "bg-white ",
                   )}
                 >
                   <CardContent className="p-0">
                     <div className="w-full min-w-0">
                       {/* View Mode Toggle, Sort control, and Refresh Button */}
-                      <div className="flex flex-col gap-4 px-4 py-2 mb-4 md:flex-row md:items-center md:justify-between">
+                      <div className="flex flex-col gap-4 px-4 py-2 mb-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
                         <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                           <span
                             className={cn(
@@ -23105,7 +23105,7 @@ export default function ContestDetailClient({
                           </Select>
                         </div>
 
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
                           <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                             <span
                               className={cn(
@@ -23823,6 +23823,7 @@ export default function ContestDetailClient({
                       {isSubmissionTableView && (
                         <>
                           <Table
+                            className="min-w-max"
                             wrapperClassName={
                               submissionsVirtualTable.scrollClassName
                             }
@@ -27751,6 +27752,7 @@ export default function ContestDetailClient({
                                 </div>
                               )}
                             <Table
+                              className="min-w-max"
                               wrapperClassName={
                                 creatorWiseVirtualTable.scrollClassName
                               }

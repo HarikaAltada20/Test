@@ -959,7 +959,8 @@ function DashboardContent({
         .dashboard-container {
           /* On very small screens (≤ 400px) we always use 85% zoom, */
           /* otherwise we respect the compact mode toggle              */
-          zoom: ${isSmallScreen || isCompactMode ? "0.85" : "1"};
+          --dashboard-zoom: ${isSmallScreen || isCompactMode ? "0.85" : "1"};
+          zoom: var(--dashboard-zoom);
           transition: zoom 0.3s ease-in-out;
         }
 
@@ -1115,16 +1116,17 @@ function DashboardContent({
       `}</style>
 
       {/* Main Layout Container */}
-      <div className="flex min-h-screen dashboard-container">
-        {/* Desktop Sidebar */}
+      <div className="relative flex min-h-screen dashboard-container">
+        {/* Desktop Sidebar — in flow so compact-mode zoom cannot slide the page under a fixed bar */}
         <aside
           className={cn(
-            "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
+            "sticky top-0 z-[41] hidden shrink-0 flex-col self-start overflow-visible border-r backdrop-blur-sm transition-[width] duration-300 ease-in-out lg:flex",
             sidebarCollapsed ? "w-28" : "w-72",
             currentMode === "dark"
               ? "bg-[#06021D] text-white border-gray-800"
               : "bg-white text-slate-900 border-gray-300"
           )}
+          style={{ height: "calc(100dvh / var(--dashboard-zoom, 1))" }}
           // style={{
           //   background:
           //     currentMode === "light"
@@ -1244,19 +1246,17 @@ function DashboardContent({
               />
             )}
           </div>
-        </aside>
 
-        {/* Sidebar Toggle Button - Always Centered at Sidebar/Header Border */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className={cn(
-            "hidden lg:flex fixed top-6 z-50 h-8 w-8 rounded-full backdrop-blur-sm transition-all duration-200",
-            "border items-center justify-center"
-          )}
-          style={{
-            left: sidebarCollapsed ? "86px" : "240px", // Center of actual sidebar border (adjusted for zoom)
+          {/* Sits on the sidebar edge and sticks with it, including in compact zoom. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className={cn(
+              "absolute top-6 right-0 z-50 h-8 w-8 translate-x-1/2 rounded-full backdrop-blur-sm",
+              "border items-center justify-center"
+            )}
+            style={{
             backgroundColor:
               currentMode === "light"
                 ? `rgba(${mode.background.primary}, 0.9)`
@@ -1332,13 +1332,11 @@ function DashboardContent({
             {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           </span>
         </Button>
+        </aside>
 
         {/* Main Content Area */}
         <div
-          className={cn(
-            "flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out",
-            sidebarCollapsed ? "lg:ml-28" : "lg:ml-72"
-          )}
+          className="flex min-w-0 max-w-full flex-1 flex-col"
         >
           {/* Premium Dashboard Header */}
           <header

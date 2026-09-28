@@ -256,6 +256,6 @@ export function useContestSubmissionsVirtualTable<T>(
     scrollToStart,
     measureElement,
     /** Horizontal overflow only — vertical scroll stays on the window. */
-    scrollClassName: "overflow-x-auto overflow-y-clip",
+    scrollClassName: "max-w-full overflow-x-auto overflow-y-clip",
   };
 }
