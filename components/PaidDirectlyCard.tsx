@@ -138,7 +138,7 @@ export default function PaidDirectlyCard({
     <div
       ref={cardRef}
       className={cn(
-        "relative flex h-[340px] w-full flex-col justify-between overflow-hidden rounded-[20px] px-6 pb-9 pt-12 sm:h-[365px] sm:px-8",
+        "relative flex min-h-[340px] h-auto w-full flex-col justify-between overflow-hidden rounded-[20px] px-6 pb-9 pt-12 sm:h-[365px] sm:min-h-[365px] sm:px-8",
         isLight
           ? "border border-[#0000000D] bg-[#ECECEC] shadow-[inset_0_0_4.43px_0_#0000001A] text-black"
           : "border border-[#303030] bg-[#151515] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)]",
@@ -171,7 +171,7 @@ export default function PaidDirectlyCard({
         </div>
       ) : null}
 
-      <div className="relative flex min-h-[120px] flex-col items-start gap-2 sm:min-h-[172px] sm:flex-row sm:items-center sm:justify-between pt-8">
+      <div className="relative flex min-h-[120px] flex-row items-center justify-between gap-2 sm:gap-4 sm:min-h-[172px] pt-0 sm:pt-8">
         {/* Account balance card */}
         <div className="relative ml-2 w-full max-w-[204px] sm:ml-12 sm:h-[172px] sm:w-[204px]">
           {/* Background Glow Ellipses - soft backlight behind top of card */}

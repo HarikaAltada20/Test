@@ -581,7 +581,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       <div
         ref={budgetRef}
         className={cn(
-          "absolute bottom-[8px] left-[20px] z-10 w-[176px] rounded-[18px] border p-4",
+          "absolute bottom-[8px] left-[10px] sm:left-[20px] z-10 w-[140px] sm:w-[176px] rounded-[14px] sm:rounded-[18px] border p-3 sm:p-4",
           isLight
             ? "border-[#0000000D] bg-[#ECECEC] shadow-[0_10px_28px_rgba(20,16,40,0.08)]"
             : "border-white/[0.12] bg-[#1b1b1b] shadow-[0_15px_35px_rgba(0,0,0,.45)]",
@@ -589,13 +589,13 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
       >
         <div
           className={cn(
-            "flex items-center gap-2 text-[15px] font-medium",
+            "flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium",
             isLight ? "text-black" : "text-white",
           )}
         >
           <Wallet
             className={cn(
-              "h-[20px] w-[20px] shrink-0",
+              "h-[16px] w-[16px] sm:h-[20px] sm:w-[20px] shrink-0",
               isLight ? "text-black/70" : "text-white/90",
             )}
             strokeWidth={1.8}
@@ -605,7 +605,7 @@ function BrandFormMockup({ isLight }: { isLight: boolean }) {
 
         <div
           className={cn(
-            "mt-3.5 flex h-[38px] items-center rounded-md border px-3.5 text-[14px] tabular-nums transition-all duration-200",
+            "mt-2 sm:mt-3.5 flex h-[32px] sm:h-[38px] items-center rounded-md border px-2.5 sm:px-3.5 text-[12px] sm:text-[14px] tabular-nums transition-all duration-200",
             isLight
               ? budgetTyping
                 ? "border-[#7C3AED]/45 bg-white text-black shadow-[0_0_0_2px_rgba(124,58,237,0.12)]"
