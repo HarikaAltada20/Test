@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
 // Predefined rejection reasons with improved descriptions
-const PREDEFINED_REASONS = [
+export const PREDEFINED_REASONS = [
     {
         value: 'contest_rules',
         label: 'Contest brief or rules not followed',

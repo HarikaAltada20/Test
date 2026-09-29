@@ -15,6 +15,7 @@ async function authorizeContestAccess(
 ): Promise<
   | {
       ok: true;
+      isAdmin: boolean;
       contest: {
         id: string;
         advertiser_id: string;
@@ -46,6 +47,7 @@ async function authorizeContestAccess(
 
   return {
     ok: true,
+    isAdmin,
     contest: {
       ...contest,
       contest_based_details:
@@ -149,14 +151,13 @@ export async function GET(
         limit: pagination.limit,
         offset: pagination.offset,
         creatorModerationData,
+        includeCreatorInsights: auth.isAdmin,
       },
     );
 
     if (page.errorMessage) {
-      return NextResponse.json(
-        { error: page.errorMessage },
-        { status: 500 },
-      );
+      console.error("[contests/submissions GET]", page.errorMessage);
+      return NextResponse.json({ error: "Failed to load submissions" }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -170,9 +171,6 @@ export async function GET(
     });
   } catch (e) {
     console.error("[contests/submissions GET]", e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to load" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to load submissions" }, { status: 500 });
   }
 }

@@ -24,6 +24,7 @@ import {
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
 import { advanceMultiPlatformMetricsChainAfterTerminal, isFinalPlatformInMetricsChain } from "@/lib/queue/multi-platform-metrics-chain";
+import { isMetricsRunStale } from "@/lib/metrics-run-stale";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -78,7 +79,41 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   // (processor crash after LMOVE can strand jobs there) and pop again.
   let popped = await popInstagramInsightsJob();
   if (!popped) {
-    const recovered = await recoverProcessingJobsToQueue({ maxToMove: 25 });
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+    type RunLookup =
+      | { kind: "found"; status: string; updated_at: string | null; started_at: string | null; last_batch_completed_at: string | null }
+      | { kind: "missing" | "unavailable" };
+    const runLookup = new Map<string, Promise<RunLookup>>();
+    const recovered = await recoverProcessingJobsToQueue({
+      maxToMove: 25,
+      classifyJob: async (job) => {
+        let lookup = runLookup.get(job.runId);
+        if (!lookup) {
+          lookup = (async (): Promise<RunLookup> => {
+            const { data, error } = await supabaseAdmin
+              .from("instagram_insights_refresh_runs")
+              .select("status, updated_at, started_at, last_batch_completed_at")
+              .eq("id", job.runId)
+              .maybeSingle();
+            if (error) return { kind: "unavailable" };
+            if (!data) return { kind: "missing" };
+            return { kind: "found", ...data };
+          })();
+          runLookup.set(job.runId, lookup);
+        }
+        const run = await lookup;
+        if (run.kind !== "found") {
+          return run.kind === "unavailable" ? "keep" : "remove";
+        }
+        if (!["pending", "running"].includes(run.status)) {
+          return "remove";
+        }
+        return isMetricsRunStale(run) ? "recover" : "keep";
+      },
+    });
     if (recovered.moved > 0) {
       popped = await popInstagramInsightsJob();
     }
@@ -87,6 +122,10 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     return NextResponse.json({ processed: 0, message: "Queue empty" });
   }
   const { job, raw: rawJobString } = popped;
+  const batchSize =
+    typeof job.batchSize === "number" && Number.isFinite(job.batchSize)
+      ? Math.max(1, Math.min(25, Math.floor(job.batchSize)))
+      : 25;
 
   const batchUrl = `${baseUrl}/api/contests/${job.contestId}/instagram-insights-refresh/batch`;
 
@@ -102,7 +141,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       body: JSON.stringify({
         runId: job.runId,
         batchIndex: job.batchIndex,
-        batchSize: job.batchSize,
+        batchSize,
         totalBatches: job.totalBatches,
         cursor: job.cursor,
         metricsTarget: job.metricsTarget ?? "submissions",
@@ -143,7 +182,7 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       contestId: job.contestId,
       runId: job.runId,
       batchIndex: job.batchIndex + 1,
-      batchSize: job.batchSize,
+      batchSize,
       totalBatches: job.totalBatches,
       cursor: batchData.nextCursor,
       metricsTarget: job.metricsTarget ?? "submissions",

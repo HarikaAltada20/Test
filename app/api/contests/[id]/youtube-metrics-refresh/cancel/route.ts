@@ -67,6 +67,11 @@ export async function POST(
       );
     }
 
+    const { removeYouTubeJobsForRunId } = await import(
+      "@/lib/queue/youtube-metrics-queue"
+    );
+    await removeYouTubeJobsForRunId(run.id).catch(() => undefined);
+
     return NextResponse.json({ runId: run.id, status: run.status });
   } catch (e) {
     console.error("[youtube-metrics-refresh cancel]", e);

@@ -59,10 +59,21 @@ export function buildTikTokPlayerEmbedUrl(
   return `https://www.tiktok.com/player/v1/${encodeURIComponent(videoId)}?${params.toString()}`;
 }
 
-/** Add autoplay params when the user explicitly starts playback (click). */
+export type EmbedAutoplayOptions = {
+  /** Start muted (required by browsers for autoplay without a click). */
+  muted?: boolean;
+  loop?: boolean;
+  /** YouTube: enable the iframe postMessage API for play/pause/mute control. */
+  jsApi?: boolean;
+  /** YouTube: hide the native control bar; the caller draws its own controls. */
+  chromeless?: boolean;
+};
+
+/** Add autoplay params when playback starts (click, or Review Mode autoplay). */
 export function withEmbedAutoplay(
   embedUrl: string,
   platform: string | null | undefined,
+  options?: EmbedAutoplayOptions,
 ): string {
   try {
     const url = new URL(embedUrl);
@@ -71,9 +82,30 @@ export function withEmbedAutoplay(
     if (p === "youtube" || url.hostname.includes("youtube.com")) {
       url.searchParams.set("autoplay", "1");
       url.searchParams.set("playsinline", "1");
+      if (options?.muted) url.searchParams.set("mute", "1");
+      if (options?.jsApi) {
+        url.searchParams.set("enablejsapi", "1");
+        // Needed for YouTube to post playback state (infoDelivery) back to us.
+        if (typeof window !== "undefined") {
+          url.searchParams.set("origin", window.location.origin);
+        }
+      }
+      if (options?.chromeless) {
+        url.searchParams.set("controls", "0");
+        url.searchParams.set("disablekb", "1");
+        url.searchParams.set("iv_load_policy", "3");
+        url.searchParams.set("fs", "0");
+      }
+      if (options?.loop) {
+        const id = url.pathname.split("/").filter(Boolean).pop();
+        url.searchParams.set("loop", "1");
+        // YouTube only loops a single video when it is also its own playlist.
+        if (id) url.searchParams.set("playlist", id);
+      }
     }
     if (p === "tiktok" || url.hostname.includes("tiktok.com")) {
       url.searchParams.set("autoplay", "1");
+      if (options?.loop) url.searchParams.set("loop", "1");
     }
 
     return url.toString();

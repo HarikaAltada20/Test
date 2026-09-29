@@ -5,16 +5,20 @@
  * minute-bucket can admit nearly 2× that limit across a boundary; this module
  * uses a true rolling 60s window instead.
  *
- * Fail-fast when the cap is hit — serverless handlers must not sleep until
- * the next minute. In production, Redis is required (fail closed); locally we
- * fall back to an in-process sliding window for single-worker dev.
+ * Redis acquires may briefly wait for pacing / short backoff, then fail fast
+ * once the per-acquire wait budget is exhausted so serverless handlers do not
+ * sleep until Vercel kills them. In production, Redis is required (fail
+ * closed); locally we fall back to an in-process sliding window for
+ * single-worker dev.
  */
 
 import { Redis } from "@upstash/redis";
 
-/** Stay under Google's typical 720 QPM Analytics quota. */
-export const YT_ANALYTICS_DEFAULT_RATE_LIMIT = 710;
+/** Stay below Google's 720 QPM Analytics quota with room for other callers. */
+export const YT_ANALYTICS_DEFAULT_RATE_LIMIT = 600;
 export const YT_ANALYTICS_RATE_WINDOW_MS = 60_000;
+/** Max time one acquire may sleep before throwing (pacing + short backoff). */
+export const YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS = 10_000;
 
 const YT_ANALYTICS_RATE_REDIS_KEY_PREFIX = "youtube_analytics_rate_limit:v3";
 
@@ -23,14 +27,19 @@ type RateLimitFailureReason = "quota_exceeded" | "redis_unavailable";
 
 /**
  * Atomic sliding-window acquire via ZSET.
- * Returns {1, 0} on success, or {0, retryAfterMs} when limited.
+ * The shared pace key spaces accepted queries evenly across the minute. A
+ * count-only window permits a burst of hundreds of requests at once, which
+ * can still trip Google's upstream quota before the window cap is reached.
+ * Returns {1, 0} on success, or {0, retryAfterMs} when the caller should wait.
  */
 const SLIDING_WINDOW_LUA = `
 local key = KEYS[1]
+local pace_key = KEYS[2]
 local now = tonumber(ARGV[1])
 local window = tonumber(ARGV[2])
 local limit = tonumber(ARGV[3])
 local member = ARGV[4]
+local minimum_interval = tonumber(ARGV[5])
 local window_start = now - window
 
 redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
@@ -44,17 +53,29 @@ if count >= limit then
   return {0, retry_after}
 end
 
+local next_allowed = tonumber(redis.call('GET', pace_key) or '0')
+if next_allowed > now then
+  return {0, next_allowed - now}
+end
+
 redis.call('ZADD', key, now, member)
 redis.call('PEXPIRE', key, window)
+redis.call('SET', pace_key, now + minimum_interval, 'PX', window)
 return {1, 0}
 `;
 
 const analyticsCallTimestamps: number[] = [];
 let analyticsRedisClient: AnalyticsRedisClient | null | undefined;
 let rateLimitForTests: number | null = null;
+let maxWaitMsForTests: number | null = null;
 let forceLocalForTests = false;
 let redisClientForTests: AnalyticsRedisClient | null | undefined;
 let hasRedisClientOverrideForTests = false;
+
+function getAcquireMaxWaitMs(): number {
+  if (maxWaitMsForTests !== null) return maxWaitMsForTests;
+  return YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS;
+}
 
 export class YoutubeAnalyticsRateLimitError extends Error {
   readonly status: 429 | 503;
@@ -108,6 +129,7 @@ function normalizeRedisKeyPart(value: string): string {
 function getRedisKey(): string {
   const explicitNamespace =
     process.env.YT_ANALYTICS_RATE_LIMIT_NAMESPACE?.trim();
+  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const environment =
     process.env.VERCEL_ENV?.trim() ||
     process.env.NODE_ENV?.trim() ||
@@ -116,7 +138,9 @@ function getRedisKey(): string {
     process.env.VERCEL_PROJECT_ID?.trim() ||
     process.env.VERCEL_GIT_REPO_SLUG?.trim() ||
     "app";
-  const namespace = explicitNamespace || `${environment}-${project}`;
+  // Quotas belong to the Google OAuth project, not the deployment. Using the
+  // client ID ensures preview/production deployments share one safe budget.
+  const namespace = explicitNamespace || googleClientId || `${environment}-${project}`;
   return `${YT_ANALYTICS_RATE_REDIS_KEY_PREFIX}:${normalizeRedisKeyPart(namespace)}`;
 }
 
@@ -194,31 +218,48 @@ function parseEvalResult(
 async function acquireRedisSlidingWindow(
   redis: AnalyticsRedisClient,
 ): Promise<void> {
-  const now = Date.now();
-  const member = `${now}:${Math.random().toString(36).slice(2, 10)}`;
-  const result = await redis.eval(
-    SLIDING_WINDOW_LUA,
-    [getRedisKey()],
-    [
-      String(now),
-      String(YT_ANALYTICS_RATE_WINDOW_MS),
-      String(getLimit()),
-      member,
-    ],
-  );
-  const parsed = parseEvalResult(result);
-  if (!parsed) {
-    throw new Error("Unexpected Redis rate-limit response");
+  const key = getRedisKey();
+  const limit = getLimit();
+  const minimumIntervalMs = Math.ceil(YT_ANALYTICS_RATE_WINDOW_MS / limit);
+  const deadline = Date.now() + getAcquireMaxWaitMs();
+
+  while (true) {
+    const now = Date.now();
+    const member = `${now}:${Math.random().toString(36).slice(2, 10)}`;
+    const result = await redis.eval(
+      SLIDING_WINDOW_LUA,
+      [key, `${key}:pace`],
+      [
+        String(now),
+        String(YT_ANALYTICS_RATE_WINDOW_MS),
+        String(limit),
+        member,
+        String(minimumIntervalMs),
+      ],
+    );
+    const parsed = parseEvalResult(result);
+    if (!parsed) {
+      throw new Error("Unexpected Redis rate-limit response");
+    }
+    if (parsed.ok) return;
+
+    const remainingMs = deadline - Date.now();
+    // Wait briefly for pacing / short backlog; fail fast once the budget is gone
+    // so serverless handlers are not killed mid-sleep.
+    if (remainingMs <= 0 || parsed.retryAfterMs > remainingMs) {
+      throw new YoutubeAnalyticsRateLimitError(parsed.retryAfterMs);
+    }
+
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, parsed.retryAfterMs),
+    );
   }
-  if (parsed.ok) {
-    return;
-  }
-  throw new YoutubeAnalyticsRateLimitError(parsed.retryAfterMs);
 }
 
 /**
  * Acquire one YouTube Analytics API query slot for the rolling window.
- * Throws YoutubeAnalyticsRateLimitError when the shared cap is exhausted.
+ * May briefly wait within YT_ANALYTICS_ACQUIRE_MAX_WAIT_MS, then throws
+ * YoutubeAnalyticsRateLimitError when the shared cap remains exhausted.
  */
 export async function acquireAnalyticsRateLimit(): Promise<void> {
   const redis = getAnalyticsRedis();
@@ -252,6 +293,13 @@ export function setYoutubeAnalyticsRateLimitForTests(limit: number | null): void
   rateLimitForTests = limit;
 }
 
+/** Test helper: override the per-acquire wait budget (null restores default). */
+export function setYoutubeAnalyticsAcquireMaxWaitMsForTests(
+  maxWaitMs: number | null,
+): void {
+  maxWaitMsForTests = maxWaitMs;
+}
+
 /** Test helper: force the in-process sliding window (skip Redis). */
 export function setYoutubeAnalyticsRateLimitForceLocalForTests(
   force: boolean,
@@ -276,6 +324,7 @@ export function getYoutubeAnalyticsRedisKeyForTests(): string {
 export function resetYoutubeAnalyticsRateLimitForTests(): void {
   analyticsCallTimestamps.length = 0;
   rateLimitForTests = null;
+  maxWaitMsForTests = null;
   forceLocalForTests = false;
   redisClientForTests = undefined;
   hasRedisClientOverrideForTests = false;

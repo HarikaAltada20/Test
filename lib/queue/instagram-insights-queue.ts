@@ -128,46 +128,96 @@ export async function removeFromProcessing(rawJobString: string): Promise<void> 
   }
 }
 
-/**
- * Best-effort recovery: move jobs from processing back into queue.
- *
- * Why: We use LMOVE(queue -> processing) for crash-safe pops. If the processor
- * crashes after moving an item but before `removeFromProcessing`, the job will
- * remain stuck in `:processing` and the queue appears empty. This function
- * re-queues those stranded jobs so the system can resume.
- *
- * NOTE: We do not have timestamps on list entries, so this is conservative and
- * bounded. Reprocessing is safe because the worker uses `current_batch_index`
- * to prevent double-counting and batch selection is guarded by `run.started_at`.
- */
-export async function recoverProcessingJobsToQueue(options?: {
-  maxToMove?: number;
-}): Promise<{ moved: number; error?: string }> {
+/** Best-effort drop queued/processing jobs for a cancelled run. */
+export async function removeInstagramJobsForRunId(
+  runId: string,
+): Promise<{ removed: number }> {
   const redis = getRedis();
-  if (!redis) return { moved: 0, error: "Redis not configured" };
-  const maxToMove = Math.max(1, Math.min(options?.maxToMove ?? 25, 200));
+  if (!redis || !runId) return { removed: 0 };
+  let removed = 0;
   try {
+    for (const key of [REDIS_QUEUE_KEY, REDIS_PROCESSING_KEY]) {
+      const items = await redis.lrange(key, 0, -1);
+      if (!items?.length) continue;
+      for (const item of items) {
+        const raw = typeof item === "string" ? item : JSON.stringify(item);
+        try {
+          const parsed = JSON.parse(raw) as { runId?: string };
+          if (parsed?.runId !== runId) continue;
+          const count = await redis.lrem(key, 0, raw);
+          removed += Number(count) || 0;
+        } catch {
+          // skip invalid entries
+        }
+      }
+    }
+  } catch (e) {
+    console.error(
+      "[instagram-insights-queue] removeInstagramJobsForRunId failed:",
+      e,
+    );
+  }
+  return { removed };
+}
+
+export type InstagramProcessingRecoveryDecision = "recover" | "remove" | "keep";
+
+/**
+ * Recover only jobs whose run is known to be stale. The processing list also
+ * contains live workers, so blindly moving it when the queue is empty can run
+ * the same batch concurrently.
+ */
+export async function recoverProcessingJobsToQueue(options: {
+  maxToMove?: number;
+  classifyJob: (
+    job: InstagramInsightsJob,
+  ) => Promise<InstagramProcessingRecoveryDecision>;
+}): Promise<{ moved: number; removed: number; error?: string }> {
+  const redis = getRedis();
+  if (!redis) return { moved: 0, removed: 0, error: "Redis not configured" };
+  const maxToMove = Math.max(1, Math.min(options.maxToMove ?? 25, 200));
+  try {
+    const rawItems = await redis.lrange(REDIS_PROCESSING_KEY, -maxToMove, -1);
+    if (!rawItems?.length) return { moved: 0, removed: 0 };
+
     let moved = 0;
-    for (let i = 0; i < maxToMove; i++) {
-      // Move from processing back to queue.
-      // We pop from the RIGHT of processing (oldest) and push to the LEFT of queue
-      // so older stuck jobs are retried first.
-      const raw = await redis.lmove(
-        REDIS_PROCESSING_KEY,
-        REDIS_QUEUE_KEY,
-        "right",
-        "left"
+    let removed = 0;
+    for (const item of rawItems) {
+      const raw = typeof item === "string" ? item : JSON.stringify(item);
+      let job: InstagramInsightsJob | null = null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.contestId && parsed?.runId) {
+          job = parsed as InstagramInsightsJob;
+        }
+      } catch {
+        // Invalid entries cannot be resumed safely.
+      }
+
+      const decision = job ? await options.classifyJob(job) : "remove";
+      if (decision === "keep") continue;
+      if (decision === "remove") {
+        const count = await redis.lrem(REDIS_PROCESSING_KEY, 1, raw);
+        if (Number(count) > 0) removed += 1;
+        continue;
+      }
+
+      const count = await redis.eval(
+        "local removed = redis.call('LREM', KEYS[1], 1, ARGV[1]); if removed > 0 then redis.call('LPUSH', KEYS[2], ARGV[1]); end; return removed",
+        [REDIS_PROCESSING_KEY, REDIS_QUEUE_KEY],
+        [raw],
       );
-      if (raw === null || raw === undefined) break;
-      moved += 1;
+      if (Number(count) > 0) moved += 1;
     }
-    if (moved > 0) {
-      console.warn(`[instagram-insights-queue] Re-queued ${moved} job(s) from processing`);
+    if (moved > 0 || removed > 0) {
+      console.warn(
+        `[instagram-insights-queue] Re-queued ${moved} stale job(s); removed ${removed} terminal/invalid job(s)`,
+      );
     }
-    return { moved };
+    return { moved, removed };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[instagram-insights-queue] recoverProcessingJobsToQueue failed:", message);
-    return { moved: 0, error: message };
+    return { moved: 0, removed: 0, error: message };
   }
 }

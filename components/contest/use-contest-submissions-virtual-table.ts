@@ -20,6 +20,12 @@ import {
 export const CONTEST_VIRTUAL_SPACER_CLASS =
   "contest-virtual-spacer hover:bg-transparent";
 
+/** Virtualized <tbody>: opts out of native scroll anchoring so only the virtualizer corrects scroll. */
+export const CONTEST_VIRTUAL_BODY_CLASS = "contest-virtual-body";
+
+/** Virtualized rows: only colors transition, so measured sizes are final immediately. */
+export const CONTEST_VIRTUAL_ROW_CLASS = "contest-virtual-row";
+
 /**
  * Virtualize the current paginated slice using the window as the scroll parent.
  * Callers should pass the current page (25–200 rows), not the full dataset.
@@ -36,7 +42,7 @@ export function useContestSubmissionsVirtualTable<T>(
   const estimateSize = options.estimateSize;
   const pageRows = rows;
   const count = pageRows.length;
-  const overscan = estimateSize >= 150 ? 5 : 8;
+  const overscan = estimateSize >= 150 ? 6 : 8;
 
   const listRef = useRef<HTMLTableSectionElement | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -87,9 +93,16 @@ export function useContestSubmissionsVirtualTable<T>(
         });
       }),
     scrollToFn: (offset, scrollOptions, instance) => {
+      const zoom = readCssZoom(listRef.current);
       windowScroll(
-        scaleLayoutToViewport(offset, readCssZoom(listRef.current)),
-        scrollOptions,
+        scaleLayoutToViewport(offset, zoom),
+        {
+          ...scrollOptions,
+          adjustments: scaleLayoutToViewport(
+            scrollOptions.adjustments ?? 0,
+            zoom,
+          ),
+        },
         instance,
       );
     },
@@ -102,17 +115,46 @@ export function useContestSubmissionsVirtualTable<T>(
       return;
     }
 
+    // Sub-pixel drift (common at zoom 0.85) must not re-render and shift every row.
     const update = () => {
-      setScrollMargin(getWindowScrollMargin(node));
+      const next = Math.round(getWindowScrollMargin(node));
+      setScrollMargin((prev) => (Math.abs(prev - next) >= 1 ? next : prev));
     };
     update();
 
+    let lastZoom = readCssZoom(node);
+    const onPossibleZoomChange = () => {
+      const zoom = readCssZoom(node);
+      if (zoom === lastZoom) return;
+      lastZoom = zoom;
+      update();
+      // Offset observer only re-reads scrollY on scroll events; resync to the new zoom.
+      window.dispatchEvent(new Event("scroll"));
+    };
+    const onResize = () => {
+      update();
+      onPossibleZoomChange();
+    };
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.propertyName === "zoom") onPossibleZoomChange();
+    };
+
     const ro = new ResizeObserver(update);
     ro.observe(node);
-    window.addEventListener("resize", update);
+    // Compact-mode zoom is injected via a <style> tag, so watch head mutations too.
+    const mo = new MutationObserver(onPossibleZoomChange);
+    mo.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    window.addEventListener("resize", onResize);
+    document.addEventListener("transitionend", onTransitionEnd);
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", update);
+      mo.disconnect();
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("transitionend", onTransitionEnd);
     };
   }, [virtualize, count, estimateSize]);
 
@@ -214,6 +256,6 @@ export function useContestSubmissionsVirtualTable<T>(
     scrollToStart,
     measureElement,
     /** Horizontal overflow only — vertical scroll stays on the window. */
-    scrollClassName: "overflow-x-auto overflow-y-clip",
+    scrollClassName: "max-w-full overflow-x-auto overflow-y-clip",
   };
 }

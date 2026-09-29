@@ -20,6 +20,7 @@ import {
   type MetricsRefreshTarget,
 } from "@/lib/post-campaign-enqueue-guards";
 import { createMetricsRefreshRunProgressWriter } from "@/lib/metrics-refresh-run-progress";
+import { shouldSkipRecentOkYouTubeRefresh } from "@/lib/youtube-skip-recent-ok";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -45,6 +46,7 @@ type BatchRow = {
   content_link: string;
   views: number | null;
   other_stats: Record<string, unknown> | null;
+  insights_status: string | null;
 };
 
 export async function POST(
@@ -74,7 +76,10 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const runId = body.runId as string | undefined;
     const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
-    const batchSize = typeof body.batchSize === "number" ? body.batchSize : 25;
+    const batchSize =
+      typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
+        ? Math.max(1, Math.min(25, Math.floor(body.batchSize)))
+        : 25;
     const cursor = body.cursor as { id: string } | undefined;
     const metricsTarget: MetricsRefreshTarget =
       body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
@@ -196,7 +201,9 @@ export async function POST(
     let query = isPostCampaignTarget
       ? supabaseAdmin
           .from("post_campaign_submission_metrics")
-          .select("submission_id, creator_id, content_link, views, other_stats")
+          .select(
+            "submission_id, creator_id, content_link, views, other_stats, insights_status, last_insights_update",
+          )
           .eq("contest_id", contestId)
           .ilike("platform", "%youtube%")
           .neq("status", "rejected")
@@ -206,7 +213,9 @@ export async function POST(
           .limit(batchSize + 1)
       : supabaseAdmin
           .from("submissions")
-          .select("id, creator_id, content_link, views, other_stats")
+          .select(
+            "id, creator_id, content_link, views, other_stats, insights_status, last_insights_update",
+          )
           .eq("contest_id", contestId)
           .ilike("platform", "%youtube%")
           .neq("status", "rejected")
@@ -236,6 +245,8 @@ export async function POST(
       content_link: row.content_link,
       views: row.views,
       other_stats: row.other_stats,
+      insights_status:
+        typeof row.insights_status === "string" ? row.insights_status : null,
     })) as BatchRow[];
     const hasMore = (rows?.length ?? 0) > batchSize;
     const lastRow = batch[batch.length - 1];
@@ -420,7 +431,52 @@ export async function POST(
       });
     }
 
-    const results = await mapLimit(batchToProcess, 5, async (sub) => {
+    let cancelCached: { at: number; cancelled: boolean } | null = null;
+    const isRunCancelled = async (): Promise<boolean> => {
+      const t = Date.now();
+      if (cancelCached && t - cancelCached.at < 2000) {
+        return cancelCached.cancelled;
+      }
+      const { data } = await supabaseAdmin
+        .from("youtube_metrics_refresh_runs")
+        .select("status")
+        .eq("id", runId)
+        .maybeSingle();
+      const cancelled = !data || data.status !== "running";
+      cancelCached = { at: t, cancelled };
+      return cancelled;
+    };
+
+    if (await isRunCancelled()) {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
+    type BatchOutcome = {
+      ok: boolean;
+      auth: boolean;
+      failureType?: "temporary_failure" | "permanent_failure";
+      skipped?: boolean;
+      skippedRecent?: boolean;
+    };
+
+    const results = await mapLimit(batchToProcess, 5, async (sub): Promise<BatchOutcome> => {
+      if (await isRunCancelled()) {
+        return { ok: false, auth: false, skipped: true };
+      }
+      if (
+        shouldSkipRecentOkYouTubeRefresh({
+          scope,
+          insightsStatus: sub.insights_status,
+          otherStats: sub.other_stats,
+        })
+      ) {
+        await progress.recordSkipped(1);
+        return { ok: true, auth: false, skipped: true, skippedRecent: true };
+      }
       const token = tokenMap.get(sub.creator_id);
       if (!token) {
         // Fallback for any creators who didn't even have a record in creators list
@@ -462,10 +518,15 @@ export async function POST(
       return { ok: res.ok, auth: res.authError, failureType: res.failureType };
     });
 
+    const cancelledMidBatch = await isRunCancelled();
+
     let success = 0;
     let tempFail = 0;
     let permFail = 0;
+    let recentOkSkips = 0;
     for (const r of results) {
+      if (r.skippedRecent) recentOkSkips += 1;
+      if (r.skipped) continue;
       if (r.ok) {
         success += 1;
       } else if (r.failureType === "permanent_failure") {
@@ -474,8 +535,9 @@ export async function POST(
         tempFail += 1;
       }
     }
+    skippedRecentCount += recentOkSkips;
 
-    const reviewedInBatch = batch.length;
+    const reviewedInBatch = success + tempFail + permFail + skippedRecentCount;
     await progress.awaitIdle();
     await progress.finalize(batchIndex, now, {
       // Include skipped so Processed reaches total_submissions for this batch.
@@ -486,6 +548,20 @@ export async function POST(
       permanentFailure: permFail,
       skipped: skippedRecentCount,
     });
+
+    if (cancelledMidBatch) {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+        reviewedCount: reviewedInBatch,
+        processedCount: success + tempFail + permFail + skippedRecentCount,
+        successCount: success,
+        permanentFailureCount: permFail,
+        temporaryFailureCount: tempFail,
+        skippedRecentCount,
+      });
+    }
 
     return NextResponse.json({
       hasMore,
