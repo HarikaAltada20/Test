@@ -3276,7 +3276,7 @@ export default function BrandsClient({
 
             <p
               className={cn(
-                "mx-auto mt-6 max-w-[720px] text-lg leading-7 sm:mt-8",
+                "mx-auto mt-6 max-w-[780px] text-[17px] leading-7 sm:mt-8",
                 isLight ? "text-black/50" : "text-[#8E8E8E]",
               )}
             >

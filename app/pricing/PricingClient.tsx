@@ -22,6 +22,7 @@ import {
   Building2,
   Loader2,
   UserCheck,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Card,
@@ -523,10 +524,10 @@ export default function PricingClient() {
         </Alert>
 
         <div className="max-w-[1250px] py-6 sm:py-8 md:py-10 lg:py-12 px-4 sm:px-6 lg:px-8 mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
-          <Card className="bg-[#000825] rounded-xl sm:rounded-2xl text-white hover:bg-[#B16FF43D] hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer">
+          <Card className="bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] rounded-xl sm:rounded-2xl text-white hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition border border-white/10 hover:border-white/20 cursor-pointer">
             <CardHeader className="mb-2 px-4 sm:px-6 pt-4 sm:pt-6">
               <CardTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg md:text-xl">
-                <div className="rounded-full p-1.5 sm:p-2 border flex items-center justify-center flex-shrink-0">
+                <div className="rounded-full p-1.5 sm:p-2 border border-white/20 bg-white/10 flex items-center justify-center flex-shrink-0">
                   <Trophy className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                 </div>
                 <span className="leading-tight">How It Works for Creators</span>
@@ -541,18 +542,14 @@ export default function PricingClient() {
               ].map((text, idx) => (
                 <div key={idx} className="flex items-center gap-2 sm:gap-3">
                   <div
-                    className="rounded-full p-2 sm:p-2.5 md:p-3 flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                    }}
+                    className="rounded-full p-2 sm:p-2.5 md:p-3 flex items-center justify-center flex-shrink-0 bg-white/10 border border-white/20"
                   >
                     <Check
                       className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white"
                       strokeWidth={3}
                     />
                   </div>
-                  <span className="text-sm sm:text-base md:text-lg leading-relaxed">
+                  <span className="text-sm sm:text-base md:text-lg leading-relaxed text-[#8E8E8E]">
                     {text}
                   </span>
                 </div>
@@ -560,10 +557,10 @@ export default function PricingClient() {
             </CardContent>
           </Card>
 
-          <Card className="bg-[#000825] rounded-xl sm:rounded-2xl text-white hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition hover:border-2 hover:border-[#7F39EC] cursor-pointer">
+          <Card className="bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] rounded-xl sm:rounded-2xl text-white border border-white/10 hover:shadow-lg hover:scale-[1.02] md:hover:scale-105 transition hover:border-white/20 cursor-pointer">
             <CardHeader className="mb-2 px-4 sm:px-6 pt-4 sm:pt-6">
               <CardTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-lg md:text-xl">
-                <div className="rounded-full p-1.5 sm:p-2 border flex items-center justify-center flex-shrink-0">
+                <div className="rounded-full p-1.5 sm:p-2 border border-white/20 bg-white/10 flex items-center justify-center flex-shrink-0">
                   <Building2 className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white" />
                 </div>
                 <span className="leading-tight">For Brands & Advertisers</span>
@@ -578,18 +575,14 @@ export default function PricingClient() {
               ].map((text, idx) => (
                 <div key={idx} className="flex items-center gap-2 sm:gap-3">
                   <div
-                    className="rounded-full p-2 sm:p-2.5 md:p-3 flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                    }}
+                    className="rounded-full p-2 sm:p-2.5 md:p-3 flex items-center justify-center flex-shrink-0 bg-white/10 border border-white/20"
                   >
                     <Check
                       className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-white"
                       strokeWidth={3}
                     />
                   </div>
-                  <span className="text-sm sm:text-base md:text-lg leading-relaxed">
+                  <span className="text-sm sm:text-base md:text-lg leading-relaxed text-[#8E8E8E]">
                     {text}
                   </span>
                 </div>
@@ -601,13 +594,9 @@ export default function PricingClient() {
         <div className="pb-8 sm:pb-12 md:pb-16 px-4 sm:px-6 text-center">
           <Button
             asChild
-            className="rounded-2xl sm:rounded-3xl mt-4 sm:mt-6 md:mt-8 relative text-white font-bold px-4 py-3 sm:px-6 sm:py-4 md:px-8 md:py-6 text-sm sm:text-base md:text-lg overflow-hidden w-full sm:w-auto"
-            style={{
-              background:
-                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-            }}
+            className="rounded-2xl sm:rounded-3xl mt-4 sm:mt-6 md:mt-8 relative border border-white/20 text-white font-bold px-4 py-3 sm:px-6 sm:py-4 md:px-8 md:py-6 text-sm sm:text-base md:text-lg overflow-hidden w-full sm:w-auto bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10 transition-all duration-300"
           >
-            <div className="scan-line"></div>
+            <div className="scan-line opacity-50"></div>
             <Link href="/dashboard/opportunities" className="w-full sm:w-auto">
               Browse Available Contests
             </Link>
@@ -618,38 +607,9 @@ export default function PricingClient() {
   }
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+    <div className="min-h-screen bg-black text-white pt-[10px] overflow-hidden">
       {/* Hero Section */}
       <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-        {/* Strategic Background Elements */}
-
-        {/* Floating Creative Elements */}
-        <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-          <Sparkles
-            className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-            style={{ animationDelay: "1s" }}
-          />
-          <Star
-            className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-            style={{ animationDelay: "2s" }}
-          />
-          <Heart
-            className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-            style={{ animationDelay: "0.5s" }}
-          />
-          <Palette
-            className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-            style={{ animationDelay: "1.5s" }}
-          />
-          <Trophy
-            className="absolute bottom-32 right-20 h-9 w-9 text-amber-400/40 animate-bounce"
-            style={{ animationDelay: "0.8s" }}
-          />
-        </div>
-        {/* Orange Ellipse Background Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1100px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
-
         <div className="container mx-auto px-4 text-center relative z-10">
           {/* Premium Badge */}
           <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 mb-6 sm:mb-8 flex-wrap justify-center max-w-full">
@@ -675,40 +635,17 @@ export default function PricingClient() {
             </div>
           </div>
 
-          {/* Massive Gaming Title */}
+          {/* Massive Title */}
           <h1
-            className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up"
-            style={{ animationDelay: "1s" }}
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 text-center slide-up"
+            style={{ animationDelay: "1s", fontFamily: "Montserrat, sans-serif" }}
           >
-            <span
-              className="font-semibold text-white drop-shadow-2xl"
-              style={{ fontFamily: "Montserrat, sans-serif" }}
-            >
-              Game Of Creators
-            </span>
-
-            <span
-              className="font-semibold text-white drop-shadow-2xl"
-              style={{ fontFamily: "Montserrat, sans-serif" }}
-            >
-              <span className="relative">
-                <span
-                  className="bg-clip-text text-transparent"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(180deg, #7F39EC 34.91%, #BC83FA 78.79%)",
-                  }}
-                >
-                  Pricing
-                </span>
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
-              </span>
-            </span>
+            Game Of Creators Pricing
           </h1>
 
           {/* Strategic Subtitle */}
           <p
-            className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+            className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
             style={{ animationDelay: "2s" }}
           >
             The World's First Platform to Democratise Brand Deals
@@ -761,25 +698,25 @@ export default function PricingClient() {
           <>
             <div ref={section1Ref} className="text-center mt-10 mb-10">
               {/* Header with Image */}
-              <div className="inline-flex items-center justify-center gap-2 bg-[#121230] px-4 py-2 rounded-full mb-4">
+              <div className="inline-flex items-center justify-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full mb-4">
                 <img
                   src="/images/Vector.png" // ← replace with your actual image path
                   alt="Payment Plan"
-                  className="w-5 h-5"
+                  className="w-5 h-5 opacity-80"
                 />
-                <span className="text-sm">Select the ideal payment plan</span>
+                <span className="text-sm text-gray-300">Select the ideal payment plan</span>
               </div>
               <h2
-                className={`text-3xl md:text-5xl font-bold mb-4 ${
+                className={`text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-4 ${
                   section1Visible ? "slide-up" : "opacity-0"
                 }`}
               >
-                Choose Your Game <span className="text-purple-400">Plan</span>
+                Choose Your Game Plan
               </h2>
               <p
                 className={`${
                   section1Visible ? "slide-left" : "opacity-0"
-                } text-gray-300 text-lg md:text-xl mb-8`}
+                } text-[#8E8E8E] text-lg md:text-xl mb-8`}
               >
                 Select the perfect plan to start winning with creator contests
               </p>
@@ -825,8 +762,8 @@ export default function PricingClient() {
                     onClick={handleToggle}
                     className={`relative w-12 h-6 sm:w-14 sm:h-7 rounded-full transition-colors flex-shrink-0 ${
                       billingCycle === "monthly"
-                        ? "bg-gray-600"
-                        : "bg-purple-500"
+                        ? "bg-white/20"
+                        : "bg-white/40"
                     }`}
                   >
                     <span
@@ -878,141 +815,156 @@ export default function PricingClient() {
                   return (
                     <div
                       key={plan.id}
-                      className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition 
+                      className={`relative flex flex-col rounded-[20px] w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition bg-[#171717] 
                       ${
                         isMostPopular
-                          ? "border-2 border-purple-500 shadow-xl"
-                          : "border border-gray-700 shadow-sm"
-                      }
-                      bg-gradient-to-b from-purple-900/10 to-purple-900/3`}
+                          ? "border border-white/40 shadow-[inset_0_1px_1px_rgba(255,255,255,0.8),_0_10px_40px_rgba(255,255,255,0.05)] z-10"
+                          : "border border-[#FFFFFF1A] shadow-[inset_0px_0px_4.43px_0px_#FFFFFF40]"
+                      }`}
                     >
                       {isMostPopular && (
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                          <Badge className="bg-purple-600 text-white">
+                          <Badge className="bg-white text-black font-semibold">
                             Most Popular
                           </Badge>
                         </div>
                       )}
-                      <CardHeader className="text-center">
-                        <div
-                          className={`mx-auto p-3 rounded-xl bg-gradient-to-r ${getPlanColor(
-                            plan.name
-                          )} text-white w-fit`}
-                        >
+                      
+                      {/* Top Icon */}
+                      <div className="mb-4 flex items-center justify-start">
+                        <div className="p-3 rounded-xl bg-white/10 border border-white/20 text-white w-fit">
                           {getPlanIcon(plan.name)}
                         </div>
-                        <CardTitle className="text-xl">
+                      </div>
+
+                      {/* Title & Description */}
+                      <div className="mb-6 text-left">
+                        <h3 className="text-xl md:text-2xl font-medium text-white mb-1">
                           {plan.displayName || plan.name}
-                        </CardTitle>
-                        <div className="text-3xl font-bold">
+                        </h3>
+                        <p className="text-sm text-gray-400">
+                          {plan.features.description}
+                        </p>
+                      </div>
+
+                      {/* Price */}
+                      <div className="mb-6 flex items-baseline justify-start">
+                        <span className="text-3xl md:text-4xl font-bold text-white">
                           {formatCurrencyFromCents(
                             billingCycle === "monthly"
                               ? plan.price
                               : getDiscountedPrice(plan.price)
                           )}
-                          <span className="text-sm font-normal text-gray-300">
-                            /{billingCycle === "monthly" ? "month" : "year"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-300">
-                          {plan.features.description}
-                        </p>
-                      </CardHeader>
-                      <CardContent className="space-y-3 flex-grow">
-                        <div className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          <span className="text-sm">
-                            {plan.features.maxActiveContests} active contests
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          <span className="text-sm">
-                            Min. budget{" "}
-                            {formatCurrencyFromCents(
-                              plan.features.minContestBudget
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          <span className="text-sm">
-                            Up to {plan.features.maxWinnersPerContest} winners
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          <span className="text-sm">
-                            {plan.features.commissionPercentage}% commission
-                          </span>
-                        </div>
-                        {plan.features.contestTypes && (
-                          <div className="flex items-center gap-2">
-                            <Check className="h-4 w-4 text-green-500" />
-                            <span className="text-sm">
-                              {plan.features.contestTypes.includes("cpm") ? (
-                                <>
-                                  Leaderboard & CPM-based contests
-                                  <span className="text-xs text-green-600 block mt-0.5 font-medium">
-                                    ✓ Both contest types available
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  Leaderboard-based contests only
-                                  {plan.name.toUpperCase() === "EXPLORER" && (
-                                    <span className="text-xs text-gray-500 block mt-0.5">
-                                      CPM contests available in paid plans
-                                    </span>
-                                  )}
-                                </>
+                        </span>
+                        <span className="text-xs md:text-sm text-gray-400 ml-2">
+                          / per {billingCycle === "monthly" ? "month" : "year"}
+                        </span>
+                      </div>
+
+                      {/* Button */}
+                      <div className="w-full mb-8">
+                        <Button
+                          className={`w-full rounded-xl relative border font-medium px-4 py-6 text-base overflow-hidden transition-all duration-300 ${
+                            isMostPopular 
+                              ? "bg-gradient-to-b from-white to-gray-300 text-black border-transparent hover:brightness-110" 
+                              : "border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                          }`}
+                          asChild
+                        >
+                          <Link href={`/signup?plan=${String(plan.id)}`}>
+                            Get Started
+                          </Link>
+                        </Button>
+                      </div>
+
+                      {/* Separator */}
+                      <div className="w-full h-px bg-white/10 mb-6"></div>
+
+                      {/* Features List */}
+                      <div className="text-left flex-grow">
+                        <h4 className="text-sm font-medium text-white mb-4">
+                          What you will get
+                        </h4>
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-300">
+                              {plan.features.maxActiveContests} active contests
+                            </span>
+                          </div>
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-300">
+                              Min. budget{" "}
+                              {formatCurrencyFromCents(
+                                plan.features.minContestBudget
                               )}
                             </span>
                           </div>
-                        )}
-                        {plan.features.analytics && (
-                          <div className="flex items-center gap-2">
-                            <Check className="h-4 w-4 text-green-500" />
-                            <span className="text-sm">
-                              {plan.features.analytics === "basic"
-                                ? "Advanced analytics & insights"
-                                : plan.features.analytics === "advanced"
-                                ? "Advanced analytics & insights"
-                                : plan.features.analytics === "comprehensive"
-                                ? "Comprehensive analytics dashboard"
-                                : plan.features.analytics}
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-300">
+                              Up to {plan.features.maxWinnersPerContest} winners
                             </span>
                           </div>
-                        )}
-                        {plan.features.support &&
-                          plan.features.support !== "basic" && (
-                            <div className="flex items-center gap-2">
-                              <Check className="h-4 w-4 text-green-500" />
-                              <span className="text-sm">
-                                {plan.features.support === "priority"
-                                  ? "Prioritized customer support"
-                                  : plan.features.support === "premium"
-                                  ? "Premium 24/7 dedicated support"
-                                  : plan.features.support}
+                          <div className="flex items-start gap-3">
+                            <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-300">
+                              {plan.features.commissionPercentage}% commission
+                            </span>
+                          </div>
+                          {plan.features.contestTypes && (
+                            <div className="flex items-start gap-3">
+                              <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                              <span className="text-sm text-gray-300">
+                                {plan.features.contestTypes.includes("cpm") ? (
+                                  <>
+                                    Leaderboard & CPM-based contests
+                                    <span className="text-xs text-gray-400 block mt-0.5">
+                                      Both contest types available
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    Leaderboard-based contests only
+                                    {plan.name.toUpperCase() === "EXPLORER" && (
+                                      <span className="text-xs text-gray-500 block mt-0.5">
+                                        CPM contests available in paid plans
+                                      </span>
+                                    )}
+                                  </>
+                                )}
                               </span>
                             </div>
                           )}
-                        <Separator />
-                      </CardContent>
-                      <div className="flex items-end justify-center flex-grow">
-                        <Button
-                          className="w-full rounded-3xl mt-8 relative text-white font-bold px-8 py-5 text-lg overflow-hidden"
-                          style={{
-                            background:
-                              "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                          }}
-                          asChild
-                        >
-                          <div className="scan-line"></div>
-                          <Link href={`/signup?plan=${String(plan.id)}`}>
-                            {isFree ? "Start Free" : "Subscribe"}
-                          </Link>
-                        </Button>
+                          {plan.features.analytics && (
+                            <div className="flex items-start gap-3">
+                              <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                              <span className="text-sm text-gray-300">
+                                {plan.features.analytics === "basic"
+                                  ? "Advanced analytics & insights"
+                                  : plan.features.analytics === "advanced"
+                                  ? "Advanced analytics & insights"
+                                  : plan.features.analytics === "comprehensive"
+                                  ? "Comprehensive analytics dashboard"
+                                  : plan.features.analytics}
+                              </span>
+                            </div>
+                          )}
+                          {plan.features.support &&
+                            plan.features.support !== "basic" && (
+                              <div className="flex items-start gap-3">
+                                <CheckCircle2 className="h-4 w-4 mt-0.5 text-gray-400 flex-shrink-0" />
+                                <span className="text-sm text-gray-300">
+                                  {plan.features.support === "priority"
+                                    ? "Prioritized customer support"
+                                    : plan.features.support === "premium"
+                                    ? "Premium 24/7 dedicated support"
+                                    : plan.features.support}
+                                </span>
+                              </div>
+                            )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1091,32 +1043,19 @@ export default function PricingClient() {
       </div> */}
 
       <section ref={section2Ref}>
-        <div className="bg-[#0b0e26] text-white py-16 px-6">
+        <div className="bg-black text-white py-16 px-6">
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
-              className={`text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${
+              className={`text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent transition-all duration-700 mb-4 ease-out transform ${
                 section2Visible ? "slide-up" : "opacity-0"
               }`}
             >
-              What's Included in{" "}
-              <span
-                style={{
-                  background:
-                    "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-
-                  display: "inline",
-                }}
-              >
-                Every Plan
-              </span>
+              What's Included in Every Plan
             </h2>
             <p
               className={`${
                 section2Visible ? "slide-left" : "opacity-0"
-              } text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
+              } text-lg md:text-xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
             >
               Essential Elements for Your Influencer Marketing Strategy
             </p>
@@ -1125,20 +1064,16 @@ export default function PricingClient() {
               {plans.map((value, index) => (
                 <div
                   key={index}
-                  className="flex items-start gap-4 rounded-xl p-9 hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer" // gradient border wrapper
+                  className="flex items-start gap-4 rounded-xl p-9 border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] hover:border-white/20 cursor-pointer transition-all duration-300"
                 >
                   <div
-                    className="rounded-full p-5 flex items-center justify-center"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                    }}
+                    className="rounded-full p-5 flex items-center justify-center border border-white/20 bg-white/10"
                   >
                     <Check className="h-6 w-6 text-white" strokeWidth={3} />
                   </div>
                   <div className="text-left">
                     <h3 className="text-2xl font-bold">{value.title}</h3>
-                    <p className="text-gray-300 text-xl mt-5">
+                    <p className="text-[#8E8E8E] text-xl mt-5">
                       {value.description}
                     </p>
                   </div>
@@ -1150,32 +1085,28 @@ export default function PricingClient() {
       </section>
 
       <section className="py-16" ref={storyRef}>
-        <div className="bg-[#040921] flex justify-center items-center py-12 px-4">
-          <div className="relative  rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 shadow-lg max-w-7xl w-full border border-gray-600">
-            {/* Purple Glow in Background */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-purple-500/20 to-transparent blur-2xl pointer-events-none"></div>
-
+        <div className="bg-black flex justify-center items-center py-12 px-4">
+          <div className="relative rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 shadow-lg max-w-7xl w-full border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)]">
             {/* Text Section */}
             <div className="flex-1 relative z-10">
               <h2
-                className={`text-4xl md:text-5xl ${visible ? "slide-up" : ""}`}
+                className={`text-4xl md:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent ${visible ? "slide-up" : ""}`}
                 style={{ animationDelay: "0.5s" }}
               >
-                Not sure which<span className="text-purple-400"> plan </span>is
-                right for you?
+                Not sure which plan is right for you?
               </h2>
               <p
-                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                className={`text-base md:text-xl leading-relaxed text-[#8E8E8E] mt-4 ${
                   visible ? "slide-left" : ""
                 }`}
                 style={{ animationDelay: "1s" }}
               >
                 Book a demo with{" "}
-                <span className="font-semibold text-purple-300">Vishesh,</span>{" "}
+                <span className="font-semibold text-white">Vishesh,</span>{" "}
                 Founder of Game Of Creators
               </p>
               <p
-                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                className={`text-base md:text-xl leading-relaxed text-[#8E8E8E] mt-4 ${
                   visible ? "slide-left" : ""
                 }`}
                 style={{ animationDelay: "1.5s" }}
@@ -1189,13 +1120,9 @@ export default function PricingClient() {
                 href="https://calendly.com/guptavishesh2/30min"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 justify-center rounded-3xl mt-8 relative text-white font-bold px-8 py-3 text-lg overflow-hidden"
-                style={{
-                  background:
-                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                }}
+                className="inline-flex items-center gap-2 justify-center rounded-[20px] mt-8 relative border border-white/20 text-white font-bold px-8 py-3 text-lg overflow-hidden bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10 transition-all duration-300"
               >
-                <div className="scan-line pointer-events-none"></div>
+                <div className="scan-line opacity-50 pointer-events-none"></div>
                 Book a Demo
                 <ArrowRight className="h-5 w-5" />
               </a>

@@ -97,37 +97,9 @@ export default function AboutPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+    <div className="min-h-screen bg-black text-white pt-[10px] overflow-hidden">
       <div className="relative z-20">
         <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-          {/* Strategic Background Elements */}
-
-          {/* Floating Creative Elements */}
-          <div className="inset-0 z-10 pointer-events-none">
-            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-            <Sparkles
-              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-              style={{ animationDelay: "1s" }}
-            />
-            <Star
-              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-              style={{ animationDelay: "2s" }}
-            />
-            <Heart
-              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-              style={{ animationDelay: "0.5s" }}
-            />
-            <Palette
-              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-              style={{ animationDelay: "1.5s" }}
-            />
-            <Trophy
-              className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-              style={{ animationDelay: "0.8s" }}
-            />
-          </div>
-          {/* Orange Ellipse Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1200px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
@@ -154,71 +126,44 @@ export default function AboutPage() {
               </div>
             </div>
 
-            {/* Massive Gaming Title */}
+            {/* Massive Title */}
             <h1
-              className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl flex flex-wrap justify-center gap-x-2 sm:gap-x-3 text-center mb-7 leading-tight slide-up"
-              style={{ animationDelay: "1s" }}
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 text-center slide-up"
+              style={{ animationDelay: "1s", fontFamily: "Montserrat, sans-serif" }}
             >
-              <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                About Game Of
-              </span>
-
-              <span
-                className="font-semibold text-white drop-shadow-2xl"
-                style={{ fontFamily: "Montserrat, sans-serif" }}
-              >
-                <span className="relative">
-                  <span
-                    className="bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                    }}
-                  >
-                    Creators
-                  </span>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
-                </span>
-              </span>
+              About Game Of Creators
             </h1>
 
             {/* Strategic Subtitle */}
             <p
-              className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+              className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
-              Game Of Creators connects brands with creators through campaigns,
-              allowing brands to generate genuine content while creators earn
-              and grow.
+              Game Of Creators connects brands with creators through campaigns, allowing brands to generate genuine content while creators earn and grow.
             </p>
           </div>
         </section>
 
         <section className="py-16" ref={storyRef}>
           <div className="flex justify-center items-center py-12 px-4">
-            <div className="relative  rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 shadow-lg max-w-7xl w-full border border-gray-600">
-              {/* Purple Glow in Background */}
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-purple-500/20 to-transparent blur-2xl pointer-events-none"></div>
+            <div className="relative rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] max-w-7xl w-full border border-white/10">
 
               {/* Text Section */}
               <div className="flex-1 relative z-10">
                 <h2
-                  className={`text-5xl ${visible ? "slide-up" : ""}`}
+                  className={`text-4xl sm:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 ${visible ? "slide-up" : ""}`}
                   style={{ animationDelay: "0.5s" }}
                 >
-                  Our <span className="text-purple-400">Story</span>
+                  Our Story
                 </h2>
                 <p
-                  className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                  className={`text-base md:text-xl leading-relaxed text-[#8E8E8E] mt-4 ${
                     visible ? "slide-left" : ""
                   }`}
                   style={{ animationDelay: "1s" }}
                 >
                   Launched in{" "}
-                  <span className="font-semibold text-purple-300">
+                  <span className="font-semibold text-white">
                     2024, Game Of Creators
                   </span>{" "}
                   addresses a key challenge: brands often struggle to produce
@@ -250,32 +195,19 @@ export default function AboutPage() {
           <div className="max-w-[1250px] mx-auto px-6">
             <h2
               ref={howItWorksRef}
-              className={`text-center text-3xl md:text-5xl font-bold mb-12 transition-all duration-700 ease-out transform ${
+              className={`text-center text-4xl sm:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-12 transition-all duration-700 ease-out transform ${
                 showHowItWorks
                   ? "translate-y-0 opacity-100"
                   : "translate-y-10 opacity-0"
               }`}
             >
-              How It{" "}
-              <span
-                style={{
-                  background:
-                    "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-
-                  display: "inline",
-                }}
-              >
-                Works
-              </span>
+              How It Works
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {howItWorksData.map((item, index) => (
                 <div
                   key={index}
-                  className="bg-[#0B0F27] border border-gray-700 rounded-xl p-9 flex cursor-pointer flex-col items-center text-center hover:bg-[#B16FF43D] hover:border-2 hover:border-[#7F39EC]"
+                  className="bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] border border-white/10 rounded-xl p-9 flex cursor-pointer flex-col items-center text-center hover:border-white/20 transition-all duration-300"
                 >
                   <div className="mb-6">
                     <Image
@@ -285,8 +217,8 @@ export default function AboutPage() {
                       height={200}
                     />
                   </div>
-                  <h3 className="text-2xl font-semibold mb-5">{item.title}</h3>
-                  <p className="text-gray-300 text-xl">{item.description}</p>
+                  <h3 className="text-2xl font-semibold mb-5 text-white">{item.title}</h3>
+                  <p className="text-[#8E8E8E] text-xl">{item.description}</p>
                 </div>
               ))}
             </div>
@@ -297,46 +229,29 @@ export default function AboutPage() {
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
               ref={valuesRef}
-              className={`text-5xl font-semibold transition-all duration-700 ease-out transform ${
+              className={`text-4xl sm:text-5xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent transition-all duration-700 ease-out transform ${
                 showValues
                   ? "translate-y-0 opacity-100"
                   : "translate-y-10 opacity-0"
               }`}
             >
-              Our{" "}
-              <span
-                style={{
-                  background:
-                    "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-
-                  display: "inline",
-                }}
-              >
-                Value
-              </span>
+              Our Values
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-12 mb-14">
               {values.map((value, index) => (
                 <div
                   key={index}
-                  className="flex items-start gap-4 rounded-xl p-9 hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer" // gradient border wrapper
+                  className="flex items-start gap-4 rounded-xl p-9 border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.8)_100%)] hover:border-white/20 cursor-pointer transition-all duration-300" 
                 >
                   <div
-                    className="rounded-full p-5 flex items-center justify-center"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                    }}
+                    className="rounded-full p-5 flex items-center justify-center border border-white/20 bg-white/10"
                   >
                     <Check className="h-6 w-6 text-white" strokeWidth={3} />
                   </div>
                   <div className="text-left">
-                    <h3 className="text-2xl font-bold">{value.title}</h3>
-                    <p className="text-gray-300 text-xl mt-5">
+                    <h3 className="text-2xl font-bold text-white">{value.title}</h3>
+                    <p className="text-[#8E8E8E] text-xl mt-5">
                       {value.description}
                     </p>
                   </div>

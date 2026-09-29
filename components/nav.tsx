@@ -175,7 +175,7 @@ export function Nav({
   const isCreatorsPage = pathname === "/creators";
   const isBrandsPage = pathname === "/brands";
   const isHomePage = pathname === "/";
-  const isDarkMarketingNav = isCreatorsPage || isBrandsPage || isHomePage;
+  const isDarkMarketingNav = true; // Always use the home page theme for all pages
   // Light mode disabled on marketing pages — always use dark chrome.
   const isLightMarketingNav = false;
   const marketingLogo = logoDark;
@@ -206,7 +206,7 @@ export function Nav({
     ? creatorsNavLinks
     : isBrandsPage
       ? brandsNavLinks
-      : null;
+      : homeNavLinks;
 
   const goToMarketingPage = (href: "/brands" | "/creators") => {
     if (href === "/brands") setBrandsLoading(true);

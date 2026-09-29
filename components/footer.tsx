@@ -118,6 +118,7 @@ export function Footer() {
               {[
                 { name: "How it Works", href: "/brands" },
                 { name: "Get Started", href: "/get-started" },
+                { name: "Pricing", href: "/pricing" },
                 {
                   name: "Book a Demo",
                   href: "https://calendly.com/guptavishesh2/30min",

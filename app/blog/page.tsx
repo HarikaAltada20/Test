@@ -123,38 +123,9 @@ export default async function BlogIndexPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-      <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+      <div className="min-h-screen bg-black text-white pt-[10px] overflow-hidden">
         <div className="relative z-20">
-          {/* Floating Gaming Elements */}
-          <section className="pt-20 pb-20 md:pt-28 md:pb-24 relative overflow-hidden">
-            {/* Strategic Background Elements */}
-
-            {/* Floating Creative Elements */}
-            <div className="inset-0 z-10 pointer-events-none">
-              <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
-              <Sparkles
-                className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
-                style={{ animationDelay: "1s" }}
-              />
-              <Star
-                className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
-                style={{ animationDelay: "2s" }}
-              />
-              <Heart
-                className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-                style={{ animationDelay: "0.5s" }}
-              />
-              <Palette
-                className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-                style={{ animationDelay: "1.5s" }}
-              />
-              <Trophy
-                className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
-                style={{ animationDelay: "0.8s" }}
-              />
-            </div>
-            {/* Orange Ellipse Background Glow */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1200px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
+          <section className="pt-20 pb-12 md:pt-28 md:pb-16 relative overflow-hidden">
 
             <div className="container mx-auto px-4 text-center relative z-10">
               {/* Premium Badge */}
@@ -183,49 +154,18 @@ export default async function BlogIndexPage() {
 
               {/* Massive Gaming Title */}
               <h1
-                className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 md:gap-x-3 mb-6 leading-tight text-center slide-up"
-                style={{ animationDelay: "1s" }}
+                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent mb-6 text-center slide-up"
+                style={{ animationDelay: "1s", fontFamily: "Montserrat, sans-serif" }}
               >
-                <span
-                  className="font-semibold text-white drop-shadow-2xl"
-                  style={{ fontFamily: "Montserrat, sans-serif" }}
-                >
-                  Our
-                </span>
-                <span
-                  className="font-semibold text-white drop-shadow-2xl"
-                  style={{ fontFamily: "Montserrat, sans-serif" }}
-                >
-                  <span className="relative">
-                    <span
-                      className="bg-clip-text text-transparent"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-                      }}
-                    >
-                      Blogs
-                    </span>
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
-                  </span>
-                </span>
+                Our Blogs
               </h1>
 
               {/* Strategic Subtitle */}
               <p
-                className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+                className="text-lg md:text-2xl text-[#8E8E8E] max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
                 style={{ animationDelay: "2s" }}
               >
-                Creator marketing
-                <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                  {" "}
-                  insights for
-                </span>
-                ,{" "}
-                <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
-                  brands and creators
-                </span>{" "}
-                focused on performance-driven content.
+                Creator marketing insights for brands and creators focused on performance-driven content.
               </p>
             </div>
           </section>
@@ -267,7 +207,7 @@ export default async function BlogIndexPage() {
             </div> */}
 
               {safePosts.length === 0 ? (
-                <p className="text-center text-lg text-slate-300">
+                <p className="text-center text-lg text-[#8E8E8E]">
                   No published blog posts yet.
                 </p>
               ) : (

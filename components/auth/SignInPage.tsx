@@ -28,7 +28,7 @@ import Link from "next/link";
 import { FcGoogle } from "react-icons/fc";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import logo from "@/public/images/gold_logo_horizontal.svg";
+import logo from "@/public/images/Primary Logo white 1.png";
 import { FaFacebookF, FaInstagram } from "react-icons/fa";
 
 export default function SignInPage() {
@@ -200,37 +200,19 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#000825] overflow-hidden relative">
+    <div className="min-h-screen bg-black overflow-hidden relative">
+      {/* Top Gray Shade */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-28 sm:h-48 overflow-hidden"
+        aria-hidden="true"
+      >
+        <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/60 to-transparent z-10" />
+        <div className="absolute inset-x-0 top-0 h-full bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.08)_35%,transparent_70%)]" />
+      </div>
+
       {/* Enhanced Background Elements - Gamified */}
 
-      {/* Floating Gaming Elements */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-20 left-10 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg rotate-45 opacity-60 animate-pulse"></div>
-        <div
-          className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60 animate-pulse"
-          style={{ animationDelay: "2s" }}
-        ></div>
-        <div
-          className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60 animate-pulse"
-          style={{ animationDelay: "4s" }}
-        ></div>
-        <Trophy
-          className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60 animate-bounce"
-          style={{ animationDelay: "1s" }}
-        />
-        <Star
-          className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60 animate-pulse"
-          style={{ animationDelay: "3s" }}
-        />
-        <Shield
-          className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60 animate-bounce"
-          style={{ animationDelay: "5s" }}
-        />
-        <Gamepad2
-          className="absolute bottom-20 right-20 h-6 w-6 text-violet-400/60 animate-pulse"
-          style={{ animationDelay: "2.5s" }}
-        />
-      </div>
+
 
       <div className="relative z-20 flex items-center justify-center min-h-screen p-4">
         <div className="w-full max-w-2xl">
@@ -238,14 +220,16 @@ export default function SignInPage() {
           <div className="text-center">
             <div className="relative group">
               <div className="absolute inset-0 transition-opacity duration-500"></div>
-              <div className="relative  p-4 ">
-                <Image
-                  src={logo}
-                  alt="Game of Creators"
-                  width={200}
-                  height={70}
-                  className="mx-auto"
-                />
+              <div className="relative pt-6 pb-0">
+                <Link href="/">
+                  <Image
+                    src={logo}
+                    alt="Game of Creators"
+                    width={260}
+                    height={90}
+                    className="mx-auto cursor-pointer"
+                  />
+                </Link>
               </div>
             </div>
           </div>
@@ -258,7 +242,7 @@ export default function SignInPage() {
             <div className="relative p-8">
               {/* Gaming Header */}
               <div className="mb-8 text-center">
-                <h1 className="text-3xl md:text-4xl font-black text-white drop-shadow-2xl mb-4">
+                <h1 className="text-3xl md:text-4xl font-black bg-[radial-gradient(45.89%_93.18%_at_47.35%_50%,_#FFFFFF_0%,_#999999_100%)] bg-clip-text text-transparent drop-shadow-2xl mb-4">
                   Welcome Back Champion
                 </h1>
                 <p className="text-slate-300 text-md leading-relaxed">
@@ -269,7 +253,7 @@ export default function SignInPage() {
               <form onSubmit={handleEmailSignIn} className="space-y-6">
                 {/* Email Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300 font-medium">
+                  <Label htmlFor="email" className="text-white font-medium">
                     Email Address
                   </Label>
                   <div className="relative">
@@ -280,7 +264,7 @@ export default function SignInPage() {
                       placeholder="Enter your email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12 bg-[#000825] border-slate-600/50 placeholder:text-slate-400 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
+                      className="pl-10 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -291,7 +275,7 @@ export default function SignInPage() {
                 <div className="space-y-2">
                   <Label
                     htmlFor="password"
-                    className="text-slate-300 font-medium"
+                    className="text-white font-medium"
                   >
                     Password
                   </Label>
@@ -303,7 +287,7 @@ export default function SignInPage() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 pr-12 h-12 bg-[#000825]  border-slate-600/50 placeholder:text-slate-400 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
+                      className="pl-10 pr-12 h-12 bg-black border-white/20 placeholder:text-slate-500 text-white focus:border-white focus:ring-white focus-visible:ring-1 focus-visible:ring-white focus-visible:ring-offset-0 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -325,7 +309,7 @@ export default function SignInPage() {
                 <div className="flex justify-end">
                   <Link
                     href="/auth/forgot-password"
-                    className="text-md text-violet-400 hover:text-violet-300 transition-colors"
+                    className="text-md text-white hover:text-gray-300 transition-colors"
                   >
                     Forgot password?
                   </Link>
@@ -341,11 +325,7 @@ export default function SignInPage() {
                 {/* Gaming Sign In Button */}
                 <Button
                   type="submit"
-                  className="group relative w-full text-white font-bold px-8 py-6 text-lg rounded-3xl transition-all duration-300 overflow-hidden"
-                  style={{
-                    background:
-                      "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                  }}
+                  className="group relative w-full text-white font-bold px-8 py-6 text-lg rounded-xl border border-white/20 bg-[linear-gradient(0deg,#000000_0%,#353535_138.24%)] hover:bg-white/10 transition-all duration-300 overflow-hidden"
                   disabled={isLoading || isGoogleLoading}
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
@@ -402,7 +382,7 @@ export default function SignInPage() {
                   New to the arena?{" "}
                   <Link
                     href="/auth/signup"
-                    className="font-semibold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent hover:from-violet-300 hover:to-purple-300 transition-all"
+                    className="font-semibold text-white hover:text-gray-300 transition-all"
                   >
                     Join the game
                   </Link>
