@@ -7,7 +7,10 @@ import ReferralCapture from "@/components/ReferralCapture";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { createClient } from "@/utils/supabase/server";
-import { getUserSafe } from "@/utils/supabase/auth-server";
+import {
+  cookieListHasSupabaseAuthToken,
+  getSessionUser,
+} from "@/utils/supabase/auth-server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
@@ -81,9 +84,13 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  // Guests with no session cookie: skip Auth entirely.
+  // With cookies: read session from cookies only — middleware already refreshes
+  // on matched routes; a second getUser here raced the single-use refresh token.
+  const hasAuthCookie = cookieListHasSupabaseAuthToken(cookieStore.getAll());
   const supabase = await createClient();
-  const { data: authData } = await getUserSafe(supabase);
-  const user = authData?.user;
+  const user = hasAuthCookie ? await getSessionUser(supabase) : null;
 
   let profileFullName: string | null = null;
   let profilePictureUrl: string | null = null;
@@ -101,7 +108,7 @@ export default async function RootLayout({
     if (userError) {
       console.error(
         "Error fetching user profile data in layout:",
-        userError.message
+        userError.message,
       );
     }
 
@@ -126,7 +133,7 @@ export default async function RootLayout({
       if (advertiserError && advertiserError.code !== "PGRST116") {
         console.error(
           "Error fetching advertiser profile in layout:",
-          advertiserError.message
+          advertiserError.message,
         );
       }
 
@@ -138,7 +145,6 @@ export default async function RootLayout({
   }
 
   // Determine initial theme mode on the server from cookies to avoid white flash
-  const cookieStore = await cookies();
   const presetCookie = cookieStore.get("dashboard-preset")?.value as
     | "game-of-creators"
     | "clean-professional"
@@ -156,8 +162,8 @@ export default async function RootLayout({
   const initialMode: "light" | "dark" = presetCookie
     ? presetToMode[presetCookie] || "light"
     : modeCookie === "dark" || modeCookie === "light"
-    ? modeCookie
-    : "light";
+      ? modeCookie
+      : "light";
 
   return (
     <html lang="en" data-theme={initialMode} suppressHydrationWarning>
@@ -169,8 +175,8 @@ export default async function RootLayout({
               html{background:${
                 initialMode === "dark" ? "#07031E" : "#ffffff"
               };color:${
-              initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
-            }}
+                initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
+              }}
               body{background:inherit;color:inherit}
             `,
           }}
@@ -232,7 +238,7 @@ export default async function RootLayout({
             `}
           </Script>
         ) : null}
-        <Script
+      <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8J6VZKVWLF"
           strategy="afterInteractive"
         />
@@ -248,10 +254,7 @@ export default async function RootLayout({
         </Script>
         {/* Mobile Auth Bridge - Enables native authentication from Flutter app */}
         <MobileAuthBridge />
-        <Script
-          src="/mobile-auth-bridge.js"
-          strategy="afterInteractive"
-        />
+        <Script src="/mobile-auth-bridge.js" strategy="afterInteractive" />
       </body>
     </html>
   );

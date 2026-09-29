@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   hasRapidApiKeys,
   rapidApiHost,
   rapidApiRequest,
 } from "@/lib/twitter/rapidApiClient";
 import { extractTweetId, getTwitterRaidTarget } from "@/lib/twitter-utils";
+import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
+import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { refreshContestStats } from "@/lib/contest-stats";
+import { persistContestBudgetSpent } from "@/lib/persist-contest-budget-spent";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +66,51 @@ const RAID_POINTS_CONFIG = {
 
 const RAID_BATCH_SIZE = 5;
 
+/** Classify a tweet from a participant's timeline as raid engagement with the target (reply / RT / quote). */
+function classifyRaidEngagementType(
+  engagement: any,
+  targetTweetId: string
+): "comment" | "retweet" | "quote_repost" | null {
+  const eid = engagement.tweet_id || engagement.id;
+  if (eid === targetTweetId) {
+    return null;
+  }
+
+  if (
+    engagement.in_reply_to_status_id_str === targetTweetId ||
+    engagement.in_reply_to === targetTweetId ||
+    engagement.in_reply_to_status_id === targetTweetId
+  ) {
+    return "comment";
+  }
+
+  if (
+    engagement.retweeted_tweet?.tweet_id === targetTweetId ||
+    engagement.retweeted_tweet?.id === targetTweetId ||
+    engagement.retweeted?.id === targetTweetId ||
+    engagement.retweeted?.tweet_id === targetTweetId ||
+    engagement.retweeted_status_id_str === targetTweetId ||
+    engagement.retweeted_status_id === targetTweetId
+  ) {
+    return "retweet";
+  }
+
+  if (
+    (engagement.quoted?.tweet_id === targetTweetId ||
+      engagement.quoted?.id === targetTweetId ||
+      engagement.quoted_status_id_str === targetTweetId ||
+      engagement.quoted_status_id === targetTweetId) &&
+    engagement.text &&
+    !engagement.retweeted_tweet &&
+    !engagement.retweeted &&
+    engagement.in_reply_to_status_id_str !== targetTweetId
+  ) {
+    return "quote_repost";
+  }
+
+  return null;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -69,6 +120,7 @@ export async function POST(
       fromQueue?: boolean;
       batchIndex?: number;
       totalBatches?: number;
+      creatorId?: string;
     } = {};
     try {
       body = await request.json();
@@ -80,6 +132,11 @@ export async function POST(
       typeof body.batchIndex === "number" ? body.batchIndex : undefined;
     const totalBatches =
       typeof body.totalBatches === "number" ? body.totalBatches : undefined;
+    const creatorId =
+      typeof body.creatorId === "string" && body.creatorId.trim()
+        ? body.creatorId.trim()
+        : undefined;
+    const creatorIdOnly = !!creatorId;
     const isBatchedRaid =
       fromQueue &&
       batchIndex !== undefined &&
@@ -94,7 +151,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, contest_type, contest_based_details, start_date, max_submissions_per_creator, post_contest_status"
+        "id, advertiser_id, contest_type, contest_based_details, start_date, max_submissions_per_creator, post_contest_status"
       )
       .eq("id", contestId)
       .maybeSingle();
@@ -118,6 +175,49 @@ export async function POST(
         contestId
       );
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+    }
+
+    // Queue worker: same contract as twitter-refresh-tweets (CRON_SECRET).
+    // Interactive: must be admin, contest owner, or active Twitter participant.
+    if (fromQueue) {
+      const cronSecret = process.env.CRON_SECRET;
+      const authHeader = request.headers.get("authorization");
+      if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+        return NextResponse.json(
+          { error: "Unauthorized (queue)" },
+          { status: 401 }
+        );
+      }
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const { isAdmin } = await verifyAdminAccess();
+      const advertiserId = (contest as { advertiser_id?: string })
+        .advertiser_id;
+      const isOwner = !!advertiserId && advertiserId === user.id;
+      const { data: participantRow } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("creator_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      const isParticipant = !!participantRow;
+      if (!isAdmin && !isOwner && !isParticipant) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (
+        creatorId &&
+        creatorId !== user.id &&
+        !isAdmin &&
+        !isOwner
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     // Hard lock: same as refresh-metrics - no raid refresh after review begins
@@ -547,7 +647,12 @@ export async function POST(
       (p) => !rejectedCreatorIds.has(p.creator_id)
     );
 
-    if (activeParticipants.length === 0) {
+    // Creator-only raid refresh: only process the requested creator's slice.
+    const activeParticipantsFiltered = creatorIdOnly
+      ? activeParticipants.filter((p) => p.creator_id === creatorId)
+      : activeParticipants;
+
+    if (activeParticipantsFiltered.length === 0) {
       return NextResponse.json({
         success: true,
         message: "No active non-rejected participants",
@@ -557,22 +662,14 @@ export async function POST(
 
     // When batching, only process this slice of participants; participantMap stays full for reply attribution.
     const batchParticipants = isBatchedRaid
-      ? activeParticipants.slice(
+      ? activeParticipantsFiltered.slice(
           batchIndex! * RAID_BATCH_SIZE,
           (batchIndex! + 1) * RAID_BATCH_SIZE
         )
-      : activeParticipants;
+      : activeParticipantsFiltered;
     const batchParticipantIds =
       isBatchedRaid && batchParticipants.length > 0
         ? new Set(batchParticipants.map((p) => p.creator_id))
-        : null;
-    const batchParticipantUsernames =
-      isBatchedRaid && batchParticipants.length > 0
-        ? new Set(
-            batchParticipants
-              .map((p) => p.twitter_username?.replace("@", "").toLowerCase())
-              .filter(Boolean) as string[]
-          )
         : null;
 
     if (isBatchedRaid && batchParticipants.length === 0) {
@@ -588,7 +685,7 @@ export async function POST(
     // Create map of username -> creator_id and join date for quick lookup (only for non-rejected creators)
     const participantMap = new Map<string, string>();
     const participantJoinDateMap = new Map<string, Date>(); // Map username -> join date
-    activeParticipants.forEach((p) => {
+    activeParticipantsFiltered.forEach((p) => {
       if (p.twitter_username) {
         const cleanUsername = p.twitter_username.replace("@", "").toLowerCase();
         participantMap.set(cleanUsername, p.creator_id);
@@ -656,428 +753,32 @@ export async function POST(
       );
     }
 
-    // 4b. Fetch engagements (replies, retweets, quote reposts) using latest_replies.php
-    // This endpoint returns ALL engagements (replies, retweets, quote reposts) on the target tweet
-    // IMPORTANT: We use pagination to fetch ALL engagements up to join dates
+    // 4b. Participant timelines only (replies.php): comments, RTs, and quotes on the target.
+    // Skips latest_replies.php + retweets.php to cut RapidAPI calls; downstream already keeps participants only.
     const allEngagementTweets: any[] = [];
 
-    try {
-      // Fetch ALL engagements using pagination
-      let allEngagements: any[] = [];
-      let cursor: string | null = null;
-      let hasMorePages = true;
-      let pageCount = 0;
-      const MAX_PAGES = 50; // Safety limit
-
-      while (hasMorePages && pageCount < MAX_PAGES) {
-        const repliesOptions: any = {
-          method: "GET",
-          url: `https://${rapidApiHost}/latest_replies.php`,
-          params: {
-            id: targetTweetId, // Get all engagements on this specific tweet
-          },
-        };
-
-        // Add cursor for pagination (if not first page)
-        if (cursor) {
-          repliesOptions.params.cursor = cursor;
-        }
-
-        const repliesResponse = await rapidApiRequest(repliesOptions);
-        const repliesData = repliesResponse.data;
-
-        // The latest_replies.php endpoint returns engagements in a timeline array
-        const pageEngagements = Array.isArray(repliesData?.timeline)
-          ? repliesData.timeline
-          : Array.isArray(repliesData)
-          ? repliesData
-          : [];
-
-        // Add engagements from this page
-        allEngagements.push(...pageEngagements);
-
-        // Check for next cursor
-        const nextCursor = repliesData?.next_cursor;
-        if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
-          hasMorePages = false;
-        } else {
-          cursor = nextCursor;
-          pageCount++;
-          console.log(
-            `[fetch-raid-engagements] Fetched page ${pageCount} from latest_replies.php, total engagements so far: ${allEngagements.length}, next cursor: ${cursor}`
-          );
-        }
-      }
-
-      console.log(
-        `[fetch-raid-engagements] Found ${
-          allEngagements.length
-        } total engagements from latest_replies.php across ${
-          pageCount + 1
-        } pages`
-      );
-
-      // Process all engagements - identify replies, retweets, and quote reposts
-      for (const engagement of allEngagements) {
-        // Skip the target tweet itself
-        const engagementId = engagement.tweet_id || engagement.id;
-        if (engagementId === targetTweetId) {
-          continue;
-        }
-
-        let engagementType: "comment" | "retweet" | "quote_repost" | null =
-          null;
-
-        // Check if it's a DIRECT reply (comment) to the target tweet
-        if (
-          engagement.in_reply_to_status_id_str === targetTweetId ||
-          engagement.in_reply_to === targetTweetId ||
-          engagement.in_reply_to_status_id === targetTweetId
-        ) {
-          engagementType = "comment";
-        }
-        // Check if it's a retweet of the target tweet
-        else if (
-          engagement.retweeted_tweet?.tweet_id === targetTweetId ||
-          engagement.retweeted_tweet?.id === targetTweetId ||
-          engagement.retweeted?.id === targetTweetId ||
-          engagement.retweeted?.tweet_id === targetTweetId ||
-          engagement.retweeted_status_id_str === targetTweetId ||
-          engagement.retweeted_status_id === targetTweetId
-        ) {
-          engagementType = "retweet";
-        }
-        // Check if it's a quote repost of the target tweet
-        // Quote reposts have quoted tweet AND original text (not just a retweet)
-        else if (
-          (engagement.quoted?.tweet_id === targetTweetId ||
-            engagement.quoted?.id === targetTweetId ||
-            engagement.quoted_status_id_str === targetTweetId ||
-            engagement.quoted_status_id === targetTweetId) &&
-          engagement.text && // Has original text (not just a retweet)
-          !engagement.retweeted_tweet && // Not a retweet
-          !engagement.retweeted
-        ) {
-          engagementType = "quote_repost";
-        }
-
-        // Only add if we identified the engagement type
-        if (engagementType) {
-          // Check if we already added this
-          const alreadyAdded = allEngagementTweets.some(
-            (e) => (e.tweet_id || e.id) === engagementId
-          );
-
-          if (!alreadyAdded) {
-            allEngagementTweets.push({
-              ...engagement,
-              _engagement_type: engagementType, // Mark the type for later processing
-            });
-            console.log(
-              `[fetch-raid-engagements] Found ${engagementType} engagement:`,
-              engagementId
-            );
-          }
-        } else {
-          // Log engagements that couldn't be identified
-          console.log(
-            `[fetch-raid-engagements] Could not identify engagement type:`,
-            {
-              tweet_id: engagementId,
-              in_reply_to: engagement.in_reply_to_status_id_str,
-              has_retweeted_tweet: !!engagement.retweeted_tweet,
-              has_retweeted: !!engagement.retweeted,
-              has_quoted: !!engagement.quoted,
-              quoted_tweet_id: engagement.quoted?.tweet_id,
-              quoted_id: engagement.quoted?.id,
-              quoted_status_id_str: engagement.quoted_status_id_str,
-              has_text: !!engagement.text,
-              keys: Object.keys(engagement).slice(0, 20),
-            }
-          );
-        }
-      }
-
-      console.log(
-        `[fetch-raid-engagements] Processed engagements from latest_replies.php:`,
-        {
-          total: allEngagements.length,
-          identified: allEngagementTweets.length,
-          byType: {
-            comments: allEngagementTweets.filter(
-              (e) => e._engagement_type === "comment"
-            ).length,
-            retweets: allEngagementTweets.filter(
-              (e) => e._engagement_type === "retweet"
-            ).length,
-            quoteReposts: allEngagementTweets.filter(
-              (e) => e._engagement_type === "quote_repost"
-            ).length,
-          },
-        }
-      );
-    } catch (repliesError: any) {
-      console.error(
-        "[fetch-raid-engagements] Error fetching replies:",
-        repliesError.message
-      );
-      // Continue with other engagement types
-    }
-
-    // 4c. Also fetch retweets using retweets.php as a fallback
-    try {
-      const retweetsOptions = {
-        method: "GET",
-        url: `https://${rapidApiHost}/retweets.php`,
-        params: {
-          id: targetTweetId,
-        },
-      };
-
-      const retweetsResponse = await rapidApiRequest(retweetsOptions);
-      const retweetsData = retweetsResponse.data;
-
-      let retweetsFromEndpoint: any[] = [];
-
-      if (Array.isArray(retweetsData?.retweets)) {
-        retweetsFromEndpoint = retweetsData.retweets;
-      } else if (Array.isArray(retweetsData?.timeline)) {
-        retweetsFromEndpoint = retweetsData.timeline;
-      } else if (Array.isArray(retweetsData)) {
-        retweetsFromEndpoint = retweetsData;
-      }
-
-      console.log(
-        `[fetch-raid-engagements] Found ${retweetsFromEndpoint.length} retweets from retweets.php`
-      );
-      console.log(`[fetch-raid-engagements] Retweets API response structure:`, {
-        hasTimeline: !!retweetsData?.timeline,
-        hasUsers: !!retweetsData?.users,
-        hasRetweets: !!retweetsData?.retweets,
-        isArray: Array.isArray(retweetsData),
-        keys: retweetsData ? Object.keys(retweetsData) : [],
-        sampleRetweet: retweetsFromEndpoint[0]
-          ? {
-              keys: Object.keys(retweetsFromEndpoint[0]),
-              tweet_id: retweetsFromEndpoint[0].tweet_id,
-              id: retweetsFromEndpoint[0].id,
-              rest_id: retweetsFromEndpoint[0].rest_id,
-              screen_name: retweetsFromEndpoint[0].screen_name,
-            }
-          : null,
-      });
-
-      for (const retweet of retweetsFromEndpoint) {
-        // Get tweet ID - might be in different fields
-        const tweetId =
-          retweet.tweet_id ||
-          retweet.id ||
-          retweet.rest_id ||
-          retweet.retweet_id;
-
-        // If it's a user object (has screen_name but no tweet_id), we need to fetch their timeline
-        const isUserObject = retweet.screen_name && !tweetId;
-
-        if (isUserObject) {
-          // This is a user object - we need to fetch their timeline to find the retweet
-          const username = retweet.screen_name;
-          if (
-            batchParticipantUsernames &&
-            !batchParticipantUsernames.has(username.toLowerCase())
-          ) {
-            continue; // Skip: not in this batch
-          }
-          console.log(
-            `[fetch-raid-engagements] Retweet is user object (${username}), fetching their timeline to find retweet`
-          );
-
-          try {
-            // Get join date for this participant
-            const participantData = activeParticipants.find(
-              (p) =>
-                p.twitter_username?.replace("@", "").toLowerCase() ===
-                username.toLowerCase()
-            );
-            const joinDate = participantData?.joined_at
-              ? new Date(participantData.joined_at)
-              : null;
-
-            // Fetch ALL tweets up to join date using pagination
-            let allUserTimelineTweets: any[] = [];
-            let cursor: string | null = null;
-            let hasMorePages = true;
-            let pageCount = 0;
-            const MAX_PAGES = 50; // Safety limit
-
-            while (hasMorePages && pageCount < MAX_PAGES) {
-              const userTimelineOptions: any = {
-                method: "GET",
-                url: `https://${rapidApiHost}/replies.php`,
-                params: {
-                  screenname: username,
-                },
-              };
-
-              // Add cursor for pagination (if not first page)
-              if (cursor) {
-                userTimelineOptions.params.cursor = cursor;
-              }
-
-              const userTimelineResponse = await rapidApiRequest(
-                userTimelineOptions
-              );
-              const userTimelineData = userTimelineResponse.data;
-              const pageTimeline = Array.isArray(userTimelineData?.timeline)
-                ? userTimelineData.timeline
-                : [];
-
-              // Add tweets from this page
-              allUserTimelineTweets.push(...pageTimeline);
-
-              // Check if we've reached the join date
-              if (joinDate && pageTimeline.length > 0) {
-                const oldestTweet = pageTimeline[pageTimeline.length - 1];
-                const oldestTweetDate = oldestTweet?.created_at
-                  ? new Date(oldestTweet.created_at)
-                  : null;
-
-                // If oldest tweet in this page is before join date, we've fetched enough
-                if (oldestTweetDate && oldestTweetDate < joinDate) {
-                  console.log(
-                    `[fetch-raid-engagements] Reached join date for ${username}. Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
-                  );
-                  hasMorePages = false;
-                  break;
-                }
-              }
-
-              // Check for next cursor
-              const nextCursor = userTimelineData?.next_cursor;
-              if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
-                hasMorePages = false;
-              } else {
-                cursor = nextCursor;
-                pageCount++;
-              }
-            }
-
-            const userTimeline = allUserTimelineTweets;
-
-            // Find the retweet in their timeline
-            for (const tweet of userTimeline) {
-              const isRetweetOfTarget =
-                tweet.retweeted_tweet?.tweet_id === targetTweetId ||
-                tweet.retweeted?.id === targetTweetId ||
-                tweet.retweeted?.tweet_id === targetTweetId ||
-                tweet.retweeted_status_id_str === targetTweetId ||
-                tweet.retweeted_status_id === targetTweetId;
-
-              if (isRetweetOfTarget) {
-                const retweetId = tweet.tweet_id || tweet.id;
-                // Check if we already added this
-                const alreadyAdded = allEngagementTweets.some(
-                  (e) => (e.tweet_id || e.id) === retweetId
-                );
-
-                if (!alreadyAdded) {
-                  allEngagementTweets.push({
-                    ...tweet,
-                    _engagement_type: "retweet",
-                  });
-                  console.log(
-                    `[fetch-raid-engagements] Found retweet from ${username}:`,
-                    retweetId
-                  );
-                  break; // Found the retweet, no need to continue
-                }
-              }
-            }
-          } catch (userTimelineError: any) {
-            console.error(
-              `[fetch-raid-engagements] Error fetching timeline for ${username}:`,
-              userTimelineError.message
-            );
-          }
-          continue; // Skip the user object itself
-        }
-
-        // If it's from retweets.php endpoint, it's a retweet of the target by definition
-        // But we still check to be safe
-        const isRetweetOfTarget =
-          retweet.retweeted_tweet?.tweet_id === targetTweetId ||
-          retweet.retweeted?.id === targetTweetId ||
-          retweet.retweeted?.tweet_id === targetTweetId ||
-          retweet.retweeted_status_id_str === targetTweetId ||
-          retweet.retweeted_status_id === targetTweetId ||
-          !tweetId; // If no tweet_id but it's from retweets.php, assume it's a retweet
-
-        // If it's from retweets.php, add it as a retweet (even if we can't verify the target)
-        if (tweetId || isRetweetOfTarget) {
-          // Check if we already added this (from latest_replies.php)
-          const alreadyAdded = allEngagementTweets.some(
-            (e) => (e.tweet_id || e.id) === tweetId
-          );
-
-          if (!alreadyAdded) {
-            allEngagementTweets.push({
-              ...retweet,
-              tweet_id: tweetId || retweet.tweet_id || retweet.id, // Ensure tweet_id is set
-              _engagement_type: "retweet", // Mark as retweet
-            });
-            console.log(
-              `[fetch-raid-engagements] Added retweet from retweets.php:`,
-              tweetId || "unknown"
-            );
-          } else {
-            console.log(
-              `[fetch-raid-engagements] Retweet already added from latest_replies.php:`,
-              tweetId
-            );
-          }
-        } else {
-          console.log(
-            `[fetch-raid-engagements] Skipping retweet (no tweet_id and not verified):`,
-            {
-              hasTweetId: !!tweetId,
-              isRetweetOfTarget,
-              keys: Object.keys(retweet),
-            }
-          );
-        }
-      }
-    } catch (retweetsError: any) {
-      console.error(
-        "[fetch-raid-engagements] Error fetching retweets:",
-        retweetsError.message
-      );
-    }
-
-    // 4d. Search participant timelines for quote reposts (if not already found in latest_replies.php)
-    // Quote reposts might not be in latest_replies.php, so we'll check each participant's timeline
-    // IMPORTANT: We fetch ALL tweets up to join date using pagination. When batching, only this batch's participants.
     console.log(
-      `[fetch-raid-engagements] Checking participant timelines for quote reposts (${
+      `[fetch-raid-engagements] Discovering raid engagements from participant timelines via replies.php (${
         isBatchedRaid
           ? `batch ${(batchIndex ?? 0) + 1}/${totalBatches ?? 1}`
-          : "all"
+          : "all participants"
       })...`
     );
+
     for (const participant of batchParticipants) {
       const username = participant.twitter_username?.replace("@", "");
       if (!username) continue;
 
       try {
-        // Get join date for this participant
         const joinDate = participant.joined_at
           ? new Date(participant.joined_at)
           : null;
 
-        // Fetch ALL tweets up to join date using pagination
         let allUserTimelineTweets: any[] = [];
         let cursor: string | null = null;
         let hasMorePages = true;
         let pageCount = 0;
-        const MAX_PAGES = 50; // Safety limit
+        const MAX_PAGES = 50;
 
         while (hasMorePages && pageCount < MAX_PAGES) {
           const userTimelineOptions: any = {
@@ -1088,7 +789,6 @@ export async function POST(
             },
           };
 
-          // Add cursor for pagination (if not first page)
           if (cursor) {
             userTimelineOptions.params.cursor = cursor;
           }
@@ -1101,27 +801,23 @@ export async function POST(
             ? userTimelineData.timeline
             : [];
 
-          // Add tweets from this page
           allUserTimelineTweets.push(...pageTimeline);
 
-          // Check if we've reached the join date
           if (joinDate && pageTimeline.length > 0) {
             const oldestTweet = pageTimeline[pageTimeline.length - 1];
             const oldestTweetDate = oldestTweet?.created_at
               ? new Date(oldestTweet.created_at)
               : null;
 
-            // If oldest tweet in this page is before join date, we've fetched enough
             if (oldestTweetDate && oldestTweetDate < joinDate) {
               console.log(
-                `[fetch-raid-engagements] Reached join date for ${username} (quote reposts). Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
+                `[fetch-raid-engagements] Reached join date for ${username}. Oldest tweet: ${oldestTweetDate.toISOString()}, Join date: ${joinDate.toISOString()}`
               );
               hasMorePages = false;
               break;
             }
           }
 
-          // Check for next cursor
           const nextCursor = userTimelineData?.next_cursor;
           if (!nextCursor || nextCursor === "0" || nextCursor === 0) {
             hasMorePages = false;
@@ -1131,7 +827,6 @@ export async function POST(
           }
         }
 
-        // Filter tweets to only include those created on or after join date
         const filteredTimeline = joinDate
           ? allUserTimelineTweets.filter((tweet: any) => {
               const tweetDate = tweet.created_at
@@ -1152,46 +847,53 @@ export async function POST(
           } pages`
         );
 
-        const userTimeline = filteredTimeline;
+        for (const tweet of filteredTimeline) {
+          const engagementType = classifyRaidEngagementType(
+            tweet,
+            targetTweetId
+          );
+          if (!engagementType) continue;
 
-        // Check for quote reposts of the target tweet
-        for (const tweet of userTimeline) {
-          const isQuoteRepost =
-            (tweet.quoted?.tweet_id === targetTweetId ||
-              tweet.quoted?.id === targetTweetId ||
-              tweet.quoted_status_id_str === targetTweetId ||
-              tweet.quoted_status_id === targetTweetId) &&
-            tweet.text && // Has original text
-            !tweet.retweeted_tweet && // Not a retweet
-            !tweet.retweeted && // Not a retweet
-            tweet.in_reply_to_status_id_str !== targetTweetId; // Not a direct reply
-
-          if (isQuoteRepost) {
-            const quoteId = tweet.tweet_id || tweet.id;
-            // Check if we already added this
-            const alreadyAdded = allEngagementTweets.some(
-              (e) => (e.tweet_id || e.id) === quoteId
+          const engagementId = tweet.tweet_id || tweet.id;
+          const alreadyAdded = allEngagementTweets.some(
+            (e) => (e.tweet_id || e.id) === engagementId
+          );
+          if (!alreadyAdded) {
+            allEngagementTweets.push({
+              ...tweet,
+              _engagement_type: engagementType,
+            });
+            console.log(
+              `[fetch-raid-engagements] Found ${engagementType} from ${username}:`,
+              engagementId
             );
-
-            if (!alreadyAdded) {
-              allEngagementTweets.push({
-                ...tweet,
-                _engagement_type: "quote_repost",
-              });
-              console.log(
-                `[fetch-raid-engagements] Found quote repost from ${username}:`,
-                quoteId
-              );
-            }
           }
         }
-      } catch (quoteError: any) {
+      } catch (timelineError: any) {
         console.error(
-          `[fetch-raid-engagements] Error checking quote reposts for ${username}:`,
-          quoteError.message
+          `[fetch-raid-engagements] Error fetching timeline for ${username}:`,
+          timelineError.message
         );
       }
     }
+
+    console.log(
+      `[fetch-raid-engagements] Processed engagements from participant replies.php timelines:`,
+      {
+        identified: allEngagementTweets.length,
+        byType: {
+          comments: allEngagementTweets.filter(
+            (e) => e._engagement_type === "comment"
+          ).length,
+          retweets: allEngagementTweets.filter(
+            (e) => e._engagement_type === "retweet"
+          ).length,
+          quoteReposts: allEngagementTweets.filter(
+            (e) => e._engagement_type === "quote_repost"
+          ).length,
+        },
+      }
+    );
 
     console.log(
       `[fetch-raid-engagements] Total direct engagements found: ${allEngagementTweets.length}`
@@ -1431,7 +1133,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_tweets")
         .select(
-          "tweet_id, creator_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible"
+          "tweet_id, creator_id, moderation_status, manual_points_adjustment, manual_points_reason, is_eligible, deleted_at"
         )
         .eq("contest_id", contestId)
         .not("target_tweet_id", "is", null); // Only raid engagements (those with target_tweet_id)
@@ -1474,7 +1176,11 @@ export async function POST(
     const existingRaidEngagementCountsByCreator = new Map<string, number>();
     if (existingRaidEngagements) {
       existingRaidEngagements.forEach((engagement: any) => {
-        if (!engagement.creator_id || !engagement.is_eligible) {
+        if (
+          !engagement.creator_id ||
+          !engagement.is_eligible ||
+          engagement.deleted_at
+        ) {
           return;
         }
         const currentCount =
@@ -1634,10 +1340,12 @@ export async function POST(
       // - For CPM contests: Use brand-assigned base points and multipliers from points_config
       // - For leaderboard contests: Use hardcoded RAID_POINTS_CONFIG base points and multipliers
       const basePoints = calculateBasePoints(engagementType, raidPointsConfig);
+      const leafMetrics = getTweetLeafPublicMetrics(tweet);
       const engagementBonusPoints = calculateEngagementBonusPoints(
         tweet,
         engagementType,
-        raidPointsConfig
+        raidPointsConfig,
+        leafMetrics
       );
 
       // Handle different field names from API
@@ -1673,19 +1381,20 @@ export async function POST(
             : engagementType,
         target_tweet_id: targetTweetId, // Mark as raid engagement
 
-        // Metrics - always update from fresh API data
-        likes: tweet.likes || tweet.favorites || tweet.favorite_count || 0,
-        replies: tweet.replies || tweet.reply_count || 0,
-        retweets: tweet.retweets || tweet.retweet_count || 0,
-        quote_reposts: tweet.quotes || tweet.quote_count || 0,
-        impressions: parseInt(tweet.views || tweet.view_count || "0", 10),
+        // Metrics — leaf post only (avoid parent/target tweet counts on RT shells)
+        likes: leafMetrics.likes,
+        replies: leafMetrics.replies,
+        retweets: leafMetrics.retweets,
+        quote_reposts: leafMetrics.quotes,
+        impressions: leafMetrics.impressions,
         points: Math.round(basePoints + engagementBonusPoints), // Recalculate based on fresh metrics
         points_calculated_at: new Date().toISOString(),
 
         // Eligibility - re-check based on current data (passed filter, so eligible)
         is_eligible: true,
         eligibility_reason: `Raid engagement: ${engagementType} on target tweet`,
-        filter_status: "eligible",
+        deleted_at: null,
+        excluded_by_submission_cap: false,
 
         // PRESERVE moderation fields if they exist, otherwise default
         moderation_status: existingModeration?.moderation_status || "pending",
@@ -1799,10 +1508,8 @@ export async function POST(
           .from("twitter_campaign_tweets")
           .update({
             is_eligible: false,
-            filter_status: "deleted",
-            is_deleted: true,
             deleted_at: deletionTimestamp,
-            deletion_detected_at: deletionTimestamp,
+            excluded_by_submission_cap: false,
             eligibility_reason:
               "Engagement not found in complete paginated fetch up to join date - likely deleted from Twitter",
             // DO NOT update moderation_status - preserve it!
@@ -1849,17 +1556,27 @@ export async function POST(
         `[fetch-raid-engagements] Enforcing raid submission cap (${maxSubmissionsPerCreator}) per creator`
       );
 
-      const {
-        data: eligibleRaidEngagements,
-        error: eligibleRaidEngagementsError,
-      } = await supabaseAdmin
+      let eligibleRaidEngagementsQuery = supabaseAdmin
         .from("twitter_campaign_tweets")
         .select("creator_id, tweet_id, tweet_created_at")
         .eq("contest_id", contestId)
         .eq("is_eligible", true)
+        .is("deleted_at", null)
         .not("target_tweet_id", "is", null) // Only raid engagements
         .order("creator_id", { ascending: true })
         .order("tweet_created_at", { ascending: false }); // Newest first
+
+      if (creatorIdOnly && creatorId) {
+        eligibleRaidEngagementsQuery = eligibleRaidEngagementsQuery.eq(
+          "creator_id",
+          creatorId
+        );
+      }
+
+      const {
+        data: eligibleRaidEngagements,
+        error: eligibleRaidEngagementsError,
+      } = await eligibleRaidEngagementsQuery;
 
       if (eligibleRaidEngagementsError) {
         console.error(
@@ -1904,7 +1621,7 @@ export async function POST(
             .from("twitter_campaign_tweets")
             .update({
               is_eligible: false,
-              filter_status: "filtered_out",
+              excluded_by_submission_cap: true,
               eligibility_reason:
                 "Replaced by newer raid engagements due to submission cap",
             })
@@ -1947,6 +1664,7 @@ export async function POST(
       .select("likes, replies, retweets, quote_reposts, impressions, points")
       .eq("contest_id", contestId)
       .eq("is_eligible", true)
+      .is("deleted_at", null)
       .not("target_tweet_id", "is", null); // Only raid engagements
 
     let totalLikes = 0;
@@ -1968,91 +1686,93 @@ export async function POST(
     }
 
     // 9. Update leaderboard with raid engagement points
-    await updateRaidLeaderboard(contestId, supabaseAdmin);
+    await updateRaidLeaderboard(contestId, supabaseAdmin, creatorIdOnly ? creatorId : undefined);
 
-    // 10. Update total_* metrics and total_filtered_tweets in metrics table
-    const { count: filteredTweetsCount } = await supabaseAdmin
-      .from("twitter_campaign_tweets")
-      .select("*", { count: "exact", head: true })
-      .eq("contest_id", contestId)
-      .eq("is_eligible", true)
-      .not("target_tweet_id", "is", null); // Only raid engagements
+    // 10. Update total_* metrics and last_metrics_updated in contests table.
+    // Creator-only raid refresh should NOT touch contest-level cooldown.
+    if (!creatorIdOnly) {
+      // Use upsert instead of update to create row if it doesn't exist
+      const { count: filteredTweetsCount } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("*", { count: "exact", head: true })
+        .eq("contest_id", contestId)
+        .eq("is_eligible", true)
+        .is("deleted_at", null)
+        .not("target_tweet_id", "is", null); // Only raid engagements
 
-    // Get total participants count (excluding rejected creators)
-    // First get all active participants
-    const { data: allParticipants } = await supabaseAdmin
-      .from("twitter_campaign_participants")
-      .select("creator_id")
-      .eq("contest_id", contestId)
-      .eq("is_active", true);
+      // Get total participants count (excluding rejected creators)
+      const { data: allParticipants } = await supabaseAdmin
+        .from("twitter_campaign_participants")
+        .select("creator_id")
+        .eq("contest_id", contestId)
+        .eq("is_active", true);
 
-    // Get rejected creator IDs
-    const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
-    const { data: allLeaderboardData } = await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select("creator_id, moderation_status")
-      .eq("contest_id", contestId)
-      .in("creator_id", allCreatorIds);
+      const allCreatorIds = (allParticipants || []).map((p) => p.creator_id);
+      const { data: allLeaderboardData } = await supabaseAdmin
+        .from("twitter_campaign_leaderboard")
+        .select("creator_id, moderation_status")
+        .eq("contest_id", contestId)
+        .in("creator_id", allCreatorIds);
 
-    const rejectedCreatorIdsSet = new Set(
-      (allLeaderboardData || [])
-        .filter((entry) => entry.moderation_status === "rejected")
-        .map((entry) => entry.creator_id)
-    );
-
-    // Count only non-rejected participants
-    const totalParticipants = (allParticipants || []).filter(
-      (p) => !rejectedCreatorIdsSet.has(p.creator_id)
-    ).length;
-
-    // Use upsert instead of update to create row if it doesn't exist
-    await supabaseAdmin.from("twitter_campaign_metrics").upsert(
-      {
-        contest_id: contestId,
-        campaign_type: "raid", // Required field - we know this is a raid campaign
-        total_filtered_tweets: filteredTweetsCount || 0,
-        total_participants: totalParticipants || 0,
-        total_likes: totalLikes,
-        total_replies: totalReplies,
-        total_retweets: totalRetweets,
-        total_quote_reposts: totalQuoteReposts,
-        total_impressions: totalImpressions,
-        total_points: totalPoints,
-        last_updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "contest_id",
-      }
-    );
-
-    // 11. Update last_metrics_updated in contests table (only when full run or last batch)
-    const isLastRaidBatch =
-      !isBatchedRaid ||
-      (typeof batchIndex === "number" &&
-        typeof totalBatches === "number" &&
-        batchIndex === totalBatches - 1);
-    if (isLastRaidBatch) {
-      const currentTime = new Date().toISOString();
-      console.log(
-        `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
+      const rejectedCreatorIdsSet = new Set(
+        (allLeaderboardData || [])
+          .filter((entry) => entry.moderation_status === "rejected")
+          .map((entry) => entry.creator_id)
       );
 
-      const { data: updateData, error: updateError } = await supabaseAdmin
-        .from("contests")
-        .update({ last_metrics_updated: currentTime })
-        .eq("id", contestId)
-        .select();
+      const totalParticipants = (allParticipants || []).filter(
+        (p) => !rejectedCreatorIdsSet.has(p.creator_id)
+      ).length;
 
-      if (updateError) {
-        console.error(
-          `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
-          updateError
-        );
-        // Don't fail the request, just log the error
-      } else {
+      await supabaseAdmin.from("twitter_campaign_metrics").upsert(
+        {
+          contest_id: contestId,
+          campaign_type: "raid",
+          total_filtered_tweets: filteredTweetsCount || 0,
+          total_participants: totalParticipants || 0,
+          total_likes: totalLikes,
+          total_replies: totalReplies,
+          total_retweets: totalRetweets,
+          total_quote_reposts: totalQuoteReposts,
+          total_impressions: totalImpressions,
+          total_points: totalPoints,
+          last_updated_at: new Date().toISOString(),
+        },
+        { onConflict: "contest_id" }
+      );
+
+      // 11. Finalize once per contest (full run or last batch only).
+      // Mid-batch refresh would N× recount contest_stats for the same campaign.
+      const isLastRaidBatch =
+        !isBatchedRaid ||
+        (typeof batchIndex === "number" &&
+          typeof totalBatches === "number" &&
+          batchIndex === totalBatches - 1);
+
+      if (isLastRaidBatch) {
+        await refreshContestStats(contestId);
+        await persistContestBudgetSpent(contestId);
+
+        const currentTime = new Date().toISOString();
         console.log(
-          `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+          `[fetch-raid-engagements] Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime}`
         );
+
+        const { error: updateError } = await supabaseAdmin
+          .from("contests")
+          .update({ last_metrics_updated: currentTime })
+          .eq("id", contestId);
+
+        if (updateError) {
+          console.error(
+            `[fetch-raid-engagements] Failed to update last_metrics_updated for contest ${contestId}:`,
+            updateError
+          );
+        } else {
+          console.log(
+            `[fetch-raid-engagements] Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+          );
+        }
       }
     }
 
@@ -2069,6 +1789,8 @@ export async function POST(
       typeof batchIndex === "number" &&
       typeof totalBatches === "number" &&
       batchIndex + 1 < totalBatches;
+
+    revalidateLeaderboardCache(contestId);
 
     return NextResponse.json({
       success: true,
@@ -2114,14 +1836,15 @@ function calculateBasePoints(
 function calculateEngagementBonusPoints(
   tweet: any,
   engagementType: "comment" | "retweet" | "quote_repost",
-  pointsConfig: typeof RAID_POINTS_CONFIG
+  pointsConfig: typeof RAID_POINTS_CONFIG,
+  leafMetrics?: ReturnType<typeof getTweetLeafPublicMetrics>
 ): number {
-  // Handle different field names from API
-  const likes = tweet.likes || tweet.favorites || tweet.favorite_count || 0;
-  const replies = tweet.replies || tweet.reply_count || 0;
-  const impressions = parseInt(tweet.views || tweet.view_count || "0", 10);
-  const retweets = tweet.retweets || tweet.retweet_count || 0;
-  const quotes = tweet.quotes || tweet.quote_count || 0;
+  const leaf = leafMetrics ?? getTweetLeafPublicMetrics(tweet);
+  const likes = leaf.likes;
+  const replies = leaf.replies;
+  const impressions = leaf.impressions;
+  const retweets = leaf.retweets;
+  const quotes = leaf.quotes;
   // const bookmarks = tweet.bookmarks || tweet.bookmark_count || 0; // If available in future
 
   if (engagementType === "comment") {
@@ -2162,17 +1885,25 @@ function calculateEngagementBonusPoints(
 // Helper function to update leaderboard with raid engagement points
 async function updateRaidLeaderboard(
   contestId: string,
-  supabaseAdmin: any
+  supabaseAdmin: any,
+  creatorId?: string
 ): Promise<void> {
   // Aggregate points AND metrics from twitter_campaign_tweets where target_tweet_id is set (raid engagements)
-  const { data: raidEngagements, error: raidError } = await supabaseAdmin
+  let raidEngagementsQuery = supabaseAdmin
     .from("twitter_campaign_tweets")
     .select(
       "creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment"
     )
     .eq("contest_id", contestId)
     .eq("is_eligible", true)
+    .is("deleted_at", null)
     .not("target_tweet_id", "is", null);
+
+  if (creatorId) {
+    raidEngagementsQuery = raidEngagementsQuery.eq("creator_id", creatorId);
+  }
+
+  const { data: raidEngagements, error: raidError } = await raidEngagementsQuery;
 
   if (raidError) {
     console.error(
@@ -2231,13 +1962,19 @@ async function updateRaidLeaderboard(
   }
 
   // Get existing leaderboard entries (to preserve manual adjustments)
+  let existingLeaderboardQuery = supabaseAdmin
+    .from("twitter_campaign_leaderboard")
+    .select(
+      "creator_id, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, manual_points_adjustment"
+    )
+    .eq("contest_id", contestId);
+
+  if (creatorId) {
+    existingLeaderboardQuery = existingLeaderboardQuery.eq("creator_id", creatorId);
+  }
+
   const { data: existingLeaderboard, error: leaderboardError } =
-    await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select(
-        "creator_id, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, manual_points_adjustment"
-      )
-      .eq("contest_id", contestId);
+    await existingLeaderboardQuery;
 
   if (leaderboardError) {
     console.error(
@@ -2248,14 +1985,21 @@ async function updateRaidLeaderboard(
   }
 
   // Get regular tweet points and metrics (non-raid tweets)
-  const { data: regularTweets } = await supabaseAdmin
+  let regularTweetsQuery = supabaseAdmin
     .from("twitter_campaign_tweets")
     .select(
       "creator_id, points, likes, replies, retweets, quote_reposts, impressions, moderation_status, manual_points_adjustment"
     )
     .eq("contest_id", contestId)
     .eq("is_eligible", true)
+    .is("deleted_at", null)
     .is("target_tweet_id", null);
+
+  if (creatorId) {
+    regularTweetsQuery = regularTweetsQuery.eq("creator_id", creatorId);
+  }
+
+  const { data: regularTweets } = await regularTweetsQuery;
 
   const regularDataByCreator = new Map<
     string,
@@ -2372,7 +2116,7 @@ async function updateRaidLeaderboard(
   leaderboardUpdates.forEach((entry, index) => {
     entry.current_rank = index + 1;
     entry.last_refreshed_at = new Date().toISOString();
-    const cooldownMs = 5 * 60 * 1000; // 5 minutes
+    const cooldownMs = creatorId ? 2 * 60 * 60 * 1000 : 5 * 60 * 1000; // 2h for creator-only; 5m for full refresh
     entry.next_refresh_available_at = new Date(
       Date.now() + cooldownMs
     ).toISOString();
@@ -2395,6 +2139,10 @@ async function updateRaidLeaderboard(
       console.log(
         `[updateRaidLeaderboard] Updated leaderboard for ${leaderboardUpdates.length} creators`
       );
+      // Creator-only upsert only touched one row; ranks must reflect full contest ordering.
+      if (creatorId) {
+        await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
+      }
     }
   }
 }

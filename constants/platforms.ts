@@ -6,7 +6,7 @@
  * and update the related types.
  */
 
-export type PlatformType = "youtube" | "instagram" | "twitter";
+export type PlatformType = "youtube" | "instagram" | "twitter" | "tiktok";
 
 export type ContestFormat = "video" | "text_image";
 
@@ -51,6 +51,15 @@ export const PLATFORMS: Record<PlatformType, PlatformConfig> = {
     requiresOAuth: false, // Uses RapidAPI instead
     contentType: "text",
     iconColor: "#1DA1F2",
+  },
+  tiktok: {
+    id: "tiktok",
+    name: "tiktok",
+    displayName: "TikTok",
+    supportedFormats: ["video"],
+    requiresOAuth: true,
+    contentType: "video",
+    iconColor: "#000000",
   },
 };
 

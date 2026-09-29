@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { creditUserWithdrawableBalance } from "@/lib/payment-utils";
 
 interface ManualEntryRequest {
   userId: string;
   transactionType: "coins" | "cash";
   amount: number;
-  cashCategory?: "contest_winnings" | "other_earnings";
+  cashCategory?: "contest_winnings" | "other_earnings" | "affiliate_earnings";
   transactionNote: string;
 }
 
@@ -165,6 +166,37 @@ export async function POST(req: NextRequest) {
       const currentBalance = creatorProfile?.withdrawable_balance || 0;
       const newBalance = currentBalance + amount;
 
+      if (cashCategory === "affiliate_earnings") {
+        const creditRes = await creditUserWithdrawableBalance(
+          userId,
+          amount,
+          transactionNote.trim(),
+          {
+            remarks: "Admin manual credit - affiliate_earnings",
+            metadata: {
+              category: "affiliate_earnings",
+              manual_entry: true,
+              admin_id: adminUserId,
+            },
+          }
+        );
+        if (!creditRes.success) {
+          return NextResponse.json(
+            { error: creditRes.error || "Failed to credit affiliate earnings" },
+            { status: 500 }
+          );
+        }
+        return NextResponse.json({
+          success: true,
+          message: "Cash credited successfully",
+          data: {
+            userId,
+            newWithdrawableBalance: creditRes.newBalance,
+            category: cashCategory,
+          },
+        });
+      }
+
       // Prepare update object for creator_profiles
       const updateData: any = {
         withdrawable_balance: newBalance,
@@ -178,7 +210,7 @@ export async function POST(req: NextRequest) {
         const newTotalWon = currentTotalWon + amount;
         updateData.total_money_won = newTotalWon;
       } else if (cashCategory === "other_earnings") {
-        // For other earnings, update other_earnings in users table
+        // Bonuses, coupons, Discord codes, etc. — users.other_earnings only (not affiliate, not contest wins)
         // First, get current other_earnings from users table
         const { data: currentUser, error: userFetchError } = await supabase
           .from("users")

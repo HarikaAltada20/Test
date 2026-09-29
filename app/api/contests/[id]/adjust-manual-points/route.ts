@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
 
 /**
  * POST /api/contests/[id]/adjust-manual-points
@@ -176,7 +177,7 @@ export async function POST(
       }
 
       // Re-rank so leaderboard order reflects new total_points
-      await rerankTwitterLeaderboard(contestId, supabaseAdmin);
+      await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
     }
 
     return NextResponse.json({
@@ -218,6 +219,7 @@ async function recalculateTwitterLeaderboard(
     .eq("contest_id", contestId)
     .eq("creator_id", creatorId)
     .eq("is_eligible", true)
+    .is("deleted_at", null)
     .in("moderation_status", ["pending", "verified"]); // Only count pending/verified
 
   // Calculate total points (base from tweets + tweet manual + leaderboard manual)
@@ -268,38 +270,5 @@ async function recalculateTwitterLeaderboard(
       }
     );
 
-  // Re-rank all creators
-  await rerankTwitterLeaderboard(contestId, supabaseAdmin);
+  await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
 }
-
-/**
- * Re-rank all creators in the leaderboard
- */
-async function rerankTwitterLeaderboard(
-  contestId: string,
-  supabaseAdmin: any
-): Promise<void> {
-  const { data: allEntries } = await supabaseAdmin
-    .from("twitter_campaign_leaderboard")
-    .select("creator_id, total_points")
-    .eq("contest_id", contestId)
-    .order("total_points", { ascending: false });
-
-  if (!allEntries) return;
-
-  // Update ranks
-  const updates = allEntries.map((entry: any, index: number) => ({
-    contest_id: contestId,
-    creator_id: entry.creator_id,
-    current_rank: index + 1,
-  }));
-
-  for (const update of updates) {
-    await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .update({ current_rank: update.current_rank })
-      .eq("contest_id", update.contest_id)
-      .eq("creator_id", update.creator_id);
-  }
-}
-

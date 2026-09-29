@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export interface Submission {
   id: string;
@@ -9,7 +10,9 @@ export interface Submission {
   creator_id: string;
   created_at: string;
   status?: string;
-  filter_status?: string;
+  /** Twitter: campaign-eligible row (is_eligible + not soft-deleted) */
+  is_eligible?: boolean;
+  deleted_at?: string | null;
   views?: number;
   platform?: string;
   other_stats?: any;
@@ -89,6 +92,56 @@ export async function getActiveContestCount(
   }
 }
 
+export async function getActiveContestCountAsAdmin(
+  userId: string,
+): Promise<ActiveContestCountResult> {
+  try {
+    const supabase = createAdminClient();
+    const { data: contests, error } = await supabase
+      .from("contests_with_status")
+      .select("id, moderation_status, status")
+      .eq("advertiser_id", userId);
+
+    if (error) {
+      console.error("Error fetching contests for active count (admin):", error);
+      return {
+        success: false,
+        activeCount: 0,
+        error: "Failed to fetch contests",
+      };
+    }
+
+    if (!contests) {
+      return { success: true, activeCount: 0 };
+    }
+
+    const activeContests = contests.filter((contest) => {
+      if (
+        contest.moderation_status === "pending_approval" ||
+        contest.moderation_status === "approved"
+      ) {
+        return true;
+      }
+      if (contest.moderation_status === "published") {
+        return contest.status === "upcoming" || contest.status === "active";
+      }
+      return false;
+    });
+
+    return {
+      success: true,
+      activeCount: activeContests.length,
+    };
+  } catch (error) {
+    console.error("Error in getActiveContestCountAsAdmin:", error);
+    return {
+      success: false,
+      activeCount: 0,
+      error: "Unknown error occurred",
+    };
+  }
+}
+
 /**
  * Check if user can create a new contest based on their plan limits
  * @param userId - The user's ID
@@ -145,6 +198,54 @@ export async function canCreateNewContest(
   };
 }
 
+export async function canCreateNewContestAsAdmin(
+  userId: string,
+  maxActiveContests: number,
+  excludeContestId?: string,
+): Promise<{ canCreate: boolean; currentCount: number; error?: string }> {
+  const result = await getActiveContestCountAsAdmin(userId);
+
+  if (!result.success) {
+    return {
+      canCreate: false,
+      currentCount: 0,
+      error: result.error,
+    };
+  }
+
+  let adjustedCount = result.activeCount;
+  if (excludeContestId) {
+    const supabase = createAdminClient();
+    const { data: contest } = await supabase
+      .from("contests_with_status")
+      .select("id, moderation_status, status")
+      .eq("id", excludeContestId)
+      .maybeSingle();
+
+    if (contest) {
+      const isCurrentlyActive =
+        contest.moderation_status === "pending_approval" ||
+        contest.moderation_status === "approved" ||
+        (contest.moderation_status === "published" &&
+          (contest.status === "upcoming" || contest.status === "active"));
+
+      if (isCurrentlyActive) {
+        adjustedCount = Math.max(0, adjustedCount - 1);
+      }
+    }
+  }
+
+  const canCreate = adjustedCount < maxActiveContests;
+
+  return {
+    canCreate,
+    currentCount: adjustedCount,
+    error: canCreate
+      ? undefined
+      : `This brand has reached their plan limit of ${maxActiveContests} active campaigns (${adjustedCount} active).`,
+  };
+}
+
 /**
  * Get commission amount based on plan percentage and prize pool
  */
@@ -179,11 +280,17 @@ export function calculateLeaderboardBudgetSpent(
 ): number {
   if (!submissions?.length || flatFeeBonus <= 0) return 0;
 
-  // Filter to verified or paid submissions, but exclude filtered_out ones
+  const twitterExcludedFromBudget = (s: Submission) =>
+    (s as any).is_twitter_tweet === true || s.platform === "twitter"
+      ? s.is_eligible === false ||
+        (s.deleted_at != null && s.deleted_at !== "")
+      : false;
+
   const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
-    const filterStatus = s.filter_status?.toLowerCase();
-    return (status === "verified" || status === "paid") && filterStatus !== "filtered_out";
+    return (
+      (status === "verified" || status === "paid") && !twitterExcludedFromBudget(s)
+    );
   });
 
   // Sort by created_at to respect "first submitted, first paid" logic
@@ -251,11 +358,17 @@ export function calculateTwitterCpmBudgetSpent(
     return 0;
   }
 
-  // Filter to verified or paid submissions, but exclude filtered_out ones
+  const twitterExcludedFromBudget = (s: Submission) =>
+    (s as any).is_twitter_tweet === true || s.platform === "twitter"
+      ? s.is_eligible === false ||
+        (s.deleted_at != null && s.deleted_at !== "")
+      : false;
+
   const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
-    const filterStatus = s.filter_status?.toLowerCase();
-    return (status === "verified" || status === "paid") && filterStatus !== "filtered_out";
+    return (
+      (status === "verified" || status === "paid") && !twitterExcludedFromBudget(s)
+    );
   });
 
   // console.log(
@@ -368,15 +481,15 @@ export function calculateTwitterCpmBudgetSpent(
         //     newTotal: creatorData.cpmTotal.toFixed(2),
         //   }
         // );
-      } else {
-        console.log(
-          `[Twitter CPM Budget] Creator cap reached for ${creatorId}:`,
-          {
-            maxEarningsPerCreator: maxInDollars.toFixed(2),
-            currentTotal: creatorData.cpmTotal.toFixed(2),
-            submissionEarnings: submissionEarnings.toFixed(2),
-          }
-        );
+      } else if (process.env.NODE_ENV === "development") {
+        // console.log(
+        //   `[Twitter CPM Budget] Creator cap reached for ${creatorId}:`,
+        //   {
+        //     maxEarningsPerCreator: maxInDollars.toFixed(2),
+        //     currentTotal: creatorData.cpmTotal.toFixed(2),
+        //     submissionEarnings: submissionEarnings.toFixed(2),
+        //   },
+        // );
       }
     } else {
       creatorData.cpmTotal += submissionEarnings;

@@ -17,7 +17,6 @@ create table public.twitter_campaign_leaderboard (
   manual_points_reason text null,
   moderation_status text null default 'pending'::text,
   rejection_reason text null,
-  paid boolean null default false,
   paid_at timestamp with time zone null,
   earnings integer null default 0,
   paid_rank integer null,
@@ -31,7 +30,8 @@ create table public.twitter_campaign_leaderboard (
         array[
           'pending'::text,
           'verified'::text,
-          'rejected'::text
+          'rejected'::text,
+          'paid'::text
         ]
       )
     )
@@ -50,6 +50,6 @@ create index IF not exists idx_twitter_leaderboard_moderation_status on public.t
 where
   (moderation_status is not null);
 
-create index IF not exists idx_twitter_leaderboard_paid on public.twitter_campaign_leaderboard using btree (contest_id, paid) TABLESPACE pg_default
+create index IF not exists idx_twitter_leaderboard_moderation_paid on public.twitter_campaign_leaderboard using btree (contest_id) TABLESPACE pg_default
 where
-  (paid = true);
+  (moderation_status = 'paid'::text);

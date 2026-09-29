@@ -176,3 +176,34 @@ export function isContestEnded(status?: string | null): boolean {
   const normalized = status?.toLowerCase();
   return normalized === "ended" || normalized === "completed";
 }
+
+/**
+ * Sanitizes a filename by replacing non-alphanumeric characters with underscores,
+ * collapsing multiple underscores, and trimming leading/trailing underscores.
+ * @param filename - The filename to sanitize
+ * @returns The sanitized filename string
+ */
+export function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[^a-z0-9]/gi, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .substring(0, 100);
+}
+
+/**
+ * Filename based on view count so downloaded videos sort by popularity.
+ * Zero-pads so lexical sort matches numeric order (e.g. 999 < 1500).
+ * Optional suffix disambiguates equal view counts in the same ZIP.
+ */
+export function buildViewsBasedVideoFilename(
+  views: number | null | undefined,
+  uniqueSuffix?: string | null,
+): string {
+  const n = Math.max(0, Math.floor(Number(views) || 0));
+  const padded = String(n).padStart(12, "0");
+  if (uniqueSuffix) {
+    return sanitizeFilename(`${padded}_${String(uniqueSuffix).slice(0, 12)}`);
+  }
+  return padded;
+}

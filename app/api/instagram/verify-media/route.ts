@@ -19,6 +19,13 @@ interface InstagramMediaInfo {
     username?: string; // If fetched and available
 }
 
+type InstagramMediaListResponse = {
+  data?: Array<InstagramMediaInfo>;
+  paging?: {
+    next?: string;
+  };
+};
+
 // Function to get an App Access Token (cache this in a real app for performance/rate limits)
 // This function is not used in the POST handler below but kept for potential other uses.
 async function getAppAccessToken() {
@@ -94,7 +101,7 @@ export async function POST(request: Request) {
     let foundMedia: any = null;
 
     while (nextUrl) {
-      const igResponse = await fetch(nextUrl);
+      const igResponse: Response = await fetch(nextUrl);
       if (!igResponse.ok) {
         let errorData;
         try {
@@ -109,7 +116,7 @@ export async function POST(request: Request) {
         }, { status: igResponse.status > 0 ? igResponse.status : 500 });
       }
 
-      const igData = await igResponse.json();
+      const igData = (await igResponse.json()) as InstagramMediaListResponse;
       if (!igData.data || !Array.isArray(igData.data)) {
         console.error('Unexpected response structure from Instagram /media endpoint:', igData);
         return NextResponse.json({ error: 'Unexpected response structure from Instagram when fetching media.' }, { status: 500 });

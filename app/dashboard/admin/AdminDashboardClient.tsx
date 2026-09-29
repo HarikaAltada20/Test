@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,6 +14,10 @@ import {
   Eye,
   Info,
   FileText,
+  RefreshCw,
+  Loader2,
+  Users,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Tooltip,
@@ -26,18 +30,19 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
-import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { AdminDateRangePicker } from "@/components/admin/AdminDateRangePicker";
+import {
+  countUniqueCreatorsFromByDay,
+  filterAndFillGrowthByRange,
+  formatGrowthDayLabel,
+  getLastNDaysUtcRange,
+  type SubmissionCreatorsByDay,
+} from "@/lib/admin-date-range";
+import { formatCurrencyFromCents, formatCompactCount } from "@/lib/currency-utils";
 import { Button } from "@/components/ui/button";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ComponentType } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import { CalendarIcon, Check } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -45,17 +50,84 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import {
   endOfMonth,
   endOfYear,
-  format,
   startOfMonth,
   startOfYear,
-  subDays,
   subMonths,
 } from "date-fns";
+
+const GROWTH_CHART_MARGIN = { top: 10, right: 16, left: 0, bottom: 20 };
+
+type GrowthXAxisTickProps = {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+  index?: number;
+};
+
+/** Pick ~6–8 evenly spaced tick indices so 30-day ranges stay readable. */
+function getGrowthXAxisTickIndices(dataLength: number): Set<number> {
+  if (dataLength <= 0) return new Set();
+  if (dataLength <= 8) {
+    return new Set(Array.from({ length: dataLength }, (_, i) => i));
+  }
+
+  const targetTicks =
+    dataLength <= 31 ? 7 : dataLength <= 90 ? 8 : Math.min(10, dataLength);
+  const indices = new Set<number>([0, dataLength - 1]);
+  const innerCount = targetTicks - 2;
+
+  for (let i = 1; i <= innerCount; i++) {
+    indices.add(Math.round((i * (dataLength - 1)) / (innerCount + 1)));
+  }
+
+  return indices;
+}
+
+function createGrowthXAxisTick(isDark: boolean, dataLength: number) {
+  const visibleIndices = getGrowthXAxisTickIndices(dataLength);
+
+  return function GrowthXAxisTick({
+    x = 0,
+    y = 0,
+    payload,
+    index = 0,
+  }: GrowthXAxisTickProps) {
+    if (!visibleIndices.has(index)) {
+      return <g />;
+    }
+
+    const isFirst = index === 0;
+    const isLast = index === dataLength - 1;
+    const textAnchor = isFirst ? "start" : isLast ? "end" : "middle";
+
+    return (
+      <text
+        x={x}
+        y={y}
+        dy={14}
+        textAnchor={textAnchor}
+        fontSize={11}
+        fill={isDark ? "#9CA3AF" : "#6B7280"}
+      >
+        {payload?.value}
+      </text>
+    );
+  };
+}
 
 interface AdminDashboardClientProps {
   totalContests: number;
@@ -79,6 +151,7 @@ interface AdminDashboardClientProps {
   pendingSubmissions: number;
   rejectedSubmissions: number;
   paidSubmissions: number;
+  uniqueCreators: number;
   totalUsers: number;
   totalCreators: number;
   totalBrands: number;
@@ -132,7 +205,164 @@ interface AdminDashboardClientProps {
       admins: number;
     }[];
   };
+  submissionGrowth: StatusGrowthSeries;
+  viewsGrowth: StatusGrowthSeries;
+  contestGrowth: CountGrowthSeries;
+  submissionCreatorsByDay: SubmissionCreatorsByDay[];
 }
+
+type StatusGrowthPoint = {
+  label: string;
+  all: number;
+  verified: number;
+  pending: number;
+  rejected: number;
+  paid: number;
+};
+
+type ChartStatusGrowthPoint = StatusGrowthPoint & {
+  verified_or_paid: number;
+  not_rejected: number;
+};
+
+type StatusGrowthSeries = {
+  byDay: StatusGrowthPoint[];
+  byWeek: StatusGrowthPoint[];
+  byMonth: StatusGrowthPoint[];
+  byYear: StatusGrowthPoint[];
+  byDayFull: (StatusGrowthPoint & { date: string })[];
+};
+
+type CountGrowthPoint = { label: string; all: number };
+
+type CountGrowthSeries = {
+  byDay: CountGrowthPoint[];
+  byWeek: CountGrowthPoint[];
+  byMonth: CountGrowthPoint[];
+  byYear: CountGrowthPoint[];
+  byDayFull: (CountGrowthPoint & { date: string })[];
+};
+
+type StatusFilter =
+  | "all"
+  | "verified"
+  | "pending"
+  | "rejected"
+  | "paid"
+  | "verified_or_paid"
+  | "not_rejected";
+
+const STATUS_SERIES = [
+  { key: "all", label: "All", colorLight: "#7C3AED", colorDark: "#A78BFA" },
+  {
+    key: "verified",
+    label: "Verified",
+    colorLight: "#059669",
+    colorDark: "#34D399",
+  },
+  {
+    key: "pending",
+    label: "Pending",
+    colorLight: "#D97706",
+    colorDark: "#FBBF24",
+  },
+  {
+    key: "rejected",
+    label: "Rejected",
+    colorLight: "#DC2626",
+    colorDark: "#F87171",
+  },
+  { key: "paid", label: "Paid", colorLight: "#2563EB", colorDark: "#60A5FA" },
+] as const;
+
+const COMPOSITE_STATUS_SERIES = [
+  {
+    key: "verified_or_paid",
+    label: "Verified + Paid",
+    colorLight: "#0D9488",
+    colorDark: "#2DD4BF",
+  },
+  {
+    key: "not_rejected",
+    label: "Pending + Verified + Paid",
+    colorLight: "#C026D3",
+    colorDark: "#E879F9",
+  },
+] as const;
+
+const CHART_STATUS_SERIES = [
+  ...STATUS_SERIES,
+  ...COMPOSITE_STATUS_SERIES,
+] as const;
+
+function enrichStatusChartData(
+  data: StatusGrowthPoint[],
+): ChartStatusGrowthPoint[] {
+  return data.map((d) => ({
+    ...d,
+    verified_or_paid: d.verified + d.paid,
+    // Match analytics: pending + verified + paid (excludes rejected/unknown)
+    not_rejected: d.pending + d.verified + d.paid,
+  }));
+}
+
+function toStatusCumulative(data: StatusGrowthPoint[]): StatusGrowthPoint[] {
+  let sumAll = 0;
+  let sumVerified = 0;
+  let sumPending = 0;
+  let sumRejected = 0;
+  let sumPaid = 0;
+  return data.map((d) => {
+    sumAll += d.all;
+    sumVerified += d.verified;
+    sumPending += d.pending;
+    sumRejected += d.rejected;
+    sumPaid += d.paid;
+    return {
+      label: d.label,
+      all: sumAll,
+      verified: sumVerified,
+      pending: sumPending,
+      rejected: sumRejected,
+      paid: sumPaid,
+    };
+  });
+}
+
+type GrowthMetricTab = "users" | "submissions" | "views";
+
+const GROWTH_METRIC_CONFIG: Record<
+  GrowthMetricTab,
+  {
+    dailyTitle: string;
+    cumulativeTitle: string;
+    dailyTabLabel: string;
+    cumulativeTabLabel: string;
+    allFilterLabel: string;
+  }
+> = {
+  users: {
+    dailyTitle: "Daily signup growth",
+    cumulativeTitle: "Users growth",
+    dailyTabLabel: "Daily signup growth",
+    cumulativeTabLabel: "Users growth",
+    allFilterLabel: "All Users",
+  },
+  submissions: {
+    dailyTitle: "Daily submission growth",
+    cumulativeTitle: "Submissions growth",
+    dailyTabLabel: "Daily submission growth",
+    cumulativeTabLabel: "Submissions growth",
+    allFilterLabel: "All Submissions",
+  },
+  views: {
+    dailyTitle: "Daily views growth",
+    cumulativeTitle: "Views growth",
+    dailyTabLabel: "Daily views growth",
+    cumulativeTabLabel: "Views growth",
+    allFilterLabel: "All Views",
+  },
+};
 
 const readIsDarkFromDom = () => {
   const modeElement = document.querySelector("[data-mode]");
@@ -143,6 +373,137 @@ const readIsDarkFromDom = () => {
   const themeElement = document.documentElement;
   return themeElement.getAttribute("data-theme") === "dark";
 };
+
+type SummaryMetricCardProps = {
+  title: string;
+  value: number;
+  subtitle: string;
+  tooltip?: string;
+  icon: ComponentType<{ className?: string }>;
+  isDark: boolean | null;
+};
+
+function sumUserGrowthPoints(points: {
+  all: number;
+  creators: number;
+  brands: number;
+  admins: number;
+}[]) {
+  return points.reduce(
+    (acc, p) => ({
+      all: acc.all + p.all,
+      creators: acc.creators + p.creators,
+      brands: acc.brands + p.brands,
+      admins: acc.admins + p.admins,
+    }),
+    { all: 0, creators: 0, brands: 0, admins: 0 },
+  );
+}
+
+function sumStatusGrowthPoints(points: StatusGrowthPoint[]) {
+  return points.reduce(
+    (acc, p) => ({
+      all: acc.all + p.all,
+      verified: acc.verified + p.verified,
+      pending: acc.pending + p.pending,
+      rejected: acc.rejected + p.rejected,
+      paid: acc.paid + p.paid,
+    }),
+    { all: 0, verified: 0, pending: 0, rejected: 0, paid: 0 },
+  );
+}
+
+function deriveCompositeStatusTotals(totals: {
+  all: number;
+  verified: number;
+  pending: number;
+  rejected: number;
+  paid: number;
+}) {
+  return {
+    verifiedOrPaid: totals.verified + totals.paid,
+    // Match analytics: pending + verified + paid (excludes rejected/unknown)
+    notRejected: totals.pending + totals.verified + totals.paid,
+  };
+}
+
+function isStatusSeriesVisibleForFilter(
+  key: string,
+  filter: StatusFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "verified_or_paid") return key === "verified_or_paid";
+  if (filter === "not_rejected") return key === "not_rejected";
+  return filter === key;
+}
+
+function sumCountGrowthPoints(points: CountGrowthPoint[]) {
+  return points.reduce((sum, p) => sum + p.all, 0);
+}
+
+function SummaryMetricCard({
+  title,
+  value,
+  subtitle,
+  tooltip,
+  icon: Icon,
+  isDark,
+}: SummaryMetricCardProps) {
+  return (
+    <div
+      className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
+        isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+      }`}
+    >
+      <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
+        <div className="flex items-center gap-2">
+          <h1
+            className={`text-md font-medium ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            {title}
+          </h1>
+          {tooltip ? (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info
+                    className={`h-3.5 w-3.5 cursor-help ${
+                      isDark
+                        ? "text-gray-400 hover:text-gray-300"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent>{tooltip}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </div>
+        <div
+          className={`w-10 h-10 flex items-center justify-center rounded-full ${
+            isDark
+              ? "bg-[#FFFFFF36] text-white"
+              : "bg-[#D8C3FF] text-[#4A00BE]"
+          }`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <CardContent>
+        <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+        <p
+          className={`text-sm mt-2 ${
+            isDark ? "text-gray-300" : "text-gray-600"
+          }`}
+        >
+          {subtitle}
+        </p>
+      </CardContent>
+    </div>
+  );
+}
 
 export default function AdminDashboardClient({
   totalContests,
@@ -166,6 +527,7 @@ export default function AdminDashboardClient({
   pendingSubmissions,
   rejectedSubmissions,
   paidSubmissions,
+  uniqueCreators,
   totalUsers,
   totalCreators,
   totalBrands,
@@ -178,95 +540,74 @@ export default function AdminDashboardClient({
   totalMoneyInDraftNotPaid,
   contestTypeFilter,
   userGrowth,
+  submissionGrowth,
+  viewsGrowth,
+  contestGrowth,
+  submissionCreatorsByDay,
 }: AdminDashboardClientProps) {
   // Get theme from parent layout
   const [isDark, setIsDark] = useState<boolean | null>(null);
+  const [growthMetricTab, setGrowthMetricTab] =
+    useState<GrowthMetricTab>("users");
   const [growthMode, setGrowthMode] = useState<"daily" | "cumulative">("daily");
   const [userTypeFilter, setUserTypeFilter] = useState<
     "all" | "creators" | "brands" | "admins"
   >("all");
+  const [submissionStatusFilter, setSubmissionStatusFilter] =
+    useState<StatusFilter>("all");
+  const [viewsStatusFilter, setViewsStatusFilter] =
+    useState<StatusFilter>("all");
 
-  const now = new Date();
-  const defaultRangeEnd = new Date(now);
-  defaultRangeEnd.setHours(23, 59, 59, 999);
-  const defaultRangeStart = subDays(now, 30);
-  defaultRangeStart.setHours(0, 0, 0, 0);
-  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: defaultRangeStart,
-    to: defaultRangeEnd,
-  });
+  const defaultRange = getLastNDaysUtcRange(30);
+  const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(
+    defaultRange,
+  );
   const [dateRangePresetLabel, setDateRangePresetLabel] =
     useState<string>("Last 30 Days");
-  const [calendarRange, setCalendarRange] = useState<
-    { from?: Date; to?: Date } | undefined
-  >(undefined);
-  const [dateRangeOpen, setDateRangeOpen] = useState(false);
-  const [rangeTimezone, setRangeTimezone] = useState<"utc" | "local">("local");
-  const [startTimeInput, setStartTimeInput] = useState<string | null>(null);
-  const [endTimeInput, setEndTimeInput] = useState<string | null>(null);
+  const [isSyncingAllCreatorViews, setIsSyncingAllCreatorViews] =
+    useState(false);
+  const [syncAllViewsDialogOpen, setSyncAllViewsDialogOpen] = useState(false);
 
-  const KOLKATA_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+  const handleSyncAllCreatorViews = async () => {
+    setIsSyncingAllCreatorViews(true);
+    try {
+      const response = await fetch("/api/admin/sync-all-creator-views", {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync creator profile views");
+      }
 
-  function getDateStrInTz(date: Date, tz: "utc" | "local"): string {
-    if (tz === "utc") {
-      const y = date.getUTCFullYear();
-      const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-      const d = String(date.getUTCDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
+      const sync = result?.views_sync ?? {};
+      const updated = Number(sync.upserted_or_updated) || 0;
+      const rejectedRemoved = Number(sync.deleted_rejected_credits) || 0;
+      const platformPass = Number(sync.platform_aware_submissions) || 0;
+
+      toast.success("Creator profile views synced", {
+        description: [
+          updated > 0
+            ? `${updated} credited snapshot${updated === 1 ? "" : "s"} updated`
+            : "Credited snapshots were already up to date",
+          rejectedRemoved > 0
+            ? `${rejectedRemoved} rejected credit${rejectedRemoved === 1 ? "" : "s"} removed`
+            : null,
+          `${platformPass} submission${platformPass === 1 ? "" : "s"} checked (platform-aware pass)`,
+        ]
+          .filter(Boolean)
+          .join(" \u00b7 "),
+      });
+      setSyncAllViewsDialogOpen(false);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to sync creator profile views";
+      toast.error("Sync failed", { description: message });
+    } finally {
+      setIsSyncingAllCreatorViews(false);
     }
-    const kolkata = new Date(date.getTime() + KOLKATA_OFFSET_MS);
-    const y = kolkata.getUTCFullYear();
-    const m = String(kolkata.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(kolkata.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }
-
-  function getTimeStrInTz(date: Date, tz: "utc" | "local"): string {
-    if (tz === "utc") {
-      const h = date.getUTCHours();
-      const m = date.getUTCMinutes();
-      const ampm = h >= 12 ? "PM" : "AM";
-      const h12 = h % 12 || 12;
-      return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-    }
-    const kolkata = new Date(date.getTime() + KOLKATA_OFFSET_MS);
-    const h = kolkata.getUTCHours();
-    const m = kolkata.getUTCMinutes();
-    const ampm = h >= 12 ? "PM" : "AM";
-    const h12 = h % 12 || 12;
-    return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-  }
-
-  function parseTime12To24(timeStr: string): { h: number; m: number } | null {
-    const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-    if (!match) return null;
-    let h = parseInt(match[1], 10);
-    const m = parseInt(match[2], 10);
-    const ampm = match[3].toUpperCase();
-    if (ampm === "PM" && h !== 12) h += 12;
-    if (ampm === "AM" && h === 12) h = 0;
-    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-    return { h, m };
-  }
-
-  function setTimeInTz(
-    existing: Date,
-    dateStr: string,
-    timeStr: string,
-    tz: "utc" | "local",
-  ): Date | null {
-    const parsed = parseTime12To24(timeStr);
-    if (!parsed) return null;
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    if (!y || !mo || !d) return null;
-    if (tz === "utc") {
-      return new Date(Date.UTC(y, mo - 1, d, parsed.h, parsed.m, 0, 0));
-    }
-    const localKolkata = new Date(
-      Date.UTC(y, mo - 1, d, parsed.h, parsed.m, 0, 0),
-    );
-    return new Date(localKolkata.getTime() - KOLKATA_OFFSET_MS);
-  }
+  };
 
   type GrowthPoint = {
     label: string;
@@ -296,26 +637,191 @@ export default function AdminDashboardClient({
     });
   };
 
-  function getUTCDateStr(date: Date): string {
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(date.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
-  const fromStr = getUTCDateStr(dateRange.from);
-  const toStr = getUTCDateStr(dateRange.to);
-  const filteredByDayFull = userGrowth.byDayFull.filter(
-    (p) => p.date >= fromStr && p.date <= toStr,
-  );
-
   const isLast12MonthsPreset = dateRangePresetLabel === "Last 12 Months";
 
-  const rawChartData: GrowthPoint[] = isLast12MonthsPreset
+  const rawUsersChartData: GrowthPoint[] = isLast12MonthsPreset
     ? userGrowth.byMonth.slice(-12)
-    : (filteredByDayFull as GrowthPoint[]);
-  const chartData =
-    growthMode === "cumulative" ? toCumulative(rawChartData) : rawChartData;
+    : filterAndFillGrowthByRange(
+        userGrowth.byDayFull as (GrowthPoint & { date: string })[],
+        dateRange.from,
+        dateRange.to,
+        (dateKey) => ({
+          label: formatGrowthDayLabel(dateKey),
+          date: dateKey,
+          all: 0,
+          creators: 0,
+          brands: 0,
+          admins: 0,
+        }),
+      );
+  const usersChartData =
+    growthMode === "cumulative"
+      ? toCumulative(rawUsersChartData)
+      : rawUsersChartData;
+
+  const activeStatusGrowth =
+    growthMetricTab === "submissions" ? submissionGrowth : viewsGrowth;
+  const activeStatusFilter =
+    growthMetricTab === "submissions"
+      ? submissionStatusFilter
+      : viewsStatusFilter;
+  const rawStatusChartData: StatusGrowthPoint[] = isLast12MonthsPreset
+    ? activeStatusGrowth.byMonth.slice(-12)
+    : filterAndFillGrowthByRange(
+        activeStatusGrowth.byDayFull,
+        dateRange.from,
+        dateRange.to,
+        (dateKey) => ({
+          label: formatGrowthDayLabel(dateKey),
+          date: dateKey,
+          all: 0,
+          verified: 0,
+          pending: 0,
+          rejected: 0,
+          paid: 0,
+        }),
+      );
+  const statusChartData = enrichStatusChartData(
+    growthMode === "cumulative"
+      ? toStatusCumulative(rawStatusChartData)
+      : rawStatusChartData,
+  );
+
+  const overviewMetrics = useMemo(() => {
+    const usersInRange: {
+      all: number;
+      creators: number;
+      brands: number;
+      admins: number;
+    }[] = isLast12MonthsPreset
+      ? userGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          userGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+            creators: 0,
+            brands: 0,
+            admins: 0,
+          }),
+        );
+
+    const submissionsInRange: StatusGrowthPoint[] = isLast12MonthsPreset
+      ? submissionGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          submissionGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+            verified: 0,
+            pending: 0,
+            rejected: 0,
+            paid: 0,
+          }),
+        );
+
+    const viewsInRange: StatusGrowthPoint[] = isLast12MonthsPreset
+      ? viewsGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          viewsGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+            verified: 0,
+            pending: 0,
+            rejected: 0,
+            paid: 0,
+          }),
+        );
+
+    const contestsInRange: CountGrowthPoint[] = isLast12MonthsPreset
+      ? contestGrowth.byMonth.slice(-12)
+      : filterAndFillGrowthByRange(
+          contestGrowth.byDayFull,
+          dateRange.from,
+          dateRange.to,
+          (dateKey) => ({
+            label: formatGrowthDayLabel(dateKey),
+            date: dateKey,
+            all: 0,
+          }),
+        );
+
+    const userTotals = sumUserGrowthPoints(usersInRange);
+    const submissionTotals = sumStatusGrowthPoints(submissionsInRange);
+    const viewTotals = sumStatusGrowthPoints(viewsInRange);
+    const submissionComposite = deriveCompositeStatusTotals(submissionTotals);
+    const viewComposite = deriveCompositeStatusTotals(viewTotals);
+
+    return {
+      campaigns: sumCountGrowthPoints(contestsInRange),
+      users: userTotals.all,
+      creators: userTotals.creators,
+      brands: userTotals.brands,
+      submissions: {
+        ...submissionTotals,
+        verifiedOrPaid: submissionComposite.verifiedOrPaid,
+        notRejected: submissionComposite.notRejected,
+      },
+      views: {
+        ...viewTotals,
+        verifiedOrPaid: viewComposite.verifiedOrPaid,
+        notRejected: viewComposite.notRejected,
+      },
+      uniqueCreators: countUniqueCreatorsFromByDay(
+        submissionCreatorsByDay,
+        dateRange.from,
+        dateRange.to,
+      ),
+    };
+  }, [
+    contestGrowth,
+    dateRange.from,
+    dateRange.to,
+    isLast12MonthsPreset,
+    submissionCreatorsByDay,
+    submissionGrowth,
+    userGrowth,
+    viewsGrowth,
+  ]);
+
+  const overviewPeriodLabel = dateRangePresetLabel || "selected period";
+
+  const metricConfig = GROWTH_METRIC_CONFIG[growthMetricTab];
+  const sectionTitle =
+    growthMode === "daily"
+      ? metricConfig.dailyTitle
+      : metricConfig.cumulativeTitle;
+
+  const growthTabButtonClass = (active: boolean) =>
+    `px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+      active
+        ? isDark
+          ? "bg-[#4A00BE] text-white"
+          : "bg-primary text-primary-foreground"
+        : isDark
+          ? "text-gray-300 hover:bg-white/10"
+          : "text-muted-foreground hover:bg-muted"
+    }`;
+
+  const isStatusSeriesVisible = (key: string) =>
+    isStatusSeriesVisibleForFilter(key, activeStatusFilter);
+
+  const statusChartConfig = Object.fromEntries(
+    CHART_STATUS_SERIES.map((s) => [
+      s.key,
+      { label: s.label, color: isDark ? s.colorDark : s.colorLight },
+    ]),
+  );
 
   // Resolve theme before first paint to avoid flash between modes
   useLayoutEffect(() => {
@@ -351,7 +857,7 @@ export default function AdminDashboardClient({
   return (
     <div className="space-y-8 pb-8 w-full min-w-0 overflow-visible">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2
             className={`text-3xl font-bold tracking-tight ${
@@ -368,228 +874,254 @@ export default function AdminDashboardClient({
             Platform-wide statistics and management
           </p>
         </div>
+        <AlertDialog
+          open={syncAllViewsDialogOpen}
+          onOpenChange={(open) => {
+            if (!isSyncingAllCreatorViews) setSyncAllViewsDialogOpen(open);
+          }}
+        >
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              className={
+                isDark
+                  ? "border-emerald-400/60 text-emerald-300 hover:bg-white/5"
+                  : "border-emerald-500/50 text-emerald-700 hover:bg-emerald-50"
+              }
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Sync All Creator Views
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className={isDark ? "bg-[#170337] text-white border-white/10" : ""}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sync all creator profile views?</AlertDialogTitle>
+              <AlertDialogDescription
+                className={isDark ? "text-gray-300" : undefined}
+              >
+                This recalculates creator leaderboard totals from all campaigns.
+                Pending, verified, and paid submissions will be credited;
+                rejected submissions will be excluded. Safe to run more than
+                once.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSyncingAllCreatorViews}>
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                onClick={handleSyncAllCreatorViews}
+                disabled={isSyncingAllCreatorViews}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {isSyncingAllCreatorViews ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing{"\u2026"}
+                  </>
+                ) : (
+                  "Sync now"
+                )}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
-      {/* Top Summary */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Total Contests */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+      {/* Platform Overview */}
+      <div className="mt-8 space-y-4 w-full min-w-0">
+        <h2
+          className={`text-xl font-bold shrink-0 ${
+            isDark ? "text-white" : "text-gray-900"
           }`}
         >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Contests
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Includes all contests (draft + published)
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Trophy className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalContests}</div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All contests on platform
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Users */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Users
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>All registered users</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <User className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalUsers.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Creators + Brands
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Creators */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Creators
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>Users with role creator</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <User className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalCreators.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Creators
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Brands */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Brands
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>Users with role advertiser</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Building className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalBrands.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Brands
-            </p>
-          </CardContent>
+          Platform Overview
+        </h2>
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {growthMetricTab === "users" ? (
+            <>
+              <SummaryMetricCard
+                title="Total Campaigns"
+                value={overviewMetrics.campaigns}
+                subtitle={`Created in ${overviewPeriodLabel}`}
+                tooltip="Campaigns created in the selected date range"
+                icon={Trophy}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Users"
+                value={overviewMetrics.users}
+                subtitle={`Signed up in ${overviewPeriodLabel}`}
+                tooltip="Users registered in the selected date range"
+                icon={User}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Creators"
+                value={overviewMetrics.creators}
+                subtitle={`Signed up in ${overviewPeriodLabel}`}
+                tooltip="Creators registered in the selected date range"
+                icon={User}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Brands"
+                value={overviewMetrics.brands}
+                subtitle={`Signed up in ${overviewPeriodLabel}`}
+                tooltip="Brands registered in the selected date range"
+                icon={Building}
+                isDark={isDark}
+              />
+            </>
+          ) : null}
+          {growthMetricTab === "submissions" ? (
+            <>
+              <SummaryMetricCard
+                title="Total Campaigns"
+                value={overviewMetrics.campaigns}
+                subtitle={`Created in ${overviewPeriodLabel}`}
+                tooltip="Campaigns created in the selected date range"
+                icon={Trophy}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Submissions"
+                value={overviewMetrics.submissions.all}
+                subtitle={`Submitted in ${overviewPeriodLabel}`}
+                tooltip="Submissions created in the selected date range"
+                icon={Video}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified Submissions"
+                value={overviewMetrics.submissions.verified}
+                subtitle={`Verified in ${overviewPeriodLabel}`}
+                tooltip="Verified submissions in the selected date range"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Pending Submissions"
+                value={overviewMetrics.submissions.pending}
+                subtitle={`Pending in ${overviewPeriodLabel}`}
+                tooltip="Pending submissions in the selected date range"
+                icon={Eye}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Rejected Submissions"
+                value={overviewMetrics.submissions.rejected}
+                subtitle={`Rejected in ${overviewPeriodLabel}`}
+                tooltip="Rejected submissions in the selected date range"
+                icon={XCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Paid Submissions"
+                value={overviewMetrics.submissions.paid}
+                subtitle={`Paid in ${overviewPeriodLabel}`}
+                tooltip="Paid submissions in the selected date range"
+                icon={DollarSign}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified + Paid Submissions"
+                value={overviewMetrics.submissions.verifiedOrPaid}
+                subtitle={`Verified or paid in ${overviewPeriodLabel}`}
+                tooltip="Submissions that are verified or paid in the selected date range"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Non Rejected Submissions"
+                value={overviewMetrics.submissions.notRejected}
+                subtitle={`Pending + verified + paid in ${overviewPeriodLabel}`}
+                tooltip="Pending + verified + paid submissions (excludes rejected and unknown statuses)"
+                icon={ShieldCheck}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Unique Creators"
+                value={overviewMetrics.uniqueCreators}
+                subtitle={`Submitted in ${overviewPeriodLabel}`}
+                tooltip="Distinct creators who submitted in the selected date range"
+                icon={Users}
+                isDark={isDark}
+              />
+            </>
+          ) : null}
+          {growthMetricTab === "views" ? (
+            <>
+              <SummaryMetricCard
+                title="Total Campaigns"
+                value={overviewMetrics.campaigns}
+                subtitle={`Created in ${overviewPeriodLabel}`}
+                tooltip="Campaigns created in the selected date range"
+                icon={Trophy}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified Views"
+                value={overviewMetrics.views.verified}
+                subtitle={`Verified in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from verified submissions, grouped by submission created date"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Pending Views"
+                value={overviewMetrics.views.pending}
+                subtitle={`Pending in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from pending submissions, grouped by submission created date"
+                icon={Eye}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Rejected Views"
+                value={overviewMetrics.views.rejected}
+                subtitle={`Rejected in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from rejected submissions, grouped by submission created date"
+                icon={XCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Paid Views"
+                value={overviewMetrics.views.paid}
+                subtitle={`Paid in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from paid submissions, grouped by submission created date"
+                icon={DollarSign}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Total Views"
+                value={overviewMetrics.views.all}
+                subtitle={`Submitted in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from all submissions, grouped by submission created date (not when views were earned)"
+                icon={Video}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Verified + Paid Views"
+                value={overviewMetrics.views.verifiedOrPaid}
+                subtitle={`Verified or paid in ${overviewPeriodLabel}`}
+                tooltip="Current view counts from verified or paid submissions, grouped by submission created date"
+                icon={CheckCircle}
+                isDark={isDark}
+              />
+              <SummaryMetricCard
+                title="Non Rejected Views"
+                value={overviewMetrics.views.notRejected}
+                subtitle={`Pending + verified + paid in ${overviewPeriodLabel}`}
+                tooltip="Current views from pending + verified + paid submissions (excludes rejected and unknown); grouped by submission created date"
+                icon={ShieldCheck}
+                isDark={isDark}
+              />
+            </>
+          ) : null}
         </div>
       </div>
 
-      {/* Users Growth Chart */}
+      {/* Platform Growth Chart */}
       <div className="mt-8 space-y-4 w-full min-w-0 overflow-visible">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h2
@@ -597,416 +1129,111 @@ export default function AdminDashboardClient({
               isDark ? "text-white" : "text-gray-900"
             }`}
           >
-            {growthMode === "daily" ? "Daily signup growth" : "Users growth"}
+            {sectionTitle}
           </h2>
           <div className="flex flex-wrap items-center gap-3 min-w-0 flex-shrink">
-            {/* Column 1: Date range picker */}
             <div className="flex items-center shrink-0">
-              <Popover open={dateRangeOpen} onOpenChange={setDateRangeOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={`min-w-[180px] max-w-[220px] justify-start text-left font-normal shrink-0 ${
-                      isDark
-                        ? "border-white/20 bg-white/5 hover:bg-white/10"
-                        : ""
+              <AdminDateRangePicker
+                isDark={isDark}
+                value={dateRange}
+                presetLabel={dateRangePresetLabel}
+                onChange={(next, label) => {
+                  setDateRange(next);
+                  setDateRangePresetLabel(label);
+                }}
+              />
+            </div>
+            <div className="flex items-center shrink-0">
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {(
+                  [
+                    { value: "users" as const, label: "Users" },
+                    { value: "submissions" as const, label: "Submissions" },
+                    { value: "views" as const, label: "Views" },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setGrowthMetricTab(value)}
+                    className={growthTabButtonClass(growthMetricTab === value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center shrink-0">
+              {growthMetricTab === "users" ? (
+                <Select
+                  value={userTypeFilter}
+                  onValueChange={(
+                    v: "all" | "creators" | "brands" | "admins",
+                  ) => setUserTypeFilter(v)}
+                >
+                  <SelectTrigger
+                    className={`min-w-[140px] h-9 text-sm ${
+                      isDark ? "border-white/20 bg-white/5 text-white" : ""
                     }`}
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRangePresetLabel}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className={`w-auto p-0 ${isDark ? "border-white/20 bg-[#170337]" : ""}`}
-                  align="end"
+                    <SelectValue placeholder="User type" />
+                  </SelectTrigger>
+                  <SelectContent
+                    className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                  >
+                    <SelectItem value="all">All Users</SelectItem>
+                    <SelectItem value="creators">Creators</SelectItem>
+                    <SelectItem value="brands">Advertisers</SelectItem>
+                    <SelectItem value="admins">Admins</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select
+                  value={activeStatusFilter}
+                  onValueChange={(v: StatusFilter) =>
+                    growthMetricTab === "submissions"
+                      ? setSubmissionStatusFilter(v)
+                      : setViewsStatusFilter(v)
+                  }
                 >
-                  <div className="flex flex-col sm:flex-row max-h-[420px] overflow-y-auto">
-                    <div className="flex flex-col gap-1 p-3 border-b sm:border-b-0 sm:border-r sm:h-full sm:min-h-[580px]">
-                      <p
-                        className={`text-sm font-medium ${
-                          isDark ? "text-gray-300" : "text-muted-foreground"
-                        }`}
-                      >
-                        Presets
-                      </p>
-                      {[
-                        {
-                          label: "Last 7 Days",
-                          get: () => ({
-                            from: subDays(now, 6),
-                            to: now,
-                          }),
-                        },
-                        {
-                          label: "Last 30 Days",
-                          get: () => ({
-                            from: subDays(now, 29),
-                            to: now,
-                          }),
-                        },
-                        {
-                          label: "Last 3 Months",
-                          get: () => ({
-                            from: subMonths(now, 3),
-                            to: now,
-                          }),
-                        },
-                        {
-                          label: "Last 12 Months",
-                          get: () => ({
-                            from: subMonths(now, 12),
-                            to: now,
-                          }),
-                        },
-                      ].map(({ label, get }) => (
-                        <Button
-                          key={label}
-                          variant="ghost"
-                          size="sm"
-                          className={`justify-start font-normal ${
-                            dateRangePresetLabel === label
-                              ? isDark
-                                ? "bg-white/10 text-white"
-                                : "bg-accent"
-                              : isDark
-                                ? "text-gray-300 hover:bg-white/10"
-                                : ""
-                          }`}
-                          onClick={() => {
-                            const { from, to } = get();
-                            setDateRange({ from, to });
-                            setDateRangePresetLabel(label);
-                            setDateRangeOpen(false);
-                          }}
-                        >
-                          {label}
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="p-3">
-                      <p
-                        className={`text-sm font-medium mb-2 ${
-                          isDark ? "text-gray-300" : "text-muted-foreground"
-                        }`}
-                      >
-                        Custom range
-                      </p>
-                      <Calendar
-                        mode="range"
-                        defaultMonth={dateRange.from}
-                        selected={
-                          calendarRange?.from != null
-                            ? {
-                                from: calendarRange.from,
-                                to: calendarRange.to ?? calendarRange.from,
-                              }
-                            : { from: dateRange.from, to: dateRange.to }
-                        }
-                        onSelect={(range) => {
-                          setCalendarRange(
-                            range
-                              ? {
-                                  from: range.from,
-                                  to: range.to,
-                                }
-                              : undefined,
-                          );
-                          if (range?.from && range?.to) {
-                            setDateRange({
-                              from: range.from,
-                              to: range.to,
-                            });
-                            setDateRangePresetLabel(
-                              `${range.from.toLocaleDateString()} – ${range.to.toLocaleDateString()}`,
-                            );
-                          }
-                        }}
-                        numberOfMonths={1}
-                        disabled={(date) =>
-                          date > now || date < subDays(now, 730)
-                        }
-                        className={
-                          isDark ? "rounded-md border-0 bg-transparent" : ""
-                        }
-                      />
-                      <div
-                        className={`space-y-3 border-t pt-3 mt-3 ${
-                          isDark ? "border-white/10" : "border-border"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <Label
-                            className={`text-xs font-medium ${
-                              isDark ? "text-gray-400" : "text-muted-foreground"
-                            }`}
-                          >
-                            Start
-                          </Label>
-                          <div className="flex gap-2">
-                            <Input
-                              type="date"
-                              value={getDateStrInTz(
-                                dateRange.from,
-                                rangeTimezone,
-                              )}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (!v) return;
-                                const timeStr = getTimeStrInTz(
-                                  dateRange.from,
-                                  rangeTimezone,
-                                );
-                                const newFrom = setTimeInTz(
-                                  dateRange.from,
-                                  v,
-                                  timeStr,
-                                  rangeTimezone,
-                                );
-                                if (newFrom) {
-                                  setDateRange((prev) => ({
-                                    ...prev,
-                                    from: newFrom,
-                                  }));
-                                  setCalendarRange((prev) =>
-                                    prev
-                                      ? {
-                                          from: newFrom,
-                                          to: prev.to ?? newFrom,
-                                        }
-                                      : { from: newFrom, to: dateRange.to },
-                                  );
-                                }
-                              }}
-                              className={`h-9 text-sm ${
-                                isDark
-                                  ? "border-white/20 bg-white/5 text-white"
-                                  : ""
-                              }`}
-                            />
-                            <Input
-                              type="text"
-                              placeholder="02:30 PM"
-                              value={
-                                startTimeInput ??
-                                getTimeStrInTz(dateRange.from, rangeTimezone)
-                              }
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setStartTimeInput(v || null);
-                                const dateStr = getDateStrInTz(
-                                  dateRange.from,
-                                  rangeTimezone,
-                                );
-                                const newFrom = setTimeInTz(
-                                  dateRange.from,
-                                  dateStr,
-                                  v,
-                                  rangeTimezone,
-                                );
-                                if (newFrom) {
-                                  setDateRange((prev) => ({
-                                    ...prev,
-                                    from: newFrom,
-                                  }));
-                                  if (parseTime12To24(v))
-                                    setStartTimeInput(null);
-                                }
-                              }}
-                              onBlur={() => setStartTimeInput(null)}
-                              className={`h-9 text-sm w-[100px] ${
-                                isDark
-                                  ? "border-white/20 bg-white/5 text-white"
-                                  : ""
-                              }`}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label
-                            className={`text-xs font-medium ${
-                              isDark ? "text-gray-400" : "text-muted-foreground"
-                            }`}
-                          >
-                            End
-                          </Label>
-                          <div className="flex gap-2">
-                            <Input
-                              type="date"
-                              value={getDateStrInTz(
-                                dateRange.to,
-                                rangeTimezone,
-                              )}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (!v) return;
-                                const timeStr = getTimeStrInTz(
-                                  dateRange.to,
-                                  rangeTimezone,
-                                );
-                                const newTo = setTimeInTz(
-                                  dateRange.to,
-                                  v,
-                                  timeStr,
-                                  rangeTimezone,
-                                );
-                                if (newTo) {
-                                  setDateRange((prev) => ({
-                                    ...prev,
-                                    to: newTo,
-                                  }));
-                                  setCalendarRange((prev) =>
-                                    prev
-                                      ? {
-                                          from: prev.from ?? dateRange.from,
-                                          to: newTo,
-                                        }
-                                      : { from: dateRange.from, to: newTo },
-                                  );
-                                }
-                              }}
-                              className={`h-9 text-sm ${
-                                isDark
-                                  ? "border-white/20 bg-white/5 text-white"
-                                  : ""
-                              }`}
-                            />
-                            <Input
-                              type="text"
-                              placeholder="03:29 PM"
-                              value={
-                                endTimeInput ??
-                                getTimeStrInTz(dateRange.to, rangeTimezone)
-                              }
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setEndTimeInput(v || null);
-                                const dateStr = getDateStrInTz(
-                                  dateRange.to,
-                                  rangeTimezone,
-                                );
-                                const newTo = setTimeInTz(
-                                  dateRange.to,
-                                  dateStr,
-                                  v,
-                                  rangeTimezone,
-                                );
-                                if (newTo) {
-                                  setDateRange((prev) => ({
-                                    ...prev,
-                                    to: newTo,
-                                  }));
-                                  if (parseTime12To24(v)) setEndTimeInput(null);
-                                }
-                              }}
-                              onBlur={() => setEndTimeInput(null)}
-                              className={`h-9 text-sm w-[100px] ${
-                                isDark
-                                  ? "border-white/20 bg-white/5 text-white"
-                                  : ""
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className={`space-y-2 border-t pt-3 mt-3 ${
-                          isDark ? "border-white/10" : "border-border"
-                        }`}
-                      >
-                        <Label
-                          className={`text-xs font-medium ${
-                            isDark ? "text-gray-400" : "text-muted-foreground"
-                          }`}
-                        >
-                          Timezone
-                        </Label>
-                        <Select
-                          value={rangeTimezone}
-                          onValueChange={(v: "utc" | "local") => {
-                            setRangeTimezone(v);
-                            setStartTimeInput(null);
-                            setEndTimeInput(null);
-                          }}
-                        >
-                          <SelectTrigger
-                            className={`h-9 text-sm ${
-                              isDark
-                                ? "border-white/20 bg-white/5 text-white"
-                                : ""
-                            }`}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent
-                            className={
-                              isDark ? "border-white/20 bg-[#170337]" : ""
-                            }
-                          >
-                            <SelectItem value="utc">UTC</SelectItem>
-                            <SelectItem value="local">
-                              Local (Asia/Calcutta)
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex gap-2 p-2 border-t mt-3">
-                        <Button
-                          size="sm"
-                          className="w-full"
-                          onClick={() => {
-                            setDateRangePresetLabel(
-                              `${format(dateRange.from, "MMM d, yyyy")} – ${format(dateRange.to, "MMM d, yyyy")}`,
-                            );
-                            setDateRangeOpen(false);
-                            setCalendarRange(undefined);
-                          }}
-                        >
-                          <Check className="mr-1 h-4 w-4" />
-                          Apply
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
+                  <SelectTrigger
+                    className={`min-w-[160px] h-9 text-sm ${
+                      isDark ? "border-white/20 bg-white/5 text-white" : ""
+                    }`}
+                  >
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent
+                    className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                  >
+                    <SelectItem value="all">
+                      {metricConfig.allFilterLabel}
+                    </SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="verified_or_paid">
+                      Verified + Paid
+                    </SelectItem>
+                    <SelectItem value="not_rejected">
+                      Pending + Verified + Paid
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-            {/* Column 2: User type */}
-            <div className="flex items-center shrink-0">
-              <Select
-                value={userTypeFilter}
-                onValueChange={(v: "all" | "creators" | "brands" | "admins") =>
-                  setUserTypeFilter(v)
-                }
-              >
-                <SelectTrigger
-                  className={`min-w-[140px] h-9 text-sm ${
-                    isDark ? "border-white/20 bg-white/5 text-white" : ""
-                  }`}
-                >
-                  <SelectValue placeholder="User type" />
-                </SelectTrigger>
-                <SelectContent
-                  className={isDark ? "border-white/20 bg-[#170337]" : ""}
-                >
-                  <SelectItem value="all">All Users</SelectItem>
-                  <SelectItem value="creators">Creators</SelectItem>
-                  <SelectItem value="brands">Advertisers</SelectItem>
-                  <SelectItem value="admins">Admins</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {/* Column 3: Daily signups vs Cumulative growth */}
             <div className="flex items-center shrink-0">
               <div className="flex rounded-lg border border-border overflow-hidden">
                 {(
                   [
                     {
                       value: "daily" as const,
-                      label: "Daily signup growth",
+                      label: metricConfig.dailyTabLabel,
                     },
                     {
                       value: "cumulative" as const,
-                      label: "Users growth",
+                      label: metricConfig.cumulativeTabLabel,
                     },
                   ] as const
                 ).map(({ value, label }) => (
@@ -1014,15 +1241,7 @@ export default function AdminDashboardClient({
                     key={value}
                     type="button"
                     onClick={() => setGrowthMode(value)}
-                    className={`px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                      growthMode === value
-                        ? isDark
-                          ? "bg-[#4A00BE] text-white"
-                          : "bg-primary text-primary-foreground"
-                        : isDark
-                          ? "text-gray-300 hover:bg-white/10"
-                          : "text-muted-foreground hover:bg-muted"
-                    }`}
+                    className={growthTabButtonClass(growthMode === value)}
                   >
                     {label}
                   </button>
@@ -1036,170 +1255,279 @@ export default function AdminDashboardClient({
             isDark ? "bg-[#170337] text-white" : "bg-white text-black"
           }`}
         >
-          <ChartContainer
-            config={{
-              all: {
-                label: "All Users",
-                color: isDark ? "#A78BFA" : "#7C3AED",
-              },
-              creators: {
-                label: "Creators",
-                color: isDark ? "#34D399" : "#059669",
-              },
-              brands: {
-                label: "Advertisers",
-                color: isDark ? "#FBBF24" : "#D97706",
-              },
-              admins: {
-                label: "Admins",
-                color: isDark ? "#F87171" : "#DC2626",
-              },
-            }}
-            className="h-[320px] w-full min-w-0"
-          >
-            <LineChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                className={isDark ? "stroke-white/10" : "stroke-border"}
-              />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#6B7280" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#6B7280" }}
-                tickLine={false}
-                axisLine={false}
-                allowDecimals={false}
-              />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Line
-                type="monotone"
-                dataKey="all"
-                stroke="var(--color-all)"
-                strokeWidth={2}
-                dot={userTypeFilter === "all" ? { r: 2 } : false}
-                strokeOpacity={userTypeFilter === "all" ? 1 : 0}
-                hide={userTypeFilter !== "all"}
-                name="All Users"
-              />
-              <Line
-                type="monotone"
-                dataKey="creators"
-                stroke="var(--color-creators)"
-                strokeWidth={2}
-                dot={
-                  userTypeFilter === "all" || userTypeFilter === "creators"
-                    ? { r: 2 }
-                    : false
-                }
-                strokeOpacity={
-                  userTypeFilter === "all" || userTypeFilter === "creators"
-                    ? 1
-                    : 0
-                }
-                hide={userTypeFilter !== "all" && userTypeFilter !== "creators"}
-                name="Creators"
-              />
-              <Line
-                type="monotone"
-                dataKey="brands"
-                stroke="var(--color-brands)"
-                strokeWidth={2}
-                dot={
-                  userTypeFilter === "all" || userTypeFilter === "brands"
-                    ? { r: 2 }
-                    : false
-                }
-                strokeOpacity={
-                  userTypeFilter === "all" || userTypeFilter === "brands"
-                    ? 1
-                    : 0
-                }
-                hide={userTypeFilter !== "all" && userTypeFilter !== "brands"}
-                name="Advertisers"
-              />
-              <Line
-                type="monotone"
-                dataKey="admins"
-                stroke="var(--color-admins)"
-                strokeWidth={2}
-                dot={
-                  userTypeFilter === "all" || userTypeFilter === "admins"
-                    ? { r: 2 }
-                    : false
-                }
-                strokeOpacity={
-                  userTypeFilter === "all" || userTypeFilter === "admins"
-                    ? 1
-                    : 0
-                }
-                hide={userTypeFilter !== "all" && userTypeFilter !== "admins"}
-                name="Admins"
-              />
-            </LineChart>
-          </ChartContainer>
-          <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
-            {userTypeFilter === "all" && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
+          {growthMetricTab === "users" ? (
+            <>
+              <ChartContainer
+                config={{
+                  all: {
+                    label: "All Users",
+                    color: isDark ? "#A78BFA" : "#7C3AED",
+                  },
+                  creators: {
+                    label: "Creators",
+                    color: isDark ? "#34D399" : "#059669",
+                  },
+                  brands: {
+                    label: "Advertisers",
+                    color: isDark ? "#FBBF24" : "#D97706",
+                  },
+                  admins: {
+                    label: "Admins",
+                    color: isDark ? "#F87171" : "#DC2626",
+                  },
+                }}
+                className="h-[320px] w-full min-w-0 overflow-visible"
               >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{
-                    backgroundColor: isDark ? "#A78BFA" : "#7C3AED",
-                  }}
-                />
-                All Users
-              </span>
-            )}
-            {(userTypeFilter === "all" || userTypeFilter === "creators") && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
+                <LineChart
+                  data={usersChartData}
+                  margin={GROWTH_CHART_MARGIN}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className={isDark ? "stroke-white/10" : "stroke-border"}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={createGrowthXAxisTick(isDark, usersChartData.length)}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                    height={36}
+                    padding={{ left: 12, right: 12 }}
+                  />
+                  <YAxis
+                    width={44}
+                    tick={{
+                      fontSize: 11,
+                      fill: isDark ? "#9CA3AF" : "#6B7280",
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(value) =>
+                      formatCompactCount(Number(value))
+                    }
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line
+                    type="monotone"
+                    dataKey="all"
+                    stroke="var(--color-all)"
+                    strokeWidth={2}
+                    dot={userTypeFilter === "all" ? { r: 2 } : false}
+                    strokeOpacity={userTypeFilter === "all" ? 1 : 0}
+                    hide={userTypeFilter !== "all"}
+                    name="All Users"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="creators"
+                    stroke="var(--color-creators)"
+                    strokeWidth={2}
+                    dot={
+                      userTypeFilter === "all" ||
+                      userTypeFilter === "creators"
+                        ? { r: 2 }
+                        : false
+                    }
+                    strokeOpacity={
+                      userTypeFilter === "all" ||
+                      userTypeFilter === "creators"
+                        ? 1
+                        : 0
+                    }
+                    hide={
+                      userTypeFilter !== "all" &&
+                      userTypeFilter !== "creators"
+                    }
+                    name="Creators"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="brands"
+                    stroke="var(--color-brands)"
+                    strokeWidth={2}
+                    dot={
+                      userTypeFilter === "all" || userTypeFilter === "brands"
+                        ? { r: 2 }
+                        : false
+                    }
+                    strokeOpacity={
+                      userTypeFilter === "all" || userTypeFilter === "brands"
+                        ? 1
+                        : 0
+                    }
+                    hide={
+                      userTypeFilter !== "all" && userTypeFilter !== "brands"
+                    }
+                    name="Advertisers"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="admins"
+                    stroke="var(--color-admins)"
+                    strokeWidth={2}
+                    dot={
+                      userTypeFilter === "all" || userTypeFilter === "admins"
+                        ? { r: 2 }
+                        : false
+                    }
+                    strokeOpacity={
+                      userTypeFilter === "all" || userTypeFilter === "admins"
+                        ? 1
+                        : 0
+                    }
+                    hide={
+                      userTypeFilter !== "all" && userTypeFilter !== "admins"
+                    }
+                    name="Admins"
+                  />
+                </LineChart>
+              </ChartContainer>
+              <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
+                {userTypeFilter === "all" && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#A78BFA" : "#7C3AED",
+                      }}
+                    />
+                    All Users
+                  </span>
+                )}
+                {(userTypeFilter === "all" ||
+                  userTypeFilter === "creators") && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#34D399" : "#059669",
+                      }}
+                    />
+                    Creators
+                  </span>
+                )}
+                {(userTypeFilter === "all" || userTypeFilter === "brands") && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#FBBF24" : "#D97706",
+                      }}
+                    />
+                    Advertisers
+                  </span>
+                )}
+                {(userTypeFilter === "all" || userTypeFilter === "admins") && (
+                  <span
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark ? "#F87171" : "#DC2626",
+                      }}
+                    />
+                    Admins
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <ChartContainer
+                config={statusChartConfig}
+                className="h-[320px] w-full min-w-0 overflow-visible"
               >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: isDark ? "#34D399" : "#059669" }}
-                />
-                Creators
-              </span>
-            )}
-            {(userTypeFilter === "all" || userTypeFilter === "brands") && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
-              >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: isDark ? "#FBBF24" : "#D97706" }}
-                />
-                Advertisers
-              </span>
-            )}
-            {(userTypeFilter === "all" || userTypeFilter === "admins") && (
-              <span
-                className={`flex items-center gap-1.5 ${
-                  isDark ? "text-gray-300" : "text-muted-foreground"
-                }`}
-              >
-                <span
-                  className="w-3 h-3 rounded-full shrink-0"
-                  style={{ backgroundColor: isDark ? "#F87171" : "#DC2626" }}
-                />
-                Admins
-              </span>
-            )}
-          </div>
+                <LineChart
+                  data={statusChartData}
+                  margin={GROWTH_CHART_MARGIN}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className={isDark ? "stroke-white/10" : "stroke-border"}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={createGrowthXAxisTick(isDark, statusChartData.length)}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                    height={36}
+                    padding={{ left: 12, right: 12 }}
+                  />
+                  <YAxis
+                    width={44}
+                    tick={{
+                      fontSize: 11,
+                      fill: isDark ? "#9CA3AF" : "#6B7280",
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    allowDecimals={false}
+                    tickFormatter={(value) =>
+                      formatCompactCount(Number(value))
+                    }
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  {CHART_STATUS_SERIES.map((series) => (
+                    <Line
+                      key={series.key}
+                      type="monotone"
+                      dataKey={series.key}
+                      stroke={`var(--color-${series.key})`}
+                      strokeWidth={2}
+                      dot={
+                        isStatusSeriesVisible(series.key) ? { r: 2 } : false
+                      }
+                      strokeOpacity={
+                        isStatusSeriesVisible(series.key) ? 1 : 0
+                      }
+                      hide={!isStatusSeriesVisible(series.key)}
+                      name={series.label}
+                    />
+                  ))}
+                </LineChart>
+              </ChartContainer>
+              <div className="flex flex-wrap gap-6 mt-4 justify-center text-sm">
+                {CHART_STATUS_SERIES.filter((series) =>
+                  isStatusSeriesVisible(series.key),
+                ).map((series) => (
+                  <span
+                    key={series.key}
+                    className={`flex items-center gap-1.5 ${
+                      isDark ? "text-gray-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: isDark
+                          ? series.colorDark
+                          : series.colorLight,
+                      }}
+                    />
+                    {series.key === "all" ? "All" : series.label}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1210,7 +1538,7 @@ export default function AdminDashboardClient({
             isDark ? "text-white" : "text-gray-900"
           }`}
         >
-          Contest Overview
+          Campaign Overview
         </h2>
         <ContestTypeFilter value={contestTypeFilter as any} />
       </div>
@@ -1244,7 +1572,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests currently in draft (not submitted for approval)
+                    Campaigns currently in draft (not submitted for approval)
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1266,7 +1594,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Draft contests
+              Draft campaigns
             </p>
           </CardContent>
         </div>
@@ -1298,7 +1626,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests submitted for approval
+                    Campaigns submitted for approval
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1352,7 +1680,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests approved and ready to publish
+                    Campaigns approved and ready to publish
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1374,7 +1702,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Approved contests
+              Approved campaigns
             </p>
           </CardContent>
         </div>
@@ -1406,7 +1734,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests that were rejected and need changes
+                    Campaigns that were rejected and need changes
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1428,7 +1756,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Rejected contests
+              Rejected campaigns
             </p>
           </CardContent>
         </div>
@@ -1459,7 +1787,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests with moderation status set to "published"
+                    Campaigns with moderation status set to "published"
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1481,7 +1809,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Published contests
+              Published campaigns
             </p>
           </CardContent>
         </div>
@@ -1513,7 +1841,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests with lifecycle status = upcoming
+                    Published campaigns with lifecycle status = upcoming
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1535,7 +1863,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Scheduled contests
+              Scheduled campaigns
             </p>
           </CardContent>
         </div>
@@ -1567,7 +1895,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests currently live
+                    Published campaigns currently live
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1620,7 +1948,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests with lifecycle status = ended
+                    Published campaigns with lifecycle status = ended
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1673,7 +2001,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Ended contests where payouts are processed
+                    Ended campaigns where payouts are processed
                     (post_contest_status = payouts_processed)
                   </TooltipContent>
                 </Tooltip>
@@ -1702,7 +2030,6 @@ export default function AdminDashboardClient({
         </div>
       </div>
 
-
       {/* Submissions Metrics */}
       <div className="mt-8 mb-4">
         <h2
@@ -1714,192 +2041,57 @@ export default function AdminDashboardClient({
         </h2>
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Verified Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <CheckCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {verifiedSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Verified
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Pending Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {pendingSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Rejected Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <XCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {rejectedSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Rejected
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Paid Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {paidSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Paid
-            </p>
-          </CardContent>
-        </div>
-
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1
-              className={`text-md font-medium ${
-                isDark ? "text-white" : "text-gray-900"
-              }`}
-            >
-              Total Submissions
-            </h1>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Video className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalSubmissions.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All submissions
-            </p>
-          </CardContent>
-        </div>
+        <SummaryMetricCard
+          title="Verified Submissions"
+          value={verifiedSubmissions}
+          subtitle="Verified"
+          tooltip="Submissions marked as verified"
+          icon={CheckCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Pending Submissions"
+          value={pendingSubmissions}
+          subtitle="Pending"
+          tooltip="Submissions awaiting review"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Rejected Submissions"
+          value={rejectedSubmissions}
+          subtitle="Rejected"
+          tooltip="Submissions marked as rejected"
+          icon={XCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Paid Submissions"
+          value={paidSubmissions}
+          subtitle="Paid"
+          tooltip="Submissions that have been paid out"
+          icon={DollarSign}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Submissions"
+          value={totalSubmissions}
+          subtitle="All submissions"
+          tooltip="All submissions across all campaigns"
+          icon={Video}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Unique Creators"
+          value={uniqueCreators}
+          subtitle="Creators with submissions"
+          tooltip="Distinct creators who have submitted"
+          icon={Users}
+          isDark={isDark}
+        />
       </div>
 
+      {/* Views Metrics */}
       <div className="mt-8 mb-4">
         <h2
           className={`text-xl font-bold mb-4 ${
@@ -1910,337 +2102,54 @@ export default function AdminDashboardClient({
         </h2>
       </div>
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Expected Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Expected Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Pending + Verified + Paid views
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalExpectedViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending + Verified
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Verified Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Verified Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Views from submissions marked as verified
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <CheckCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalVerifiedViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Verified
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Pending Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Pending Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Views from submissions marked as pending
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Eye className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalPendingViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Pending
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Rejected Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Rejected Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>From rejected entries</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <XCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalRejectedViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              From rejected entries
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Paid Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Paid Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>From paid entries</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalPaidViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              From paid entries
-            </p>
-          </CardContent>
-        </div>
-
-        {/* Total Views */}
-        <div
-          className={`rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 ${
-            isDark ? "bg-[#170337] text-white" : "bg-white text-black"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <div className="flex items-center gap-2">
-              <h1
-                className={`text-md font-medium ${
-                  isDark ? "text-white" : "text-gray-900"
-                }`}
-              >
-                Total Views
-              </h1>
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Info
-                      className={`h-3.5 w-3.5 cursor-help ${
-                        isDark
-                          ? "text-gray-400 hover:text-gray-300"
-                          : "text-gray-400 hover:text-gray-600"
-                      }`}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    All views across all submissions
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full ${
-                isDark
-                  ? "bg-[#FFFFFF36] text-white"
-                  : "bg-[#D8C3FF] text-[#4A00BE]"
-              }`}
-            >
-              <Video className="h-5 w-5" />
-            </div>
-          </div>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalViews.toLocaleString()}
-            </div>
-            <p
-              className={`text-sm mt-2 ${
-                isDark ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              All views
-            </p>
-          </CardContent>
-        </div>
+        <SummaryMetricCard
+          title="Expected Views"
+          value={totalExpectedViews}
+          subtitle="Pending + Verified + Paid views"
+          tooltip="Pending + verified + paid views"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Verified Views"
+          value={totalVerifiedViews}
+          subtitle="Verified"
+          tooltip="Views from submissions marked as verified"
+          icon={CheckCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Pending Views"
+          value={totalPendingViews}
+          subtitle="Pending"
+          tooltip="Views from submissions marked as pending"
+          icon={Eye}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Rejected Views"
+          value={totalRejectedViews}
+          subtitle="From rejected entries"
+          tooltip="Views from rejected submissions"
+          icon={XCircle}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Paid Views"
+          value={totalPaidViews}
+          subtitle="From paid entries"
+          tooltip="Views from paid submissions"
+          icon={DollarSign}
+          isDark={isDark}
+        />
+        <SummaryMetricCard
+          title="Total Views"
+          value={totalViews}
+          subtitle="All views"
+          tooltip="All views across all submissions"
+          icon={Video}
+          isDark={isDark}
+        />
       </div>
 
       {/* Admin actions */}
@@ -2296,7 +2205,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Sum of completed payments for contests that are published
+                    Sum of completed payments for campaigns that are published
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -2320,7 +2229,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Completed payments for published contests
+              Completed payments for published campaigns
             </p>
           </CardContent>
         </div>
@@ -2351,7 +2260,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Completed payments for contests not yet published
+                    Completed payments for campaigns not yet published
                     (draft/approved)
                   </TooltipContent>
                 </Tooltip>
@@ -2407,7 +2316,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Sum of completed payments across all contests (published and
+                    Sum of completed payments across all campaigns (published and
                     unpublished)
                   </TooltipContent>
                 </Tooltip>
@@ -2432,7 +2341,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              All contests with completed payment
+              All campaigns with completed payment
             </p>
           </CardContent>
         </div>
@@ -2733,7 +2642,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Includes payments made + budgets set on not-yet-paid contests
+              Includes payments made + budgets set on not-yet-paid campaigns
             </p>
           </CardContent>
         </div>
@@ -2764,7 +2673,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Budgets/prize pools on contests still in draft and not yet
+                    Budgets/prize pools on campaigns still in draft and not yet
                     paid
                   </TooltipContent>
                 </Tooltip>
@@ -2789,7 +2698,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Draft contests only (unpaid)
+              Draft campaigns only (unpaid)
             </p>
           </CardContent>
         </div>

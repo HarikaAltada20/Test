@@ -14,9 +14,9 @@ export function parseSubmissionMetadata(metadata: any): SubmissionMetadata | nul
       return null;
     }
     
-    // Validate rejection metadata
+    // Validate rejection metadata (reason required; timestamp/updatedBy optional for legacy data)
     if (parsedMetadata.type === 'rejection') {
-      if (!parsedMetadata.reason || !parsedMetadata.timestamp || !parsedMetadata.updatedBy) {
+      if (!parsedMetadata.reason || typeof parsedMetadata.reason !== 'string') {
         return null;
       }
       return parsedMetadata as SubmissionRejectionMetadata;

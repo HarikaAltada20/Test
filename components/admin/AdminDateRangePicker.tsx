@@ -1,0 +1,426 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { subDays, format } from "date-fns";
+import { Calendar as CalendarIcon, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import {
+  ADMIN_GROWTH_TIMEZONE,
+  type AdminGrowthTimezone,
+  dayRangeFromKeys,
+  getDateStrInTz,
+  getLastNDaysRange,
+  getMonthsAgoRange,
+  getTimeStrInTz,
+  parseTime12To24,
+  setTimeInTz,
+} from "@/lib/admin-date-range";
+
+export type AdminDateRangeValue = { from: Date; to: Date };
+
+export type AdminDateRangePickerProps = {
+  isDark: boolean;
+  value: AdminDateRangeValue;
+  presetLabel: string;
+  onChange: (next: AdminDateRangeValue, presetLabel: string) => void;
+  triggerClassName?: string;
+  align?: "start" | "center" | "end";
+  maxHistoryDays?: number;
+};
+
+/**
+ * Presets + custom calendar + timezone controls for admin dashboard date filtering.
+ */
+export function AdminDateRangePicker({
+  isDark,
+  value,
+  presetLabel,
+  onChange,
+  triggerClassName,
+  align = "end",
+  maxHistoryDays = 730,
+}: AdminDateRangePickerProps) {
+  const now = useMemo(() => new Date(), []);
+  const [open, setOpen] = useState(false);
+  const [internalRange, setInternalRange] = useState<AdminDateRangeValue>(value);
+  const [calendarRange, setCalendarRange] = useState<
+    { from?: Date; to?: Date } | undefined
+  >(undefined);
+  const [rangeTimezone, setRangeTimezone] = useState<AdminGrowthTimezone>(
+    ADMIN_GROWTH_TIMEZONE,
+  );
+  const [startTimeInput, setStartTimeInput] = useState<string | null>(null);
+  const [endTimeInput, setEndTimeInput] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setInternalRange(value);
+      setCalendarRange(undefined);
+    }
+  }, [open, value.from, value.to]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          type="button"
+          className={cn(
+            "min-w-[180px] max-w-[220px] justify-start text-left font-normal shrink-0",
+            isDark ? "border-white/20 bg-white/5 hover:bg-white/10" : "",
+            triggerClassName,
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {presetLabel}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className={cn(
+          "w-auto p-0",
+          isDark ? "border-white/20 bg-[#170337]" : "",
+        )}
+        align={align}
+      >
+        <div className="flex flex-col sm:flex-row max-h-[420px] overflow-y-auto">
+          <div className="flex flex-col gap-1 p-3 border-b sm:border-b-0 sm:border-r sm:h-full sm:min-h-[580px]">
+            <p
+              className={cn(
+                "text-sm font-medium",
+                isDark ? "text-gray-300" : "text-muted-foreground",
+              )}
+            >
+              Presets
+            </p>
+            {(
+              [
+                {
+                  label: "Last 7 Days",
+                  get: () => getLastNDaysRange(7, rangeTimezone),
+                },
+                {
+                  label: "Last 30 Days",
+                  get: () => getLastNDaysRange(30, rangeTimezone),
+                },
+                {
+                  label: "Last 3 Months",
+                  get: () => getMonthsAgoRange(3, rangeTimezone),
+                },
+                {
+                  label: "Last 12 Months",
+                  get: () => getMonthsAgoRange(12, rangeTimezone),
+                },
+              ] as const
+            ).map(({ label: presetLabelItem, get }) => (
+              <Button
+                key={presetLabelItem}
+                variant="ghost"
+                size="sm"
+                type="button"
+                className={cn(
+                  "justify-start font-normal",
+                  presetLabel === presetLabelItem
+                    ? isDark
+                      ? "bg-white/10 text-white"
+                      : "bg-accent"
+                    : isDark
+                      ? "text-gray-300 hover:bg-white/10"
+                      : "",
+                )}
+                onClick={() => {
+                  const next = get();
+                  setInternalRange(next);
+                  onChange(next, presetLabelItem);
+                  setOpen(false);
+                  setCalendarRange(undefined);
+                }}
+              >
+                {presetLabelItem}
+              </Button>
+            ))}
+          </div>
+          <div className="p-3">
+            <p
+              className={cn(
+                "text-sm font-medium mb-2",
+                isDark ? "text-gray-300" : "text-muted-foreground",
+              )}
+            >
+              Custom range
+            </p>
+            <Calendar
+              mode="range"
+              defaultMonth={internalRange.from}
+              selected={
+                calendarRange?.from != null
+                  ? {
+                      from: calendarRange.from,
+                      to: calendarRange.to ?? calendarRange.from,
+                    }
+                  : { from: internalRange.from, to: internalRange.to }
+              }
+              onSelect={(range) => {
+                setCalendarRange(
+                  range ? { from: range.from, to: range.to } : undefined,
+                );
+                if (range?.from && range?.to) {
+                  const next = { from: range.from, to: range.to };
+                  setInternalRange(next);
+                }
+              }}
+              numberOfMonths={1}
+              disabled={(date) =>
+                date > now || date < subDays(now, maxHistoryDays)
+              }
+              className={isDark ? "rounded-md border-0 bg-transparent" : ""}
+            />
+            <div
+              className={cn(
+                "space-y-3 border-t pt-3 mt-3",
+                isDark ? "border-white/10" : "border-border",
+              )}
+            >
+              <div className="space-y-2">
+                <Label
+                  className={cn(
+                    "text-xs font-medium",
+                    isDark ? "text-gray-400" : "text-muted-foreground",
+                  )}
+                >
+                  Start
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="date"
+                    value={getDateStrInTz(internalRange.from, rangeTimezone)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      const timeStr = getTimeStrInTz(
+                        internalRange.from,
+                        rangeTimezone,
+                      );
+                      const newFrom = setTimeInTz(
+                        internalRange.from,
+                        v,
+                        timeStr,
+                        rangeTimezone,
+                      );
+                      if (newFrom) {
+                        setInternalRange((prev) => ({ ...prev, from: newFrom }));
+                        setCalendarRange((prev) =>
+                          prev
+                            ? { from: newFrom, to: prev.to ?? newFrom }
+                            : { from: newFrom, to: internalRange.to },
+                        );
+                      }
+                    }}
+                    className={cn(
+                      "h-9 text-sm",
+                      isDark
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "",
+                    )}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="02:30 PM"
+                    value={
+                      startTimeInput ??
+                      getTimeStrInTz(internalRange.from, rangeTimezone)
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setStartTimeInput(v || null);
+                      const dateStr = getDateStrInTz(
+                        internalRange.from,
+                        rangeTimezone,
+                      );
+                      const newFrom = setTimeInTz(
+                        internalRange.from,
+                        dateStr,
+                        v,
+                        rangeTimezone,
+                      );
+                      if (newFrom) {
+                        setInternalRange((prev) => ({ ...prev, from: newFrom }));
+                        if (parseTime12To24(v)) setStartTimeInput(null);
+                      }
+                    }}
+                    onBlur={() => setStartTimeInput(null)}
+                    className={cn(
+                      "h-9 text-sm w-[100px]",
+                      isDark
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "",
+                    )}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label
+                  className={cn(
+                    "text-xs font-medium",
+                    isDark ? "text-gray-400" : "text-muted-foreground",
+                  )}
+                >
+                  End
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="date"
+                    value={getDateStrInTz(internalRange.to, rangeTimezone)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      const timeStr = getTimeStrInTz(
+                        internalRange.to,
+                        rangeTimezone,
+                      );
+                      const newTo = setTimeInTz(
+                        internalRange.to,
+                        v,
+                        timeStr,
+                        rangeTimezone,
+                      );
+                      if (newTo) {
+                        setInternalRange((prev) => ({ ...prev, to: newTo }));
+                        setCalendarRange((prev) =>
+                          prev
+                            ? { from: prev.from ?? internalRange.from, to: newTo }
+                            : { from: internalRange.from, to: newTo },
+                        );
+                      }
+                    }}
+                    className={cn(
+                      "h-9 text-sm",
+                      isDark
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "",
+                    )}
+                  />
+                  <Input
+                    type="text"
+                    placeholder="03:29 PM"
+                    value={
+                      endTimeInput ??
+                      getTimeStrInTz(internalRange.to, rangeTimezone)
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEndTimeInput(v || null);
+                      const dateStr = getDateStrInTz(
+                        internalRange.to,
+                        rangeTimezone,
+                      );
+                      const newTo = setTimeInTz(
+                        internalRange.to,
+                        dateStr,
+                        v,
+                        rangeTimezone,
+                      );
+                      if (newTo) {
+                        setInternalRange((prev) => ({ ...prev, to: newTo }));
+                        if (parseTime12To24(v)) setEndTimeInput(null);
+                      }
+                    }}
+                    onBlur={() => setEndTimeInput(null)}
+                    className={cn(
+                      "h-9 text-sm w-[100px]",
+                      isDark
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "",
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "space-y-2 border-t pt-3 mt-3",
+                isDark ? "border-white/10" : "border-border",
+              )}
+            >
+              <Label
+                className={cn(
+                  "text-xs font-medium",
+                  isDark ? "text-gray-400" : "text-muted-foreground",
+                )}
+              >
+                Timezone
+              </Label>
+              <Select
+                value={rangeTimezone}
+                onValueChange={(v: AdminGrowthTimezone) => {
+                  setRangeTimezone(v);
+                  setStartTimeInput(null);
+                  setEndTimeInput(null);
+                }}
+              >
+                <SelectTrigger
+                  className={cn(
+                    "h-9 text-sm",
+                    isDark ? "border-white/20 bg-white/5 text-white" : "",
+                  )}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
+                  className={isDark ? "border-white/20 bg-[#170337]" : ""}
+                >
+                  <SelectItem value="utc">UTC</SelectItem>
+                  <SelectItem value="local">Local (Asia/Calcutta)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2 p-2 border-t mt-3">
+              <Button
+                size="sm"
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  const fromDateStr = getDateStrInTz(
+                    internalRange.from,
+                    rangeTimezone,
+                  );
+                  const toDateStr = getDateStrInTz(
+                    internalRange.to,
+                    rangeTimezone,
+                  );
+                  const next = dayRangeFromKeys(
+                    fromDateStr,
+                    toDateStr,
+                    rangeTimezone,
+                  );
+                  const appliedLabel = `${format(next.from, "MMM d, yyyy")} \u2013 ${format(next.to, "MMM d, yyyy")}`;
+                  onChange(next, appliedLabel);
+                  setOpen(false);
+                  setCalendarRange(undefined);
+                }}
+              >
+                <Check className="mr-1 h-4 w-4" />
+                Apply
+              </Button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}

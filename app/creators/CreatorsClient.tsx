@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 import NumbersSection from "@/components/NumberSection";
 import {
@@ -26,6 +26,7 @@ import {
   Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,13 @@ import { createClient } from "@/utils/supabase/client";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { isCpmContestType } from "@/lib/contest-type";
+import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
+import {
+  parseVideoContestPlatforms,
+  resolveContestPlatformCpmRates,
+  resolveContestPoolBudgetCents,
+} from "@/lib/video-platform-campaigns";
 import { cn } from "@/lib/utils";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
@@ -104,16 +112,16 @@ const creatorsteps = [
     number: "1",
     title: "Sign Up & Connect Social Media",
     description:
-      "Simply sign up as a creator and connect your social media accounts (Instagram, YouTube, etc.) from which you want to participate in contests.",
+      "Simply sign up as a creator and connect your social media accounts (Instagram, YouTube, etc.) from which you want to participate in campaigns.",
     icon: <Users className="h-8 w-8" />,
     gradient: "from-violet-600 to-purple-600",
     color: "bg-[#7F39EC87] border-4 border-[#7F39EC]",
   },
   {
     number: "2",
-    title: "Browse & Choose Contests",
+    title: "Browse & Choose Campaigns",
     description:
-      "Explore available contests from brands looking for creators. Filter opportunities based on prize pool, competition, end date, platform, and contest type to find the best match for you.",
+      "Explore available campaigns from brands looking for creators. Filter opportunities based on prize pool, competition, end date, platform, and campaign type to find the best match for you.",
     icon: <Target className="h-8 w-8" />,
     gradient: "from-blue-600 to-indigo-600",
     color: "bg-[#444DE787] border-4 border-[#454DE5]",
@@ -122,7 +130,7 @@ const creatorsteps = [
     number: "3",
     title: "Create & Submit Content",
     description:
-      "Once you've found the right contest, create content that aligns with the brand's brief and follows the contest rules. Post it on your social media, then submit the link through our platform.",
+      "Once you've found the right campaign, create content that aligns with the brand's brief and follows the campaign rules. Post it on your social media, then submit the link through our platform.",
     icon: <Camera className="h-8 w-8" />,
     gradient: "from-amber-600 to-orange-600",
     color: "bg-[#E75D0D8F] border-4 border-[#E65D09]",
@@ -131,7 +139,7 @@ const creatorsteps = [
     number: "4",
     title: "Get Paid Based on Performance",
     description:
-      "Earn money based on how your content performs. For Leaderboard contests, you get paid based on your rank (determined by views). For CPM contests, you get paid purely based on the views your content generates.",
+      "Earn money based on how your content performs. For Leaderboard campaigns, you get paid based on your rank (determined by views). For CPM campaigns, you get paid purely based on the views your content generates.",
     icon: <Trophy className="h-8 w-8" />,
     gradient: "from-emerald-600 to-teal-600",
     color: "bg-[#0C94825C] border-4 border-[#08947E]",
@@ -176,6 +184,13 @@ export default function CreatorsClient({
   const [showAdvertiserModal, setShowAdvertiserModal] = useState(false);
   const [isCheckingStartEarning, setIsCheckingStartEarning] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [navigatingContestId, setNavigatingContestId] = useState<string | null>(null);
+  const [isNavigatingViewMore, setIsNavigatingViewMore] = useState(false);
+
+  const handleNavigation = () => {
+    setIsNavigating(true);
+  };
   const router = useRouter();
 
   // Cache management for client-side fetching
@@ -348,8 +363,23 @@ export default function CreatorsClient({
   }, []);
 
   const handleViewContest = (id: string) => {
+    setNavigatingContestId(id);
     router.push(`/dashboard/opportunities/${id}`);
   };
+
+  const handleViewMoreClick = () => {
+    setIsNavigatingViewMore(true);
+    router.push(getViewMoreLink());
+  };
+
+  // Get pathname for route change detection
+  const pathname = usePathname();
+
+  // Reset navigating contest ID when route changes
+  useEffect(() => {
+    setNavigatingContestId(null);
+    setIsNavigatingViewMore(false);
+  }, [pathname]);
 
   // Get the "View More" link based on user type
   const getViewMoreLink = () => {
@@ -397,7 +427,7 @@ export default function CreatorsClient({
     setIsSigningOut(true);
     try {
       const supabase = createClient();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
       localStorage.setItem("signupRole", "creator");
       setShowAdvertiserModal(false);
       router.push("/auth/signup");
@@ -449,6 +479,28 @@ export default function CreatorsClient({
     return endedFiltered.slice(0, limit);
   };
 
+  // Budget/prize pool in cents for any contest type (cpm, dual_rewards, milestone, leaderboard)
+  const getContestBudgetCents = (contest: any): number => {
+    if (contest.contest_type === "leaderboard") {
+      return (
+        contest.contest_based_details?.leaderboard_contest?.total_prize || 0
+      );
+    }
+    return resolveContestPoolBudgetCents(
+      contest.contest_type,
+      contest.contest_based_details,
+      contest.platform,
+    );
+  };
+
+  const getContestBudgetSpentCents = (contest: any): number =>
+    getPoolBudgetSpentCentsForDisplay({
+      contest_type: contest.contest_type,
+      post_contest_status: contest.post_contest_status,
+      contest_based_details: contest.contest_based_details,
+      platform: contest.platform,
+    });
+
   // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)
   // Ensure diversity: different platforms and contest types, prioritizing highest budgets
   const availableForMostPopular = contests.filter((c) => {
@@ -457,30 +509,20 @@ export default function CreatorsClient({
       return false;
     }
     // Only include contests with a valid budget/prize
-    const value =
-      c.contest_type === "cpm"
-        ? c.contest_based_details?.cpm_contest?.total_budget
-        : c.contest_based_details?.leaderboard_contest?.total_prize;
-    return value && value > 0;
+    return getContestBudgetCents(c) > 0;
   });
 
   const sortedForMostPopular = [...availableForMostPopular].sort((a, b) => {
-    // First: Get budget/prize value
-    const getBudget = (contest: any) => {
-      if (contest.contest_type === "cpm") {
-        return contest.contest_based_details?.cpm_contest?.total_budget || 0;
-      } else if (contest.contest_type === "leaderboard") {
-        return (
-          contest.contest_based_details?.leaderboard_contest?.total_prize || 0
-        );
-      }
-      return 0;
-    };
+    const getBudget = getContestBudgetCents;
 
-    // Second: Get CPM rate (only for CPM contests)
+    // Second: Get CPM rate (only for CPM-style contests, incl. dual rewards)
     const getCpmRate = (contest: any) => {
-      if (contest.contest_type === "cpm") {
-        return contest.contest_based_details?.cpm_contest?.cpm_rate_usd || 0;
+      if (isCpmContestType(contest.contest_type)) {
+        const rates = resolveContestPlatformCpmRates(
+          contest.contest_based_details,
+          contest.platform,
+        );
+        return rates.reduce((max, row) => Math.max(max, row.rateUsd), 0);
       }
       return 0;
     };
@@ -556,7 +598,7 @@ export default function CreatorsClient({
   const instagramContests = getContestsWithLiveAndEnded(
     contests.filter(
       (c) =>
-        c.platform?.toLowerCase() === "instagram" &&
+        parseVideoContestPlatforms(c.platform).includes("instagram") &&
         !mostPopularContestIds.has(c.id)
     ),
     5
@@ -564,26 +606,17 @@ export default function CreatorsClient({
   const youtubeContests = getContestsWithLiveAndEnded(
     contests.filter(
       (c) =>
-        c.platform?.toLowerCase() === "youtube" &&
+        parseVideoContestPlatforms(c.platform).includes("youtube") &&
         !mostPopularContestIds.has(c.id)
     ),
     5
   );
 
   // Calculate total budget for all campaigns (live, upcoming, and ended)
-  const totalBudget = contests.reduce((sum, contest) => {
-    if (contest.contest_type === "cpm") {
-      return (
-        sum + (contest.contest_based_details?.cpm_contest?.total_budget || 0)
-      );
-    } else if (contest.contest_type === "leaderboard") {
-      return (
-        sum +
-        (contest.contest_based_details?.leaderboard_contest?.total_prize || 0)
-      );
-    }
-    return sum;
-  }, 0);
+  const totalBudget = contests.reduce(
+    (sum, contest) => sum + getContestBudgetCents(contest),
+    0
+  );
 
   // Calculate total contests published
   const totalContests = contests.length;
@@ -591,47 +624,46 @@ export default function CreatorsClient({
   const renderContestCard = (contest: any) => {
     // Calculate budget used percentage
     let budgetUsedPercent = 0;
-    let totalBudget = 0;
-    let budgetSpent = 0;
-    let cpmRate = null;
+    const totalBudget =
+      contest.contest_type === "leaderboard"
+        ? contest.contest_based_details?.leaderboard_contest?.total_budget || 0
+        : getContestBudgetCents(contest);
+    const budgetSpent = getContestBudgetSpentCents(contest);
+    const cpmRate = isCpmContestType(contest.contest_type)
+      ? contest.contest_based_details?.cpm_contest?.cpm_rate_usd
+      : null;
 
-    if (contest.contest_type === "cpm") {
-      totalBudget =
-        contest.contest_based_details?.cpm_contest?.total_budget || 0;
-      budgetSpent =
-        contest.contest_based_details?.cpm_contest?.budget_spent || 0;
-      cpmRate = contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
-      if (totalBudget > 0) {
-        budgetUsedPercent = Math.min(
-          Math.round((budgetSpent / totalBudget) * 100),
-          100
-        );
-      }
-    } else if (contest.contest_type === "leaderboard") {
-      totalBudget =
-        contest.contest_based_details?.leaderboard_contest?.total_budget || 0;
-      budgetSpent =
-        contest.contest_based_details?.leaderboard_contest?.budget_spent || 0;
-      if (totalBudget > 0) {
-        budgetUsedPercent = Math.min(
-          Math.round((budgetSpent / totalBudget) * 100),
-          100
-        );
-      }
+    if (totalBudget > 0) {
+      budgetUsedPercent = Math.min(
+        Math.round((budgetSpent / totalBudget) * 100),
+        100
+      );
     }
 
     // Get budget/prize amount for display
-    const budgetAmount =
-      contest.contest_type === "cpm"
-        ? contest.contest_based_details?.cpm_contest?.total_budget
-        : contest.contest_based_details?.leaderboard_contest?.total_prize;
+    const budgetAmount = getContestBudgetCents(contest);
+
+    // Show budget-used progress for pool-based contests (CPM, dual rewards, milestone)
+    const showBudgetProgress =
+      (isCpmContestType(contest.contest_type) ||
+        contest.contest_type === "milestone") &&
+      totalBudget > 0;
 
     return (
       <div
         key={contest.id}
         onClick={() => handleViewContest(contest.id)}
-        className="relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-1 pb-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2"
+        className={cn(
+          "relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-1 pb-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2",
+          navigatingContestId === contest.id && "opacity-70 cursor-not-allowed"
+        )}
       >
+        {/* Loading overlay with spinner */}
+        {navigatingContestId === contest.id && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
+            <ButtonLoadingSpinner />
+          </div>
+        )}
         {/* Image */}
         {contest.thumbnail_url ? (
           <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex items-center justify-center overflow-hidden">
@@ -682,16 +714,16 @@ export default function CreatorsClient({
             )}
           </div>
 
-          {/* Budget used text - only show for CPM contests */}
-          {contest.contest_type === "cpm" && totalBudget > 0 && (
+          {/* Budget used text - only show for pool-based contests */}
+          {showBudgetProgress && (
             <span className="mt-1 text-[9px] sm:text-[10px] text-slate-400">
               {budgetUsedPercent}% budget used
             </span>
           )}
         </div>
 
-        {/* Progress bar - only show for CPM contests */}
-        {contest.contest_type === "cpm" && totalBudget > 0 && (
+        {/* Progress bar - only show for pool-based contests */}
+        {showBudgetProgress && (
           <div className="absolute bottom-0 left-[5px] right-0 h-1">
             <div
               className="h-full rounded-tr-full bg-green-500 transition-all"
@@ -821,7 +853,7 @@ export default function CreatorsClient({
                 disabled={isCheckingStartEarning}
                 className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Sparkles className="h-4 w-4" />
+                {isCheckingStartEarning ? <ButtonLoadingSpinner /> : <Sparkles className="h-4 w-4" />}
                 <span>Start Earning →</span>
               </Button>
 
@@ -871,10 +903,19 @@ export default function CreatorsClient({
                   {finalMostPopularContests.map(renderContestCard)}
 
                   {/* Total Budget Card */}
-                  <Link
-                    href={getViewMoreLink()}
-                    className="relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2 flex items-center justify-center"
+                  <div
+                    onClick={handleViewMoreClick}
+                    className={cn(
+                      "relative w-[180px] sm:w-[200px] md:w-[220px] lg:w-[240px] flex-shrink-0 overflow-hidden rounded-2xl border border-slate-700 bg-[#06021D] p-2 font-medium transition-transform duration-150 ease-in-out hover:scale-105 hover:border-orange-400 cursor-pointer my-2 flex items-center justify-center",
+                      isNavigatingViewMore && "opacity-70 cursor-not-allowed"
+                    )}
                   >
+                    {/* Loading overlay with spinner */}
+                    {isNavigatingViewMore && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10 rounded-2xl">
+                        <ButtonLoadingSpinner />
+                      </div>
+                    )}
                     {/* Icon Area (similar to image area) */}
                     <div className="w-full h-[140px] sm:h-[150px] md:h-[170px] lg:h-[190px] rounded-xl flex flex-col items-center justify-center gap-2">
                       <div className="relative flex items-center justify-center">
@@ -897,7 +938,7 @@ export default function CreatorsClient({
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 </div>
               </div>
             )}
@@ -960,7 +1001,7 @@ export default function CreatorsClient({
                 {
                   title: "Earn Money",
                   description:
-                    "Get paid for creating content for brands you love through contests and collaborations.",
+                    "Get paid for creating content for brands you love through campaigns and collaborations.",
                   number: "1",
                   image:
                     "/images/c89a26089c94c4806f6c5d35d5a13d7b9b4abe4d.avif", // first card image
@@ -1233,6 +1274,7 @@ export default function CreatorsClient({
                 disabled={isCheckingStartEarning}
                 className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
+                {isCheckingStartEarning ? <ButtonLoadingSpinner /> : null}
                 Start earning
               </Button>
             </div>

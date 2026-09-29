@@ -85,7 +85,7 @@ export function ManualEntryModal({
   );
   const [amount, setAmount] = useState("");
   const [cashCategory, setCashCategory] = useState<
-    "contest_winnings" | "other_earnings" | ""
+    "contest_winnings" | "other_earnings" | "affiliate_earnings" | ""
   >("");
   const [transactionNote, setTransactionNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -434,7 +434,10 @@ export function ManualEntryModal({
                 value={cashCategory}
                 onValueChange={(value) =>
                   setCashCategory(
-                    value as "contest_winnings" | "other_earnings"
+                    value as
+                      | "contest_winnings"
+                      | "other_earnings"
+                      | "affiliate_earnings"
                   )
                 }
               >
@@ -450,10 +453,13 @@ export function ManualEntryModal({
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
                   <SelectItem value="contest_winnings" isDark={isDark}>
-                    Contest Winnings
+                    Contest winnings (total money won)
+                  </SelectItem>
+                  <SelectItem value="affiliate_earnings" isDark={isDark}>
+                    Affiliate earnings
                   </SelectItem>
                   <SelectItem value="other_earnings" isDark={isDark}>
-                    Other Earnings
+                    Other earnings (bonuses, coupons, etc.)
                   </SelectItem>
                 </SelectContent>
               </Select>

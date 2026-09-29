@@ -258,7 +258,9 @@ export function PaginationControls({
                 <SelectContent
                   isDark={isDark}
                   className={cn(
-                    isDark && "border-gray-600 bg-[#07031D] text-white"
+                    // Above dialogs (e.g. download summary z-[80])
+                    "z-[90]",
+                    isDark && "border-gray-600 bg-[#07031D] text-white",
                   )}
                 >
                   {(hide200Option

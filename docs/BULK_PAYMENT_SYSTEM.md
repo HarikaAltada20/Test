@@ -3,7 +3,7 @@
 ## 📋 Table of Contents
 1. [Overview](#overview)
 2. [Payment Options](#payment-options)
-3. [API Endpoint](#api-endpoint)
+3. [API Endpoints](#api-endpoints)
 4. [Frontend Implementation](#frontend-implementation)
 5. [Payment Flow](#payment-flow)
 6. [Cap Handling](#cap-handling)
@@ -29,6 +29,16 @@ The GoViral platform now supports **TWO payment modes** for bulk submission paym
 - Faster processing
 - Atomic operation
 - **Status**: ✅ Fully Implemented
+
+### **Platform routing (bulk)**
+
+| Platform / content | Data store | Bulk endpoint |
+|--------------------|------------|----------------|
+| YouTube, Instagram | `submissions` | `POST /api/admin/bulk-payment` |
+| Twitter / X **CPM** (text/image) | `twitter_campaign_tweets` | `POST /api/contests/[id]/bulk-pay-twitter-cpm` |
+| Twitter **leaderboard** | `twitter_campaign_tweets` + creator payout | *(Bulk in modal still uses per-row payment APIs; use creator-level pay where applicable.)* |
+
+The creator submissions modal chooses the bulk URL based on `contest.contest_type === "cpm"` and Twitter/X platform so **Twitter CPM bulk matches Instagram: one wallet transaction**.
 
 ---
 
@@ -64,9 +74,12 @@ Brands have **6 payment buttons** in the creator submissions modal:
 
 ---
 
-## 🔌 API Endpoint
+## 🔌 API Endpoints
 
 ### **POST** `/api/admin/bulk-payment`
+
+Used for **YouTube and Instagram** (and any contest whose rows live in `submissions`).
+
 
 #### Request Body
 ```json
@@ -121,6 +134,40 @@ Brands have **6 payment buttons** in the creator submissions modal:
 
 ---
 
+### **POST** `/api/contests/[contestId]/bulk-pay-twitter-cpm`
+
+Used for **Twitter / X CPM** contests when the brand selects multiple tweets for the same creator and uses a **(Bulk)** payment action.
+
+#### Request Body
+```json
+{
+  "tweet_ids": ["uuid1", "uuid2", "uuid3"],
+  "payment_type": "both",
+  "creator_id": "creator-uuid"
+}
+```
+
+(`contestId` is taken from the URL path `[contestId]`.)
+
+#### Parameters
+- `tweet_ids` (required): Array of `twitter_campaign_tweets.id` values (must all belong to `creator_id`)
+- `payment_type` (required): `"standard"` | `"bonus"` | `"both"`
+- `creator_id` (required): Creator UUID
+
+#### Behavior (summary)
+- Validates contest is Twitter/X **CPM** and `post_contest_status === "verification_complete"`.
+- Sorts tweets by `tweet_created_at` (earliest first).
+- Applies per-creator CPM cap using existing `money_transactions` semantics (including `payout_type: "twitter_cpm_bulk"` totals via `metadata.total_cpm`).
+- Credits the creator **once** with `payout_type: "twitter_cpm_bulk"`; optional `bonus_type: "flat_fee"` when bonus is included; per-tweet amounts in `cpm_breakdown` and `twitter_bulk_bonus_breakdown`.
+- Updates each paid tweet: `moderation_status: "paid"`, `earnings` (CPM cents). Updates `twitter_campaign_leaderboard.earnings` by the sum of CPM paid in this call.
+
+#### Response `data` shape (success)
+Aligns with the modal alert fields: `total_amount`, `total_cpm`, `total_bonus`, `paid_count`, `skipped_count`, `transaction_id`, plus `cpm_breakdown` / `bonus_breakdown` objects keyed by tweet id.
+
+The UI hydrates Twitter bonus rows via `GET /api/contests/[id]/twitter-bonus-status`, which also reads `twitter_bulk_bonus_breakdown` on reward transactions.
+
+---
+
 ## 🎨 Frontend Implementation
 
 ### Component: `CreatorSubmissionsModal.tsx`
@@ -131,31 +178,14 @@ const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(new 
 const [selectAll, setSelectAll] = useState(false);
 ```
 
-#### Bulk Payment Function
-```tsx
-const handleBulkPayment = async (
-  type: 'standard' | 'bonus' | 'both',
-  isBulkTransaction: boolean
-) => {
-  // Filter to verified submissions
-  const verifiedSubs = selectedSubmissions.filter(s => s.status === 'verified');
-  
-  // Sort by submission time (earliest first)
-  const sortedSubs = verifiedSubs.sort((a, b) => 
-    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  
-  if (isBulkTransaction) {
-    // Single API call
-    await fetch('/api/admin/bulk-payment', { ... });
-  } else {
-    // Multiple API calls
-    for (const sub of sortedSubs) {
-      await onPayment(sub.id, type);
-    }
-  }
-};
-```
+#### Bulk payment function (`CreatorSubmissionsModal.tsx`)
+
+- **Verified-only**: Non-Twitter rows use `status === "verified"`; Twitter tweets use `moderation_status === "verified"` (or equivalent).
+- **Sort**: By `created_at` ascending.
+- **Bulk (`isBulkTransaction === true`)**:
+  - **Twitter CPM** (`contest.contest_type === "cpm"` and platform Twitter/X): `POST /api/contests/${contest.id}/bulk-pay-twitter-cpm` with `{ tweet_ids, payment_type, creator_id }`.
+  - **Otherwise** (e.g. Instagram / YouTube): `POST /api/admin/bulk-payment` with `{ submission_ids, payment_type, contest_id, creator_id }`.
+- **Non-bulk**: Sequential `onPayment(sub.id, type)` (Twitter still uses per-tweet APIs such as `pay-twitter-tweet` / `pay-twitter-bonus` as appropriate).
 
 #### UI Buttons
 ```tsx
@@ -223,6 +253,10 @@ Shows alert with breakdown:
   Flat Fee Bonus: $50.00
   Total Paid: $150.00
 ```
+
+### Twitter CPM bulk flow (same UX, different endpoint)
+
+Same as above, except IDs are **tweet** ids and the backend uses `twitter_campaign_tweets` + `bulk-pay-twitter-cpm`. Per-tweet **earnings** (cents) are stored on the tweet row so normal list views can show granted amounts consistently with Instagram.
 
 ---
 
@@ -472,7 +506,8 @@ Expected Result:
 
 ## 📝 Database Changes
 
-### Submission Status Fields
+### Submission status fields (`submissions`)
+
 ```sql
 -- Track CPM/Leaderboard payment
 paid: boolean (default false)
@@ -483,7 +518,19 @@ bonus_paid: boolean (default false)
 bonus_paid_at: timestamp
 ```
 
-### Wallet Transaction Metadata
+### Twitter CPM tweet fields (`twitter_campaign_tweets`)
+
+```sql
+-- Per-tweet CPM amount credited (cents); set when marked paid (single or bulk)
+earnings: integer (nullable)
+
+moderation_status: includes 'paid' when CPM (and/or workflow) completed for that tweet
+```
+
+### Wallet transaction metadata
+
+**Instagram / YouTube bulk** (`/api/admin/bulk-payment`):
+
 ```json
 {
   "contest_id": "uuid",
@@ -503,13 +550,31 @@ bonus_paid_at: timestamp
 }
 ```
 
+**Twitter CPM bulk** (`bulk-pay-twitter-cpm`):
+
+```json
+{
+  "contest_id": "uuid",
+  "twitter_creator_id": "uuid",
+  "payout_type": "twitter_cpm_bulk",
+  "payment_type": "both",
+  "total_cpm": 10000,
+  "total_bonus": 5000,
+  "tweet_count": 8,
+  "bonus_type": "flat_fee",
+  "cpm_breakdown": { "tweet-uuid-1": 1100, "tweet-uuid-2": 950 },
+  "twitter_bulk_bonus_breakdown": { "tweet-uuid-1": 1000, "tweet-uuid-2": 1000 }
+}
+```
+
 ---
 
 ## 🚀 Implementation Status
 
 ### ✅ Completed
-- [x] Bulk payment API endpoint
-- [x] Frontend bulk payment integration
+- [x] Bulk payment API endpoint (`/api/admin/bulk-payment`)
+- [x] Twitter CPM bulk payment API (`/api/contests/[id]/bulk-pay-twitter-cpm`)
+- [x] Frontend bulk payment integration (routes bulk by platform / contest type)
 - [x] Individual payment flow
 - [x] Earnings cap handling
 - [x] Bonus payment logic
@@ -539,7 +604,7 @@ For issues or questions:
 
 ---
 
-**Last Updated**: October 7, 2025
-**Version**: 1.0.0
-**Status**: ✅ Production Ready
+**Last Updated**: April 12, 2026  
+**Version**: 1.1.0  
+**Status**: ✅ Production Ready (apply `twitter_campaign_tweets.earnings` migration for Twitter CPM bulk)
 

@@ -1,33 +1,115 @@
+import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
-import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import {
+  creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
+  REVERSAL_TRANSACTION_REMARK,
+} from "@/lib/payment-utils";
+import {
+  adjustBonusCents,
+  adjustRewardCents,
+  parsePayoutAdjustment,
+} from "@/lib/payout-rules";
+import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
+import { buildMilestoneSubmissionPayoutCentsMapFromDetails } from "@/lib/milestone-contest-expected-spend";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import {
+  isKeyedMaxEarningsMap,
+  parseVideoContestPlatforms,
+  resolveFlatFeeBonusPlan,
+  resolveMaxEarningsCentsForSubmission,
+} from "@/lib/video-platform-campaigns";
+import {
+  buildContestPayoutIdempotencyPayload,
+  creditWithWalletShortfallRetry,
+  loadContestPayoutLedgerBundle,
+} from "@/lib/contest-payout-idempotency";
+import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+  getFlatFeeBonusLadderForSubmission,
+} from "@/lib/twitter-cpm-bonus-expected";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import { MetricsService } from "@/lib/metrics-service";
+import { fetchByIdsInChunks } from "@/lib/supabase-in-id-chunks";
+import {
+  fetchNonTwitterLeaderboardPrizeMap,
+  isTwitterTextImageLeaderboardContest,
+  sumPaidEarningsCents,
+} from "@/lib/non-twitter-leaderboard-creator-prize";
+import {
+  buildWalletRollbackDebitIdempotencyKey,
+  bulkPaymentRollbackRevertFlags,
+  splitFreshBulkCreditCents,
+} from "@/lib/bulk-payment-rollback";
+import {
+  acquireCreatorContestPayoutLease,
+  releaseCreatorContestPayoutLease,
+  renewCreatorContestPayoutLease,
+  type CreatorContestPayoutLease,
+} from "@/lib/creator-contest-payout-lease";
+
+function isQueueWorkerRequest(request: NextRequest): boolean {
+  return (
+    request.headers.get("X-From-Queue") === "1" ||
+    request.headers.get("x-from-queue") === "1"
+  );
+}
 
 export async function POST(request: NextRequest) {
-  const supabaseAdmin = await createClient();
+  let payoutLease: CreatorContestPayoutLease | null = null;
 
   try {
-    // Authenticate user
-    const {
-      data: { user },
-    } = await supabaseAdmin.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user is admin or advertiser
-    const { data: userData } = await supabaseAdmin
-      .from("users")
-      .select("user_type")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData || !["admin", "advertiser"].includes(userData.user_type)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
     const body = await request.json();
     const { submission_ids, payment_type, contest_id, creator_id } = body;
+
+    let adminUserId: string;
+    let supabaseAdmin: Awaited<ReturnType<typeof createClient>> | ReturnType<
+      typeof createAdminClient
+    >;
+
+    if (isQueueWorkerRequest(request)) {
+      const cronSecret = process.env.CRON_SECRET;
+      const auth = request.headers.get("Authorization");
+      if (!cronSecret || auth !== `Bearer ${cronSecret}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      const queuedAdminId =
+        typeof body.admin_user_id === "string" ? body.admin_user_id.trim() : "";
+      if (!queuedAdminId) {
+        return NextResponse.json(
+          { error: "admin_user_id is required for queued bulk payment" },
+          { status: 400 },
+        );
+      }
+      adminUserId = queuedAdminId;
+      supabaseAdmin = createAdminClient();
+    } else {
+      supabaseAdmin = await createClient();
+      const {
+        data: { user },
+      } = await supabaseAdmin.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("user_type")
+        .eq("id", user.id)
+        .single();
+
+      if (!userData || userData.user_type !== "admin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      adminUserId = user.id;
+    }
 
     if (
       !submission_ids ||
@@ -36,28 +118,67 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "submission_ids is required and must be a non-empty array" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!["standard", "bonus", "both"].includes(payment_type)) {
       return NextResponse.json(
         { error: "payment_type must be standard, bonus, or both" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Fetch all submissions
-    const { data: submissions, error: submissionsError } = await supabaseAdmin
-      .from("submissions")
-      .select("*")
-      .in("id", submission_ids)
-      .eq("contest_id", contest_id);
+    if (typeof contest_id !== "string" || contest_id.trim().length === 0) {
+      return NextResponse.json(
+        { error: "contest_id is required and must be a non-empty string" },
+        { status: 400 },
+      );
+    }
+
+    if (typeof creator_id !== "string" || creator_id.trim().length === 0) {
+      return NextResponse.json(
+        { error: "creator_id is required and must be a non-empty string" },
+        { status: 400 },
+      );
+    }
+
+    // Fetch all submissions (chunked — large `.in("id", …)` fails in production)
+    const { data: submissions, error: submissionsError } =
+      await fetchByIdsInChunks({
+        ids: submission_ids.map((value: unknown) => String(value)),
+        fetchChunk: async (chunkIds) =>
+          await supabaseAdmin
+            .from("submissions")
+            .select("*")
+            .in("id", chunkIds)
+            .eq("contest_id", contest_id),
+      });
 
     if (submissionsError || !submissions || submissions.length === 0) {
+      console.error(
+        "[bulk-payment] Failed to fetch submissions:",
+        submissionsError?.message || "empty result",
+        { requested: submission_ids.length },
+      );
       return NextResponse.json(
         { error: "Failed to fetch submissions" },
-        { status: 500 }
+        { status: 500 },
+      );
+    }
+
+    // Financial safety guard:
+    // all selected submissions must belong to the same creator we are crediting.
+    const mismatchedCreatorSubmission = submissions.find(
+      (s) => String(s.creator_id || "") !== creator_id,
+    );
+    if (mismatchedCreatorSubmission) {
+      return NextResponse.json(
+        {
+          error:
+            "creator_id does not match one or more selected submissions. Refusing to process payout.",
+        },
+        { status: 400 },
       );
     }
 
@@ -72,6 +193,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
+    if (isTwitterTextImageLeaderboardContest(contest)) {
+      return NextResponse.json(
+        {
+          error:
+            "Twitter text/image leaderboard contests must be paid via the Twitter creator payout APIs, not bulk-payment.",
+        },
+        { status: 400 },
+      );
+    }
+
     // Only allow payments when contest status is verification_complete
     if (contest.post_contest_status !== "verification_complete") {
       return NextResponse.json(
@@ -79,27 +210,143 @@ export async function POST(request: NextRequest) {
           error:
             "Payments can only be processed when contest status is 'verification_complete'",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Filter to verified submissions only
-    const verifiedSubmissions = submissions.filter(
-      (s) => s.status === "verified"
-    );
+    const leaseResult = await acquireCreatorContestPayoutLease({
+      contestId: contest_id,
+      creatorId: creator_id,
+    });
+    if (!leaseResult.ok) {
+      return NextResponse.json(
+        { error: leaseResult.error },
+        { status: leaseResult.busy ? 409 : 500 },
+      );
+    }
+    payoutLease = leaseResult.lease;
+
+    if (contest.contest_type === "dual_rewards") {
+      const dualResult = await executeDualRewardsBulkPayment({
+        supabaseAdmin,
+        adminUserId,
+        contest,
+        contestId: contest_id,
+        creatorId: creator_id,
+        submissionIds: submission_ids,
+        paymentType: payment_type,
+        payoutLease,
+      });
+
+      if (!dualResult.ok) {
+        const errorBody: Record<string, unknown> = { error: dualResult.error };
+        if (
+          dualResult.details != null &&
+          typeof dualResult.details === "object" &&
+          !Array.isArray(dualResult.details)
+        ) {
+          Object.assign(errorBody, dualResult.details);
+        } else if (dualResult.details !== undefined) {
+          errorBody.details = dualResult.details;
+        }
+        return NextResponse.json(errorBody, { status: dualResult.status });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully paid ${dualResult.appliedCount} submissions`,
+        data: {
+          total_amount: dualResult.totalAmount,
+          total_cpm: dualResult.totalCpm,
+          total_milestone: dualResult.totalMilestone,
+          paid_count: dualResult.appliedCount,
+          applied_count: dualResult.appliedCount,
+          requested_count: dualResult.requestedCount,
+          skipped_count: dualResult.skippedCount,
+          breakdown: dualResult.breakdown,
+          transaction_id: dualResult.transactionId,
+          payout_idempotent_retry: dualResult.alreadyApplied,
+          payout_operation_key: dualResult.payoutOperationKey,
+        },
+      });
+    }
+
+    // Filter to verified (or legacy "approved") submissions — same notion as verify-submission / UI.
+    // For bonus-only payouts, also accept rows whose standard reward was already paid
+    // (status="paid" or paid=true) but whose flat-fee bonus is still unpaid. This mirrors
+    // the Twitter CPM bulk payout, which already supports paying bonus after standard.
+    const verifiedSubmissions = submissions.filter((s) => {
+      const st = String(s.status || "").toLowerCase();
+      if (st === "verified" || st === "approved") return true;
+      if (payment_type === "bonus") {
+        const isPaidRow = st === "paid" || s.paid === true;
+        return isPaidRow && s.bonus_paid !== true;
+      }
+      return false;
+    });
 
     if (verifiedSubmissions.length === 0) {
       return NextResponse.json(
-        { error: "No verified submissions found" },
-        { status: 400 }
+        {
+          error:
+            payment_type === "bonus"
+              ? "No eligible submissions found. Bonus can be paid on verified rows, or already-paid rows whose bonus has not been paid yet."
+              : "No verified submissions found",
+        },
+        { status: 400 },
       );
     }
 
     // Sort by submission time (earliest first)
     const sortedSubmissions = verifiedSubmissions.sort(
       (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
+
+    // Milestone payout — same FCFS + limits + view rules as contest detail / verify-submission
+    let milestonePayoutBySubmissionId = new Map<string, number>();
+    if (contest.contest_type === "milestone") {
+      const { data: payoutEligibleSubs, error: payoutEligibleErr } =
+          await fetchContestSubmissionsAllPages(
+            supabaseAdmin,
+            contest_id,
+            "id, creator_id, status, views, created_at, platform, other_stats",
+            {
+              statusIn: ["pending", "verified", "paid"],
+              order: { column: "created_at", ascending: true },
+            },
+          );
+
+        if (payoutEligibleErr) {
+          console.error(
+            "[bulk-payment] milestone payout query failed:",
+            payoutEligibleErr,
+          );
+          return NextResponse.json(
+            {
+              error: `Milestone allocation failed: ${String((payoutEligibleErr as { message?: string })?.message ?? payoutEligibleErr)}. Try again or contact support.`,
+            },
+            { status: 500 },
+          );
+        } else {
+          const records = (payoutEligibleSubs || []).map((sub: any) => ({
+            id: String(sub.id),
+            creator_id: sub.creator_id,
+            created_at: sub.created_at,
+            status: sub.status,
+            views: sub.views,
+            platform: sub.platform,
+            other_stats: sub.other_stats,
+          }));
+          milestonePayoutBySubmissionId =
+            buildMilestoneSubmissionPayoutCentsMapFromDetails(
+              records,
+              (contest.contest_based_details as Record<string, unknown>) ||
+                null,
+              contest.platform,
+            );
+        }
+    }
 
     // Get flat fee bonus and total budget
     const contestDetails =
@@ -107,11 +354,32 @@ export async function POST(request: NextRequest) {
         ? (contest.contest_based_details as any)?.cpm_contest
         : (contest.contest_based_details as any)?.leaderboard_contest;
 
-    const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
+    const flatFeeBonusPlan = resolveFlatFeeBonusPlan(
+      (contest.contest_based_details as Record<string, unknown>) || null,
+      contest.platform,
+      contest.contest_type,
+    );
+    const flatFeeBonus = getFlatFeeBonusCentsFromContest(contest as any);
     const totalBudget = contestDetails?.total_budget || null;
     const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
-    const maxEarnings = contest.max_earnings_per_creator || null;
+    const maxEarningsKeyed = isKeyedMaxEarningsMap(
+      contest.max_earnings_per_creator,
+    );
+    const maxEarnings =
+      maxEarningsKeyed
+        ? null
+        : typeof contest.max_earnings_per_creator === "number"
+          ? contest.max_earnings_per_creator
+          : contestDetails?.max_earnings_per_creator || null;
+
+    const payoutAdjustment = parsePayoutAdjustment(
+      contest.payout_adjustment_percentage,
+      contest.payout_adjustment_mode,
+      { contestType: contest.contest_type },
+    );
+    const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
+    const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
 
     // Check bonus budget/cap before processing
     if (
@@ -119,26 +387,41 @@ export async function POST(request: NextRequest) {
       flatFeeBonus > 0
     ) {
       // Calculate current bonus spending
-      const { data: bonusSpendingData } = await supabaseAdmin
-        .from("submissions")
-        .select("bonus_amount")
-        .eq("contest_id", contest_id)
-        .eq("bonus_paid", true);
+      const { data: bonusSpendingData, error: bonusSpendErr } =
+        await fetchContestSubmissionsAllPages(
+          supabaseAdmin,
+          contest_id,
+          "bonus_amount",
+          { bonusPaid: true, order: { column: "created_at", ascending: true } },
+        );
+
+      if (bonusSpendErr) {
+        return NextResponse.json(
+          {
+            error: `Failed to load bonus spending: ${String((bonusSpendErr as { message?: string })?.message ?? bonusSpendErr)}`,
+          },
+          { status: 500 },
+        );
+      }
 
       const currentBonusSpent = (bonusSpendingData || []).reduce(
-        (sum, sub) => sum + (sub.bonus_amount || 0),
-        0
+        (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
+        0,
       );
 
       // Calculate potential bonus spending for this bulk payment (only unpaid bonuses)
       const unpaidBonusSubmissions = verifiedSubmissions.filter(
-        (s) => !s.bonus_paid
+        (s) => !s.bonus_paid,
       );
       const potentialBonusSpending =
         unpaidBonusSubmissions.length * flatFeeBonus;
 
       // For leaderboard contests with total_budget, check if budget would be exceeded
-      if (contest.contest_type === "leaderboard" && totalBudget) {
+      if (
+        contest.contest_type === "leaderboard" &&
+        totalBudget &&
+        flatFeeBonusPlan.shareAcrossAllPlatforms
+      ) {
         if (currentBonusSpent + potentialBonusSpending > totalBudget) {
           return NextResponse.json(
             {
@@ -149,17 +432,21 @@ export async function POST(request: NextRequest) {
                 budgetLimit: totalBudget,
                 remaining: totalBudget - currentBonusSpent,
                 maxSubmissions: Math.floor(
-                  (totalBudget - currentBonusSpent) / flatFeeBonus
+                  (totalBudget - currentBonusSpent) / flatFeeBonus,
                 ),
               },
             },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
 
       // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
-      if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+      if (
+        contest.contest_type === "cpm" &&
+        flatFeeBonusCap &&
+        flatFeeBonusPlan.shareAcrossAllPlatforms
+      ) {
         if (currentBonusSpent + potentialBonusSpending > flatFeeBonusCap) {
           return NextResponse.json(
             {
@@ -170,11 +457,11 @@ export async function POST(request: NextRequest) {
                 capLimit: flatFeeBonusCap,
                 remaining: flatFeeBonusCap - currentBonusSpent,
                 maxSubmissions: Math.floor(
-                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus
+                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus,
                 ),
               },
             },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
@@ -183,22 +470,160 @@ export async function POST(request: NextRequest) {
     // Calculate earnings for each submission
     let runningTotal = 0;
     const breakdown: any[] = [];
+    const isMilestoneContest = contest.contest_type === "milestone";
+    const breakdownMainAmount = (item: {
+      cpm_amount?: number;
+      milestone_cents?: number;
+    }) =>
+      isMilestoneContest
+        ? Math.round(Number(item.milestone_cents) || 0)
+        : Math.round(Number(item.cpm_amount) || 0);
+    const breakdownBonusAmount = (item: {
+      bonus_amount?: number;
+      bonus_cents?: number;
+    }) =>
+      isMilestoneContest
+        ? Math.round(Number(item.bonus_cents) || 0)
+        : Math.round(Number(item.bonus_amount) || 0);
     let totalCPM = 0;
     let totalBonus = 0;
     let paidCount = 0;
     let skippedCount = 0;
+    let bonusReasonCounts: Record<string, number> = {};
+    let globalExpectedBonusMap = new Map<string, number>();
+
+    const { data: bonusSpendingData, error: bonusSpendErr2 } =
+      await fetchContestSubmissionsAllPages(
+        supabaseAdmin,
+        contest_id,
+        "bonus_amount, platform",
+        { bonusPaid: true, order: { column: "created_at", ascending: true } },
+      );
+    if (bonusSpendErr2) {
+      return NextResponse.json(
+        {
+          error: `Failed to load bonus spending: ${String((bonusSpendErr2 as { message?: string })?.message ?? bonusSpendErr2)}`,
+        },
+        { status: 500 },
+      );
+    }
+    const currentBonusSpent = (bonusSpendingData || []).reduce(
+      (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
+      0,
+    );
+    let runningBonusSpent = currentBonusSpent;
+    const runningBonusSpentByPlatform = new Map<string, number>();
+    if (!flatFeeBonusPlan.shareAcrossAllPlatforms) {
+      for (const row of bonusSpendingData || []) {
+        const key =
+          parseVideoContestPlatforms((row as { platform?: string }).platform)[0] ||
+          "_";
+        runningBonusSpentByPlatform.set(
+          key,
+          (runningBonusSpentByPlatform.get(key) || 0) +
+            (Number((row as { bonus_amount?: number }).bonus_amount) || 0),
+        );
+      }
+    }
+    if (payment_type !== "standard" && flatFeeBonus > 0) {
+      // Fetch every contest submission and let `buildFlatFeeBonusExpectedCentsBySubmissionId`
+      // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
+      // We intentionally avoid pre-filtering with `.or(...)` on Supabase because the
+      // PostgREST `.or()` syntax parses commas inside `in.(...)` as top-level filter
+      // separators, which yields an empty result and silently breaks the bonus map.
+      const { data: contestEligibleSubs, error: contestEligibleErr } =
+        await fetchContestSubmissionsAllPages(
+          supabaseAdmin,
+          contest_id,
+          "id, created_at, status, paid, platform",
+          { order: { column: "created_at", ascending: true } },
+        );
+      if (contestEligibleErr) {
+        return NextResponse.json(
+          {
+            error: `Failed to load contest submissions for bonus map: ${String((contestEligibleErr as { message?: string })?.message ?? contestEligibleErr)}`,
+          },
+          { status: 500 },
+        );
+      }
+      globalExpectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
+        contest as any,
+        (contestEligibleSubs || []).map((s: any) => ({
+          id: String(s.id),
+          created_at: s.created_at,
+          status: s.status,
+          paid: s.paid === true,
+          platform: s.platform,
+        })),
+      );
+    }
 
     // Check how much has already been paid to this creator
-    const { data: previousSubmissions } = await supabaseAdmin
-      .from("submissions")
-      .select("earnings, paid")
-      .eq("contest_id", contest_id)
-      .eq("creator_id", creator_id)
-      .eq("paid", true);
+    const { data: previousSubmissions, error: previousSubsErr } =
+      await fetchContestSubmissionsAllPages(
+        supabaseAdmin,
+        contest_id,
+        "earnings, paid, platform",
+        {
+          creatorId: creator_id,
+          paid: true,
+          order: { column: "created_at", ascending: true },
+        },
+      );
+    if (previousSubsErr) {
+      return NextResponse.json(
+        {
+          error: `Failed to load creator payment history: ${String((previousSubsErr as { message?: string })?.message ?? previousSubsErr)}`,
+        },
+        { status: 500 },
+      );
+    }
 
-    const alreadyPaidAmount =
-      previousSubmissions?.reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+    const alreadyPaidAmount = sumPaidEarningsCents(
+      (previousSubmissions || []) as Array<{
+        earnings?: number | null;
+        paid?: boolean | null;
+      }>,
+    );
     runningTotal = alreadyPaidAmount;
+    const runningByPlatform = new Map<string, number>();
+    if (maxEarningsKeyed) {
+      for (const row of previousSubmissions || []) {
+        const key = String((row as any).platform || "").toLowerCase() || "_";
+        runningByPlatform.set(
+          key,
+          (runningByPlatform.get(key) || 0) +
+            Math.max(0, Number((row as any).earnings) || 0),
+        );
+      }
+    }
+
+    // Non-Twitter leaderboard: per-submission prizes from All-tab rank when
+    // platform prizes match, or each platform's own ladder when they differ.
+    // Ranking is always fetched fresh (no cross-request cache) so concurrent
+    // verifies cannot cause two submissions to both receive the same prize rank.
+    let leaderboardPrizeBySubmissionId = new Map<string, number>();
+    const isLeaderboardContest = contest.contest_type === "leaderboard";
+    if (isLeaderboardContest && payment_type !== "bonus") {
+      const prizes =
+        (contest.contest_based_details as any)?.leaderboard_contest?.prizes ||
+        [];
+      const prizeMapResult = await fetchNonTwitterLeaderboardPrizeMap({
+        supabaseAdmin,
+        contestId: contest_id,
+        prizes,
+        contestBasedDetails:
+          (contest.contest_based_details as Record<string, unknown>) || null,
+        contestPlatform: contest.platform,
+      });
+      if (prizeMapResult.error) {
+        return NextResponse.json(
+          { error: `Failed to load leaderboard ranking submissions: ${prizeMapResult.error}` },
+          { status: 500 },
+        );
+      }
+      leaderboardPrizeBySubmissionId = prizeMapResult.prizeBySubmissionId;
+    }
 
     for (const sub of sortedSubmissions) {
       // Skip if already paid
@@ -207,164 +632,451 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Calculate CPM earnings for this submission
+      // Calculate earnings for this submission
       let submissionEarnings = 0;
 
       if (payment_type !== "bonus") {
-        // Use stored earnings or calculate from views
-        submissionEarnings = sub.earnings || 0;
+        if (isLeaderboardContest) {
+          submissionEarnings =
+            leaderboardPrizeBySubmissionId.get(String(sub.id)) || 0;
+        } else if (contest.contest_type === "milestone") {
+          submissionEarnings =
+            milestonePayoutBySubmissionId.get(String(sub.id)) || 0;
+        } else {
+          // Numeric normalize: DB/JSON may send string "0" which is truthy and would skip CPM math below.
+          const storedEarnings = Number((sub as any).earnings);
+          submissionEarnings =
+            Number.isFinite(storedEarnings) && storedEarnings > 0
+              ? storedEarnings
+              : 0;
 
-        // If earnings not stored, calculate dynamically for CPM contests
-        if (!submissionEarnings && contest.contest_type === "cpm") {
-          const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
-          if (cpmConfig?.cpm_rate_usd) {
-            let effectiveViews = sub.views || 0;
-
-            // Apply min_views threshold
-            if (
-              cpmConfig.min_views != null &&
-              effectiveViews < cpmConfig.min_views
-            ) {
-              effectiveViews = 0;
-            }
-
-            // Apply max_views cap
-            if (
-              cpmConfig.max_views != null &&
-              effectiveViews > cpmConfig.max_views
-            ) {
-              effectiveViews = cpmConfig.max_views;
-            }
-
-            // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-            const calculatedEarnings =
-              (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-            submissionEarnings = Math.round(calculatedEarnings);
+          // If earnings not stored, calculate dynamically for CPM contests.
+          // Multi-platform contests store rates under youtube|instagram|tiktok,
+          // not root cpm_contest — use the submission's platform config.
+          if (!submissionEarnings && contest.contest_type === "cpm") {
+            submissionEarnings = computeCpmRawCentsForRow(
+              {
+                views: sub.views,
+                platform: sub.platform,
+                other_stats: sub.other_stats,
+              },
+              (contest.contest_based_details as Record<string, unknown>) ||
+                null,
+              contest.platform,
+            );
           }
         }
 
-        // Check if adding this submission would exceed the cap
-        if (maxEarnings && runningTotal + submissionEarnings > maxEarnings) {
-          // Partial payment to reach cap exactly
-          const remainingCap = maxEarnings - runningTotal;
+        // Cap applies to CPM, stored-earnings, and leaderboard rank prizes so pay
+        // cannot exceed creator-wise Expected Reward (max_earnings_per_creator).
+        const subCap = maxEarningsKeyed
+          ? resolveMaxEarningsCentsForSubmission(
+              contest as any,
+              (sub as any).platform,
+            )
+          : maxEarnings;
+        const runKey = maxEarningsKeyed
+          ? String((sub as any).platform || "").toLowerCase() || "_"
+          : "_";
+        const platformRunning = maxEarningsKeyed
+          ? runningByPlatform.get(runKey) || 0
+          : runningTotal;
+        if (subCap && platformRunning + submissionEarnings > subCap) {
+          const remainingCap = subCap - platformRunning;
           if (remainingCap > 0) {
             submissionEarnings = remainingCap;
-            runningTotal = maxEarnings;
+            if (maxEarningsKeyed) {
+              runningByPlatform.set(runKey, subCap);
+            } else {
+              runningTotal = subCap;
+            }
           } else {
-            // Cap reached, skip this submission for CPM payment
             submissionEarnings = 0;
           }
         } else {
-          runningTotal += submissionEarnings;
+          if (maxEarningsKeyed) {
+            runningByPlatform.set(runKey, platformRunning + submissionEarnings);
+          } else {
+            runningTotal += submissionEarnings;
+          }
         }
 
-        totalCPM += submissionEarnings;
+        // Leaderboard prizes are fixed rank amounts — do not apply % payout adjustment.
+        const adjustedSubmissionEarnings = isLeaderboardContest
+          ? submissionEarnings
+          : adjustRewardCents(submissionEarnings, {
+              shouldAdjustReward,
+              percentage: payoutAdjustment.percentage,
+            });
+
+        totalCPM += adjustedSubmissionEarnings;
       }
 
       // Calculate bonus
       let submissionBonus = 0;
       if (payment_type !== "standard" && flatFeeBonus > 0 && !sub.bonus_paid) {
-        // Check if adding this bonus would exceed the cap/budget
-        let wouldExceedCap = false;
-
-        if (contest.contest_type === "leaderboard" && totalBudget) {
-          const remainingBudget = totalBudget - totalBonus;
-          if (flatFeeBonus > remainingBudget) {
-            wouldExceedCap = true;
-          }
-        } else if (contest.contest_type === "cpm" && flatFeeBonusCap) {
-          const remainingCap = flatFeeBonusCap - totalBonus;
-          if (flatFeeBonus > remainingCap) {
-            wouldExceedCap = true;
-          }
-        }
-
-        if (!wouldExceedCap) {
-          submissionBonus = flatFeeBonus;
-          totalBonus += submissionBonus;
+        const expectedBonusForSubmission =
+          globalExpectedBonusMap.get(String(sub.id)) || 0;
+        if (expectedBonusForSubmission <= 0) {
+          bonusReasonCounts.not_expected =
+            (bonusReasonCounts.not_expected || 0) + 1;
+          submissionBonus = 0;
         } else {
-          // Cap reached, skip bonus for remaining submissions
-          skippedCount++;
+          const ladder = getFlatFeeBonusLadderForSubmission(
+            contest as any,
+            (sub as { platform?: string | null }).platform,
+          );
+          const platformKey =
+            parseVideoContestPlatforms(
+              (sub as { platform?: string | null }).platform,
+            )[0] || "_";
+          const spent = flatFeeBonusPlan.shareAcrossAllPlatforms
+            ? runningBonusSpent
+            : runningBonusSpentByPlatform.get(platformKey) || 0;
+          const remainingBudget =
+            ladder.budgetCents != null
+              ? Math.max(0, ladder.budgetCents - spent)
+              : null;
+          const bonusAllocation = allocateFlatFeeBonusCents(
+            expectedBonusForSubmission,
+            remainingBudget,
+          );
+          submissionBonus = bonusAllocation.amount;
+          bonusReasonCounts[bonusAllocation.reason] =
+            (bonusReasonCounts[bonusAllocation.reason] || 0) + 1;
+          submissionBonus = Math.min(
+            submissionBonus,
+            expectedBonusForSubmission,
+          );
+          if (submissionBonus > 0) {
+            if (flatFeeBonusPlan.shareAcrossAllPlatforms) {
+              runningBonusSpent += submissionBonus;
+            } else {
+              runningBonusSpentByPlatform.set(
+                platformKey,
+                spent + submissionBonus,
+              );
+            }
+            totalBonus += submissionBonus;
+          }
         }
       }
 
       // Add to breakdown
-      if (submissionEarnings > 0 || submissionBonus > 0) {
-        breakdown.push({
-          submission_id: sub.id,
-          video_title: sub.video_title || "Untitled",
-          cpm_amount: submissionEarnings,
-          bonus_amount: submissionBonus,
-          created_at: sub.created_at,
-        });
+      const finalCpmAmount =
+        payment_type !== "bonus"
+          ? isLeaderboardContest
+            ? submissionEarnings
+            : adjustRewardCents(submissionEarnings, {
+                shouldAdjustReward,
+                percentage: payoutAdjustment.percentage,
+              })
+          : 0;
+
+      const finalBonusAmount =
+        payment_type !== "standard"
+          ? adjustBonusCents(submissionBonus, {
+              shouldAdjustBonus,
+              percentage: payoutAdjustment.percentage,
+            })
+          : 0;
+
+      if (finalCpmAmount > 0 || finalBonusAmount > 0) {
+        if (isMilestoneContest) {
+          breakdown.push({
+            submission_id: sub.id,
+            video_title: sub.video_title || "Untitled",
+            milestone_cents: finalCpmAmount,
+            bonus_cents: finalBonusAmount,
+            original_milestone_cents: submissionEarnings,
+            original_bonus_cents: submissionBonus,
+            created_at: sub.created_at,
+          });
+        } else {
+          breakdown.push({
+            submission_id: sub.id,
+            video_title: sub.video_title || "Untitled",
+            cpm_amount: finalCpmAmount,
+            bonus_amount: finalBonusAmount,
+            original_cpm_amount: submissionEarnings,
+            original_bonus_amount: submissionBonus,
+            created_at: sub.created_at,
+          });
+        }
         paidCount++;
       } else {
         skippedCount++;
       }
     }
 
-    const totalAmount = totalCPM + totalBonus;
+    // Use breakdown totals so credited amount matches adjusted values (not raw totalBonus)
+    const totalAmount = breakdown.reduce(
+      (sum, b) => sum + breakdownMainAmount(b) + breakdownBonusAmount(b),
+      0,
+    );
+    const totalMainPaid = breakdown.reduce(
+      (s, b) => s + breakdownMainAmount(b),
+      0,
+    );
+    const totalBonusPaid = breakdown.reduce(
+      (s, b) => s + breakdownBonusAmount(b),
+      0,
+    );
 
     if (totalAmount === 0) {
+      const milestoneHint =
+        contest.contest_type === "milestone"
+          ? " Milestone: confirm submissions are not already paid, creator max earnings is not exhausted, and view counts qualify for the ladder (pending entries count toward winner limits)."
+          : "";
+
+      if (payment_type === "bonus") {
+        const alreadyBonusPaid = sortedSubmissions.filter(
+          (s) => s.bonus_paid === true,
+        ).length;
+        const notExpected = bonusReasonCounts.not_expected || 0;
+        const capExhausted = bonusReasonCounts.cap_exhausted || 0;
+        const partialZero = bonusReasonCounts.partial_remainder || 0;
+
+        // Per-submission diagnostic so admins can compare with the UI's
+        // "Expected bonus" column when the buckets above seem to disagree
+        // with what's on screen.
+        const perSubmissionDiagnostic = sortedSubmissions.map((s) => ({
+          submission_id: s.id,
+          status: s.status,
+          paid: s.paid === true,
+          bonus_paid: s.bonus_paid === true,
+          in_eligible_map: globalExpectedBonusMap.has(String(s.id)),
+          expected_bonus_cents:
+            globalExpectedBonusMap.get(String(s.id)) ?? null,
+        }));
+
+        const reasonParts: string[] = [];
+        if (alreadyBonusPaid > 0) {
+          reasonParts.push(`${alreadyBonusPaid} already had bonus paid`);
+        }
+        if (notExpected > 0) {
+          reasonParts.push(
+            `${notExpected} fall outside this contest's bonus budget allocation`,
+          );
+        }
+        if (capExhausted > 0) {
+          reasonParts.push(`${capExhausted} hit the bonus cap at runtime`);
+        }
+        if (partialZero > 0) {
+          reasonParts.push(
+            `${partialZero} had bonus adjusted to 0 by the payout adjustment`,
+          );
+        }
+        const reasonSummary = reasonParts.length
+          ? ` ${reasonParts.join("; ")}.`
+          : "";
+        const tip =
+          notExpected > 0
+            ? " Bonus is allocated first-come-first-served by submission date until flat_fee_bonus_cap (or total_budget if no cap is set) is exhausted. To pay these rows, raise the cap/budget or pick earlier submissions."
+            : "";
+
+        console.warn("[bulk-payment] bonus payout produced 0 total amount", {
+          contest_id,
+          creator_id,
+          flatFeeBonus,
+          flatFeeBonusCap,
+          totalBudget,
+          currentBonusSpent,
+          globalExpectedBonusMapSize: globalExpectedBonusMap.size,
+          bonusReasonCounts,
+          alreadyBonusPaid,
+          perSubmissionDiagnostic,
+        });
+
+        return NextResponse.json(
+          {
+            error: "No bonus payments to process." + reasonSummary + tip,
+            bonus_reason_counts: bonusReasonCounts,
+            already_bonus_paid: alreadyBonusPaid,
+            per_submission_diagnostic: perSubmissionDiagnostic,
+          },
+          { status: 400 },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: isLeaderboardContest
+            ? "No leaderboard prize to pay for these submissions. They may be outside the prize ranks, already paid, or have no verified submissions in the ranking."
+            : "No payments to process. All submissions may be already paid or cap reached." +
+              milestoneHint,
+        },
+        { status: 400 },
+      );
+    }
+
+    const ledgerBundle = await loadContestPayoutLedgerBundle(
+      supabaseAdmin,
+      creator_id,
+      contest_id,
+    );
+    if ("errorMessage" in ledgerBundle) {
+      console.error(
+        "[bulk-payment] failed to read payout ledger for idempotency:",
+        ledgerBundle.errorMessage,
+      );
       return NextResponse.json(
         {
           error:
-            "No payments to process. All submissions may be already paid or cap reached.",
+            "Cannot verify payout ledger for safe payout (idempotency). Try again or contact support.",
+          details: ledgerBundle.errorMessage,
         },
-        { status: 400 }
+        { status: 500 },
       );
     }
+    const {
+      state: payoutLedgerState,
+      walletNetCents: contestWalletNetBeforePay,
+    } = ledgerBundle;
 
-    // Credit creator wallet
-    const creditResult = await creditCreatorWithdrawableBalance(
-      creator_id,
-      totalAmount,
-      `Bulk payment for ${paidCount} submissions in contest: ${
-        contest.title || "Contest"
-      }`,
-      {
-        remarks: `Bulk payment: ${payment_type}`,
-        metadata: {
-          contest_id: contest_id,
-          payment_type: payment_type,
-          submission_count: paidCount,
-          breakdown: breakdown,
-          total_cpm: totalCPM,
-          total_bonus: totalBonus,
-          cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
-        },
+    // Build idempotency from immutable request intent rather than computed payout breakdown.
+    // This keeps retries stable even if a prior attempt partially updated submission rows.
+    const requestedSubmissionIds = Array.from(
+      new Set(
+        submission_ids.map((value: unknown) => String(value)).filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
+      .update(
+        JSON.stringify(
+          buildContestPayoutIdempotencyPayload(
+            {
+              contest_id,
+              creator_id,
+              payment_type,
+              requested_submission_ids: requestedSubmissionIds,
+              payout_adjustment_percentage: payoutAdjustment.percentage,
+              payout_adjustment_mode: payoutAdjustment.mode ?? null,
+            },
+            payoutLedgerState,
+          ),
+        ),
+      )
+      .digest("hex")
+      .slice(0, 48)}`;
+
+    let creditResult: {
+      success: boolean;
+      error?: string;
+      transactionId?: string | null;
+      alreadyApplied?: boolean;
+    } = {
+      success: true,
+      transactionId: null,
+      alreadyApplied: false,
+    };
+
+    const payableTotalAmount = totalAmount;
+    const payableTotalMainPaid = totalMainPaid;
+
+    /** Fresh wallet cents credited in this request (for targeted rollback). */
+    let freshPrizeCreditedCents = 0;
+    let freshBonusCreditedCents = 0;
+
+    if (payableTotalAmount > 0) {
+      creditResult = await creditWithWalletShortfallRetry({
+        payableCents: payableTotalAmount,
+        walletNetBeforePay: contestWalletNetBeforePay,
+        baseIdempotencyKey: bulkPayIdempotencyKey,
+        ledger: payoutLedgerState,
+        credit: (idempotencyKey) =>
+          creditCreatorWithdrawableBalance(
+            creator_id,
+            payableTotalAmount,
+            `Bulk payment for ${paidCount} submissions in contest: ${
+              contest.title || "Contest"
+            }`,
+            {
+              idempotencyKey,
+              remarks: `Bulk payment: ${payment_type}`,
+              metadata: {
+                contest_id: contest_id,
+                payment_type: payment_type,
+                submission_count: paidCount,
+                breakdown: breakdown,
+                ...(isMilestoneContest
+                  ? {
+                      total_milestone: payableTotalMainPaid,
+                      total_bonus: totalBonusPaid,
+                    }
+                  : {
+                      total_cpm: payableTotalMainPaid,
+                      total_bonus: totalBonusPaid,
+                    }),
+                cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+                bonus_reason_counts: bonusReasonCounts,
+              },
+            },
+          ),
+      });
+
+      if (!creditResult.success) {
+        return NextResponse.json(
+          { error: `Failed to credit wallet: ${creditResult.error}` },
+          { status: 500 },
+        );
       }
-    );
-
-    if (!creditResult.success) {
-      return NextResponse.json(
-        { error: `Failed to credit wallet: ${creditResult.error}` },
-        { status: 500 }
-      );
+      // Split fresh credit by component so row rollback can clear paid vs bonus_paid.
+      if (!creditResult.alreadyApplied) {
+        const split = splitFreshBulkCreditCents({
+          paymentType: payment_type as "standard" | "bonus" | "both",
+          payableTotalAmount,
+          payableTotalMainPaid,
+          totalBonusPaid,
+          alreadyApplied: false,
+        });
+        freshPrizeCreditedCents = split.freshPrizeCreditedCents;
+        freshBonusCreditedCents = split.freshBonusCreditedCents;
+      }
     }
 
-    // Update all submissions with earnings and payment status
-    const submissionUpdates = breakdown.map((item) => ({
-      id: item.submission_id,
-      cpm_amount: item.cpm_amount,
-      bonus_amount: item.bonus_amount,
-      paid: payment_type !== "bonus" ? true : undefined,
-      paid_at: payment_type !== "bonus" ? new Date().toISOString() : undefined,
-      bonus_paid: payment_type !== "standard" ? true : undefined,
-      bonus_paid_at:
-        payment_type !== "standard" ? new Date().toISOString() : undefined,
-    }));
+    // Update all submissions with earnings and payment status.
+    // For payment_type "both", only mark prize paid when main amount > 0 so a
+    // bonus-only row (e.g. leaderboard outside prize ranks) is not locked as paid.
+    const submissionUpdates = breakdown.map((item) => {
+      const mainCents = breakdownMainAmount(item);
+      const bonusCents = breakdownBonusAmount(item);
+      const markPrizePaid =
+        payment_type === "standard" ||
+        (payment_type === "both" && mainCents > 0);
+      return {
+        id: item.submission_id,
+        cpm_amount: mainCents,
+        bonus_amount: bonusCents,
+        paid: markPrizePaid ? true : undefined,
+        paid_at: markPrizePaid ? new Date().toISOString() : undefined,
+        bonus_paid:
+          payment_type !== "standard" && bonusCents > 0 ? true : undefined,
+        bonus_paid_at:
+          payment_type !== "standard" && bonusCents > 0
+            ? new Date().toISOString()
+            : undefined,
+      };
+    });
+
+    const updateFailures: { submission_id: string; message: string }[] = [];
+    const appliedUpdates: typeof submissionUpdates = [];
 
     // Update each submission
     for (const update of submissionUpdates) {
-      const updatePayload: any = {};
+      await renewCreatorContestPayoutLease(payoutLease);
 
-      // Always update earnings (CPM amount) and status if paying standard or both
-      if (payment_type !== "bonus") {
-        updatePayload.earnings = update.cpm_amount;
-        updatePayload.paid = update.paid;
+      const updatePayload: Record<string, unknown> = {};
+
+      // Mark prize paid only when this update actually includes a prize credit.
+      if (update.paid === true) {
+        if (update.cpm_amount > 0) {
+          updatePayload.earnings = update.cpm_amount;
+        }
+        updatePayload.paid = true;
         updatePayload.paid_at = update.paid_at;
-        updatePayload.status = "paid"; // Update status to 'paid'
+        updatePayload.status = "paid";
       }
 
       // Update bonus payment status and amount
@@ -374,13 +1086,183 @@ export async function POST(request: NextRequest) {
         updatePayload.bonus_amount = update.bonus_amount; // Store actual bonus amount paid
       }
 
-      const { error: updateError } = await supabaseAdmin
+      let updateQuery = supabaseAdmin
         .from("submissions")
         .update(updatePayload)
         .eq("id", update.id);
 
+      if (update.paid === true) {
+        updateQuery = updateQuery.neq("paid", true);
+      }
+      if (update.bonus_paid !== undefined) {
+        updateQuery = updateQuery.neq("bonus_paid", true);
+      }
+
+      const { data: updatedRows, error: updateError } = await updateQuery
+        .select("id")
+        .maybeSingle();
+
       if (updateError) {
         console.error(`Failed to update submission ${update.id}:`, updateError);
+        updateFailures.push({
+          submission_id: update.id as string,
+          message: updateError.message,
+        });
+      } else if (!updatedRows) {
+        updateFailures.push({
+          submission_id: update.id as string,
+          message:
+            "Submission was already claimed by another payout request. Wallet credit will be rolled back if this request applied fresh funds.",
+        });
+      } else {
+        appliedUpdates.push(update);
+      }
+    }
+
+    if (updateFailures.length > 0) {
+      const prizeRollbackCents = Math.max(0, freshPrizeCreditedCents);
+      const bonusRollbackCents = Math.max(0, freshBonusCreditedCents);
+      const rollbackCents =
+        prizeRollbackCents + bonusRollbackCents > 0
+          ? prizeRollbackCents + bonusRollbackCents
+          : !creditResult.alreadyApplied && payableTotalAmount > 0
+            ? payableTotalAmount
+            : 0;
+      let rollbackFailedError: string | undefined;
+      if (rollbackCents > 0) {
+        const rollbackDebitKey = buildWalletRollbackDebitIdempotencyKey({
+          payoutOperationKey: bulkPayIdempotencyKey,
+          reason: "submission_row_update_failed",
+        });
+        const rollback = await debitCreatorWithdrawableBalance(
+          creator_id,
+          rollbackCents,
+          { idempotencyKey: rollbackDebitKey },
+        );
+        if (rollback.success) {
+          // Fresh debit must leave a ledger refund. alreadyApplied means a prior
+          // attempt already debited; still attempt the refund log once.
+          const refundLogged = await logTransactionAsAdmin(
+            creator_id,
+            "refund",
+            rollbackCents,
+            "success",
+            `Rollback: bulk payment row update failed for ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id,
+                payout_type: "bulk_payment_rollback",
+                original_reward_transaction_id: creditResult.transactionId,
+                payout_operation_key: bulkPayIdempotencyKey,
+                wallet_rollback_debit_key: rollbackDebitKey,
+                wallet_rollback_already_applied: Boolean(
+                  rollback.alreadyApplied,
+                ),
+                fresh_prize_credited_cents: prizeRollbackCents,
+                fresh_bonus_credited_cents: bonusRollbackCents,
+                update_failures: updateFailures,
+              },
+            },
+          );
+          if (!refundLogged && !rollback.alreadyApplied) {
+            rollbackFailedError =
+              "Wallet debit succeeded but refund ledger row could not be written";
+            console.error(
+              "[bulk-payment] CRITICAL: wallet rolled back but refund log failed:",
+              { creator_id, rollbackDebitKey, rollbackCents },
+            );
+          }
+        } else {
+          rollbackFailedError =
+            rollback.error || "Unknown wallet rollback failure";
+          console.error(
+            "[bulk-payment] CRITICAL: wallet rollback failed after submission update failure:",
+            rollbackFailedError,
+          );
+        }
+
+        // Never make successfully updated rows look unpaid while the wallet
+        // still contains their credit. Preserve them for deterministic retry.
+        if (!rollbackFailedError) {
+          for (const applied of appliedUpdates) {
+            const revertPayload: Record<string, unknown> = {};
+            const { revertPrize, revertBonus } =
+              bulkPaymentRollbackRevertFlags({
+                paymentType: payment_type as "standard" | "bonus" | "both",
+                prizeRollbackCents,
+                bonusRollbackCents,
+                rollbackCents,
+                hadBonusPaidUpdate: applied.bonus_paid !== undefined,
+              });
+            // Only clear prize flags on rows we actually marked paid this request.
+            if (revertPrize && applied.paid === true) {
+              revertPayload.earnings = null;
+              revertPayload.paid = false;
+              revertPayload.paid_at = null;
+              revertPayload.status = "verified";
+            }
+            if (revertBonus) {
+              revertPayload.bonus_paid = false;
+              revertPayload.bonus_paid_at = null;
+              revertPayload.bonus_amount = null;
+            }
+            if (Object.keys(revertPayload).length > 0) {
+              await supabaseAdmin
+                .from("submissions")
+                .update(revertPayload)
+                .eq("id", applied.id);
+            }
+          }
+        }
+      }
+
+      return NextResponse.json(
+        {
+          error: rollbackFailedError
+            ? "CRITICAL: creator wallet was credited and automatic rollback failed. Successfully updated rows were preserved as paid; do not retry with a different selection. Contact support immediately."
+            : creditResult.alreadyApplied
+              ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
+              : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+          ...(rollbackFailedError
+            ? { wallet_rollback_error: rollbackFailedError }
+            : {}),
+          updateFailures,
+          transaction_id: creditResult.transactionId,
+          already_applied_idempotent: Boolean(creditResult.alreadyApplied),
+          payout_operation_key: bulkPayIdempotencyKey,
+        },
+        { status: 500 },
+      );
+    }
+
+    const paidSubmissionIds = appliedUpdates.map((u) => String(u.id));
+    if (paidSubmissionIds.length > 0) {
+      const { data: paidRows, error: paidRowsErr } = await fetchByIdsInChunks({
+        ids: paidSubmissionIds,
+        fetchChunk: async (chunkIds) =>
+          await supabaseAdmin
+            .from("submissions")
+            .select("id, views, creator_id, platform, other_stats")
+            .in("id", chunkIds),
+      });
+      if (paidRowsErr) {
+        console.error(
+          "[bulk-payment] Failed to load submissions for view credit:",
+          paidRowsErr,
+        );
+      } else {
+        try {
+          await MetricsService.creditSubmissionViewsForCreators(paidRows || []);
+        } catch (creditErr) {
+          console.error(
+            "[bulk-payment] Failed to credit submission views after payout:",
+            creditErr,
+          );
+        }
       }
     }
 
@@ -388,14 +1270,21 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Successfully paid ${paidCount} submissions`,
       data: {
-        total_amount: totalAmount,
-        total_cpm: totalCPM,
-        total_bonus: totalBonus,
+        total_amount:
+          (payment_type === "bonus" ? 0 : payableTotalMainPaid) +
+          (payment_type === "standard" ? 0 : totalBonusPaid),
+        ...(isMilestoneContest
+          ? { total_milestone: payableTotalMainPaid }
+          : { total_cpm: payableTotalMainPaid }),
+        total_bonus: totalBonusPaid,
         paid_count: paidCount,
         skipped_count: skippedCount,
         breakdown: breakdown,
         transaction_id: creditResult.transactionId,
+        payout_idempotent_retry: Boolean(creditResult.alreadyApplied),
+        payout_operation_key: bulkPayIdempotencyKey,
         cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+        bonus_reason_counts: bonusReasonCounts,
         remaining_cap: maxEarnings
           ? Math.max(0, maxEarnings - runningTotal)
           : null,
@@ -405,7 +1294,9 @@ export async function POST(request: NextRequest) {
     console.error("Error processing bulk payment:", error);
     return NextResponse.json(
       { error: "Internal server error", details: error.message },
-      { status: 500 }
+      { status: 500 },
     );
+  } finally {
+    await releaseCreatorContestPayoutLease(payoutLease);
   }
 }

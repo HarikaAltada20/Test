@@ -1,10 +1,16 @@
 import React from "react";
 import { Metadata } from "next";
 import CreatorsClient from "./CreatorsClient";
-import { createClient } from "@/utils/supabase/server";
+import {
+  getCachedCreatorsLandingData,
+} from "@/lib/landing-data-cache";
 
-// Cache for 1 day (86400 seconds) 
-export const revalidate = 86400;
+/**
+ * Do not set `revalidate` here — with `force-dynamic`, the page must not participate in static prerender
+ * (that path hits 60s / PGRST003 during `next build`). Freshness comes from `unstable_cache` in
+ * `getCachedCreatorsLandingData` (24h TTL + tags).
+ */
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title:
@@ -30,47 +36,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CreatorsPage() {
-  const supabase = await createClient();
-
-  const { data: submissions } = await supabase
-    .from("submissions")
-    .select("views");
-
-  const totalViews =
-    submissions?.reduce(
-      (sum, sub: { views: number | null }) => sum + (sub.views || 0),
-      0
-    ) || 0;
-
-  const { data: creatorProfiles } = await supabase
-    .from("creator_profiles")
-    .select("total_money_won");
-
-  const totalMoneyCreditedCents =
-    creatorProfiles?.reduce(
-      (sum, p: { total_money_won: number | null }) =>
-        sum + (p.total_money_won || 0),
-      0
-    ) || 0;
-
-  // Fetch contests on the server for immediate display
-  const { data: contestsData, error: contestsError } = await supabase
-    .from("contests_with_status")
-    .select(
-      `
-      *,
-      contest_based_details
-    `
-    )
-    .eq("moderation_status", "published")
-    .not("status", "eq", "incomplete")
-    .order("created_at", { ascending: false });
-
-  if (contestsError) {
-    console.error("Error fetching contests:", contestsError);
-  }
-
-  const contests = contestsData || [];
+  const { totalViews, totalMoneyCreditedCents, contests } =
+    await getCachedCreatorsLandingData();
 
   return (
     <CreatorsClient

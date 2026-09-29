@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
-import { SubmissionWithContest, CpmContestDetails } from "@/types/supabase";
+import { SubmissionWithContest } from "@/types/supabase";
 import {
   Card,
   CardContent,
@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Select,
   SelectContent,
@@ -33,12 +34,20 @@ import {
   EnhancedTabsList as TabsList,
   EnhancedTabsTrigger as TabsTrigger,
 } from "@/components/ui/enhanced-tabs";
-import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ExternalLink, Filter, Video, AlertCircle, Info, ArrowRight, Search, Layers, Clock, CheckCircle2, XCircle, History, DollarSign, Menu, MoreVertical, Eye, Trophy, TrendingUp, Coins, CalendarDays, Tag, ChevronLeft, ChevronRight, Check, ListOrdered, Gift, CheckCheck, Loader2, ShieldCheck, Star, Hash } from "lucide-react";
 import Image from "next/image";
 import React from "react";
-import { centsToDollars } from "@/lib/currency-utils";
+import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
+import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
+import { computeCpmRawCentsForRow } from "@/lib/cpm-expected-cents";
+import { getMilestoneEligibleViewsFromRow } from "@/lib/milestone-contest-expected-spend";
+import {
+  contestTypeForPlatform,
+  resolveCpmContestConfigForPlatform,
+  resolveMilestoneContestForPlatform,
+} from "@/lib/video-platform-campaigns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
@@ -52,6 +61,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { SubmissionQualityScoreDisplay } from "@/components/SubmissionQualityScoreCell";
+import { parseQualityScore, type QualityScore } from "@/lib/quality-score";
+import {
+  formatQualityScoreDisplay,
+  formatQualitySumDisplay,
+  formatTrustScoreDisplay,
+} from "@/lib/creator-profile-stats";
 
 // Map human-readable rejection reason labels to their descriptions (new canonical set only)
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -74,12 +90,31 @@ const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
 };
 
 
+interface PaginationCursor {
+  cursor: string;
+  cursor_id: string;
+}
+
 interface SubmissionsClientProps {
   initialSubmissions: SubmissionWithContest[];
   fetchError?: string;
+  creatorStats?: {
+    trustScorePct: number | null;
+    trustNumber: number | null;
+    avgQualityScore: number | null;
+    bestQualityScore: number | null;
+    totalQualityScore: number | null;
+  };
+  initialNextCursor?: PaginationCursor | null;
+  totalCount?: number;
 }
 
-type ContestTypeFilter = "all" | "leaderboard" | "cpm";
+type ContestTypeFilter =
+  | "all"
+  | "leaderboard"
+  | "cpm"
+  | "milestone"
+  | "dual_rewards";
 type StatusFilter =
   | "all"
   | "pending"
@@ -88,8 +123,127 @@ type StatusFilter =
   | "paid";
 type PlatformFilter = "all" | "youtube" | "instagram" | "tiktok" | "twitter" | "other";
 type ViewMode = "all" | "contest";
-type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low";
+type SortOrder = "normal" | "newest" | "oldest" | "views_high" | "views_low" | "earnings_high" | "earnings_low" | "submissions_high" | "submissions_low" | "quality_high" | "quality_low";
 type DateFilter = "all" | "today" | "3days" | "1week" | "1month" | "1year" | "custom";
+
+type SubmissionQualityFields = SubmissionWithContest & {
+  quality_score?: number | null;
+  quality_score_backfilled?: boolean | null;
+};
+
+function asContestDetails(
+  value: unknown,
+): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function submissionCampaignType(
+  submission: SubmissionWithContest,
+  contest: {
+    contest_type?: string | null;
+    contest_based_details?: unknown;
+  } | null | undefined,
+): string | null | undefined {
+  return (
+    contestTypeForPlatform(
+      (contest?.contest_based_details as Record<string, unknown> | null) ?? null,
+      submission.platform,
+      contest?.contest_type,
+    ) ?? contest?.contest_type
+  );
+}
+
+function campaignTypeBadgeLabel(type: string | null | undefined): string {
+  if (type === "leaderboard") return "Leaderboard";
+  if (type === "cpm") return "CPM";
+  if (type === "milestone") return "Milestone";
+  if (type === "dual_rewards") return "Dual Rewards";
+  return type || "—";
+}
+
+function isPoolPayoutCampaignType(type: string | null | undefined): boolean {
+  return type === "cpm" || type === "milestone" || type === "dual_rewards";
+}
+
+function formatTrustNumberDisplay(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value >= 0 ? `+${value}` : String(value);
+}
+
+function getExplicitSubmissionQualityScore(
+  submission: SubmissionWithContest,
+): number | null {
+  const row = submission as SubmissionQualityFields;
+  if (row.quality_score_backfilled === true) return null;
+  const status = String(row.status || "").toLowerCase();
+  if (status !== "verified" && status !== "paid") return null;
+  return parseQualityScore(row.quality_score);
+}
+
+function compareSubmissionQualityScores(
+  a: SubmissionWithContest,
+  b: SubmissionWithContest,
+  direction: "high" | "low",
+): number {
+  const scoreA = getExplicitSubmissionQualityScore(a);
+  const scoreB = getExplicitSubmissionQualityScore(b);
+  if (scoreA === null && scoreB === null) return 0;
+  if (scoreA === null) return 1;
+  if (scoreB === null) return -1;
+  return direction === "high" ? scoreB - scoreA : scoreA - scoreB;
+}
+
+function matchesQualityScoreFilters(
+  submission: SubmissionWithContest,
+  filters: Array<QualityScore | "unscored">,
+): boolean {
+  if (filters.length === 0) return true;
+  const score = getExplicitSubmissionQualityScore(submission);
+  return filters.some((filterValue) => {
+    if (filterValue === "unscored") return score === null;
+    return score === filterValue;
+  });
+}
+
+function isVideoCampaignSubmission(submission: SubmissionWithContest): boolean {
+  const contest = submission.contests;
+  const platform = (contest?.platform || submission.platform || "").toLowerCase();
+  const isTwitterTextImage =
+    (platform === "twitter" || platform === "x") &&
+    (contest as { contest_format?: string | null } | null)?.contest_format ===
+      "text_image";
+  return !isTwitterTextImage;
+}
+
+function getBestExplicitQualityScoreInGroup(
+  submissions: SubmissionWithContest[],
+): number | null {
+  let best: number | null = null;
+  for (const sub of submissions) {
+    const score = getExplicitSubmissionQualityScore(sub);
+    if (score !== null && (best === null || score > best)) {
+      best = score;
+    }
+  }
+  return best;
+}
+
+function compareGroupQualityScores(
+  a: SubmissionWithContest[],
+  b: SubmissionWithContest[],
+  direction: "high" | "low",
+): number {
+  const scoreA = getBestExplicitQualityScoreInGroup(a);
+  const scoreB = getBestExplicitQualityScoreInGroup(b);
+  if (scoreA === null && scoreB === null) return 0;
+  if (scoreA === null) return 1;
+  if (scoreB === null) return -1;
+  return direction === "high" ? scoreB - scoreA : scoreA - scoreB;
+}
 
 /**
  * Smart Lock Action Buttons - Enterprise Interaction
@@ -98,10 +252,36 @@ type DateFilter = "all" | "today" | "3days" | "1week" | "1month" | "1year" | "cu
  * - 3s delay before closing on leave
  * - ESC or Click Outside to close
  */
-const SubmissionActionButtons = ({ contentLink, contestId }: { contentLink: string; contestId: string | null | undefined }) => {
+const SubmissionActionButtons = ({
+  contentLink,
+  contestId,
+  contestStatus,
+  isGroup = false,
+  isFullWidth = false,
+  onAction,
+  disableAnimation = false
+}: {
+  contentLink: string;
+  contestId: string | null | undefined;
+  contestStatus?: string | null;
+  isGroup?: boolean;
+  isFullWidth?: boolean;
+  onAction?: () => void;
+  disableAnimation?: boolean;
+}) => {
   const [activeButton, setActiveButton] = useState<"content" | "contest" | null>(null);
   const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const status = contestStatus || (contestId ? "active" : null);
+  const isLive = status === "active" || status === "published" || status == null;
+  const contestLink = contestId
+    ? `/dashboard/opportunities/${contestId}?tab=leaderboard`
+    : "#";
+  const contestLabel = isLive ? "View Contest" : "View Leaderboard";
+  const ContestIcon = isLive ? Info : Trophy;
+  const ActionIcon = isGroup ? ListOrdered : Video;
+  const actionLabel = isGroup ? "View Submissions" : "View Content";
 
   const clearTimer = () => {
     if (timeoutRef.current) {
@@ -111,11 +291,13 @@ const SubmissionActionButtons = ({ contentLink, contestId }: { contentLink: stri
   };
 
   const handleHover = (type: "content" | "contest") => {
+    if (disableAnimation) return;
     clearTimer();
     setActiveButton(type);
   };
 
   const handleLeave = () => {
+    if (disableAnimation) return;
     clearTimer();
     timeoutRef.current = setTimeout(() => {
       setActiveButton(null);
@@ -145,42 +327,64 @@ const SubmissionActionButtons = ({ contentLink, contestId }: { contentLink: stri
   return (
     <div
       ref={containerRef}
-      className="flex flex-col lg:flex-row items-center gap-[10px] w-full lg:w-auto lg:justify-self-end self-end lg:mb-1"
+      className={cn(
+        "flex items-center gap-2",
+        isFullWidth ? "w-full" : "w-auto justify-end md:justify-self-end self-center md:self-end"
+      )}
     >
-      <div className="flex flex-col lg:flex-row gap-[10px] items-center w-full lg:w-auto">
-        {/* View Content Button */}
+      <div className={cn(
+        "flex flex-row gap-2 items-center shrink-0",
+        isFullWidth ? "w-full" : "w-auto"
+      )}>
+        {/* Main Action Button (Content or Group) — square icon button */}
         <Button
-          asChild
+          asChild={!onAction}
           onMouseEnter={() => handleHover("content")}
           onMouseLeave={handleLeave}
+          onClick={onAction ? (e) => {
+            e.preventDefault();
+            onAction();
+          } : undefined}
           className={cn(
-            "relative flex items-center justify-center h-[42px] rounded-[10px] transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
+            "relative flex items-center justify-center h-10 w-10 min-h-10 min-w-10 rounded-lg transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
             "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
-            "w-full lg:w-[42px]",
-            activeButton === "content" && "lg:!w-[160px]",
-            activeButton === "contest" && "lg:!w-[36px]"
+            isFullWidth ? (
+              (!disableAnimation && activeButton === "content") ? "flex-[2] min-w-0" : (!disableAnimation && activeButton === "contest" ? "flex-[0.5] min-w-0" : "flex-1 min-w-0")
+            ) : (
+              (!disableAnimation && activeButton === "content") ? "sm:w-[160px] sm:min-w-[160px] z-10 shadow-lg rounded-lg" : "sm:w-10 sm:min-w-10"
+            ),
+            (!disableAnimation && !isFullWidth && activeButton === "contest") ? "sm:w-9 sm:min-w-9 opacity-60" : "opacity-100"
           )}
         >
-          <Link href={contentLink || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center">
-            <Video className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
-          </Link>
+          {onAction ? (
+            <div className="w-full h-full flex items-center justify-center" title={actionLabel}>
+              <ActionIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
+            </div>
+          ) : (
+            <Link href={contentLink || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center" title={actionLabel}>
+              <ActionIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
+            </Link>
+          )}
         </Button>
 
-        {/* View Contest Button */}
+        {/* View Contest / Leaderboard Button — square icon button */}
         <Button
           asChild
           onMouseEnter={() => handleHover("contest")}
           onMouseLeave={handleLeave}
           className={cn(
-            "relative flex items-center justify-center h-[42px] rounded-[10px] transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
+            "relative flex items-center justify-center h-10 w-10 min-h-10 min-w-10 rounded-lg transition-all duration-300 ease-in-out p-0 overflow-hidden shadow-sm",
             "bg-[#4211a1] hover:bg-[#350d81] border-none text-white",
-            "w-full lg:w-[42px]",
-            activeButton === "contest" && "lg:!w-[160px]",
-            activeButton === "content" && "lg:!w-[36px]"
+            isFullWidth ? (
+              (!disableAnimation && activeButton === "contest") ? "flex-[2] min-w-0" : (!disableAnimation && activeButton === "content" ? "flex-[0.5] min-w-0" : "flex-1 min-w-0")
+            ) : (
+              (!disableAnimation && activeButton === "contest") ? "sm:w-[180px] sm:min-w-[180px] z-10 shadow-lg rounded-lg" : "sm:w-10 sm:min-w-10"
+            ),
+            (!disableAnimation && !isFullWidth && activeButton === "content") ? "sm:w-9 sm:min-w-9 opacity-60" : "opacity-100"
           )}
         >
-          <Link href={contestId ? `/dashboard/opportunities/${contestId}` : "#"} className="w-full h-full flex items-center justify-center">
-            <Info className="w-[18px] h-[18px] text-white shrink-0" strokeWidth={3} />
+          <Link href={contestLink} className="w-full h-full flex items-center justify-center" title={contestLabel}>
+            <ContestIcon className="w-5 h-5 text-white shrink-0" strokeWidth={2.5} />
           </Link>
         </Button>
       </div>
@@ -191,30 +395,90 @@ const SubmissionActionButtons = ({ contentLink, contestId }: { contentLink: stri
 export default function SubmissionsClient({
   initialSubmissions,
   fetchError,
+  creatorStats,
+  initialNextCursor,
+  totalCount,
 }: SubmissionsClientProps) {
   const [allSubmissions, setAllSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
   const [filteredSubmissions, setFilteredSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
+  // Used for analytics/statistics cards. Intentionally ignores Quality Score filter
+  // so selecting a Quality Score in the Submissions table doesn't filter analytics.
+  const [analyticsFilteredSubmissions, setAnalyticsFilteredSubmissions] =
+    useState<SubmissionWithContest[]>(initialSubmissions);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [allPagesLoaded, setAllPagesLoaded] = useState(!initialNextCursor);
+  const nextCursorRef = useRef<PaginationCursor | null>(initialNextCursor ?? null);
 
-  const [contestTypeFilter, setContestTypeFilter] =
-    useState<string[]>(["leaderboard", "cpm"]);
+  const fetchRemainingPages = useCallback(async () => {
+    if (!nextCursorRef.current || isLoadingMore) return;
+    setIsLoadingMore(true);
+    const accumulated: SubmissionWithContest[] = [];
+    let cursor = nextCursorRef.current;
+
+    try {
+      while (cursor) {
+        const params = new URLSearchParams({
+          cursor: cursor.cursor,
+          cursor_id: cursor.cursor_id,
+          limit: "50",
+        });
+        const res = await fetch(`/api/submissions/list?${params}`);
+        if (!res.ok) break;
+        const data = await res.json();
+        accumulated.push(...(data.submissions ?? []));
+        cursor = data.nextCursor ?? null;
+      }
+    } catch (err) {
+      console.error("Error loading remaining submissions:", err);
+    }
+
+    if (accumulated.length > 0) {
+      setAllSubmissions((prev) => {
+        const existingIds = new Set(prev.map((s) => s.id));
+        const unique = accumulated.filter((s) => !existingIds.has(s.id));
+        return [...prev, ...unique];
+      });
+    }
+    nextCursorRef.current = null;
+    setAllPagesLoaded(true);
+    setIsLoadingMore(false);
+  }, [isLoadingMore]);
+
+  useEffect(() => {
+    if (initialNextCursor) {
+      fetchRemainingPages();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [contestTypeFilter, setContestTypeFilter] = useState<string[]>([
+    "leaderboard",
+    "cpm",
+    "milestone",
+    "dual_rewards",
+  ]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [platformFilter, setPlatformFilter] = useState<string[]>([
     "youtube", "instagram", "tiktok"
   ]);
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [qualityScoreFilters, setQualityScoreFilters] = useState<
+    Array<QualityScore | "unscored">
+  >([]);
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [brokenThumbs, setBrokenThumbs] = useState<Record<string, boolean>>({});
   const [selectedContestGroup, setSelectedContestGroup] = useState<any>(null);
   const [expandedCaptions, setExpandedCaptions] = useState<Record<string, boolean>>({});
   const [expandedReasons, setExpandedReasons] = useState<Record<string, boolean>>({});
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
 
   // Contest Status Multi-select State
   const [contestStatusFilter, setContestStatusFilter] = useState<string[]>([
@@ -229,9 +493,280 @@ export default function SubmissionsClient({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
-  const handleSearch = () => {
-    setActiveSearch(searchTerm);
+  // Payout semantics helpers (centralized)
+  const isPayoutsProcessed = (c: any) => c?.post_contest_status === "payouts_processed";
+  const isSubmissionPaid = (s: SubmissionWithContest) =>
+    (s.status as string || "").toLowerCase() === "paid" || (s as any).paid === true;
+
+  const formatContestTypeFilterLabel = (id: string) => {
+    if (id === "dual_rewards") return "Dual Rewards";
+    if (id === "cpm") return "CPM";
+    return id.charAt(0).toUpperCase() + id.slice(1);
   };
+
+  const getMilestoneMatchForSubmission = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    const milestoneContest = resolveMilestoneContestForPlatform(
+      contest?.contest_based_details,
+      submission.platform,
+      contest?.platform,
+    );
+    const milestones = Array.isArray(milestoneContest?.milestones)
+      ? milestoneContest.milestones
+      : [];
+    if (milestones.length === 0) return null;
+
+    const submissionViews = getMilestoneEligibleViewsFromRow(submission);
+    const sortedMilestones = [...milestones].sort(
+      (a, b) => Number(b?.target_views || 0) - Number(a?.target_views || 0),
+    );
+
+    const matched = sortedMilestones.find((milestone) => {
+      const targetViews = Number(milestone?.target_views || 0);
+      return submissionViews >= targetViews;
+    });
+
+    if (!matched) return null;
+    return {
+      order: Number(matched?.order || 0),
+      targetViews: Number(matched?.target_views || 0),
+      payoutCents: Number(matched?.payout_cents || 0),
+    };
+  };
+
+  const getMilestoneEstimatedEarningsCents = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    const matchedMilestone = getMilestoneMatchForSubmission(submission, contest);
+    return Number(matchedMilestone?.payoutCents || 0);
+  };
+
+  /** CPM-only portion (cents), using the submission platform's rate. */
+  const getDualRewardsCpmEstimatedCents = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    return computeCpmRawCentsForRow(
+      submission,
+      contest?.contest_based_details,
+      contest?.platform,
+    );
+  };
+
+  const applyContestRewardAdjustment = (
+    amountCents: number,
+    contest: any,
+    contestType?: string | null,
+  ) => {
+    const adjustment = parsePayoutAdjustment(
+      contest?.payout_adjustment_percentage,
+      contest?.payout_adjustment_mode,
+      { contestType: contestType ?? contest?.contest_type ?? null },
+    );
+    return adjustRewardCents(amountCents, {
+      shouldAdjustReward: adjustment.shouldAdjustReward,
+      percentage: adjustment.percentage,
+    });
+  };
+
+  const getSubmissionEarningsAmount = (submission: SubmissionWithContest) => {
+    const contest = submission.contests;
+    const subStatus = (submission.status as string || "").toLowerCase();
+    const paid = isSubmissionPaid(submission);
+    const campaignType = submissionCampaignType(submission, contest);
+
+    // Paid: always use DB values (all contests, all platforms)
+    if (paid) {
+      return submission.earnings ?? 0;
+    }
+    if (isPayoutsProcessed(contest)) return 0;
+
+    if (campaignType === "cpm") {
+      if (subStatus === "rejected") return 0;
+      const rawAmount = computeCpmRawCentsForRow(
+        submission,
+        asContestDetails(contest?.contest_based_details),
+        contest?.platform,
+      );
+      return applyContestRewardAdjustment(rawAmount, contest, campaignType);
+    }
+
+    if (campaignType === "milestone") {
+      if (subStatus === "rejected") return 0;
+      return applyContestRewardAdjustment(
+        getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+        campaignType,
+      );
+    }
+
+    if (campaignType === "dual_rewards") {
+      if (subStatus === "rejected") return 0;
+      return applyContestRewardAdjustment(
+        getDualRewardsCpmEstimatedCents(submission, contest) +
+          getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+        campaignType,
+      );
+    }
+
+    const data = calculateLeaderboardEarnings(submission, contest);
+    return applyContestRewardAdjustment(data.amount, contest, campaignType);
+  };
+
+  // For UI display only (cards/modals). This can show CPM estimates for
+  // pending/verified submissions, but DOES NOT affect budget/confirmed stats.
+  const getSubmissionDisplayEarningsAmount = (submission: SubmissionWithContest) => {
+    const contest = submission.contests;
+    const subStatus = (submission.status as string || "").toLowerCase();
+    const paid = isSubmissionPaid(submission);
+    const campaignType = submissionCampaignType(submission, contest);
+
+    // Paid: always use DB values (all contests, all platforms)
+    if (paid) {
+      return submission.earnings ?? 0;
+    }
+
+    const postContestStatus = contest?.post_contest_status;
+
+    // If contest payouts are fully processed, and this submission isn't paid,
+    // there's nothing more to earn.
+    if (isPayoutsProcessed(contest)) return 0;
+
+    if (campaignType === "cpm") {
+      if (subStatus === "rejected") return 0;
+
+      const isVerificationComplete = postContestStatus === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed =
+          subStatus === "verified" ||
+          subStatus === "paid" ||
+          (submission as any).paid === true;
+        if (!isConfirmed) return 0;
+      }
+
+      const rawAmount = computeCpmRawCentsForRow(
+        submission,
+        asContestDetails(contest?.contest_based_details),
+        contest?.platform,
+      );
+      return applyContestRewardAdjustment(rawAmount, contest, campaignType);
+    }
+
+    if (campaignType === "milestone") {
+      if (subStatus === "rejected") return 0;
+
+      const isVerificationComplete = postContestStatus === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed =
+          subStatus === "verified" ||
+          subStatus === "paid" ||
+          (submission as any).paid === true;
+        if (!isConfirmed) return 0;
+      }
+
+      return applyContestRewardAdjustment(
+        getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+        campaignType,
+      );
+    }
+
+    if (campaignType === "dual_rewards") {
+      if (subStatus === "rejected") return 0;
+
+      const isVerificationComplete =
+        postContestStatus === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed =
+          subStatus === "verified" ||
+          subStatus === "paid" ||
+          (submission as any).paid === true;
+        if (!isConfirmed) return 0;
+      }
+
+      return applyContestRewardAdjustment(
+        getDualRewardsCpmEstimatedCents(submission, contest) +
+          getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+        campaignType,
+      );
+    }
+
+    const data = calculateLeaderboardEarnings(submission, contest);
+    return applyContestRewardAdjustment(data.amount, contest, campaignType);
+  };
+
+  const getSubmissionBonusAmount = (submission: SubmissionWithContest) => {
+    if (isSubmissionPaid(submission)) {
+      return (submission as any).bonus_amount ?? 0;
+    }
+    const contest = submission.contests;
+    const subStatus = (submission.status as string || "").toLowerCase();
+    const isVerified = subStatus === "verified" || subStatus === "paid";
+    const isRejected = subStatus === "rejected";
+
+    if (isRejected) return 0;
+
+    // Gate: Participant bonus (flat fee) is ONLY shown/calculated once verified.
+    // However, if an admin has ALREADY manually assigned a bonus_amount, we respect that immediately.
+    const assignedBonus = (submission as any).bonus_amount || 0;
+    if (!isVerified && assignedBonus === 0) return 0;
+
+    const postContestStatus = contest?.post_contest_status;
+    const isPayoutsProcessed = postContestStatus === "payouts_processed";
+    const isVerificationComplete = postContestStatus === "verification_complete";
+    const isFinalized = isPayoutsProcessed || isVerificationComplete;
+
+    const bonusPaid = (submission as any).bonus_paid === true;
+
+    if (isPayoutsProcessed) {
+      return bonusPaid ? assignedBonus : 0;
+    }
+
+    // Prioritize assigned bonus amount if it exists
+    if (assignedBonus > 0) return assignedBonus;
+
+    // Fallback to flat fee bonus (participation bonus) ONLY if not finalized
+    // Once finalized (Verification Completed), only count confirmed bonuses
+    if (isFinalized) return 0;
+
+    const contestDetails = contest?.contest_based_details as any;
+    const bonusDetails = contest?.bonus_details as any;
+    const platformCpmConfig = resolveCpmContestConfigForPlatform(
+      contestDetails,
+      submission.platform,
+      contest?.platform,
+    );
+    const flatFeeBonus =
+      platformCpmConfig?.flat_fee_bonus ||
+      contestDetails?.cpm_contest?.flat_fee_bonus ||
+      contestDetails?.leaderboard_contest?.flat_fee_bonus ||
+      bonusDetails?.flat_fee_bonus || 0;
+
+    return flatFeeBonus;
+  };
+
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const handleSearch = () => {
+    if (isSearching) return;
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setIsSearching(true);
+    setActiveSearch(searchTerm);
+    searchTimeoutRef.current = setTimeout(() => {
+      setIsSearching(false);
+      searchTimeoutRef.current = null;
+    }, 450);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -268,7 +803,8 @@ export default function SubmissionsClient({
     if (!contest) return { label: "Unknown", styles: { bg: "bg-gray-500/15", text: "text-gray-400", border: "border-gray-500/40" } };
 
     const isEnded = contest.end_date ? new Date(contest.end_date) < new Date() : false;
-    const isLive = !isEnded;
+    const currentStatus = contest.status || contest.moderation_status;
+    const isLive = !isEnded && (currentStatus === "active" || currentStatus === "published" || currentStatus == null);
     const postContestStatus = contest.post_contest_status;
 
     // 1. If payouts are processed, it's COMPLETELY done
@@ -321,76 +857,42 @@ export default function SubmissionsClient({
       const isVerificationComplete = postContestStatus === "verification_complete";
       const isRejected = submission.status === "rejected";
 
-      // 4. Rejected
       if (isRejected) {
         return { amount: 0, label: "Earnings", isRejected: true };
       }
 
-      // 3. Paid (Payouts Processed)
+      const isLive = contest.status === "active";
+      const amount = submission.earnings || 0;
+
+
+      const subStatus = (submission.status as string || "").toLowerCase();
+      const isPaid = subStatus === "paid" || (submission as any).paid === true;
+
       if (isPayoutsProcessed) {
-        const subStatus = (submission.status as string || "").toLowerCase();
-        const isPaid = subStatus === "paid";
-        return {
-          amount: isPaid ? (submission.earnings || 0) : 0,
-          label: "Amount Earned"
-        };
+        return { amount: isPaid ? amount : 0, label: "Amount Earned" };
       }
-
-      // 2. Finalized (Verification Completed)
       if (isVerificationComplete) {
-        return {
-          amount: submission.earnings || 0,
-          label: "Final Earnings"
-        };
+        if (isPaid && amount > 0) return { amount, label: "Amount Earned" };
+        return { amount: 0, label: "Check your rank" };
+      }
+      if (isLive) {
+        if (amount > 0) return { amount, label: "Winning Zone" };
+        return { amount: 0, label: "Check your rank" };
       }
 
-      // 1. Estimated (Live, Pending Review, In Review)
-      return { amount: submission.earnings || 0, label: "Estimated Earnings" };
+      return { amount: 0, label: "Check your rank" };
     } catch (error) {
       console.warn("Error calculating leaderboard earnings:", error);
       return { amount: 0, label: "Estimated Earnings" };
     }
   };
 
-  const getSubmissionEarningsAmount = (submission: SubmissionWithContest) => {
-    const contest = submission.contests;
-    const isPayoutsProcessed = contest?.post_contest_status === "payouts_processed";
-    const subStatus = (submission.status as string || "").toLowerCase();
-    const isPaid = subStatus === "paid";
 
-    // If payouts processed but entry not officially "paid", show $0
-    if (isPayoutsProcessed && !isPaid) {
-      return 0;
-    }
-
-    if (contest?.contest_type === "cpm") {
-      const cpmConfig =
-        contest.contest_based_details &&
-          typeof contest.contest_based_details === "object" &&
-          "cpm_contest" in (contest.contest_based_details as any)
-          ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
-          : null;
-      const views = submission.views ?? 0;
-      let effectiveViews = views;
-      if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
-      else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
-      // Return in CENTS
-      return (effectiveViews * (cpmConfig?.cpm_rate_usd || 0)) / 10;
-    } else {
-      // calculateLeaderboardEarnings already handles the payout processed check
-      const data = calculateLeaderboardEarnings(submission, contest);
-      return data.amount;
-    }
-  };
 
   const getDisplayStatus = (submission: SubmissionWithContest): string => {
     if (!submission.status) return "Unknown";
-    if (submission.status === "paid" && submission.contests?.post_contest_status !== "payouts_processed") {
-      return "Verified";
-    }
-    return (
-      submission.status.charAt(0).toUpperCase() + submission.status.slice(1)
-    );
+    if (submission.status === "paid") return "Paid";
+    return submission.status.charAt(0).toUpperCase() + submission.status.slice(1);
   };
 
   const postContestStatusMap: Record<string, string> = {
@@ -465,7 +967,34 @@ export default function SubmissionsClient({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter]);
+  }, [contestTypeFilter, statusFilter, platformFilter, activeSearch, dateFilter, dateRange, itemsPerPage, contestStatusFilter, qualityScoreFilters]);
+
+  const qualityScoreFilterButtonLabel = useMemo(() => {
+    if (qualityScoreFilters.length === 0) return "All Quality Scores";
+    const labels: Array<{ value: QualityScore | "unscored"; label: string }> = [
+      { value: 5, label: "Score 5/5" },
+      { value: 4, label: "Score 4/5" },
+      { value: 3, label: "Score 3/5" },
+      { value: 2, label: "Score 2/5" },
+      { value: 1, label: "Score 1/5" },
+      { value: "unscored", label: "No Quality Score" },
+    ];
+    const ordered = labels
+      .filter((l) => qualityScoreFilters.includes(l.value))
+      .map((l) => l.label);
+    return ordered.length > 0 ? ordered.join(", ") : "All Quality Scores";
+  }, [qualityScoreFilters]);
+
+  const showQualityScoreFilter = useMemo(
+    () => allSubmissions.some(isVideoCampaignSubmission),
+    [allSubmissions],
+  );
+
+  useEffect(() => {
+    if (!showQualityScoreFilter) {
+      setQualityScoreFilters([]);
+    }
+  }, [showQualityScoreFilter]);
 
   const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
@@ -498,6 +1027,7 @@ export default function SubmissionsClient({
   useEffect(() => {
     setAllSubmissions(initialSubmissions);
     setFilteredSubmissions(initialSubmissions);
+    setAnalyticsFilteredSubmissions(initialSubmissions);
   }, [initialSubmissions]);
 
 
@@ -506,7 +1036,7 @@ export default function SubmissionsClient({
     let submissions = [...allSubmissions];
 
     // Filter by contest type
-    if (contestTypeFilter.length < 2) {
+    if (contestTypeFilter.length < 4) {
       submissions = submissions.filter(
         (sub) => sub.contests?.contest_type && contestTypeFilter.includes(sub.contests.contest_type)
       );
@@ -674,6 +1204,16 @@ export default function SubmissionsClient({
       }
     }
 
+    // Analytics should reflect the same filters (status/search/date/type/platform)
+    // but NOT be affected by the Quality Score filter used in the Submissions list.
+    const submissionsForAnalytics = [...submissions];
+
+    if (qualityScoreFilters.length > 0) {
+      submissions = submissions.filter((sub) =>
+        matchesQualityScoreFilters(sub, qualityScoreFilters),
+      );
+    }
+
     // Sort submissions
     submissions.sort((a, b) => {
       if (sortOrder === "normal" || sortOrder === "newest") {
@@ -698,6 +1238,12 @@ export default function SubmissionsClient({
         const earningsB = getSubmissionEarningsAmount(b);
         return earningsA - earningsB;
       }
+      if (sortOrder === "quality_high") {
+        return compareSubmissionQualityScores(a, b, "high");
+      }
+      if (sortOrder === "quality_low") {
+        return compareSubmissionQualityScores(a, b, "low");
+      }
       if (sortOrder === "submissions_high" || sortOrder === "submissions_low") {
         // Fallback to newest for individual submissions view
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
@@ -705,8 +1251,9 @@ export default function SubmissionsClient({
       return 0;
     });
 
+    setAnalyticsFilteredSubmissions(submissionsForAnalytics);
     setFilteredSubmissions(submissions);
-  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter]);
+  }, [allSubmissions, contestTypeFilter, statusFilter, platformFilter, activeSearch, sortOrder, dateFilter, dateRange, contestStatusFilter, qualityScoreFilters]);
 
   const groupedContests = useMemo(() => {
     const groups: Record<string, {
@@ -717,12 +1264,9 @@ export default function SubmissionsClient({
       totalEarnings: number;
       totalBonus: number;
       videoCount: number;
-      _bonusAdded?: boolean;
     }> = {};
 
-    console.log("DEBUG: groupedContests computing with", filteredSubmissions.length, "submissions");
     filteredSubmissions.forEach((sub, idx) => {
-      if (idx === 0) console.log("DEBUG: Sample submission:", sub);
       const contestId = sub.contest_id || "unknown";
       const contest = sub.contests;
       if (!groups[contestId]) {
@@ -738,46 +1282,35 @@ export default function SubmissionsClient({
       }
       groups[contestId].submissions.push(sub);
       groups[contestId].videoCount += 1;
-      groups[contestId].totalViews += sub.views || 0;
 
-      // Logic for contest group summaries (cards):
-      // Only count submissions with status: pending, verified, or paid (explicitly whitelist valid statuses)
-      // Rejected (and any other unexpected status) are strictly excluded
       const subStatus = (sub.status as string || "").toLowerCase();
-      const isCountableStatus = subStatus === "pending" || subStatus === "verified" || subStatus === "paid";
+      const isRejected = subStatus === "rejected";
+      const postContestStatus = contest?.post_contest_status;
+      const isVerificationComplete = postContestStatus === "verification_complete";
 
-      if (isCountableStatus) {
-        const isPostProcessed = contest?.post_contest_status === "payouts_processed";
-        const isActuallyPaid = subStatus === "paid";
-        const isBonusPaid = (sub as any).bonus_paid === true;
+      // 1. EXCLUDE Rejected submissions from all totals
+      if (!isRejected) {
+        // Only count views of valid submissions in the card total
+        groups[contestId].totalViews += sub.views || 0;
 
-        if (isPostProcessed) {
-          // Payouts processed: only count if submission is officially PAID
-          if (isActuallyPaid) {
-            groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
-            if (isBonusPaid) {
-              groups[contestId].totalBonus += ((sub as any).bonus_amount || 0);
-            }
-          }
-        } else {
-          // Live / In Review / Verification Complete: count pending + verified earnings
+        // For earnings/bonus in Verification Complete, only count confirmed
+        // submissions (verified/paid). Pending items should no longer be
+        // treated as having estimated earnings once verification is done.
+        let includeForTotals = true;
+        if (isVerificationComplete) {
+          const isConfirmed =
+            subStatus === "verified" ||
+            subStatus === "paid" ||
+            (sub as any).paid === true;
+          if (!isConfirmed) includeForTotals = false;
+        }
+
+        if (includeForTotals) {
+          // Add Earnings
           groups[contestId].totalEarnings += getSubmissionEarningsAmount(sub);
 
-          const subBonus = (sub as any).bonus_amount || 0;
-          if (subBonus > 0) {
-            // Submission has its own assigned bonus amount
-            groups[contestId].totalBonus += subBonus;
-          } else if (!groups[contestId]._bonusAdded) {
-            // Add flat_fee_bonus only ONCE per contest group
-            const contestDetails = contest?.contest_based_details as any;
-            const bonusDetails = contest?.bonus_details as any;
-            const flatFeeBonus =
-              contestDetails?.cpm_contest?.flat_fee_bonus ||
-              contestDetails?.leaderboard_contest?.flat_fee_bonus ||
-              bonusDetails?.flat_fee_bonus || 0;
-            groups[contestId].totalBonus += flatFeeBonus;
-            groups[contestId]._bonusAdded = true;
-          }
+          // Add Bonus using unified logic
+          groups[contestId].totalBonus += getSubmissionBonusAmount(sub);
         }
       }
     });
@@ -796,6 +1329,10 @@ export default function SubmissionsClient({
           return b.totalViews - a.totalViews;
         case "views_low":
           return a.totalViews - b.totalViews;
+        case "quality_high":
+          return compareGroupQualityScores(a.submissions, b.submissions, "high");
+        case "quality_low":
+          return compareGroupQualityScores(a.submissions, b.submissions, "low");
         case "oldest": {
           const earliestA = Math.min(...a.submissions.map((s) => new Date(s.created_at).getTime()));
           const earliestB = Math.min(...b.submissions.map((s) => new Date(s.created_at).getTime()));
@@ -813,67 +1350,63 @@ export default function SubmissionsClient({
   }, [filteredSubmissions, sortOrder]);
 
   const stats = useMemo(() => {
-    const contests = new Set(filteredSubmissions.map(s => s.contest_id).filter(Boolean));
-    const totalViews = filteredSubmissions.reduce((sum, s) => sum + (s.views || 0), 0);
+    const contests = new Set(
+      analyticsFilteredSubmissions.map((s) => s.contest_id).filter(Boolean),
+    );
+    const totalViews = analyticsFilteredSubmissions.reduce(
+      (sum, s) => sum + (s.views || 0),
+      0,
+    );
 
-    // Only count confirmed earnings (Payouts Processed + Status 'Paid')
-    const totalEarnings = filteredSubmissions.reduce((sum, s) => {
-      const contest = s.contests;
-      if (!contest) return sum;
-      const isPostProcessed = contest.post_contest_status === "payouts_processed";
+    // Cash Earned: only submissions with status "paid"; use submission.earnings (cents).
+    // post_contest_status may be verification_complete or payouts_processed — both allowed.
+    const totalEarnings = analyticsFilteredSubmissions.reduce((sum, s) => {
       const subStatus = (s.status as string || "").toLowerCase();
-      const isActuallyPaid = subStatus === "paid";
-      if (isPostProcessed && isActuallyPaid) {
-        return sum + getSubmissionEarningsAmount(s);
-      }
-      return sum;
+      if (subStatus !== "paid") return sum;
+      return sum + (Number((s as any).earnings) || 0);
     }, 0);
 
-    // Only count confirmed bonuses (Payouts Processed + bonus_paid + Status 'Paid')
-    const totalBonus = filteredSubmissions.reduce((sum, s) => {
-      const contest = s.contests;
-      if (!contest) return sum;
-      const isPostProcessed = contest.post_contest_status === "payouts_processed";
+    // Bonus Earned: only submissions with status "paid"; use submission.bonus_amount (cents).
+    // post_contest_status may be verification_complete or payouts_processed — both allowed.
+    const totalBonus = analyticsFilteredSubmissions.reduce((sum, s) => {
       const subStatus = (s.status as string || "").toLowerCase();
-      const isActuallyPaid = subStatus === "paid";
-      const isBonusPaid = (s as any).bonus_paid === true;
-      if (isPostProcessed && isActuallyPaid && isBonusPaid) {
-        return sum + ((s as any).bonus_amount || 0);
-      }
-      return sum;
+      if (subStatus !== "paid") return sum;
+      return sum + (Number((s as any).bonus_amount) || 0);
     }, 0);
 
-    // Estimated earnings: for submissions NOT in payouts_processed contests
-    // (live, pending_review, in_review, verification_complete)
-    const estimatedEarnings = filteredSubmissions.reduce((sum, s) => {
+    // Estimated earnings: for submissions NOT paid and NOT in payouts_processed contests.
+    // EXCLUDES rejected and paid — only pending/verified (not yet paid) count as "estimated".
+    const estimatedEarnings = analyticsFilteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
       const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
-      // If payouts already processed, this is no longer "estimated" — show $0
       if (isPayoutsProcessed) return sum;
-      const isRejected = (s.status as string || "").toLowerCase() === "rejected";
-      if (isRejected) return sum;
+
+      const subStatus = (s.status as string || "").toLowerCase();
+      if (subStatus === "rejected") return sum;
+      if (subStatus === "paid" || (s as any).paid === true) return sum;
+
+      const isVerificationComplete = contest.post_contest_status === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed = subStatus === "verified";
+        if (!isConfirmed) return sum;
+      }
+
       return sum + getSubmissionEarningsAmount(s);
     }, 0);
 
-    // Estimated bonus: for submissions NOT in payouts_processed contests
-    const estimatedBonus = filteredSubmissions.reduce((sum, s) => {
+    // Estimated bonus: for submissions NOT paid and NOT in payouts_processed contests.
+    // EXCLUDES paid — only pending/verified (not yet paid) count as "estimated".
+    const estimatedBonus = analyticsFilteredSubmissions.reduce((sum, s) => {
       const contest = s.contests;
       if (!contest) return sum;
       const isPayoutsProcessed = contest.post_contest_status === "payouts_processed";
       if (isPayoutsProcessed) return sum;
-      const isRejected = (s.status as string || "").toLowerCase() === "rejected";
-      if (isRejected) return sum;
-      // Use already-assigned bonus_amount, or fall back to flat_fee_bonus from contest config
-      const subBonus = (s as any).bonus_amount || 0;
-      if (subBonus > 0) return sum + subBonus;
-      const contestDetails = contest?.contest_based_details as any;
-      const bonusDetails = contest?.bonus_details as any;
-      const flatFeeBonus =
-        contestDetails?.cpm_contest?.flat_fee_bonus ||
-        contestDetails?.leaderboard_contest?.flat_fee_bonus ||
-        bonusDetails?.flat_fee_bonus || 0;
-      return sum + flatFeeBonus;
+
+      const subStatus = (s.status as string || "").toLowerCase();
+      if (subStatus === "paid" || (s as any).paid === true) return sum;
+
+      return sum + getSubmissionBonusAmount(s);
     }, 0);
 
     return {
@@ -884,18 +1417,12 @@ export default function SubmissionsClient({
       estimatedEarnings,
       estimatedBonus,
     };
-  }, [filteredSubmissions]);
+  }, [analyticsFilteredSubmissions]);
+
+
 
   const renderSubmissionCard = (submission: SubmissionWithContest) => {
     const contest = submission.contests;
-    const cpmConfig =
-      contest?.contest_type === "cpm" &&
-        contest.contest_based_details &&
-        typeof contest.contest_based_details === "object" &&
-        contest.contest_based_details !== null &&
-        "cpm_contest" in contest.contest_based_details
-        ? (contest.contest_based_details.cpm_contest as unknown as CpmContestDetails)
-        : null;
 
     const displayStatus = getDisplayStatus(submission);
     const views = submission.views ?? 0;
@@ -905,97 +1432,122 @@ export default function SubmissionsClient({
     const systemNote = rejectionDetails?.reason ? REJECTION_REASON_DESCRIPTIONS[rejectionDetails.reason] : null;
     const displayNote = rejectionDetails?.additionalNotes || systemNote;
 
-    const isPayoutsProcessed = contest?.post_contest_status === "payouts_processed";
+    const isPayoutsProcessedVal = isPayoutsProcessed(contest);
     const isVerificationComplete = contest?.post_contest_status === "verification_complete";
     const isRejected = submission.status === "rejected";
+    const isPaidCard = isSubmissionPaid(submission);
+    const subStatusLower = (submission.status as string || "").toLowerCase();
+    const isPendingLike =
+      !isPaidCard &&
+      !isRejected &&
+      contest?.post_contest_status !== "verification_complete" &&
+      contest?.post_contest_status !== "payouts_processed" &&
+      (subStatusLower === "pending" ||
+        subStatusLower === "pending_review" ||
+        subStatusLower === "submitted" ||
+        subStatusLower === "in_review");
 
-    const totalEarningsCents = getSubmissionEarningsAmount(submission);
+    const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
     const earningsInDollars = centsToDollars(totalEarningsCents);
+    const campaignType = submissionCampaignType(submission, contest);
+    const milestoneMatch =
+      campaignType === "milestone" || campaignType === "dual_rewards"
+        ? getMilestoneMatchForSubmission(submission, contest)
+        : null;
 
     let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
 
     if (isRejected) {
       earningsDisplay = { label: "Earnings", amount: "Not Eligible", color: "text-red-500", isRejected: true };
-    } else if (contest?.contest_type === "cpm") {
-      const subStatusForLabel = (submission.status as string || "").toLowerCase();
-      const isSubPaidForLabel = subStatusForLabel === "paid" || (submission as any).paid === true;
-      const label = isPayoutsProcessed
+    } else if (isPaidCard) {
+      earningsDisplay = {
+        label: "Amount Earned",
+        amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
+        // Finalized, fully earned amount in dark green
+        color: "text-green-700",
+      };
+    } else if (isPoolPayoutCampaignType(campaignType)) {
+      const label = isPayoutsProcessedVal
         ? "Amount Earned"
-        : isVerificationComplete ? "Final Earnings" : "Estimated Earnings";
+        : "Estimated Earnings";
       earningsDisplay = {
         label,
         amount: earningsInDollars.toFixed(2),
-        color: isPayoutsProcessed ? "text-green-500" : isVerificationComplete ? (isDark ? "text-emerald-400" : "text-emerald-600") : isDark ? "text-blue-400" : "text-blue-600",
+        // Base color; will be overridden below by status-based scheme
+        color: isPayoutsProcessedVal ? "text-green-700" : isDark ? "text-blue-300" : "text-blue-600",
       };
     } else {
-      const data = calculateLeaderboardEarnings(submission, contest);
+      const data = calculateLeaderboardEarnings(submission, contest) as any;
+      const isCheckRank = data.label === "Check your rank";
       let color = isDark ? "text-emerald-400" : "text-emerald-600";
       if (data.isRejected) color = "text-red-500";
       else if (data.label === "Amount Earned") color = "text-green-500";
-      else if (data.label === "Final Earnings") color = isDark ? "text-emerald-400" : "text-emerald-600";
+      else if (data.label === "Winning Zone") color = "text-purple-500";
+      else if (data.label === "View Leaderboard" || data.label === "Check your rank") color = "text-[#7F39EC]";
       else if (data.label === "Estimated Earnings") color = isDark ? "text-blue-400" : "text-blue-600";
 
       earningsDisplay = {
-        label: data.label,
-        amount: data.isRejected ? "Not Eligible" : earningsInDollars.toFixed(2),
+        label: isCheckRank ? "Estimated Earnings" : data.label,
+        amount: data.isRejected ? "Not Eligible" : isCheckRank ? "Check Ranking" : earningsInDollars.toFixed(2),
         color
       };
     }
 
-    // Bonus display — only verified/paid submissions qualify for the flat_fee_bonus
-    const bonusPaid = (submission as any).bonus_paid === true;
-    const isVerifiedOrPaid = submission.status === "verified" || (submission.status as string) === "paid" || bonusPaid;
+    // Status-based color overrides for CPM submissions
+    if (
+      earningsDisplay &&
+      isPoolPayoutCampaignType(campaignType)
+    ) {
+      if (isPaidCard && isPayoutsProcessedVal) {
+        // Fully finalized
+        earningsDisplay.color = "text-green-700";
+      } else if (subStatusLower === "verified") {
+        // Verified estimated earnings in blue
+        earningsDisplay.color = isDark ? "text-blue-300" : "text-blue-600";
+      } else if (isPendingLike) {
+        // Pending estimated earnings in yellow
+        earningsDisplay.color = isDark ? "text-yellow-300" : "text-yellow-500";
+      }
+    }
+
     const contestDetailsForBonus = contest?.contest_based_details as any;
     const bonusDetailsForCard = contest?.bonus_details as any;
+    const platformCpmConfig = resolveCpmContestConfigForPlatform(
+      contestDetailsForBonus,
+      submission.platform,
+      contest?.platform,
+    );
     const flatFeeBonusForCard =
+      platformCpmConfig?.flat_fee_bonus ||
       contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
       contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
       bonusDetailsForCard?.flat_fee_bonus ||
       0;
 
-    // Bonus logic: If not rejected and not paid out, show potential/estimated bonus
-    let bonusAmountCents = 0;
-    const isActuallyPaidStatus = (submission.status as string || "").toLowerCase() === "paid";
-
-    if (bonusPaid && isActuallyPaidStatus) {
-      bonusAmountCents = ((submission as any).bonus_amount || 0);
-    } else if (!isRejected) {
-      if (isPayoutsProcessed) {
-        // Payouts processed but either bonus not paid or status not "paid"
-        bonusAmountCents = 0;
-      } else {
-        // Show potential/estimated bonus (Estimated or Final)
-        bonusAmountCents = flatFeeBonusForCard;
-      }
-    }
-
+    const bonusAmountCents = getSubmissionBonusAmount(submission);
     const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
+    const isVerifiedForBonus = submission.status === "verified";
+    const isMilestoneContest = campaignType === "milestone";
+    const showEstimatedBonus = !isMilestoneContest && !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
 
-    // Bonus Label logic
     let bonusLabel = "Estimated Bonus";
-    const subStatusForBonus = (submission.status as string || "").toLowerCase();
-    const isSubPaidForBonus = subStatusForBonus === "paid" || (submission as any).paid === true;
-
     if (isRejected) {
-      bonusLabel = "Bonus Won"; // Will show $0.00 (hidden in UI)
+      bonusLabel = "Bonus Won";
+    } else if (isPaidCard) {
+      bonusLabel = "Bonus Earned";
+    } else if (isPayoutsProcessedVal) {
+      bonusLabel = "Bonus Earned";
+    } else if (isVerificationComplete) {
+      bonusLabel = "Estimated Bonus";
     } else {
-      if (isPayoutsProcessed) {
-        bonusLabel = "Bonus Earned";
-      } else if (isVerificationComplete) {
-        bonusLabel = "Final Bonus";
-      } else {
-        bonusLabel = "Estimated Bonus";
-      }
+      bonusLabel = "Estimated Bonus";
     }
     const bonusColor = (bonusLabel === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
+    const showBonusRow = !isMilestoneContest && bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
+    const explicitQualityScore = getExplicitSubmissionQualityScore(submission);
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
-
-    // Log keys for the first submission to help diagnose field mismatches if any
-    if (submission === filteredSubmissions[0]) {
-      console.log("DEBUG: First submission fields:", Object.keys(submission));
-    }
 
     // Capture the primary DB column and every possible variation from metadata (IG/TikTok/YT)
     const bestThumbnail = submission.video_thumbnail_url ||
@@ -1033,12 +1585,12 @@ export default function SubmissionsClient({
       <div
         key={submission.id}
         className={cn(
-          "relative grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_220px] gap-6 p-6 rounded-[16px] border shadow-sm transition-none overflow-hidden",
+          "relative grid grid-cols-1 md:grid-cols-[280px_1fr] lg:grid-cols-[280px_1fr_220px] gap-6 p-4 md:p-6 rounded-[16px] border shadow-sm transition-none overflow-hidden",
           isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
         )}
       >
-        {/* Contest Status Badge - Absolute Positioned at Top Right */}
-        <div className="absolute top-4 right-4 z-10 flex flex-row gap-2">
+        {/* Contest Status Badge - Absolute on desktop, relative flow on mobile column */}
+        <div className="md:absolute md:top-4 md:right-4 z-10 flex flex-row gap-2 mb-2 md:mb-0">
           {(() => {
             const contestStatusInfo = getContestStatusDisplay(contest);
             return (
@@ -1053,12 +1605,16 @@ export default function SubmissionsClient({
         </div>
 
         {/* Column 1: Thumbnail */}
-        <div className="relative w-[280px] aspect-[4/3] rounded-[12px] overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-100 dark:bg-slate-900 group/thumb">
+        <div className="relative w-full md:w-[280px] aspect-[16/9] md:aspect-[4/3] rounded-[12px] overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-100 dark:bg-slate-900 group/thumb">
+
           {(() => {
-            const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
+            const platformLower = (submission.platform || "").toLowerCase();
+            const isInstagram = platformLower === "instagram";
+            const isTiktok = platformLower.includes("tiktok");
             const isBroken = !!brokenThumbs[submission.id];
             const hasThumb = !!bestThumbnail;
             const shouldShowIgPoster = isInstagram && (!hasThumb || isBroken);
+            const shouldShowTiktokPoster = isTiktok && (!hasThumb || isBroken);
 
             if (shouldShowIgPoster) {
               return (
@@ -1066,6 +1622,15 @@ export default function SubmissionsClient({
                   src="/instagram-poster.svg"
                   alt="Instagram content"
                   className="absolute inset-0 w-full h-full object-cover"
+                />
+              );
+            }
+
+            if (shouldShowTiktokPoster) {
+              return (
+                <div
+                  className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-950 via-cyan-950 to-pink-950"
+                  aria-label="TikTok content"
                 />
               );
             }
@@ -1151,52 +1716,93 @@ export default function SubmissionsClient({
             )}
           </div>
 
-          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium", isDark ? "text-slate-300" : "text-slate-500")}>
-            <span className="flex items-center gap-1">
+          <div className={cn("flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap overflow-hidden flex-wrap", isDark ? "text-slate-300" : "text-slate-500")}>
+            <span className="flex items-center gap-1 flex-shrink-0">
               <History className="w-3 h-3 opacity-60" />
-              Submitted: {submission.formatted_created_at || "Date N/A"}
+              {submission.formatted_created_at?.split(',')[0] || "Date N/A"}
             </span>
-            <span className="opacity-40">•</span>
-            <span className="uppercase">{contest?.contest_type || "N/A"}</span>
-            <span className="opacity-40">•</span>
-            <span>{views.toLocaleString()} Views</span>
+            <span className="opacity-40 flex-shrink-0">•</span>
+            <span className="flex items-center gap-1 flex-shrink-0">
+              <Eye className="w-3 h-3 opacity-60" />
+              {views.toLocaleString()}
+            </span>
+            <span className="opacity-40 flex-shrink-0">•</span>
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2 py-0 rounded-full border-slate-300 dark:border-slate-600">
+              {campaignTypeBadgeLabel(campaignType)}
+            </Badge>
+            {campaignType === "leaderboard" && null}
           </div>
 
           <div className="flex flex-col gap-1 mt-1">
             {earningsDisplay && (
-              <div className="flex items-center gap-2">
-                <p className={cn("text-[15px] font-semibold", earningsDisplay.color)}>
-                  {earningsDisplay.label}: {earningsDisplay.amount === "Check Ranking" ? (
-                    <Link href={`/dashboard/leaderboard?contestId=${contestId}`} className="underline hover:opacity-80 transition-opacity">
-                      Check Ranking <ExternalLink className="inline h-3 w-3 ml-1" />
+              <div className="flex flex-col items-start gap-1">
+                <p className={cn("text-[15px] font-semibold flex items-center gap-1.5", earningsDisplay.color)}>
+                  {earningsDisplay.label === "Winning Zone" && <Trophy className="h-4 w-4" />}
+                  {earningsDisplay.label}:{" "}
+                  {earningsDisplay.amount === "Check Ranking" ? (
+                    <Link
+                      href={`/dashboard/opportunities/${contestId}?tab=leaderboard`}
+                      className="underline hover:opacity-80 transition-opacity"
+                    >
+                      Check your rank <ExternalLink className="inline h-3 w-3 ml-1" />
                     </Link>
                   ) : earningsDisplay.amount === "Not Eligible" ? (
                     "Not Eligible"
-                  ) : `$${earningsDisplay.amount} USD`}
+                  ) : (
+                    `$${earningsDisplay.amount} USD`
+                  )}
                 </p>
-                {isPayoutsProcessed && (submission as any).paid_at && (
+                {campaignType === "milestone" &&
+                  totalEarningsCents > 0 &&
+                  milestoneMatch && (
+                    <p className={cn("text-[12px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
+                      {milestoneMatch.order > 0
+                        ? `Milestone ${milestoneMatch.order}`
+                        : "Milestone"}{" "}
+                      • Required Views: {milestoneMatch.targetViews.toLocaleString()}
+                    </p>
+                  )}
+                {campaignType === "dual_rewards" && milestoneMatch && (
+                    <p className={cn("text-[12px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
+                      {milestoneMatch.order > 0
+                        ? `Milestone ${milestoneMatch.order}`
+                        : "Milestone"}{" "}
+                      • Required Views:{" "}
+                      {milestoneMatch.targetViews.toLocaleString()}
+                    </p>
+                  )}
+                {isPayoutsProcessedVal && (submission as any).paid_at && (
                   <span className="text-[12px] font-medium text-slate-400">
                     (Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")})
                   </span>
                 )}
               </div>
             )}
+            {/* Detailed helper text replaced by tooltip on the label */}
             {!earningsDisplay && submission.status === "rejected" && (
               <p className="text-[15px] font-semibold text-red-500">
                 No Prize Won: $0.00 USD
               </p>
             )}
-            {!isRejected && (
+            {!isRejected && showBonusRow && (
               <div className="flex items-center gap-2">
                 <p className={cn("text-[15px] font-medium", bonusColor)}>
                   {bonusLabel}: ${bonusAmountDollars} USD
                 </p>
-                {isPayoutsProcessed && (submission as any).bonus_paid_at && (
+                {isPayoutsProcessedVal && (submission as any).bonus_paid_at && (
                   <span className="text-[12px] font-medium text-slate-400">
                     (Paid on: {format(new Date((submission as any).bonus_paid_at), "MMM d, yyyy")})
                   </span>
                 )}
               </div>
+            )}
+            {explicitQualityScore !== null && (
+              <SubmissionQualityScoreDisplay
+                qualityScore={explicitQualityScore}
+                isDark={isDark}
+                variant="inline"
+                className="mt-1"
+              />
             )}
           </div>
 
@@ -1264,6 +1870,7 @@ export default function SubmissionsClient({
         <SubmissionActionButtons
           contentLink={submission.content_link || "#"}
           contestId={contestId}
+          contestStatus={contest?.status}
         />
       </div>
     );
@@ -1282,6 +1889,27 @@ export default function SubmissionsClient({
     const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
     const isPaidOut = contest?.post_contest_status === "payouts_processed";
     const isVerificationComplete = contest?.post_contest_status === "verification_complete";
+    const contestId = contest?.id;
+
+    const contestDetailsForBonus = contest?.contest_based_details as any;
+    const bonusDetailsForContest = contest?.bonus_details as any;
+    const groupCpmConfig = resolveCpmContestConfigForPlatform(
+      contestDetailsForBonus,
+      group.submissions[0]?.platform,
+      contest?.platform,
+    );
+    const flatFeeBonusForContest =
+      groupCpmConfig?.flat_fee_bonus ||
+      contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
+      contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
+      bonusDetailsForContest?.flat_fee_bonus ||
+      0;
+    const hasFlatFeeBonus = flatFeeBonusForContest > 0;
+    const cpmRateUsd =
+      groupCpmConfig?.cpm_rate_usd ??
+      contest?.contest_based_details?.cpm_contest?.cpm_rate_usd ??
+      null;
+    const maxSubmissions = contest?.max_submissions_per_creator ?? 1;
 
     return (
       <Card
@@ -1291,8 +1919,8 @@ export default function SubmissionsClient({
           isDark ? "bg-[#0f172a] border-slate-800" : "bg-white border-slate-200"
         )}
       >
-        {/* Status Badge - Aligned with the status logic in modal */}
-        <div className="absolute top-4 right-4 z-10 flex flex-row gap-2">
+        {/* Status Badge - Fixed overlap issues on mobile */}
+        <div className="md:absolute md:top-4 md:right-4 z-10 flex flex-row gap-2 p-4 md:p-0">
           {(() => {
             const statusInfo = getContestStatusDisplay(contest);
             return (
@@ -1373,6 +2001,70 @@ export default function SubmissionsClient({
                 </p>
               )}
             </div>
+
+            {/* Contest meta: CPM rate, bonus availability, submissions allowed */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {cpmRateUsd != null &&
+                !Number.isNaN(cpmRateUsd) &&
+                cpmRateUsd > 0 && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[11px] font-semibold flex items-center gap-1.5 rounded-full",
+                      isDark
+                        ? "bg-slate-800/70 text-slate-100 border-slate-700"
+                        : "bg-slate-50 text-slate-700 border-slate-200"
+                    )}
+                  >
+                    <DollarSign className="w-3 h-3" />
+                    <span>
+                      CPM:{" "}
+                      <span className="font-bold">
+                        {formatMoney(Math.round(cpmRateUsd * 100))} / 1k views
+                      </span>
+                    </span>
+                  </Badge>
+                )}
+
+              {hasFlatFeeBonus && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold flex items-center gap-1.5 rounded-full",
+                    isDark
+                      ? "bg-green-900/30 text-green-300 border-green-700/50"
+                      : "bg-green-50 text-green-700 border-green-200"
+                  )}
+                >
+                  <Gift className="w-3 h-3" />
+                  <span>
+                    Bonus available:{" "}
+                    <span className="font-bold">
+                      {formatMoney(flatFeeBonusForContest)} / submission
+                    </span>
+                  </span>
+                </Badge>
+              )}
+
+              {maxSubmissions > 1 && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[11px] font-semibold flex items-center gap-1.5 rounded-full",
+                    isDark
+                      ? "bg-purple-900/30 text-purple-200 border-purple-700/50"
+                      : "bg-purple-50 text-purple-700 border-purple-200"
+                  )}
+                >
+                  <CheckCheck className="w-3 h-3" />
+                  <span>
+                    {(maxSubmissions ?? 1) > 1
+                      ? `${maxSubmissions} submissions allowed`
+                      : "Multiple entries allowed"}
+                  </span>
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* Stats Grid */}
@@ -1391,35 +2083,70 @@ export default function SubmissionsClient({
               <div className="flex items-center gap-1.5 text-slate-400">
                 <DollarSign className="w-3.5 h-3.5" />
                 <span className="text-[10px] font-bold uppercase tracking-wider">
-                  {isPaidOut ? "Amount Earned" : isVerificationComplete ? "Final Earnings" : "Estimated Earnings"}
+                  {(() => {
+                    if (statusFilter === "rejected") return "Estimated Earnings";
+                    // Paid tab or contest payouts done: show Amount Earned (including leaderboard paid)
+                    if (statusFilter === "paid" || isPaidOut) return "Amount Earned";
+                    return "Estimated Earnings";
+                  })()}
                 </span>
               </div>
-              <p className={cn("text-[16px] font-black text-green-500")}>
-                ${centsToDollars(totalEarnings)}
+              <p
+                className={cn(
+                  "text-[16px] font-black",
+                  (() => {
+                    if (statusFilter === "pending") return "text-yellow-500";
+                    if (statusFilter === "verified") return "text-blue-600";
+                    if (statusFilter === "rejected") return "text-red-500";
+                    if (statusFilter === "paid" || isPaidOut) return "text-green-700";
+                    // Leaderboard when not paid: "Check your rank" link in purple
+                    if (contest?.contest_type === "leaderboard") return "text-[#7F39EC]";
+                    return "text-[#7F39EC]";
+                  })()
+                )}
+              >
+                {statusFilter === "rejected" ? (
+                  "Not Eligible"
+                ) : (statusFilter === "paid" || isPaidOut) ? (
+                  <>${centsToDollars(totalEarnings).toFixed(2)}</>
+                ) : contest?.contest_type === "leaderboard" ? (
+                  <Link
+                    href={contestId ? `/dashboard/opportunities/${contestId}?tab=leaderboard` : "#"}
+                    className="underline hover:opacity-80 transition-opacity"
+                  >
+                    Check your rank
+                  </Link>
+                ) : (
+                  <>${centsToDollars(totalEarnings).toFixed(2)}</>
+                )}
               </p>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <Coins className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">
-                  {isPaidOut ? "Bonus Earned" : isVerificationComplete ? "Final Bonus" : "Estimated Bonus"}
-                </span>
+            {statusFilter !== "rejected" && statusFilter !== "pending" && (hasFlatFeeBonus || totalBonus > 0) && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {(statusFilter === "paid" || isPaidOut) ? "Bonus Earned" : "Estimated Bonus"}
+                  </span>
+                </div>
+                <p className={cn("text-[16px] font-black text-purple-500")}>
+                  ${centsToDollars(totalBonus).toFixed(2)}
+                </p>
               </div>
-              <p className={cn("text-[16px] font-black text-purple-500")}>
-                ${centsToDollars(totalBonus)}
-              </p>
-            </div>
+            )}
 
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <TrendingUp className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Views</span>
+            {statusFilter !== "rejected" && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Views</span>
+                </div>
+                <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-slate-900")}>
+                  {totalViews.toLocaleString()}
+                </p>
               </div>
-              <p className={cn("text-[16px] font-black", isDark ? "text-white" : "text-slate-900")}>
-                {totalViews.toLocaleString()}
-              </p>
-            </div>
+            )}
           </div>
 
           <div className="flex justify-end pt-2">
@@ -1429,7 +2156,7 @@ export default function SubmissionsClient({
               className="rounded-full h-8 px-4 text-[12px] font-bold border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
               onClick={() => setSelectedContestGroup(group)}
             >
-              View Submission
+              View Submissions
             </Button>
           </div>
         </div>
@@ -1458,14 +2185,28 @@ export default function SubmissionsClient({
   return (
     <div className="max-w-[1280px] mx-auto py-[24px] px-[16px] flex flex-col gap-[24px]">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h1 className={cn("text-[24px] font-semibold leading-tight", isDark ? "text-white" : "text-slate-900")}>Submission view</h1>
-          <p className={cn("text-[14px] mt-1", isDark ? "text-slate-400" : "text-slate-500")}>Showing your submission view across different statuses</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
+        <div className="max-w-[360px]">
+          <h1
+            className={cn(
+              "text-[24px] font-semibold leading-tight",
+              isDark ? "text-white" : "text-slate-900"
+            )}
+          >
+            My Submissions & Earnings
+          </h1>
+          <p
+            className={cn(
+              "text-[14px] mt-1 leading-snug",
+              isDark ? "text-slate-400" : "text-slate-500"
+            )}
+          >
+            Showing your submissions and analytics across different statuses
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
-          <div className="relative flex-1 min-w-[200px] md:w-[320px]">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:max-w-[520px] mt-3 md:mt-0 md:justify-end">
+          <div className="relative w-full sm:flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" strokeWidth={3} />
             <Input
               placeholder="Search by URL or Title..."
@@ -1481,39 +2222,110 @@ export default function SubmissionsClient({
             />
           </div>
 
-          <Button
-            onClick={handleSearch}
-            className="h-10 flex-1 sm:flex-none px-4 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0"
-          >
-            Search
-          </Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-none">
+            <Button
+              onClick={handleSearch}
+              disabled={isSearching}
+              className={cn(
+                "h-10 flex-1 sm:flex-none px-6 rounded-lg bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all duration-200",
+                isSearching && "opacity-90 cursor-wait"
+              )}
+            >
+              {isSearching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  <span>Searching...</span>
+                </>
+              ) : (
+                "Search"
+              )}
+            </Button>
 
-          <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
-            <Link href="/dashboard/opportunities">Find Opportunities</Link>
-          </Button>
+            <Button asChild className="h-10 flex-1 sm:flex-none px-[18px] rounded-[10px] bg-[#4211a1] hover:bg-[#350d81] text-white font-bold text-sm uppercase tracking-wide shadow-none shrink-0 transition-all">
+              <button
+                onClick={() => {
+                  setOpportunitiesLoading(true);
+                  setTimeout(() => {
+                    window.location.href = '/dashboard/opportunities';
+                  }, 100);
+                }}
+                disabled={opportunitiesLoading}
+                className="w-full h-full flex items-center justify-center"
+              >
+                {opportunitiesLoading ? (
+                  <ButtonLoadingSpinner />
+                ) : null}
+                <span className="ml-2">Find Campaigns</span>
+              </button>
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Quick Stats Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Quick Stats Summary — wider cards, consistent height and alignment */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 md:gap-4 items-stretch">
         {[
-          { label: "Submitted to", value: stats.contests, sub: "Contests", icon: Trophy, color: "text-blue-500" },
-          { label: "Viral Views", value: stats.views.toLocaleString(), sub: "Total", icon: TrendingUp, color: "text-indigo-500" },
-          { label: "Cash Earned", value: `$${centsToDollars(stats.earnings)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
-          { label: "Extra Bonus", value: `$${centsToDollars(stats.bonus)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
-          { label: "Est. Earning", value: `$${centsToDollars(stats.estimatedEarnings)}`, sub: "USD", icon: TrendingUp, color: "text-blue-400" },
-          { label: "Est. Bonus", value: `$${centsToDollars(stats.estimatedBonus)}`, sub: "USD", icon: Coins, color: "text-orange-400" },
+          {
+            label: "Trust %",
+            value:
+              creatorStats?.trustScorePct != null
+                ? formatTrustScoreDisplay(creatorStats.trustScorePct)
+                : "—",
+            sub: "",
+            icon: ShieldCheck,
+            color: "text-emerald-500",
+          },
+          {
+            label: "Trust Score",
+            value: formatTrustNumberDisplay(creatorStats?.trustNumber),
+            sub: "",
+            icon: Hash,
+            color: "text-[#7F39EC]",
+          },
+          {
+            label: "Avg Quality Score",
+            value: formatQualityScoreDisplay(creatorStats?.avgQualityScore),
+            sub: "",
+            icon: Star,
+            color: "text-amber-500",
+          },
+          {
+            label: "Best Quality Score",
+            value: formatQualityScoreDisplay(creatorStats?.bestQualityScore),
+            sub: "",
+            icon: Star,
+            color: "text-orange-500",
+          },
+          {
+            label: "Total Quality Score",
+            value: formatQualitySumDisplay(creatorStats?.totalQualityScore),
+            sub: "",
+            icon: Star,
+            color: "text-rose-500",
+          },
+          { label: "Submitted to", value: stats.contests, sub: "Campaigns", icon: Trophy, color: "text-blue-500" },
+          { label: "Total Views", value: stats.views.toLocaleString(), sub: "", icon: TrendingUp, color: "text-indigo-500" },
+          { label: "Cash Earned", value: `$${centsToDollars(stats.earnings).toFixed(2)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
+          { label: "Bonus Earned", value: `$${centsToDollars(stats.bonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
+          { label: "Estimated Cash", value: `$${centsToDollars(stats.estimatedEarnings).toFixed(2)}`, sub: "USD", icon: TrendingUp, color: "text-blue-400" },
+          { label: "Estimated Bonus", value: `$${centsToDollars(stats.estimatedBonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-orange-400" },
         ].map((item, idx) => (
-          <Card key={idx} className={cn("border shadow-none rounded-[16px]", isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100")}>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className={cn("p-2.5 rounded-xl shadow-sm", isDark ? "bg-slate-800" : "bg-slate-50")}>
+          <Card
+            key={idx}
+            className={cn(
+              "border shadow-none rounded-[16px] w-full min-h-[96px] flex",
+              isDark ? "bg-[#1e293b] border-slate-800" : "bg-white border-slate-100"
+            )}
+          >
+            <CardContent className="p-4 flex flex-1 items-center gap-4 min-w-0">
+              <div className={cn("p-2.5 rounded-xl shadow-sm shrink-0", isDark ? "bg-slate-800" : "bg-slate-50")}>
                 <item.icon className={cn("w-5 h-5", item.color)} strokeWidth={2.5} />
               </div>
-              <div>
-                <p className={cn("text-[10px] font-bold uppercase tracking-wider", isDark ? "text-slate-500" : "text-slate-400")}>{item.label}</p>
-                <div className="flex items-baseline gap-1.5 leading-none mt-0.5">
-                  <h3 className={cn("text-[18px] font-black", isDark ? "text-white" : "text-slate-900")}>{item.value}</h3>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">{item.sub}</span>
+              <div className="min-w-0 flex-1">
+                <p className={cn("text-[10px] font-bold uppercase tracking-wider truncate", isDark ? "text-slate-500" : "text-slate-400")}>{item.label}</p>
+                <div className="flex items-baseline gap-1.5 leading-tight mt-0.5 flex-wrap">
+                  <h3 className={cn("text-[18px] font-black break-words", isDark ? "text-white" : "text-slate-900")}>{item.value}</h3>
+                  {item.sub ? <span className="text-[10px] text-slate-400 font-bold uppercase shrink-0">{item.sub}</span> : null}
                 </div>
               </div>
             </CardContent>
@@ -1546,7 +2358,7 @@ export default function SubmissionsClient({
                   const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
                   const allEndedSelected = endedStatuses.every(s => contestStatusFilter.includes(s));
 
-                  if (contestStatusFilter.length === 5) return "All Contest Status";
+                  if (contestStatusFilter.length === 5) return "All Campaign Status";
                   if (contestStatusFilter.length === 0) return "No Status Selected";
 
                   const parts: string[] = [];
@@ -1670,8 +2482,8 @@ export default function SubmissionsClient({
             >
               <Trophy className="mr-2 h-4 w-4 opacity-70" />
               <span className="truncate">
-                {contestTypeFilter.length === 2 ? "All Types" :
-                  contestTypeFilter.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(", ")}
+                {contestTypeFilter.length === 4 ? "All Types" :
+                  contestTypeFilter.map((t) => formatContestTypeFilterLabel(t)).join(", ")}
               </span>
               <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
             </Button>
@@ -1680,7 +2492,9 @@ export default function SubmissionsClient({
             <div className="flex flex-col gap-1">
               {[
                 { id: "leaderboard", label: "Leaderboard" },
-                { id: "cpm", label: "CPM" }
+                { id: "cpm", label: "CPM" },
+                { id: "milestone", label: "Milestone" },
+                { id: "dual_rewards", label: "Dual Rewards" },
               ].map(type => (
                 <div
                   key={type.id}
@@ -1767,7 +2581,7 @@ export default function SubmissionsClient({
             isDark ? "border-slate-700 bg-[#1e293b] text-slate-100" : "border-slate-200 bg-white text-slate-900"
           )}><SelectValue placeholder="View Mode" /></SelectTrigger>
           <SelectContent isDark={isDark}>
-            <SelectItem isDark={isDark} value="all">Submission view</SelectItem>
+            <SelectItem isDark={isDark} value="all">Submission View</SelectItem>
             <SelectItem isDark={isDark} value="contest">Contest View</SelectItem>
           </SelectContent>
         </Select>
@@ -1784,6 +2598,8 @@ export default function SubmissionsClient({
             <SelectItem isDark={isDark} value="views_low">Lowest to Highest Views</SelectItem>
             <SelectItem isDark={isDark} value="earnings_high">Most Earnings</SelectItem>
             <SelectItem isDark={isDark} value="earnings_low">Lowest Earnings</SelectItem>
+            <SelectItem isDark={isDark} value="quality_high">Highest Quality Score</SelectItem>
+            <SelectItem isDark={isDark} value="quality_low">Lowest Quality Score</SelectItem>
             {viewMode === "contest" && (
               <>
                 <SelectItem isDark={isDark} value="submissions_high">Most Submissions</SelectItem>
@@ -1792,6 +2608,120 @@ export default function SubmissionsClient({
             )}
           </SelectContent>
         </Select>
+
+        {showQualityScoreFilter && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn(
+                "w-full lg:w-[200px] h-10 rounded-lg justify-start text-left font-semibold text-sm border-slate-200 dark:border-slate-700 shadow-none",
+                isDark
+                  ? "bg-[#1e293b] text-slate-100 hover:bg-slate-800"
+                  : "bg-white text-slate-900 hover:bg-slate-50",
+              )}
+            >
+              <Star className="mr-2 h-4 w-4 shrink-0 text-[#7F39EC]" />
+              <span className="truncate font-semibold text-sm">
+                {qualityScoreFilterButtonLabel}
+              </span>
+              <ChevronRight className="ml-auto h-4 w-4 shrink-0 opacity-50 rotate-90" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            className={cn(
+              "w-[240px] p-2 rounded-xl border-slate-200 dark:border-slate-800",
+              isDark ? "bg-[#0f172a]" : "bg-white",
+            )}
+            align="start"
+          >
+            <div className="flex flex-col gap-1">
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                  isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                )}
+                onClick={() => setQualityScoreFilters([])}
+              >
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                    qualityScoreFilters.length === 0
+                      ? "bg-[#4211a1] border-[#4211a1]"
+                      : isDark
+                        ? "border-slate-700 bg-slate-900"
+                        : "border-slate-300 bg-white",
+                  )}
+                >
+                  {qualityScoreFilters.length === 0 && (
+                    <Check className="w-3 h-3 text-white" strokeWidth={4} />
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-semibold",
+                    isDark ? "text-slate-300" : "text-slate-700",
+                  )}
+                >
+                  All Quality Scores
+                </span>
+              </div>
+
+              {(
+                [
+                  { value: 5, label: "Score 5/5" },
+                  { value: 4, label: "Score 4/5" },
+                  { value: 3, label: "Score 3/5" },
+                  { value: 2, label: "Score 2/5" },
+                  { value: 1, label: "Score 1/5" },
+                  { value: "unscored", label: "No Quality Score" },
+                ] as Array<{ value: QualityScore | "unscored"; label: string }>
+              ).map((opt) => {
+                const checked = qualityScoreFilters.includes(opt.value);
+                return (
+                  <div
+                    key={String(opt.value)}
+                    className={cn(
+                      "flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
+                      isDark ? "hover:bg-slate-800" : "hover:bg-slate-50",
+                    )}
+                    onClick={() => {
+                      setQualityScoreFilters((prev) =>
+                        prev.includes(opt.value)
+                          ? prev.filter((v) => v !== opt.value)
+                          : [...prev, opt.value],
+                      );
+                    }}
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                        checked
+                          ? "bg-[#4211a1] border-[#4211a1]"
+                          : isDark
+                            ? "border-slate-700 bg-slate-900"
+                            : "border-slate-300 bg-white",
+                      )}
+                    >
+                      {checked && (
+                        <Check className="w-3 h-3 text-white" strokeWidth={4} />
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "text-sm font-semibold",
+                        isDark ? "text-slate-300" : "text-slate-700",
+                      )}
+                    >
+                      {opt.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
+        )}
 
         <div className="flex items-center gap-2">
           <Select
@@ -1919,6 +2849,12 @@ export default function SubmissionsClient({
             )}
           </div>
 
+          {isLoadingMore && (
+            <div className={cn("text-center py-3 text-sm animate-pulse", isDark ? "text-slate-400" : "text-slate-500")}>
+              Loading remaining submissions…
+            </div>
+          )}
+
           {/* Pagination Bar - Moved down as requested */}
           {(viewMode === "contest" ? groupedContests.length : filteredSubmissions.length) > 0 && (
             <div className={cn(
@@ -2045,14 +2981,6 @@ export default function SubmissionsClient({
           <div className="flex flex-col gap-4 mt-4 w-full min-w-0">
             {selectedContestGroup?.submissions?.map((submission: SubmissionWithContest) => {
               const contest = submission.contests;
-              const cpmConfig =
-                contest?.contest_type === "cpm" &&
-                  contest.contest_based_details &&
-                  typeof contest.contest_based_details === "object" &&
-                  contest.contest_based_details !== null &&
-                  "cpm_contest" in contest.contest_based_details
-                  ? (contest.contest_based_details.cpm_contest as unknown as CpmContestDetails)
-                  : null;
               const views = submission.views ?? 0;
               const contestId = contest?.id;
               const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
@@ -2098,81 +3026,107 @@ export default function SubmissionsClient({
               const isRejectedModal = submission.status === "rejected";
               const isVerifiedOrPaidModal = submission.status === "verified" || (submission.status as string) === "paid" || ((submission as any).bonus_paid === true);
 
-              // Earnings calculation
-              const totalEarningsCents = getSubmissionEarningsAmount(submission);
+              const isPaidModal = isSubmissionPaid(submission);
+              const subStatusLowerModal = (submission.status as string || "").toLowerCase();
+              const isPendingLikeModal =
+                !isPaidModal &&
+                !isRejectedModal &&
+                contest?.post_contest_status !== "verification_complete" &&
+                contest?.post_contest_status !== "payouts_processed" &&
+                (subStatusLowerModal === "pending" ||
+                  subStatusLowerModal === "pending_review" ||
+                  subStatusLowerModal === "submitted" ||
+                  subStatusLowerModal === "in_review");
+
+              const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
               const earningsInDollars = centsToDollars(totalEarningsCents);
+              const campaignTypeModal = submissionCampaignType(submission, contest);
+              const milestoneMatchModal =
+                campaignTypeModal === "milestone" ||
+                campaignTypeModal === "dual_rewards"
+                  ? getMilestoneMatchForSubmission(submission, contest)
+                  : null;
 
-              // Bonus calculation
-              const bonusPaidModal = (submission as any).bonus_paid === true;
-              const isActuallyPaidModal = (submission.status as string || "").toLowerCase() === "paid";
-              const contestDetailsForBonus = contest?.contest_based_details as any;
-              const bonusDetails = contest?.bonus_details as any;
-              const flatFeeBonus =
-                contestDetailsForBonus?.cpm_contest?.flat_fee_bonus ||
-                contestDetailsForBonus?.leaderboard_contest?.flat_fee_bonus ||
-                bonusDetails?.flat_fee_bonus ||
+              const bonusAmountCentsModal = getSubmissionBonusAmount(submission);
+              const bonusAmountDollarsModal = centsToDollars(bonusAmountCentsModal).toFixed(2);
+              const contestDetailsModal = contest?.contest_based_details as any;
+              const bonusDetailsModal = contest?.bonus_details as any;
+              const platformCpmConfigModal = resolveCpmContestConfigForPlatform(
+                contestDetailsModal,
+                submission.platform,
+                contest?.platform,
+              );
+              const flatFeeBonusModal =
+                platformCpmConfigModal?.flat_fee_bonus ||
+                contestDetailsModal?.cpm_contest?.flat_fee_bonus ||
+                contestDetailsModal?.leaderboard_contest?.flat_fee_bonus ||
+                bonusDetailsModal?.flat_fee_bonus ||
                 0;
-
-              let bonusAmountCents = 0;
-              if (bonusPaidModal && isActuallyPaidModal) {
-                bonusAmountCents = ((submission as any).bonus_amount || 0);
-              } else if (!isRejectedModal) {
-                if (isPayoutsProcessed) {
-                  bonusAmountCents = 0;
-                } else {
-                  bonusAmountCents = flatFeeBonus;
-                }
-              }
-              const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
+              const isMilestoneContestModal = campaignTypeModal === "milestone";
+              const showEstimatedBonusModal = !isMilestoneContestModal && !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
+              let bonusLabelModal = "Estimated Bonus";
+              if (isRejectedModal) bonusLabelModal = "Bonus Won";
+              else if (isPaidModal) bonusLabelModal = "Bonus Earned";
+              else if (isPayoutsProcessed) bonusLabelModal = "Bonus Earned";
+              else if (isVerificationComplete) bonusLabelModal = "Estimated Bonus";
+              else bonusLabelModal = "Estimated Bonus";
+              const showBonusRowModal = !isMilestoneContestModal && bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
+              const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
+              const explicitQualityScoreModal = getExplicitSubmissionQualityScore(submission);
 
               let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
               if (isRejectedModal) {
                 earningsDisplay = { label: "Earnings", amount: "Not Eligible", color: "text-red-500", isRejected: true };
-              } else if (contest?.contest_type === "cpm") {
-                const subStatusModal = (submission.status as string || "").toLowerCase();
-                const isSubPaidModal = subStatusModal === "paid" || (submission as any).paid === true;
+              } else if (isPaidModal) {
+                earningsDisplay = {
+                  label: "Amount Earned",
+                  amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
+                  color: "text-green-700",
+                };
+              } else if (isPoolPayoutCampaignType(campaignTypeModal)) {
                 const label = isPayoutsProcessed
                   ? "Amount Earned"
-                  : isVerificationComplete ? "Final Earnings" : "Estimated Earnings";
+                  : "Estimated Earnings";
                 earningsDisplay = {
                   label,
                   amount: earningsInDollars.toFixed(2),
-                  color: isPayoutsProcessed ? "text-green-500" : isVerificationComplete ? (isDark ? "text-emerald-400" : "text-emerald-600") : isDark ? "text-blue-400" : "text-blue-600",
+                  // Base color; will be overridden below by status-based scheme
+                  color: isPayoutsProcessed ? "text-green-700" : isDark ? "text-blue-300" : "text-blue-600",
                 };
               } else {
-                const data = calculateLeaderboardEarnings(submission, contest);
+                const data = calculateLeaderboardEarnings(submission, contest) as any;
+                const isCheckRank = data.label === "Check your rank";
                 let color = isDark ? "text-emerald-400" : "text-emerald-600";
                 if (data.isRejected) color = "text-red-500";
                 else if (data.label === "Amount Earned") color = "text-green-500";
-                else if (data.label === "Final Earnings") color = isDark ? "text-emerald-400" : "text-emerald-600";
+                else if (data.label === "Winning Zone") color = "text-purple-500";
+                else if (data.label === "View Leaderboard" || data.label === "Check your rank") color = "text-[#7F39EC]";
                 else if (data.label === "Estimated Earnings") color = isDark ? "text-blue-400" : "text-blue-600";
 
                 earningsDisplay = {
-                  label: data.label,
-                  amount: data.isRejected ? "Not Eligible" : earningsInDollars.toFixed(2),
+                  label: isCheckRank ? "Estimated Earnings" : data.label,
+                  amount: data.isRejected ? "Not Eligible" : isCheckRank ? "Check Ranking" : earningsInDollars.toFixed(2),
                   color
                 };
               }
 
-              // Bonus Label for modal
-              let bonusLabelModal = "Estimated Bonus";
-              const subStatusModalForBonus = (submission.status as string || "").toLowerCase();
-              const isSubPaidModalForBonus = subStatusModalForBonus === "paid" || (submission as any).paid === true;
-
-              if (isRejectedModal) {
-                bonusLabelModal = "Bonus Won";
-              } else {
-                if (isPayoutsProcessed) {
-                  bonusLabelModal = "Bonus Earned";
-                } else if (isVerificationComplete) {
-                  bonusLabelModal = "Final Bonus";
-                } else {
-                  bonusLabelModal = "Estimated Bonus";
+              // Status-based color overrides for CPM / milestone / dual in modal
+              if (
+                earningsDisplay &&
+                isPoolPayoutCampaignType(campaignTypeModal)
+              ) {
+                if (isPaidModal && isPayoutsProcessed) {
+                  earningsDisplay.color = "text-green-700";
+                } else if (subStatusLowerModal === "verified") {
+                  earningsDisplay.color = isDark ? "text-blue-300" : "text-blue-600";
+                } else if (isPendingLikeModal) {
+                  earningsDisplay.color = isDark ? "text-yellow-300" : "text-yellow-500";
                 }
               }
-              const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
 
-              const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
+              const platformLowerModal = (submission.platform || "").toLowerCase();
+              const isInstagram = platformLowerModal === "instagram";
+              const isTiktok = platformLowerModal.includes("tiktok");
               const isBroken = !!brokenThumbs[submission.id];
               const hasThumb = !!bestThumbnail;
 
@@ -2188,6 +3142,11 @@ export default function SubmissionsClient({
                   <div className="relative w-full h-[160px] bg-slate-100 dark:bg-slate-900">
                     {isInstagram && (!hasThumb || isBroken) ? (
                       <img src="/instagram-poster.svg" alt="Instagram content" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : isTiktok && (!hasThumb || isBroken) ? (
+                      <div
+                        className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-950 via-cyan-950 to-pink-950"
+                        aria-label="TikTok content"
+                      />
                     ) : hasThumb && !isBroken ? (
                       <img
                         src={bestThumbnail}
@@ -2233,9 +3192,10 @@ export default function SubmissionsClient({
                   <div className={cn("px-4 pt-3 pb-3 border-b max-w-full overflow-hidden min-w-0 flex-shrink-0", isDark ? "border-slate-700" : "border-slate-100")}>
                     <h4
                       className={cn(
-                        "text-[15px] font-bold leading-snug transition-all duration-300 w-full whitespace-normal break-words",
+                        "text-[15px] font-bold leading-snug transition-all duration-300 w-full truncate hover:whitespace-normal group-hover:whitespace-normal",
                         isDark ? "text-white" : "text-slate-900"
                       )}
+                      title={submission.video_title || meta?.video_title || meta?.caption || "Untitled Submission"}
                     >
                       {submission.video_title ||
                         meta?.video_title ||
@@ -2253,46 +3213,80 @@ export default function SubmissionsClient({
                   </div>
 
                   {/* ── SECTION 3: Meta chips row ── */}
-                  <div className={cn("px-4 py-3 flex items-center gap-2 flex-wrap border-b", isDark ? "border-slate-700" : "border-slate-100")}>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
-                      <CalendarDays className="w-3 h-3 shrink-0" /> Submitted: {submission.formatted_created_at || "Date N/A"}
+                  <div className={cn("px-4 py-3 flex items-center gap-2 border-b whitespace-nowrap overflow-hidden flex-wrap", isDark ? "border-slate-700" : "border-slate-100")}>
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                      <CalendarDays className="w-3 h-3 shrink-0" /> {submission.formatted_created_at?.split(',')[0]}
                     </span>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
-                      <Tag className="w-3 h-3 shrink-0" /> {contest?.contest_type || "N/A"}
+                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
+                      <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()}
                     </span>
-                    <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold", isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")}>
-                      <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()} Views
+                    <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-slate-800 text-slate-300 border-slate-600" : "bg-slate-100 text-slate-600 border-slate-200")}>
+                      {campaignTypeBadgeLabel(campaignTypeModal)}
                     </span>
+                    {campaignTypeModal === "leaderboard" && null}
                   </div>
 
                   {/* ── SECTION 4: Earnings grid ── */}
-                  <div className={cn("px-4 py-3 grid gap-3 border-b", isRejectedModal ? "grid-cols-1" : "grid-cols-2", isDark ? "border-slate-700" : "border-slate-100")}>
+                  <div className={cn(
+                    "px-4 py-3 grid gap-3 border-b",
+                    isRejectedModal
+                      ? "grid-cols-1"
+                      : explicitQualityScoreModal !== null
+                        ? showBonusRowModal
+                          ? "grid-cols-1 sm:grid-cols-3"
+                          : "grid-cols-1 sm:grid-cols-2"
+                        : !showBonusRowModal
+                          ? "grid-cols-1"
+                          : "grid-cols-2",
+                    isDark ? "border-slate-700" : "border-slate-100"
+                  )}>
                     <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
                       <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                         {earningsDisplay?.label || "Estimated Earnings"}
                       </p>
-                      <p className={cn("text-[16px] font-black", earningsDisplay?.color || (isDark ? "text-emerald-400" : "text-emerald-600"))}>
+                      <p className={cn("text-[16px] font-black flex items-center gap-1.5 whitespace-nowrap", earningsDisplay?.color || (isDark ? "text-emerald-400" : "text-emerald-600"))}>
+                        {(earningsDisplay as any)?.label === "Winning Zone" && <Trophy className="h-4 w-4" />}
                         {earningsDisplay?.amount === "Check Ranking" ? (
-                          <Link href={`/dashboard/leaderboard?contestId=${contestId}`} className="underline hover:opacity-80 transition-opacity text-[13px]">
-                            Check Ranking <ExternalLink className="inline h-3 w-3 ml-1" />
+                          <Link href={`/dashboard/opportunities/${contestId}?tab=leaderboard`} className="underline hover:opacity-80 transition-opacity text-[13px]">
+                            Check your rank <ExternalLink className="inline h-3 w-3 ml-1" />
                           </Link>
                         ) : earningsDisplay?.amount === "Not Eligible" ? (
                           "Not Eligible"
                         ) : `$${earningsDisplay?.amount || "0.00"} USD`}
                       </p>
+                      {campaignTypeModal === "milestone" &&
+                        totalEarningsCents > 0 &&
+                        milestoneMatchModal && (
+                          <p className={cn("text-[11px] font-semibold mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                            {milestoneMatchModal.order > 0
+                              ? `Milestone ${milestoneMatchModal.order}`
+                              : "Milestone"}{" "}
+                            • Required Views: {milestoneMatchModal.targetViews.toLocaleString()}
+                          </p>
+                        )}
+                      {campaignTypeModal === "dual_rewards" && milestoneMatchModal && (
+                          <p className={cn("text-[11px] font-semibold mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                            {milestoneMatchModal.order > 0
+                              ? `Milestone ${milestoneMatchModal.order}`
+                              : "Milestone"}{" "}
+                            • Required Views:{" "}
+                            {milestoneMatchModal.targetViews.toLocaleString()}
+                          </p>
+                        )}
                       {isPayoutsProcessed && (submission as any).paid_at && (
                         <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
                           Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")}
                         </p>
                       )}
                     </div>
-                    {!isRejectedModal && (
+                    {/* Detailed helper text replaced by tooltip on the label */}
+                    {!isRejectedModal && showBonusRowModal && (
                       <div className={cn("rounded-[10px] p-3", isDark ? "bg-slate-800/60" : "bg-slate-50")}>
                         <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", isDark ? "text-slate-500" : "text-slate-400")}>
                           {bonusLabelModal}
                         </p>
                         <p className={cn("text-[16px] font-black", bonusColorModal)}>
-                          {bonusAmountDollars === "Not Eligible" ? "Not Eligible" : `$${bonusAmountDollars} USD`}
+                          {bonusAmountDollarsModal === "Not Eligible" ? "Not Eligible" : `$${bonusAmountDollarsModal} USD`}
                         </p>
                         {isPayoutsProcessed && (submission as any).bonus_paid_at && (
                           <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
@@ -2300,6 +3294,13 @@ export default function SubmissionsClient({
                           </p>
                         )}
                       </div>
+                    )}
+                    {explicitQualityScoreModal !== null && (
+                      <SubmissionQualityScoreDisplay
+                        qualityScore={explicitQualityScoreModal}
+                        isDark={isDark}
+                        variant="tile"
+                      />
                     )}
                   </div>
 
@@ -2359,28 +3360,15 @@ export default function SubmissionsClient({
                     )
                   }
 
-                  {/* ── SECTION 6: Action buttons ── */}
-                  <div className="px-4 py-3 flex items-center gap-2">
-                    <Button
-                      asChild
-                      size="sm"
-                      className="h-9 p-0 rounded-[8px] bg-[#4211a1] hover:bg-[#350d81] text-white text-[12px] font-bold overflow-hidden flex-1 shadow-sm"
-                    >
-                      <Link href={submission.content_link || "#"} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center">
-                        <Video className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />
-                      </Link>
-                    </Button>
-                    {contestId && (
-                      <Button
-                        asChild
-                        size="sm"
-                        className="h-9 p-0 rounded-[8px] bg-[#4211a1] hover:bg-[#350d81] text-white text-[12px] font-bold overflow-hidden flex-1 shadow-sm"
-                      >
-                        <Link href={`/dashboard/opportunities/${contestId}`} className="w-full h-full flex items-center justify-center">
-                          <Info className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />
-                        </Link>
-                      </Button>
-                    )}
+                  <div className="px-4 py-3 w-full">
+                    <SubmissionActionButtons
+                      contentLink={submission.content_link || "#"}
+                      contestId={contestId}
+                      contestStatus={contest?.status}
+                      isGroup={false}
+                      isFullWidth={true}
+                      disableAnimation={true}
+                    />
                   </div>
                 </div>
               );

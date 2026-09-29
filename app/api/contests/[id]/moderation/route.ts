@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { getContestBudgetPaymentMismatch } from '@/lib/contest-payment-validation';
+import { invalidateCampaignListCachesAfterMutation } from '@/lib/campaign-list-cache';
 
 // POST: Brand submit contest for approval or publish approved contest
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -36,7 +39,7 @@ export async function POST(
     // Verify user owns this contest (or is admin)
     let contestQuery = supabase
       .from('contests_with_status')
-      .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url, payment_details, status')
+      .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url, payment_details, status, contest_type, contest_based_details')
       .eq('id', contestId);
 
     // Only check ownership if not admin
@@ -83,6 +86,27 @@ export async function POST(
             error: 'Contest payment must be completed before submission for approval' 
           }, { status: 400 });
           }
+
+          const budgetMismatch = getContestBudgetPaymentMismatch({
+            id: contestId,
+            contest_type: contest.contest_type,
+            contest_based_details: contest.contest_based_details as Record<string, unknown> | null,
+            payment_details: paymentDetails,
+          });
+
+          if (budgetMismatch) {
+            if (budgetMismatch.deltaCents > 0) {
+              console.log('❌ Budget increase not paid:', budgetMismatch);
+              return NextResponse.json({
+                error: 'Campaign budget was increased after payment. Complete the additional payment before submitting for approval.',
+              }, { status: 400 });
+            }
+
+            console.log('❌ Budget decrease not refunded:', budgetMismatch);
+            return NextResponse.json({
+              error: 'Campaign budget was decreased after payment. Process the refund before submitting for approval.',
+            }, { status: 400 });
+          }
         } catch (err) {
           console.log('❌ Invalid payment details JSON:', err);
         return NextResponse.json({ 
@@ -92,8 +116,10 @@ export async function POST(
 
       console.log('✅ Payment validation passed - proceeding with submission');
 
+      const writeClient = isAdmin ? createAdminClient() : supabase;
+
       // Update to pending approval (keep rejection_reason as history/log)
-      const { error } = await supabase
+      const { error } = await writeClient
         .from('contests')
         .update({
           moderation_status: 'pending_approval',
@@ -105,30 +131,58 @@ export async function POST(
         return NextResponse.json({ error: 'Failed to submit for approval' }, { status: 500 });
       }
 
+      await invalidateCampaignListCachesAfterMutation({
+        advertiserId: contest.advertiser_id,
+        touchOpportunities: false,
+      });
+
       return NextResponse.json({ 
         success: true,
         message: 'Contest submitted for approval'
       });
 
     } else if (action === 'publish') {
-      if (contest.moderation_status !== 'approved') {
+      const publishableStatuses = isAdmin
+        ? ['approved', 'pending_approval']
+        : ['approved'];
+
+      if (!publishableStatuses.includes(contest.moderation_status)) {
         return NextResponse.json({ 
-          error: 'Contest must be approved before publishing' 
+          error: isAdmin
+            ? 'Campaign must be approved or pending approval before publishing'
+            : 'Contest must be approved before publishing'
         }, { status: 400 });
       }
 
-      // Publish the contest
-      const { error } = await supabase
+      const writeClient = isAdmin ? createAdminClient() : supabase;
+      const now = new Date().toISOString();
+      const updatePayload: Record<string, string> = {
+        moderation_status: 'published',
+        published_at: now,
+      };
+
+      if (
+        isAdmin &&
+        contest.moderation_status === 'pending_approval' &&
+        !(contest as { approved_at?: string | null }).approved_at
+      ) {
+        updatePayload.approved_at = now;
+        updatePayload.approved_by = user.id;
+      }
+
+      const { error } = await writeClient
         .from('contests')
-        .update({
-          moderation_status: 'published',
-          published_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', contestId);
 
       if (error) {
         return NextResponse.json({ error: 'Failed to publish contest' }, { status: 500 });
       }
+
+      await invalidateCampaignListCachesAfterMutation({
+        advertiserId: contest.advertiser_id,
+        touchOpportunities: true,
+      });
 
       return NextResponse.json({ 
         success: true,
@@ -145,7 +199,7 @@ export async function POST(
 // GET: Get contest moderation status and history
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();

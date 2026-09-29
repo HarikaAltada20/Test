@@ -2,10 +2,7 @@
 
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-
-function sanitizeCode(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
-}
+import { sanitizeReferralCodeForUrl } from "@/lib/referral-links";
 
 export default function ReferralCapture() {
     const searchParams = useSearchParams();
@@ -19,7 +16,7 @@ export default function ReferralCapture() {
 
         if (code) {
             try {
-                const sanitized = sanitizeCode(code);
+                const sanitized = sanitizeReferralCodeForUrl(code);
                 if (sanitized) {
                     localStorage.setItem("referralCode", sanitized);
                 }

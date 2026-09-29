@@ -1,0 +1,232 @@
+/**
+ * Client-side metrics refresh run polling.
+ * Polls only while a run is pending/running; stops when run is null or terminal.
+ */
+
+export type MetricsRefreshRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type MetricsRefreshRun = {
+  id: string;
+  status: MetricsRefreshRunStatus;
+};
+
+export type MetricsRefreshPlatform =
+  | "youtube"
+  | "instagram"
+  | "twitter"
+  | "tiktok";
+
+const STATUS_PATH: Record<MetricsRefreshPlatform, string> = {
+  youtube: "youtube-metrics-refresh",
+  instagram: "instagram-insights-refresh",
+  twitter: "twitter-metrics-refresh",
+  tiktok: "tiktok-metrics-refresh",
+};
+
+export function resolveMetricsRefreshPlatform(
+  platform: string | null | undefined,
+): MetricsRefreshPlatform | null {
+  const platforms = resolveMetricsRefreshPlatforms(platform);
+  return platforms[0] ?? null;
+}
+
+/**
+ * All metrics-refresh platforms present on a contest (hybrid-aware).
+ * Order matches multi-platform chain: YouTube → Instagram → TikTok.
+ */
+export function resolveMetricsRefreshPlatforms(
+  platform: string | null | undefined,
+): MetricsRefreshPlatform[] {
+  const p = (platform ?? "").toLowerCase().trim();
+  if (!p) return [];
+
+  const out: MetricsRefreshPlatform[] = [];
+  if (p.includes("youtube")) out.push("youtube");
+  if (p.includes("instagram")) out.push("instagram");
+  if (p.includes("tiktok")) out.push("tiktok");
+
+  if (out.length === 0) {
+    if (p === "twitter" || p === "x" || p.includes("twitter")) {
+      out.push("twitter");
+    }
+  }
+
+  return out;
+}
+
+export type MetricsRefreshTarget = "submissions" | "post_campaign";
+
+export function getMetricsRefreshStatusUrl(
+  contestId: string,
+  platform: MetricsRefreshPlatform,
+  metricsTarget: MetricsRefreshTarget = "submissions",
+): string {
+  const base = `/api/contests/${contestId}/${STATUS_PATH[platform]}/status`;
+  if (metricsTarget === "post_campaign") {
+    return `${base}?metricsTarget=post_campaign`;
+  }
+  return base;
+}
+
+export async function fetchMetricsRunStatus<T extends MetricsRefreshRun>(
+  contestId: string,
+  platform: MetricsRefreshPlatform,
+  metricsTarget: MetricsRefreshTarget = "submissions",
+): Promise<T | null> {
+  const res = await fetch(
+    getMetricsRefreshStatusUrl(contestId, platform, metricsTarget),
+  );
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  return (data?.run as T | null) ?? null;
+}
+
+export function isActiveMetricsRun(
+  run: { status?: string } | null | undefined,
+): boolean {
+  return run?.status === "pending" || run?.status === "running";
+}
+
+export function isTerminalMetricsRunStatus(
+  status: string | undefined,
+): boolean {
+  return (
+    status === "completed" || status === "failed" || status === "cancelled"
+  );
+}
+
+export type StartMetricsRunPollingOptions<T extends MetricsRefreshRun> = {
+  contestId: string;
+  platform: MetricsRefreshPlatform;
+  /** Which metrics table the run targets. Defaults to submissions. */
+  metricsTarget?: MetricsRefreshTarget;
+  intervalMs?: number;
+  /** Stop polling after this many ms (manual refresh flows). */
+  maxMs?: number;
+  /**
+   * Keep polling when status is null (no run yet). Used for multi-platform
+   * chains where later platforms are not enqueued until earlier ones finish.
+   */
+  waitForRun?: boolean;
+  onRun: (run: T | null) => void;
+  /** Called when run reaches a terminal status. */
+  onTerminal?: (run: T) => void;
+  onTimeout?: () => void;
+};
+
+/**
+ * Fetches run status once, then polls every intervalMs only while run is pending/running.
+ * Stops interval when run is null (unless waitForRun), terminal, maxMs exceeded, or tab hidden.
+ */
+export function startMetricsRunPolling<T extends MetricsRefreshRun>(
+  options: StartMetricsRunPollingOptions<T>,
+): () => void {
+  const {
+    contestId,
+    platform,
+    metricsTarget = "submissions",
+    intervalMs = 3000,
+    maxMs,
+    waitForRun = false,
+    onRun,
+    onTerminal,
+    onTimeout,
+  } = options;
+
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+  let disposed = false;
+  const startedAt = Date.now();
+
+  const clearIntervalOnly = () => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+  };
+
+  const stop = () => {
+    disposed = true;
+    clearIntervalOnly();
+  };
+
+  const startInterval = () => {
+    if (disposed || intervalId) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    intervalId = setInterval(() => void tick(), intervalMs);
+  };
+
+  const tick = async () => {
+    if (disposed) return;
+    if (typeof document !== "undefined" && document.hidden) {
+      clearIntervalOnly();
+      return;
+    }
+    if (maxMs != null && Date.now() - startedAt > maxMs) {
+      onTimeout?.();
+      stop();
+      return;
+    }
+
+    try {
+      const run = await fetchMetricsRunStatus<T>(
+        contestId,
+        platform,
+        metricsTarget,
+      );
+      if (disposed) return;
+
+      onRun(run);
+
+      if (!run) {
+        if (waitForRun) {
+          startInterval();
+        } else {
+          clearIntervalOnly();
+        }
+        return;
+      }
+
+      if (isActiveMetricsRun(run)) {
+        startInterval();
+        return;
+      }
+
+      if (isTerminalMetricsRunStatus(run.status)) {
+        clearIntervalOnly();
+        onTerminal?.(run);
+        return;
+      }
+
+      clearIntervalOnly();
+    } catch {
+      // best-effort polling
+    }
+  };
+
+  const onVisibilityChange = () => {
+    if (disposed) return;
+    if (document.hidden) {
+      clearIntervalOnly();
+    } else {
+      void tick();
+    }
+  };
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+
+  void tick();
+
+  return () => {
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
+    stop();
+  };
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { calculateTwitterCpmBudgetSpent } from "@/lib/contest-utils";
+import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
 
 export const dynamic = "force-dynamic";
 
@@ -23,17 +24,12 @@ export async function GET(request: Request) {
     const { data: contests, error: contestsError } = await supabaseAdmin
       .from("contests")
       .select(
-        `
-        id,
-        title,
-        contest_type,
-        platform,
-        contest_based_details
-      `
+        "id, title, contest_type, platform, contest_based_details, views_locked_at, post_contest_status",
       )
       .eq("contest_type", "cpm")
       .eq("platform", "twitter")
-      .not("contest_based_details->cpm_contest->cpm_rate_usd", "is", null);
+      .not("contest_based_details->cpm_contest->cpm_rate_usd", "is", null)
+      .is("views_locked_at", null);
 
     if (contestsError) {
       console.error(
@@ -55,11 +51,24 @@ export async function GET(request: Request) {
       });
     }
 
+    const eligibleContests = (contests || []).filter(
+      isContestEligibleForScheduledMetricsRefresh,
+    );
+
+    if (!eligibleContests.length) {
+      console.log("[Twitter CPM Metrics] No eligible Twitter CPM contests found");
+      return NextResponse.json({
+        success: true,
+        message: "No eligible Twitter CPM contests to process",
+        processedCount: 0,
+      });
+    }
+
     let processedCount = 0;
     const now = new Date().toISOString();
 
     // Process each contest
-    for (const contest of contests) {
+    for (const contest of eligibleContests) {
       try {
         const cpmConfig = (contest as any).contest_based_details?.cpm_contest;
         const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
@@ -76,11 +85,12 @@ export async function GET(request: Request) {
         const { data: twitterTweets, error: tweetsError } = await supabaseAdmin
           .from("twitter_campaign_tweets")
           .select(
-            "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, filter_status"
+            "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, is_eligible, deleted_at",
           )
           .eq("contest_id", contest.id)
-          .in("moderation_status", ["verified", "paid"])
-          .neq("filter_status", "filtered_out");
+          .eq("is_eligible", true)
+          .is("deleted_at", null)
+          .in("moderation_status", ["verified", "paid"]);
 
         if (tweetsError) {
           console.error(
@@ -98,7 +108,9 @@ export async function GET(request: Request) {
             created_at: tweet.tweet_created_at,
             platform: "twitter",
             status: tweet.moderation_status,
-            filter_status: tweet.filter_status,
+            is_eligible: tweet.is_eligible === true,
+            deleted_at: tweet.deleted_at ?? null,
+            is_twitter_tweet: true as const,
             paid: tweet.moderation_status === "paid",
             earnings: null, // Twitter uses points, not direct earnings
             bonus_paid: false,
@@ -148,6 +160,18 @@ export async function GET(request: Request) {
               contest.title
             }): $${actualBudgetSpent.toFixed(2)}`
           );
+          // Also run unified persist (list cache invalidate + dual/leaderboard/milestone parity).
+          try {
+            const { persistContestBudgetSpent } = await import(
+              "@/lib/persist-contest-budget-spent"
+            );
+            await persistContestBudgetSpent(contest.id, supabaseAdmin as any);
+          } catch (persistErr) {
+            console.warn(
+              `[Twitter CPM Metrics] persistContestBudgetSpent failed for ${contest.id}:`,
+              persistErr,
+            );
+          }
           processedCount++;
         }
       } catch (contestError) {
@@ -159,14 +183,14 @@ export async function GET(request: Request) {
     }
 
     console.log(
-      `[Twitter CPM Metrics] Completed processing ${processedCount}/${contests.length} Twitter CPM contests`
+      `[Twitter CPM Metrics] Completed processing ${processedCount}/${eligibleContests.length} Twitter CPM contests`
     );
 
     return NextResponse.json({
       success: true,
       message: `Successfully processed ${processedCount} Twitter CPM contests`,
       processedCount,
-      totalCount: contests.length,
+      totalCount: eligibleContests.length,
     });
   } catch (error: any) {
     console.error("[Twitter CPM Metrics] Unexpected error:", error);

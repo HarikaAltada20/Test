@@ -18,9 +18,19 @@ const REDIS_QUEUE_KEY = `${REDIS_PREFIX}:queue`;
 const REDIS_STATE_TTL_SEC = 60 * 60 * 2; // 2 hours
 
 export type MetricsRefreshJob =
-  | { contestId: string; isRaid: true; batchIndex?: number; totalBatches?: number }
   | {
       contestId: string;
+      creatorId?: string;
+      /** DB row in twitter_metrics_refresh_runs (when queue run tracking is enabled). */
+      runId?: string;
+      isRaid: true;
+      batchIndex?: number;
+      totalBatches?: number;
+    }
+  | {
+      contestId: string;
+      creatorId?: string;
+      runId?: string;
       isRaid: false;
       batchIndex: number;
       totalBatches: number;

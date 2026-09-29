@@ -45,6 +45,34 @@ If `QSTASH_TOKEN` is not set, the app does not use QStash and instead uses a dir
 
 ---
 
+## Recurring: stale contest_stats refresh
+
+`contest_stats` views are refreshed after metrics jobs. Two schedulers run the same safety net:
+
+| Scheduler | Cadence | Role |
+| --- | --- | --- |
+| **QStash** | every 10 min (`*/10 * * * *`) | Primary |
+| **Vercel Cron** | once daily (`25 5 * * *`) | Backup |
+
+- **Endpoint:** `/api/cron/refresh-stale-contest-stats` (default `limit=50`)
+- **QStash schedule id:** `goviral-refresh-stale-contest-stats`
+- **Auth:** `Upstash-Signature` or `Authorization: Bearer CRON_SECRET` (bare `x-vercel-cron` is rejected; set `CRON_SECRET` so Vercel Cron sends Bearer)
+
+The QStash schedule is upserted when metrics refresh runs, and on POST to this endpoint. Requires `QSTASH_TOKEN` + public `NEXT_PUBLIC_APP_URL` for the 10-minute path.
+
+To bootstrap QStash manually after deploy:
+
+```bash
+curl -X POST "https://your-app.vercel.app/api/cron/refresh-stale-contest-stats" \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Structured logs: successful and failed runs emit JSON with `"type":"refresh_stale_contest_stats"` (`durationMs`, `refreshed`, `error`). List routes emit `"type":"campaign_list_request"`. See `docs/PRODUCTION_DEPLOYMENT_NOTES.md` (Campaign list monitoring).
+
+---
+
 ## Optional: Daily Crons via QStash
 
 The daily jobs (`update-youtube-metrics`, `update-instagram-insights`) remain in **Vercel Cron** in `vercel.json` (e.g. once per day). If you prefer to move them to QStash as well:

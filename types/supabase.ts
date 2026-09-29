@@ -171,6 +171,10 @@ export interface Database {
           bio: string | null;
           youtube_account: Json | null;
           instagram_account: Json | null;
+          twitter_account: Json | null;
+          instagram_archive: Json | null;
+          youtube_archive: Json | null;
+          twitter_archive: Json | null;
           total_contests_participated: number;
           total_contests_won: number;
           total_money_won: number;
@@ -181,12 +185,17 @@ export interface Database {
           interests: Json | null;
           has_claimed_profile_reward: boolean;
           profile_reward_claimed_at: string | null;
+          trust_score_metrics: Json;
         };
         Insert: {
           id: string;
           bio?: string | null;
           youtube_account?: Json | null;
           instagram_account?: Json | null;
+          twitter_account?: Json | null;
+          instagram_archive?: Json | null;
+          youtube_archive?: Json | null;
+          twitter_archive?: Json | null;
           total_contests_participated?: number;
           total_contests_won?: number;
           total_money_won?: number;
@@ -197,12 +206,17 @@ export interface Database {
           interests?: Json | null;
           has_claimed_profile_reward?: boolean;
           profile_reward_claimed_at?: string | null;
+          trust_score_metrics?: Json;
         };
         Update: {
           id?: string;
           bio?: string | null;
           youtube_account?: Json | null;
           instagram_account?: Json | null;
+          twitter_account?: Json | null;
+          instagram_archive?: Json | null;
+          youtube_archive?: Json | null;
+          twitter_archive?: Json | null;
           total_contests_participated?: number;
           total_contests_won?: number;
           total_money_won?: number;
@@ -213,6 +227,7 @@ export interface Database {
           interests?: Json | null;
           has_claimed_profile_reward?: boolean;
           profile_reward_claimed_at?: string | null;
+          trust_score_metrics?: Json;
         };
       };
       subscriptions: {
@@ -287,7 +302,7 @@ export interface Database {
           tracking_links: { url: string; description: string }[] | null;
           created_at: string;
           updated_at: string;
-          contest_type: "leaderboard" | "cpm";
+          contest_type: "leaderboard" | "cpm" | "milestone" | "dual_rewards";
           contest_based_details: Json | null;
           post_contest_status:
             | "pending_review"
@@ -313,7 +328,10 @@ export interface Database {
           max_submissions_per_creator: number;
           content_type: "ugc" | "clipping" | "other" | null;
           bonus_details: Json | null;
-          max_earnings_per_creator: number | null; // Per-contest cap (in cents), NOT platform-wide
+          max_earnings_per_creator: Json | number | null; // cents number, or platform-keyed map for multi-platform
+          payout_adjustment_percentage: number | null;
+          payout_adjustment_mode: string | null;
+          trust_score: number | null;
           // Note: flat_fee_bonus is stored in contest_based_details JSONB (in cents)
         };
         Insert: {
@@ -340,7 +358,11 @@ export interface Database {
           tracking_links?: { url: string; description: string }[] | null;
           created_at?: string;
           updated_at?: string;
-          contest_type?: "leaderboard" | "cpm";
+          contest_type?:
+            | "leaderboard"
+            | "cpm"
+            | "milestone"
+            | "dual_rewards";
           contest_based_details?: Json | null;
           post_contest_status?:
             | "pending_review"
@@ -366,7 +388,10 @@ export interface Database {
           max_submissions_per_creator?: number;
           content_type?: "ugc" | "clipping" | "other" | null;
           bonus_details?: Json | null;
-          max_earnings_per_creator?: number | null;
+          max_earnings_per_creator?: Json | number | null;
+          payout_adjustment_percentage?: number | null;
+          payout_adjustment_mode?: string | null;
+          trust_score?: number | null;
         };
         Update: {
           id?: string;
@@ -391,7 +416,11 @@ export interface Database {
           inspiration_links?: { url: string; description: string }[] | null;
           created_at?: string;
           updated_at?: string;
-          contest_type?: "leaderboard" | "cpm";
+          contest_type?:
+            | "leaderboard"
+            | "cpm"
+            | "milestone"
+            | "dual_rewards";
           contest_based_details?: Json | null;
           post_contest_status?:
             | "pending_review"
@@ -417,7 +446,10 @@ export interface Database {
           max_submissions_per_creator?: number;
           content_type?: "ugc" | "clipping" | "other" | null;
           bonus_details?: Json | null;
-          max_earnings_per_creator?: number | null;
+          max_earnings_per_creator?: Json | number | null;
+          payout_adjustment_percentage?: number | null;
+          payout_adjustment_mode?: string | null;
+          trust_score?: number | null;
         };
       };
       submissions: {
@@ -433,6 +465,7 @@ export interface Database {
           status: "pending" | "verified" | "rejected" | "paid";
           earnings: number | null;
           last_insights_update: string | null;
+          insights_status: string | null;
           platform: string | null;
           video_id: string | null;
           video_title: string | null;
@@ -442,6 +475,8 @@ export interface Database {
           bonus_paid: boolean;
           bonus_paid_at: string | null;
           bonus_amount: number;
+          /** dual_rewards: main earnings split `{ cpm_cents, milestone_cents }` (JSON). */
+          dual_rewards_payout: Json | null;
         };
         Insert: {
           id?: string;
@@ -455,6 +490,7 @@ export interface Database {
           status?: "pending" | "verified" | "rejected" | "paid";
           earnings?: number | null;
           last_insights_update?: string | null;
+          insights_status?: string | null;
           platform?: string | null;
           video_id?: string | null;
           video_title?: string | null;
@@ -464,6 +500,7 @@ export interface Database {
           bonus_paid?: boolean;
           bonus_paid_at?: string | null;
           bonus_amount?: number;
+          dual_rewards_payout?: Json | null;
         };
         Update: {
           id?: string;
@@ -477,6 +514,7 @@ export interface Database {
           status?: "pending" | "verified" | "rejected" | "paid";
           earnings?: number | null;
           last_insights_update?: string | null;
+          insights_status?: string | null;
           platform?: string | null;
           video_id?: string | null;
           video_title?: string | null;
@@ -486,6 +524,264 @@ export interface Database {
           bonus_paid?: boolean;
           bonus_paid_at?: string | null;
           bonus_amount?: number;
+          dual_rewards_payout?: Json | null;
+        };
+      };
+      post_campaign_submission_metrics: {
+        Row: {
+          submission_id: string;
+          contest_id: string;
+          creator_id: string;
+          content_link: string | null;
+          views: number | null;
+          metadata: Json | null;
+          other_stats: Json | null;
+          created_at: string | null;
+          video_id: string | null;
+          video_title: string | null;
+          video_thumbnail_url: string | null;
+          platform: string | null;
+          last_insights_update: string | null;
+          insights_status: string | null;
+          status: "pending" | "verified" | "rejected" | "paid" | null;
+          earnings: number | null;
+          views_locked: number | null;
+          affiliate_paid: boolean | null;
+          affiliate_metadata: Json | null;
+          paid: boolean | null;
+          paid_at: string | null;
+          bonus_paid: boolean | null;
+          bonus_paid_at: string | null;
+          bonus_amount: number | null;
+          milestone_bonus_paid: Json | null;
+          dual_rewards_payout: Json | null;
+          quality_score: number | null;
+          quality_score_backfilled: boolean | null;
+          submission_updated_at: string | null;
+          synced_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          submission_id: string;
+          contest_id: string;
+          creator_id: string;
+          content_link?: string | null;
+          views?: number | null;
+          metadata?: Json | null;
+          other_stats?: Json | null;
+          created_at?: string | null;
+          video_id?: string | null;
+          video_title?: string | null;
+          video_thumbnail_url?: string | null;
+          platform?: string | null;
+          last_insights_update?: string | null;
+          insights_status?: string | null;
+          status?: "pending" | "verified" | "rejected" | "paid" | null;
+          earnings?: number | null;
+          views_locked?: number | null;
+          affiliate_paid?: boolean | null;
+          affiliate_metadata?: Json | null;
+          paid?: boolean | null;
+          paid_at?: string | null;
+          bonus_paid?: boolean | null;
+          bonus_paid_at?: string | null;
+          bonus_amount?: number | null;
+          milestone_bonus_paid?: Json | null;
+          dual_rewards_payout?: Json | null;
+          quality_score?: number | null;
+          quality_score_backfilled?: boolean | null;
+          submission_updated_at?: string | null;
+          synced_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          submission_id?: string;
+          contest_id?: string;
+          creator_id?: string;
+          content_link?: string | null;
+          views?: number | null;
+          metadata?: Json | null;
+          other_stats?: Json | null;
+          created_at?: string | null;
+          video_id?: string | null;
+          video_title?: string | null;
+          video_thumbnail_url?: string | null;
+          platform?: string | null;
+          last_insights_update?: string | null;
+          insights_status?: string | null;
+          status?: "pending" | "verified" | "rejected" | "paid" | null;
+          earnings?: number | null;
+          views_locked?: number | null;
+          affiliate_paid?: boolean | null;
+          affiliate_metadata?: Json | null;
+          paid?: boolean | null;
+          paid_at?: string | null;
+          bonus_paid?: boolean | null;
+          bonus_paid_at?: string | null;
+          bonus_amount?: number | null;
+          milestone_bonus_paid?: Json | null;
+          dual_rewards_payout?: Json | null;
+          quality_score?: number | null;
+          quality_score_backfilled?: boolean | null;
+          submission_updated_at?: string | null;
+          synced_at?: string;
+          updated_at?: string;
+        };
+      };
+      instagram_insights_refresh_runs: {
+        Row: {
+          id: string;
+          contest_id: string;
+          metrics_target: "submissions" | "post_campaign";
+          status: "pending" | "running" | "completed" | "failed" | "cancelled";
+          total_submissions: number;
+          processed_submissions: number;
+          success_count: number;
+          permanent_failure_count: number;
+          temporary_failure_count: number;
+          skipped_recent_count: number;
+          reviewed_count: number;
+          current_batch_index: number;
+          total_batches: number;
+          started_at: string;
+          finished_at: string | null;
+          last_batch_completed_at: string | null;
+          updated_at: string;
+          error_message: string | null;
+        };
+        Insert: {
+          id?: string;
+          contest_id: string;
+          metrics_target?: "submissions" | "post_campaign";
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          total_submissions?: number;
+          processed_submissions?: number;
+          success_count?: number;
+          permanent_failure_count?: number;
+          temporary_failure_count?: number;
+          skipped_recent_count?: number;
+          reviewed_count?: number;
+          current_batch_index?: number;
+          total_batches?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          updated_at?: string;
+          error_message?: string | null;
+        };
+        Update: {
+          id?: string;
+          contest_id?: string;
+          metrics_target?: "submissions" | "post_campaign";
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          total_submissions?: number;
+          processed_submissions?: number;
+          success_count?: number;
+          permanent_failure_count?: number;
+          temporary_failure_count?: number;
+          skipped_recent_count?: number;
+          reviewed_count?: number;
+          current_batch_index?: number;
+          total_batches?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          updated_at?: string;
+          error_message?: string | null;
+        };
+      };
+      meta_graph_app_usage_log: {
+        Row: {
+          id: string;
+          created_at: string;
+          source: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id: string | null;
+          run_id: string | null;
+          batch_index: number | null;
+          call_count: number;
+          total_time: number;
+          total_cputime: number;
+          business_use_case: Json | null;
+          raw_headers: Json | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          source: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id?: string | null;
+          run_id?: string | null;
+          batch_index?: number | null;
+          call_count?: number;
+          total_time?: number;
+          total_cputime?: number;
+          business_use_case?: Json | null;
+          raw_headers?: Json | null;
+        };
+        Update: {
+          id?: string;
+          created_at?: string;
+          source?: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id?: string | null;
+          run_id?: string | null;
+          batch_index?: number | null;
+          call_count?: number;
+          total_time?: number;
+          total_cputime?: number;
+          business_use_case?: Json | null;
+          raw_headers?: Json | null;
+        };
+      };
+      twitter_metrics_refresh_runs: {
+        Row: {
+          id: string;
+          contest_id: string;
+          status: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid: boolean;
+          creator_scope_id: string | null;
+          total_batches: number;
+          current_batch_index: number;
+          total_participants: number;
+          processed_participants: number;
+          tweets_upserted: number;
+          started_at: string;
+          finished_at: string | null;
+          last_batch_completed_at: string | null;
+          error_message: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contest_id: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid?: boolean;
+          creator_scope_id?: string | null;
+          total_batches?: number;
+          current_batch_index?: number;
+          total_participants?: number;
+          processed_participants?: number;
+          tweets_upserted?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contest_id?: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid?: boolean;
+          creator_scope_id?: string | null;
+          total_batches?: number;
+          current_batch_index?: number;
+          total_participants?: number;
+          processed_participants?: number;
+          tweets_upserted?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+          updated_at?: string;
         };
       };
       money_transactions: {
@@ -511,6 +807,7 @@ export interface Database {
           payment_intent_id: string | null;
           payment_method: string | null;
           metadata: any | null;
+          idempotency_key: string | null;
         };
         Insert: {
           id?: string;
@@ -534,6 +831,7 @@ export interface Database {
           payment_intent_id?: string | null;
           payment_method?: string | null;
           metadata?: any | null;
+          idempotency_key?: string | null;
         };
         Update: {
           id?: string;
@@ -557,6 +855,7 @@ export interface Database {
           payment_intent_id?: string | null;
           payment_method?: string | null;
           metadata?: any | null;
+          idempotency_key?: string | null;
         };
       };
       coin_transactions: {
@@ -613,6 +912,9 @@ export interface Database {
           payout_method_details_snapshot: Json | null;
           cancelled_at: string | null;
           cancellation_reason: string | null;
+          payment_proof_link: string | null;
+          payment_proof_storage_path: string | null;
+          payment_proof_file_size_bytes: number | null;
         };
         Insert: {
           id?: string;
@@ -636,6 +938,9 @@ export interface Database {
           amount_type: "cash" | "coins";
           payout_method_type_snapshot?: string | null;
           payout_method_details_snapshot?: Json | null;
+          payment_proof_link?: string | null;
+          payment_proof_storage_path?: string | null;
+          payment_proof_file_size_bytes?: number | null;
         };
         Update: {
           id?: string;
@@ -661,6 +966,9 @@ export interface Database {
           payout_method_details_snapshot?: Json | null;
           cancelled_at?: string | null;
           cancellation_reason?: string | null;
+          payment_proof_link?: string | null;
+          payment_proof_storage_path?: string | null;
+          payment_proof_file_size_bytes?: number | null;
         };
       };
     };
@@ -690,7 +998,12 @@ export interface Database {
           tracking_links: { url: string; description: string }[] | null;
           created_at: string | null;
           updated_at: string | null;
-          contest_type: "leaderboard" | "cpm" | null;
+          contest_type:
+            | "leaderboard"
+            | "cpm"
+            | "milestone"
+            | "dual_rewards"
+            | null;
           contest_based_details: Json | null;
           post_contest_status:
             | "pending_review"
@@ -730,7 +1043,8 @@ export interface Database {
           max_submissions_per_creator: number | null;
           content_type: "ugc" | "clipping" | "other" | null;
           bonus_details: Json | null;
-          max_earnings_per_creator: number | null;
+          max_earnings_per_creator: Json | number | null;
+          trust_score: number | null;
         };
       };
     };
@@ -797,10 +1111,13 @@ export interface SubmissionRejectionMetadata {
   legacy?: boolean;
 }
 
+/** Not stored on paid `dual_rewards` rows; payment audit + split live on `dual_rewards_payout`. */
 export interface SubmissionPaymentMetadata {
   type: "payment";
   paymentProofUrl: string | null;
   paymentDescription: string | null;
+  /** Optional human note; for dual_rewards see `dual_rewards_payout.customRemarks` on the row. */
+  customRemarks?: string | null;
   timestamp: string;
   updatedBy: string;
 }

@@ -1660,6 +1660,8 @@ CREATE TABLE public.contests (
     categories jsonb,
     subcategories jsonb,
     interests jsonb,
+    payout_adjustment_percentage numeric(5,2),
+    payout_adjustment_mode text,
     region jsonb,
     CONSTRAINT contests_content_type_check CHECK ((content_type = ANY (ARRAY['ugc'::text, 'clipping'::text, 'other'::text])))
 );

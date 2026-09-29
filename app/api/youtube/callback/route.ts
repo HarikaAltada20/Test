@@ -1,3 +1,9 @@
+import { duplicateSocialAccountLinkedMessage } from '@/lib/duplicate-social-account-message';
+import {
+  buildPostOAuthRedirectUrl,
+  clearOAuthReturnToCookie,
+  readOAuthReturnToCookie,
+} from '@/lib/oauth-return-to';
 import { createOAuthClient, getChannelInfo } from '@/lib/youtube-api';
 import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
@@ -9,6 +15,8 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
   const state = request.nextUrl.searchParams.get('state');
   const cookieStore = await cookies();
+  const oauthReturnTo = readOAuthReturnToCookie(cookieStore);
+  const origin = new URL(request.url).origin;
   const storedStateCookie = cookieStore.get('youtube_oauth_state');
   const storedState = storedStateCookie?.value;
 
@@ -18,14 +26,16 @@ export async function GET(request: NextRequest) {
 
   if (!state || !storedState || state !== storedState) {
     console.error('State mismatch or missing state cookie.');
-    const errorUrl = new URL('/dashboard/settings?error=state_mismatch', request.url);
-    const response = NextResponse.redirect(errorUrl);
+    const response = NextResponse.redirect(
+      buildPostOAuthRedirectUrl(origin, oauthReturnTo, { error: 'state_mismatch' }),
+    );
     response.cookies.set({
       name: 'youtube_oauth_state',
       value: '',
       maxAge: 0,
       path: '/'
     });
+    clearOAuthReturnToCookie(response);
     return response;
   }
 
@@ -55,14 +65,16 @@ export async function GET(request: NextRequest) {
 
     if (!code) {
       console.log('No code found, redirecting');
-      response = NextResponse.redirect(new URL('/dashboard/settings?error=no_code', request.url));
+      response = NextResponse.redirect(
+        buildPostOAuthRedirectUrl(origin, oauthReturnTo, { error: 'no_code' }),
+      );
       response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+      clearOAuthReturnToCookie(response);
       return response;
     }
 
     // Use the same redirect URI that was used in the auth request
     // This must match exactly what Google expects
-    const origin = new URL(request.url).origin;
     const redirectUri = `${origin}/api/youtube/callback`;
     const oauth2Client = await createOAuthClient(redirectUri);
     
@@ -90,6 +102,16 @@ export async function GET(request: NextRequest) {
       console.warn('YouTube Callback: tokens.expiry_date not found, defaulting to 1 hour.');
     }
 
+    const { data: existingYoutubeProfile } = await supabase
+      .from('creator_profiles')
+      .select('youtube_account')
+      .eq('id', user.id)
+      .maybeSingle();
+    const existingYoutubeAccount =
+      (existingYoutubeProfile?.youtube_account as Record<string, unknown> | null) ||
+      null;
+    const connectedAtNow = new Date().toISOString();
+
     const youtubeAccount = {
       channel_id: channelInfo.id,
       channel_title: channelInfo.snippet?.title,
@@ -104,8 +126,66 @@ export async function GET(request: NextRequest) {
       token_type: tokens.token_type,
       expires_at: newExpiresAt,
       scopes: tokens.scope?.split(' '),
-      updated_at: new Date().toISOString()
+      updated_at: connectedAtNow,
+      // First connect only; weekly refresh cadence anchors to this.
+      connected_at:
+        typeof existingYoutubeAccount?.connected_at === 'string' &&
+        existingYoutubeAccount.connected_at
+          ? existingYoutubeAccount.connected_at
+          : connectedAtNow,
+      needs_reconnect: false,
     };
+
+    // --- REFINED: Check for duplicate connection within the switcher group ---
+    const { data: vaultLinks } = await supabase
+        .from('user_sessions_vault')
+        .select('target_user_id')
+        .eq('owner_user_id', user.id);
+
+    const linkedAccountIds = vaultLinks?.map(link => link.target_user_id) || [];
+
+    const { data: duplicateAccount, error: duplicateCheckError } = await supabase
+        .from('creator_profiles')
+        .select('id')
+        .eq('youtube_account->>channel_id', channelInfo.id)
+        .neq('id', user.id)
+        .maybeSingle();
+
+    if (duplicateCheckError) {
+        console.error('Error checking for duplicate YouTube account:', duplicateCheckError);
+        throw new Error(`Failed to verify account uniqueness: ${duplicateCheckError.message}`);
+    }
+
+    if (duplicateAccount && linkedAccountIds.includes(duplicateAccount.id)) {
+        console.warn(`YouTube account ${channelInfo.id} is already linked to user ${duplicateAccount.id} in the same switcher group`);
+        // Log the blocked attempt
+        try {
+            const adminSupabase = (await import('@/utils/supabase/admin')).createAdminClient();
+            await adminSupabase.rpc("log_action", { 
+                p_action: "social_link_blocked", 
+                p_metadata: { 
+                    platform: 'youtube',
+                    platform_user_id: channelInfo.id,
+                    existing_owner_id: duplicateAccount.id,
+                    reason: 'duplicate_within_switcher_group'
+                },
+                p_user_id: user.id
+            });
+        } catch (logErr) {
+            console.warn('Failed to log blocked connection attempt:', logErr);
+        }
+
+        response = NextResponse.redirect(
+          buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+            error: 'duplicate_account',
+            message: await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'YouTube'),
+          }),
+        );
+        response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+        clearOAuthReturnToCookie(response);
+        return response;
+    }
+    // --- END REFINED ---
 
     console.log('Updating creator profile for user:', user.id);
     const { error: updateError } = await supabase
@@ -122,21 +202,26 @@ export async function GET(request: NextRequest) {
 
     console.log('Creator profile updated successfully');
 
-    const redirectUrl = '/dashboard/settings?success=youtube_connected';
+    const redirectUrl = buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+      success: 'youtube_connected',
+    });
     console.log('Redirecting to:', redirectUrl);
-    response = NextResponse.redirect(new URL(redirectUrl, request.url));
+    response = NextResponse.redirect(redirectUrl);
 
     response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+    clearOAuthReturnToCookie(response);
 
     return response;
 
   } catch (error) {
     console.error('YouTube OAuth error:', error);
-    const errorUrl = new URL('/dashboard/settings', request.url);
-    errorUrl.searchParams.set('error', 'youtube_connection_failed');
-    errorUrl.searchParams.set('message', error instanceof Error ? error.message : 'Failed to connect YouTube account');
-    response = NextResponse.redirect(errorUrl);
+    response = NextResponse.redirect(
+      buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+        error: 'youtube_connection_failed',
+      }),
+    );
     response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+    clearOAuthReturnToCookie(response);
     return response;
   }
 } 

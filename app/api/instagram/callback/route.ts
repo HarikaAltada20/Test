@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server'; // Ensure this points to server client
 import dayjs from 'dayjs';
+import {
+    buildPostOAuthRedirectUrl,
+    clearOAuthReturnToCookie,
+    readOAuthReturnToCookie,
+} from '@/lib/oauth-return-to';
+import {
+    computeSinceUntilForPreset,
+    fetchUserAccountInsights,
+} from '@/lib/instagram-account-insights';
+import {
+    mergeInstagramAnalyticsEntry,
+    type InstagramAnalyticsEntry,
+} from '@/lib/platform-social-archive';
+import { duplicateSocialAccountLinkedMessage } from '@/lib/duplicate-social-account-message';
 
 export const dynamic = 'force-dynamic'; // Ensures the route is not statically cached
 
@@ -12,19 +27,33 @@ export async function GET(request: NextRequest) {
     const errorParam = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
 
-    const baseRedirectUrl = new URL('/dashboard/settings', request.url);
+    const origin = new URL(request.url).origin;
+    const cookieStore = await cookies();
+    const oauthReturnTo = readOAuthReturnToCookie(cookieStore);
+
+    const redirectAfterOAuth = (params: {
+        success?: string;
+        error?: string;
+        message?: string;
+    }) => {
+        const response = NextResponse.redirect(
+            buildPostOAuthRedirectUrl(origin, oauthReturnTo, params),
+        );
+        clearOAuthReturnToCookie(response);
+        return response;
+    };
 
     if (errorParam) {
         console.error(`Instagram authentication failed: ${errorDescription || errorParam}`);
-        baseRedirectUrl.searchParams.set('error', 'instagram_auth_failed');
-        baseRedirectUrl.searchParams.set('message', errorDescription || errorParam);
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({
+            error: 'instagram_auth_failed',
+            message: errorDescription || errorParam,
+        });
     }
 
     if (!code) {
         console.error('No authorization code found from Instagram.');
-        baseRedirectUrl.searchParams.set('error', 'instagram_no_code');
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({ error: 'instagram_no_code' });
     }
 
     const supabase = await createClient(); // Uses server-side client
@@ -35,15 +64,13 @@ export async function GET(request: NextRequest) {
 
         if (userError || !user) {
             console.error('Supabase user not authenticated during Instagram callback:', userError?.message);
-            baseRedirectUrl.searchParams.set('error', 'supabase_user_not_found');
-            baseRedirectUrl.searchParams.set('message', 'User session not found. Please sign in again.');
             // It might be better to redirect to sign-in if no user
             return NextResponse.redirect(new URL('/auth/signin?error=instagram_callback_no_user', request.url));
         }
 
         // 2. Exchange code for access token
         const clientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
-        const clientSecret = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_SECRET;
+        const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
         // The redirect_uri for the token exchange must exactly match the one configured in the Instagram App settings
         // and used in the initial authorization request.
         const serverSideRedirectUri = `${new URL(request.url).origin}/api/instagram/callback`;
@@ -118,7 +145,63 @@ export async function GET(request: NextRequest) {
         
         const globalInstagramUserID = profile.user_id || instagram_user_id_from_token_exchange;
 
+        // --- REFINED: Check for duplicate connection within the switcher group ---
+        const { data: vaultLinks } = await supabase
+            .from('user_sessions_vault')
+            .select('target_user_id')
+            .eq('owner_user_id', user.id);
+
+        const linkedAccountIds = vaultLinks?.map(link => link.target_user_id) || [];
+
+        const { data: duplicateAccount, error: duplicateCheckError } = await supabase
+            .from('creator_profiles')
+            .select('id')
+            .eq('instagram_account->>instagram_user_id', globalInstagramUserID)
+            .neq('id', user.id)
+            .maybeSingle();
+
+        if (duplicateCheckError) {
+            console.error('Error checking for duplicate Instagram account:', duplicateCheckError);
+            throw new Error(`Failed to verify account uniqueness: ${duplicateCheckError.message}`);
+        }
+
+        if (duplicateAccount && linkedAccountIds.includes(duplicateAccount.id)) {
+            console.warn(`Instagram account ${globalInstagramUserID} is already linked to user ${duplicateAccount.id} in the same switcher group`);
+            // Log the blocked attempt
+            try {
+                const adminSupabase = (await import('@/utils/supabase/admin')).createAdminClient();
+                await adminSupabase.rpc("log_action", { 
+                    p_action: "social_link_blocked", 
+                    p_metadata: { 
+                        platform: 'instagram',
+                        platform_user_id: globalInstagramUserID,
+                        existing_owner_id: duplicateAccount.id,
+                        reason: 'duplicate_within_switcher_group'
+                    },
+                    p_user_id: user.id
+                });
+            } catch (logErr) {
+                console.warn('Failed to log blocked connection attempt:', logErr);
+            }
+
+            return redirectAfterOAuth({
+                error: 'duplicate_account',
+                message: await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'Instagram'),
+            });
+        }
+        // --- END REFINED ---
+
         // 4. Store in Supabase (`creator_profiles.instagram_account`)
+        const { data: existingIgProfile } = await supabase
+            .from('creator_profiles')
+            .select('instagram_account')
+            .eq('id', user.id)
+            .maybeSingle();
+        const existingIgAccount =
+            (existingIgProfile?.instagram_account as Record<string, unknown> | null) ||
+            null;
+        const connectedAtNow = new Date().toISOString();
+
         const instagramAccountData = {
             access_token: long_lived_access_token, // Use long-lived token
             instagram_user_id: globalInstagramUserID,
@@ -131,7 +214,13 @@ export async function GET(request: NextRequest) {
             token_expiry: actualTokenExpiry, // Use actual expiry from long-lived token
             name_of_account: profile.name,
             app_scoped_user_id: profile.id,
-            updated_at: new Date().toISOString(),
+            updated_at: connectedAtNow,
+            // First connect only; weekly refresh cadence anchors to this.
+            connected_at:
+                typeof existingIgAccount?.connected_at === 'string' &&
+                existingIgAccount.connected_at
+                    ? existingIgAccount.connected_at
+                    : connectedAtNow,
         };
 
         const { error: updateError } = await supabase
@@ -146,14 +235,60 @@ export async function GET(request: NextRequest) {
             throw new Error(`Failed to update creator profile with Instagram data: ${updateError.message}`);
         }
 
+        // Optional: seed "overall" account insights into instagram_archive (non-blocking)
+        try {
+            const { data: row } = await supabase
+                .from('creator_profiles')
+                .select('instagram_archive')
+                .eq('id', user.id)
+                .single();
+            const nowSec = Math.floor(Date.now() / 1000);
+            const { since, until, entryKey } = computeSinceUntilForPreset('overall', nowSec);
+            const insights = await fetchUserAccountInsights(
+                profile.id as string,
+                long_lived_access_token,
+                since,
+                until
+            );
+            let entry: InstagramAnalyticsEntry;
+            if (insights.kind === 'success') {
+                entry = {
+                    fetched_at: new Date().toISOString(),
+                    since,
+                    until,
+                    preset: 'overall',
+                    metrics: insights.metrics,
+                };
+            } else {
+                entry = {
+                    fetched_at: new Date().toISOString(),
+                    since,
+                    until,
+                    preset: 'overall',
+                    metrics: {},
+                    error: insights.message || 'Insights unavailable',
+                };
+            }
+            const merged = mergeInstagramAnalyticsEntry(row?.instagram_archive, entryKey, entry);
+            const { error: archiveUpdateErr } = await supabase
+                .from('creator_profiles')
+                .update({ instagram_archive: merged as Record<string, unknown> })
+                .eq('id', user.id);
+            if (archiveUpdateErr) {
+                console.warn('[instagram/callback] Optional analytics seed archive update failed:', archiveUpdateErr);
+            }
+        } catch (seedErr) {
+            console.warn('[instagram/callback] Optional analytics seed skipped:', seedErr);
+        }
+
         console.log('Instagram account connected successfully for user:', user.id);
-        baseRedirectUrl.searchParams.set('success', 'instagram_connected');
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({ success: 'instagram_connected' });
 
     } catch (err: any) {
         console.error('Error during Instagram server-side callback processing:', err);
-        baseRedirectUrl.searchParams.set('error', 'instagram_processing_failed');
-        baseRedirectUrl.searchParams.set('message', err.message || 'An unexpected error occurred.');
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({
+            error: 'instagram_processing_failed',
+            message: err.message || 'An unexpected error occurred.',
+        });
     }
 } 

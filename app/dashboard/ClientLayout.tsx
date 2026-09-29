@@ -2,6 +2,12 @@
 
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { LoadingPlaceholder } from "@/components/loading-placeholder";
+import { ReviewModal } from "@/components/ReviewModal";
+import { submitReview, ReviewData } from "@/lib/reviews";
+import { hasPublishedContests } from "@/lib/review-utils";
+import { hasSubmittedContent } from "@/lib/creator-review-utils";
+import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
+import { useToast } from "@/hooks/use-toast";
 import type { UserResponse } from "@supabase/supabase-js";
 import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -24,6 +30,7 @@ import {
   CreditCard,
   Maximize,
   Minimize,
+  Loader2,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -43,18 +50,24 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ChatSuppport from "@/components/ChatSupport";
+import { UserNotificationsBell } from "@/components/UserNotificationsBell";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
-import { useClientAuth } from "@/hooks/use-client-auth";
+import { completeLogout } from "@/lib/auth-utils";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
+import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 import Link from "next/link";
 import Image from "next/image";
 import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
 import goldSquareLogo from "@/public/images/Group (4).png";
 import logo from "@/public/images/Primary Horizintal.svg";
 import squareLogo from "@/public/images/Group (2).avif";
+import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
+import { BulkModerationProgressProvider } from "@/components/BulkModerationProgressProvider";
+import { BulkPaymentProgressProvider } from "@/components/BulkPaymentProgressProvider";
+import { BulkVideoDownloadProgressProvider } from "@/components/BulkVideoDownloadProgressProvider";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -227,18 +240,32 @@ function DashboardContent({
     fullName: string;
     profilePictureUrl: string;
     isActive: boolean;
-    subscriptionPlan: string | null;
+    username: string;
+    subscriptionPlan?: string | null;
   }>({
     fullName: "",
     profilePictureUrl: "",
     isActive: true,
+    username: "",
     subscriptionPlan: null,
   });
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
   const [open, setOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [supportChatEnabled, setSupportChatEnabled] = useState(true);
+  const [supportThreadId, setSupportThreadId] = useState<string | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
+
+  const accountTypeLabel =
+    userRole === "advertiser"
+      ? "Brand"
+      : userRole === "creator"
+        ? "Creator"
+        : userRole === "admin"
+          ? "Admin"
+          : null;
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileSidebarOpen, setProfileSidebarOpen] = useState(false);
@@ -286,7 +313,7 @@ function DashboardContent({
   });
   // Track very small screens (≤ 400px) so we can force 85% zoom and hide the toggle
   const [isSmallScreen, setIsSmallScreen] = useState(false);
-  const { logout } = useClientAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const {
     isFullscreen,
     isSupported: isFullscreenSupported,
@@ -294,14 +321,301 @@ function DashboardContent({
     toggleFullscreen,
   } = useFullscreen();
 
+  useEffect(() => {
+    if (!userRole || userRole === "admin") return;
+    const threadParam = searchParams.get("supportThread");
+    if (threadParam) {
+      setSupportThreadId(threadParam);
+      setIsChatOpen(true);
+    }
+  }, [searchParams, userRole]);
+
+  useEffect(() => {
+    if (!user || userRole === "admin") return;
+    fetch("/api/support/status")
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.enabled === "boolean") setSupportChatEnabled(d.enabled);
+      })
+      .catch(() => {});
+  }, [user, userRole]);
+
+  const openSupportThread = (threadId: string) => {
+    setSupportThreadId(threadId);
+    setIsChatOpen(true);
+  };
+
+  const openAdminSupportThread = (threadId: string) => {
+    setIsChatOpen(false);
+    setSupportThreadId(null);
+    router.push(`/dashboard/admin/support?supportThread=${threadId}`);
+  };
+
   const handleSignOut = async () => {
+    setIsSigningOut(true);
     try {
-      await logout();
+      await completeLogout();
       console.log("Sign out successful");
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error("Error signing out:", error);
+    } finally {
+      setIsSigningOut(false);
     }
   };
+
+  const { toast } = useToast();
+
+  const checkReviewActivityEligibility = useCallback(
+    async (showToasts: boolean): Promise<boolean> => {
+      if (!user?.id) return false;
+
+      const showErrorToast = (description: string) => {
+        if (!showToasts) return;
+        toast({
+          title: "Error",
+          description,
+          variant: "destructive",
+        });
+      };
+
+      try {
+        // Check contests for advertisers
+        const contestResult = await hasPublishedContests(user.id);
+        if (!contestResult.success) {
+          showErrorToast("Failed to check your contest status. Please try again.");
+          return false;
+        }
+
+        // Check content submissions for creators
+        const contentResult = await hasSubmittedContent(user.id);
+        if (!contentResult.success) {
+          showErrorToast(
+            "Failed to check your content submission status. Please try again."
+          );
+          return false;
+        }
+
+        // Get user type to provide specific validation
+        const supabase = createClient();
+        const { data: userTypeData, error: userTypeError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
+
+        if (userTypeError) {
+          console.error("Error checking user type for review eligibility:", userTypeError);
+          showErrorToast("Failed to check your account type. Please try again.");
+          return false;
+        }
+
+        const userType = userTypeData?.user_type;
+
+        // Validate based on user type
+        if (userType === "creator" && !contentResult.hasSubmittedContent) {
+          if (showToasts) {
+            toast({
+              title: "Submit Content First",
+              description:
+                "You need to submit at least one content before leaving a review. Start by participating in a contest!",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        if (userType === "advertiser" && !contestResult.hasPublishedContests) {
+          if (showToasts) {
+            toast({
+              title: "Create a Contest First",
+              description:
+                "You need to create and publish at least one contest before leaving a review. Get started by launching your first campaign!",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        if (
+          !contestResult.hasPublishedContests &&
+          !contentResult.hasSubmittedContent
+        ) {
+          if (showToasts) {
+            toast({
+              title: "Activity Required",
+              description:
+                "You need to create and publish at least one contest as an advertiser, or submit at least one content as a creator before leaving a review.",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error checking review activity eligibility:", error);
+        showErrorToast("An unexpected error occurred. Please try again.");
+        return false;
+      }
+    },
+    [toast, user?.id]
+  );
+
+  const handleReviewSubmit = async (review: {
+    rating: number;
+    experience: string;
+    images: File[];
+    videoLinks: string[];
+  }) => {
+    try {
+      // Show loading toast
+      const loadingToast = toast({
+        title: "Submitting Review",
+        description: "Please wait while we compress and upload your images...",
+      });
+      
+      // Submit review to Supabase with compression progress callback
+      const result = await submitReview(user, review as ReviewData, (index, originalSize, compressedSize) => {
+        console.log(`Compression progress for image ${index + 1}: ${(originalSize / 1024).toFixed(1)}KB → ${(compressedSize / 1024).toFixed(1)}KB`);
+        // The modal will show the compression progress via its own state
+      });
+      
+      // Dismiss loading toast
+      loadingToast.dismiss();
+      
+      if (result.success) {
+        // Show success toast
+        toast({
+          title: "Review Submitted Successfully!",
+          description: "Thank you for sharing your experience with us.",
+        });
+        console.log("Review submitted with ID:", result.reviewId);
+      } else {
+        // Show error toast
+        toast({
+          title: "Submission Failed",
+          description: result.error || "Failed to submit review. Please try again.",
+          variant: "destructive",
+        });
+        console.error("Review submission failed:", result.error);
+      }
+    } catch (error) {
+      console.error("Unexpected error in review submission:", error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const shouldPromptReviewAfterWithdrawal = useCallback(
+    async (): Promise<boolean> => {
+      if (!user?.id) return false;
+
+      const supabase = createClient();
+
+      // First, use the latest non-null timestamp to apply the 30-day rule.
+      const { data: latestDatedReview, error: latestReviewError } = await supabase
+        .from("user_reviews")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .not("created_at", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestReviewError) {
+        console.error(
+          "Error checking latest review timestamp for withdrawal prompt:",
+          latestReviewError
+        );
+        return false;
+      }
+
+      if (latestDatedReview?.created_at) {
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const latestReviewTime = new Date(latestDatedReview.created_at).getTime();
+        const now = Date.now();
+        return now - latestReviewTime >= THIRTY_DAYS_MS;
+      }
+
+      // If no dated review exists, verify whether any review exists at all.
+      const { data: anyReview, error: anyReviewError } = await supabase
+        .from("user_reviews")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (anyReviewError) {
+        console.error(
+          "Error checking review existence for withdrawal prompt:",
+          anyReviewError
+        );
+        return false;
+      }
+
+      // No review rows => prompt user. Any row with null created_at => avoid re-prompt spam.
+      return !anyReview;
+    },
+    [user?.id]
+  );
+
+  const openReviewModalIfEligible = useCallback(
+    async ({
+      enforceWithdrawalCooldown = false,
+      showEligibilityToasts = true,
+    }: {
+      enforceWithdrawalCooldown?: boolean;
+      showEligibilityToasts?: boolean;
+    }): Promise<boolean> => {
+      const hasRequiredActivity =
+        await checkReviewActivityEligibility(showEligibilityToasts);
+      if (!hasRequiredActivity) return false;
+
+      if (enforceWithdrawalCooldown) {
+        const shouldPrompt = await shouldPromptReviewAfterWithdrawal();
+        if (!shouldPrompt) return false;
+      }
+
+      setIsReviewModalOpen(true);
+      return true;
+    },
+    [checkReviewActivityEligibility, shouldPromptReviewAfterWithdrawal]
+  );
+
+  const handleReviewOpen = async () => {
+    await openReviewModalIfEligible({
+      enforceWithdrawalCooldown: false,
+      showEligibilityToasts: true,
+    });
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleWithdrawalReviewTrigger = () => {
+      void (async () => {
+        await openReviewModalIfEligible({
+          enforceWithdrawalCooldown: true,
+          showEligibilityToasts: false,
+        });
+      })();
+    };
+
+    window.addEventListener(
+      WITHDRAWAL_REVIEW_TRIGGER_EVENT,
+      handleWithdrawalReviewTrigger
+    );
+
+    return () => {
+      window.removeEventListener(
+        WITHDRAWAL_REVIEW_TRIGGER_EVENT,
+        handleWithdrawalReviewTrigger
+      );
+    };
+  }, [openReviewModalIfEligible]);
 
   useEffect(() => {
     setOpen(false);
@@ -372,7 +686,7 @@ function DashboardContent({
       const supabase = createClient();
       const { data: profile } = await supabase
         .from("users")
-        .select("full_name, profile_picture_url, is_active, user_type")
+        .select("full_name, profile_picture_url, is_active, user_type, username")
         .eq("id", user.id)
         .single();
 
@@ -395,6 +709,7 @@ function DashboardContent({
           fullName: profile.full_name,
           profilePictureUrl: profile.profile_picture_url,
           isActive: profile.is_active ?? true,
+          username: profile.username,
           subscriptionPlan: subscriptionPlan,
         });
       }
@@ -509,12 +824,13 @@ function DashboardContent({
   // Function to get page title from pathname
   const getPageTitle = (path: string) => {
     if (path === "/dashboard") return "Overview";
-    if (path.includes("/contests")) return "Contests";
+    if (path.includes("/contests")) return "Campaigns";
     if (path.includes("/analytics")) return "Analytics";
     if (path.includes("/billing")) return "Billing";
     if (path.includes("/settings")) return "Settings";
     if (path.includes("/submissions")) return "Submissions";
-    if (path.includes("/opportunities")) return "Opportunities";
+    if (path.includes("/opportunities")) return "Campaigns";
+    if (path.includes("/daily-challenge")) return "Daily Challenge";
     if (path.includes("/earnings")) return "Earnings";
     if (path.includes("/admin")) return "Admin";
 
@@ -535,6 +851,13 @@ function DashboardContent({
   const displayName =
     profileData.fullName ||
     user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
+    
+  // Get username for AccountSwitcher
+  const username =
+    profileData.username ||
+    user?.user_metadata?.username ||
     user?.email?.split("@")[0] ||
     "User";
   const displayEmail = user?.email || "";
@@ -636,7 +959,8 @@ function DashboardContent({
         .dashboard-container {
           /* On very small screens (≤ 400px) we always use 85% zoom, */
           /* otherwise we respect the compact mode toggle              */
-          zoom: ${isSmallScreen || isCompactMode ? "0.85" : "1"};
+          --dashboard-zoom: ${isSmallScreen || isCompactMode ? "0.85" : "1"};
+          zoom: var(--dashboard-zoom);
           transition: zoom 0.3s ease-in-out;
         }
 
@@ -669,6 +993,28 @@ function DashboardContent({
         /* Ensure smooth transitions for all elements when zoom changes */
         .dashboard-container * {
           transition: all 0.3s ease-in-out;
+        }
+
+        /* Window-virtualized table spacers must not animate height or rows blank. */
+        .dashboard-container tr.contest-virtual-spacer,
+        .dashboard-container tr.contest-virtual-spacer * {
+          transition: none !important;
+        }
+
+        /* Only the virtualizer may correct scroll; native anchoring double-shifts. */
+        .dashboard-container .contest-virtual-body {
+          overflow-anchor: none;
+        }
+
+        /* Animating row padding/size makes virtualizer measurements stale. */
+        .dashboard-container tr.contest-virtual-row,
+        .dashboard-container tr.contest-virtual-row * {
+          transition-property: color, background-color, border-color, opacity !important;
+        }
+
+        /* Review Mode overlay sits below dialogs (z-50); hide the page behind it instead. */
+        html.review-mode-open .dashboard-container {
+          visibility: hidden;
         }
       `}</style>
 
@@ -770,16 +1116,17 @@ function DashboardContent({
       `}</style>
 
       {/* Main Layout Container */}
-      <div className="flex min-h-screen dashboard-container">
-        {/* Desktop Sidebar */}
+      <div className="relative flex min-h-screen dashboard-container">
+        {/* Desktop Sidebar — in flow so compact-mode zoom cannot slide the page under a fixed bar */}
         <aside
           className={cn(
-            "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
+            "sticky top-0 z-[41] hidden shrink-0 flex-col self-start overflow-visible border-r backdrop-blur-sm transition-[width] duration-300 ease-in-out lg:flex",
             sidebarCollapsed ? "w-28" : "w-72",
             currentMode === "dark"
               ? "bg-[#06021D] text-white border-gray-800"
               : "bg-white text-slate-900 border-gray-300"
           )}
+          style={{ height: "calc(100dvh / var(--dashboard-zoom, 1))" }}
           // style={{
           //   background:
           //     currentMode === "light"
@@ -827,7 +1174,7 @@ function DashboardContent({
             <div className="relative flex items-center justify-center flex-1 z-10">
               {!sidebarCollapsed ? (
                 <Link
-                  href="/"
+                  href={MARKETING_HOME_AS_GUEST}
                   className="flex items-center group transition-all duration-300"
                 >
                   <div
@@ -854,7 +1201,7 @@ function DashboardContent({
                 </Link>
               ) : (
                 <Link
-                  href="/"
+                  href={MARKETING_HOME_AS_GUEST}
                   className="flex items-center justify-center group transition-all duration-300"
                 >
                   <div
@@ -888,25 +1235,28 @@ function DashboardContent({
             {userRole && (
               <DashboardSidebar
                 userRole={userRole}
-                onChatOpen={() => setIsChatOpen(true)}
+                onChatOpen={() => {
+                  setSupportThreadId(null);
+                  setIsChatOpen(true);
+                }}
+                onReviewOpen={handleReviewOpen}
                 collapsed={sidebarCollapsed}
                 mode={currentMode}
+                supportChatEnabled={supportChatEnabled}
               />
             )}
           </div>
-        </aside>
 
-        {/* Sidebar Toggle Button - Always Centered at Sidebar/Header Border */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className={cn(
-            "hidden lg:flex fixed top-6 z-50 h-8 w-8 rounded-full backdrop-blur-sm transition-all duration-200",
-            "border items-center justify-center"
-          )}
-          style={{
-            left: sidebarCollapsed ? "86px" : "240px", // Center of actual sidebar border (adjusted for zoom)
+          {/* Sits on the sidebar edge and sticks with it, including in compact zoom. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className={cn(
+              "absolute top-6 right-0 z-50 h-8 w-8 translate-x-1/2 rounded-full backdrop-blur-sm",
+              "border items-center justify-center"
+            )}
+            style={{
             backgroundColor:
               currentMode === "light"
                 ? `rgba(${mode.background.primary}, 0.9)`
@@ -982,13 +1332,11 @@ function DashboardContent({
             {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           </span>
         </Button>
+        </aside>
 
         {/* Main Content Area */}
         <div
-          className={cn(
-            "flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out",
-            sidebarCollapsed ? "lg:ml-28" : "lg:ml-72"
-          )}
+          className="flex min-w-0 max-w-full flex-1 flex-col"
         >
           {/* Premium Dashboard Header */}
           <header
@@ -1102,7 +1450,12 @@ function DashboardContent({
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.08),transparent)]"></div>
                         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div> */}
 
-                        <div>
+                        <Link
+                          href={MARKETING_HOME_AS_GUEST}
+                          onClick={() => setOpen(false)}
+                          className="inline-flex shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+                          aria-label="Go to home"
+                        >
                           <Image
                             src={
                               currentMode === "dark" ? goldLogoHorizontal : logo
@@ -1112,7 +1465,7 @@ function DashboardContent({
                             height={100}
                             className="h-[50px] mt-5 w-auto transition-all duration-300"
                           />
-                        </div>
+                        </Link>
                         <SheetDescription className="sr-only">
                           Dashboard navigation menu
                         </SheetDescription>
@@ -1122,9 +1475,14 @@ function DashboardContent({
                           {userRole && (
                             <DashboardSidebar
                               userRole={userRole}
-                              onChatOpen={() => setIsChatOpen(true)}
+                              onChatOpen={() => {
+                  setSupportThreadId(null);
+                  setIsChatOpen(true);
+                }}
+                              onReviewOpen={handleReviewOpen}
                               collapsed={false}
                               mode={currentMode}
+                              supportChatEnabled={supportChatEnabled}
                             />
                           )}
                         </div>
@@ -1188,6 +1546,19 @@ function DashboardContent({
 
                 {/* Right Side: Actions */}
                 <div className="flex items-center gap-3">
+                  {userRole && (
+                    <UserNotificationsBell
+                      isDark={currentMode === "dark"}
+                      userType={userRole}
+                      onOpenSupportThread={
+                        userRole === "admin" ? undefined : openSupportThread
+                      }
+                      onOpenAdminSupportThread={
+                        userRole === "admin" ? openAdminSupportThread : undefined
+                      }
+                    />
+                  )}
+
                   {/* Full Screen Toggle Button */}
                   {isFullscreenClient && isFullscreenSupported && (
                     <Button
@@ -1807,7 +2178,12 @@ function DashboardContent({
                     <SheetTrigger asChild>
                       <Button
                         variant="ghost"
-                        className="h-8 px-3"
+                        className={cn(
+                          "h-auto min-h-9 py-1.5 px-2.5 sm:px-3 gap-0 rounded-xl border transition-colors",
+                          currentMode === "light"
+                            ? "border-transparent hover:border-violet-200 hover:bg-violet-50/90"
+                            : "border-transparent hover:border-violet-500/25 hover:bg-white/[0.06]",
+                        )}
                         // style={{
                         //   backgroundColor:
                         //     currentMode === "light"
@@ -1832,25 +2208,44 @@ function DashboardContent({
                         //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
                         // }}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                           {avatarSrc ? (
-                            <Avatar className="h-5 w-5">
+                            <Avatar className="h-9 w-9 ring-2 ring-violet-500/15 shrink-0">
                               <AvatarImage src={avatarSrc} alt={displayName} />
                               <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white text-xs font-bold">
                                 {avatarFallback}
                               </AvatarFallback>
                             </Avatar>
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-md font-bold">
+                            <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-violet-500/15">
                               {avatarFallback}
                             </div>
                           )}
-                          <span
-                            className="hidden sm:block text-md font-medium truncate"
-                            title={displayName}
-                          >
-                            {displayName}
-                          </span>
+                          <div className="hidden sm:flex flex-col items-start min-w-0 text-left">
+                            <span
+                              className={cn(
+                                "text-sm font-semibold leading-tight truncate max-w-[9rem] md:max-w-[11rem]",
+                                currentMode === "light"
+                                  ? "text-slate-900"
+                                  : "text-white",
+                              )}
+                              title={displayName}
+                            >
+                              {displayName}
+                            </span>
+                            {accountTypeLabel ? (
+                              <span
+                                className={cn(
+                                  "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                                  currentMode === "light"
+                                    ? "bg-violet-100 text-violet-800"
+                                    : "bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/30",
+                                )}
+                              >
+                                {accountTypeLabel}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </Button>
                     </SheetTrigger>
@@ -1894,7 +2289,7 @@ function DashboardContent({
                       <div className="relative h-full flex flex-col">
                         {/* Header */}
                         <SheetHeader
-                          className="p-6 border-b flex-shrink-0"
+                          className="p-6 border-b flex-shrink-0 text-left"
                           style={{
                             borderColor: `rgba(${theme.primary}, ${
                               currentMode === "dark" ? "0.2" : "0.15"
@@ -1933,7 +2328,7 @@ function DashboardContent({
                                 {avatarFallback}
                               </div>
                             )}
-                            <div className="flex-1 min-w-0">
+                            <div className="flex-1 min-w-0 text-left">
                               <SheetTitle
                                 className="text-lg text-start font-semibold truncate max-w-full"
                                 style={{
@@ -1944,25 +2339,20 @@ function DashboardContent({
                                 {displayName}
                               </SheetTitle>
 
-                              <div className="flex-1 min-w-0">
+                              <div className="mt-1 flex justify-start">
                                 <span
                                   className={cn(
-                                    "block text-start mt-[2px] text-sm font-medium",
+                                    "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide",
                                     currentMode === "light"
-                                      ? "text-gray-700"
-                                      : "text-white"
+                                      ? "bg-violet-100 text-violet-800 ring-1 ring-violet-200/80"
+                                      : "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/35",
                                   )}
-                                  // style={{
-                                  //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                  //   color: `rgba(${theme.primary}, 1)`,
-                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                  // }}
                                 >
                                   {userRole === "advertiser"
-                                    ? "Advertiser"
+                                    ? "Brand"
                                     : userRole === "creator"
-                                    ? "Creator"
-                                    : "Admin"}
+                                      ? "Creator"
+                                      : "Admin"}
                                 </span>
                               </div>
                             </div>
@@ -1995,6 +2385,21 @@ function DashboardContent({
                               {displayEmail}
                             </p>
                           </div>
+
+                          {/* Account Switcher  - Only for Creators */}
+                          {userRole === "creator" && (
+                            <div className="pl-2 py-4 border-y border-slate-100 dark:border-slate-800/50">
+                              <AccountSwitcher
+                                currentUserId={user?.id || ""}
+                                currentUsername={username}
+                                currentUserEmail={user?.email ?? null}
+                                currentUserJoinedAt={user?.created_at ?? null}
+                                isDark={currentMode === "dark"}
+                                userType={userRole}
+                              />
+                            </div>
+                          )}
+
                           {/* Content - Unique Information Instead of Duplicate Navigation */}
                           <div className="px-4 md:pl-4 md:pr-0 py-6 space-y-6">
                             {/* Account Plan Section - Only for Advertisers */}
@@ -2140,7 +2545,8 @@ function DashboardContent({
                                           : "text-white"
                                       )}
                                     >
-                                      Edit Profile
+                                     
+                                     Profile
                                     </div>
                                   </div>
                                   <ChevronRight
@@ -2290,9 +2696,17 @@ function DashboardContent({
                           }}
                         >
                           <Button
+                            type="button"
                             onClick={handleSignOut}
+                            disabled={isSigningOut}
+                            aria-busy={isSigningOut}
+                            aria-label={
+                              isSigningOut
+                                ? "Signing out"
+                                : "Sign out, end your session"
+                            }
                             variant="ghost"
-                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300"
+                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300 disabled:opacity-90 disabled:pointer-events-none"
                             // style={{
                             //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                             //   borderColor: "rgba(244, 63, 94, 0.2)",
@@ -2316,19 +2730,27 @@ function DashboardContent({
                             // }}
                           >
                             <div
-                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center"
+                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center shrink-0"
                               // style={{
                               //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                               // }}
                             >
-                              <LogOut
-                                className="h-5 w-5"
-                                style={{
-                                  color: "rgb(244, 63, 94)",
-                                }}
-                              />
+                              {isSigningOut ? (
+                                <Loader2
+                                  className="h-5 w-5 animate-spin"
+                                  style={{ color: "rgb(244, 63, 94)" }}
+                                  aria-hidden
+                                />
+                              ) : (
+                                <LogOut
+                                  className="h-5 w-5"
+                                  style={{
+                                    color: "rgb(244, 63, 94)",
+                                  }}
+                                />
+                              )}
                             </div>
-                            <div className="flex-1 text-left">
+                            <div className="flex-1 text-left min-w-0">
                               <div
                                 className={cn(
                                   "text-md font-semibold",
@@ -2337,7 +2759,7 @@ function DashboardContent({
                                     : "text-white"
                                 )}
                               >
-                                Sign Out
+                                {isSigningOut ? "Signing out…" : "Sign Out"}
                               </div>
                               <div
                                 className={cn(
@@ -2351,7 +2773,9 @@ function DashboardContent({
                                 //   color: "rgba(244, 63, 94, 0.8)",
                                 // }}
                               >
-                                End your session
+                                {isSigningOut
+                                  ? "Please wait"
+                                  : "End your session"}
                               </div>
                             </div>
                           </Button>
@@ -2372,18 +2796,36 @@ function DashboardContent({
                   data-mode={currentMode}
                   data-compact={isCompactMode ? "true" : "false"}
                 >
-                  {children}
+                  <BulkModerationProgressProvider>
+                    <BulkPaymentProgressProvider>
+                      <BulkVideoDownloadProgressProvider>
+                        {children}
+                      </BulkVideoDownloadProgressProvider>
+                    </BulkPaymentProgressProvider>
+                  </BulkModerationProgressProvider>
                 </div>
               </Suspense>
 
-              {/* Chat Popup */}
-              {isChatOpen && (
+              {/* Chat Popup — creators/brands only; admins use /dashboard/admin/support */}
+              {isChatOpen && userRole && userRole !== "admin" && (
                 <ChatSuppport
-                  onClose={() => setIsChatOpen(false)}
+                  onClose={() => {
+                    setIsChatOpen(false);
+                    setSupportThreadId(null);
+                  }}
                   email={displayEmail}
                   userType={userRole as any}
+                  initialThreadId={supportThreadId}
+                  supportChatEnabled={supportChatEnabled}
                 />
               )}
+
+              {/* Review Modal */}
+              <ReviewModal
+                isOpen={isReviewModalOpen}
+                onClose={() => setIsReviewModalOpen(false)}
+                onSubmit={handleReviewSubmit}
+              />
             </div>
           </main>
         </div>

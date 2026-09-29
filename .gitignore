@@ -15,6 +15,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+scripts/.simulation-snapshots/
 
 # env files
 .env*
@@ -27,3 +28,16 @@ yarn-error.log*
 next-env.d.ts
 # Video originals backup
 public/videos/_originals/
+
+# Generated AI / export diffs — do not commit
+reviews/*.diff
+SUPABASE/storage-backups/
+SUPABASE/backup-storage.local.ps1
+SUPABASE/supabase-backups/
+SUPABASE_BACKUP/
+db/backups/*.dump
+db/full_backup*.sql
+
+# Local desktop downloader secrets / manifests (installer is hosted separately)
+**/*.gocdownload.local
+.env.goc-download.local

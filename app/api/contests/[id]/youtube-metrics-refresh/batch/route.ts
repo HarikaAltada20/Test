@@ -1,0 +1,583 @@
+/**
+ * POST: Batch worker for YouTube metrics refresh (queue only).
+ */
+
+import { NextResponse } from "next/server";
+import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
+import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
+import {
+  updateYouTubeSubmissionForScope,
+  fetchYouTubeBasicStatsByVideoId,
+  isYouTubeAllLikeScope,
+  type PrefetchedBasic,
+} from "@/lib/youtube-submission-refresh-by-scope";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
+import { patchYouTubeMetrics } from "@/lib/youtube-metrics-patch";
+import {
+  isMetricsTargetMismatch,
+  type MetricsRefreshTarget,
+} from "@/lib/post-campaign-enqueue-guards";
+import { createMetricsRefreshRunProgressWriter } from "@/lib/metrics-refresh-run-progress";
+import { shouldSkipRecentOkYouTubeRefresh } from "@/lib/youtube-skip-recent-ok";
+
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let idx = 0;
+  const workers = Array.from({ length: Math.max(1, limit) }, async () => {
+    while (true) {
+      const current = idx++;
+      if (current >= items.length) return;
+      results[current] = await fn(items[current]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+type BatchRow = {
+  id: string;
+  creator_id: string;
+  content_link: string;
+  views: number | null;
+  other_stats: Record<string, unknown> | null;
+  insights_status: string | null;
+};
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      return NextResponse.json(
+        { error: "YouTube queue auth misconfigured: CRON_SECRET missing" },
+        { status: 503 },
+      );
+    }
+    const fromQueue =
+      request.headers.get("X-From-Queue") === "1" || request.headers.get("x-from-queue") === "1";
+    const auth = request.headers.get("Authorization");
+    if (!fromQueue || auth !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id: contestId } = await params;
+    if (!contestId) {
+      return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const runId = body.runId as string | undefined;
+    const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
+    const batchSize =
+      typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
+        ? Math.max(1, Math.min(25, Math.floor(body.batchSize)))
+        : 25;
+    const cursor = body.cursor as { id: string } | undefined;
+    const metricsTarget: MetricsRefreshTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
+    const writeTarget = isPostCampaignTarget
+      ? "post_campaign_submission_metrics"
+      : "submissions";
+
+    if (!runId) {
+      return NextResponse.json({ error: "runId required" }, { status: 400 });
+    }
+
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: run, error: runError } = await supabaseAdmin
+      .from("youtube_metrics_refresh_runs")
+      .select("id, status, scope, metrics_target")
+      .eq("id", runId)
+      .single();
+
+    if (runError || !run) {
+      return NextResponse.json({ error: "Run not found" }, { status: 404 });
+    }
+    if (run.status !== "running") {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: run.status === "cancelled",
+        runStatus: run.status,
+      });
+    }
+
+    if (isMetricsTargetMismatch(run.metrics_target, metricsTarget)) {
+      console.error(
+        "[youtube-metrics-refresh batch] metrics_target mismatch",
+        {
+          runId,
+          contestId,
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target,
+        },
+      );
+      return NextResponse.json(
+        {
+          error: "metrics_target mismatch between job and run",
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target ?? "submissions",
+        },
+        { status: 409 },
+      );
+    }
+
+    console.info("[youtube-metrics-refresh batch] start", {
+      contestId,
+      runId,
+      batchIndex,
+      metricsTarget,
+      scope: run.scope,
+    });
+
+    // Heartbeat so long-running batches are not treated as stale mid-work.
+    await supabaseAdmin
+      .from("youtube_metrics_refresh_runs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", runId)
+      .eq("status", "running");
+
+    const scope = run.scope as YouTubeRefreshScope;
+
+    const { data: contest } = await supabaseAdmin
+      .from("contests")
+      .select("id, views_locked_at, post_contest_status")
+      .eq("id", contestId)
+      .maybeSingle();
+
+    if (!contest) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("youtube_metrics_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest not found",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
+    if (
+      !isPostCampaignTarget &&
+      !isContestEligibleForScheduledMetricsRefresh(contest)
+    ) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("youtube_metrics_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest locked for review or finalized",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
+    let query = isPostCampaignTarget
+      ? supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .select(
+            "submission_id, creator_id, content_link, views, other_stats, insights_status, last_insights_update",
+          )
+          .eq("contest_id", contestId)
+          .ilike("platform", "%youtube%")
+          .neq("status", "rejected")
+          .not("content_link", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .order("submission_id", { ascending: true })
+          .limit(batchSize + 1)
+      : supabaseAdmin
+          .from("submissions")
+          .select(
+            "id, creator_id, content_link, views, other_stats, insights_status, last_insights_update",
+          )
+          .eq("contest_id", contestId)
+          .ilike("platform", "%youtube%")
+          .neq("status", "rejected")
+          .not("content_link", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .order("id", { ascending: true })
+          .limit(batchSize + 1);
+
+    if (cursor?.id) {
+      if (isPostCampaignTarget) {
+        query = query.gt("submission_id", cursor.id);
+      } else {
+        query = query.gt("id", cursor.id);
+      }
+    }
+
+    const { data: rows, error: selectError } = await query;
+
+    if (selectError) {
+      console.error("[youtube-metrics-refresh batch] select error:", selectError);
+      return NextResponse.json({ error: "Batch select failed" }, { status: 500 });
+    }
+
+    const batch = ((rows ?? []).slice(0, batchSize) as any[]).map((row) => ({
+      id: isPostCampaignTarget ? row.submission_id : row.id,
+      creator_id: row.creator_id,
+      content_link: row.content_link,
+      views: row.views,
+      other_stats: row.other_stats,
+      insights_status:
+        typeof row.insights_status === "string" ? row.insights_status : null,
+    })) as BatchRow[];
+    const hasMore = (rows?.length ?? 0) > batchSize;
+    const lastRow = batch[batch.length - 1];
+    const nextCursor = lastRow && hasMore ? { id: lastRow.id } : undefined;
+
+    if (batch.length === 0) {
+      return NextResponse.json({
+        hasMore: false,
+        nextCursor: undefined,
+        reviewedCount: 0,
+        processedCount: 0,
+        successCount: 0,
+        permanentFailureCount: 0,
+        temporaryFailureCount: 0,
+        skippedRecentCount: 0,
+      });
+    }
+
+    const markTemporaryFailure = async (
+      sub: BatchRow,
+      now: string,
+      patch: Record<string, unknown>,
+    ) => {
+      const payload = {
+        insights_status: "temporary_failure",
+        last_insights_update: now,
+        updated_at: now,
+      };
+      const { error } = await patchYouTubeMetrics(
+        supabaseAdmin, sub.id, patch, payload, writeTarget,
+      );
+      if (error) console.error(`[youtube-batch] Failure status write failed ${sub.id}:`, error.message);
+    };
+
+    const creatorIds = [...new Set(batch.map((r) => r.creator_id))];
+    const byCreator = batch.reduce<Record<string, BatchRow[]>>((acc, row) => {
+      if (!acc[row.creator_id]) acc[row.creator_id] = [];
+      acc[row.creator_id].push(row);
+      return acc;
+    }, {});
+    const { data: creators } = await supabaseAdmin
+      .from("creator_profiles")
+      .select("id, youtube_account")
+      .in("id", creatorIds);
+
+    const tokenMap = new Map<string, string>();
+    const skippedCreatorIds = new Set<string>();
+    const now = new Date().toISOString();
+    let skippedRecentCount = 0;
+
+    const { data: progressBaseRow } = await supabaseAdmin
+      .from("youtube_metrics_refresh_runs")
+      .select(
+        "processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count",
+      )
+      .eq("id", runId)
+      .single();
+    const progress = createMetricsRefreshRunProgressWriter({
+      supabase: supabaseAdmin,
+      table: "youtube_metrics_refresh_runs",
+      runId,
+      base: {
+        processed_submissions: progressBaseRow?.processed_submissions ?? 0,
+        reviewed_count: progressBaseRow?.reviewed_count ?? 0,
+        success_count: progressBaseRow?.success_count ?? 0,
+        temporary_failure_count:
+          progressBaseRow?.temporary_failure_count ?? 0,
+        permanent_failure_count:
+          progressBaseRow?.permanent_failure_count ?? 0,
+        skipped_recent_count: progressBaseRow?.skipped_recent_count ?? 0,
+      },
+    });
+
+    for (const creator of creators ?? []) {
+      const account = creator.youtube_account as Record<string, unknown> | null;
+      if (!account?.access_token) {
+        // Disconnected or missing token - handle as temporary failure
+        const creatorSubs = byCreator[creator.id] ?? [];
+        skippedRecentCount += creatorSubs.length;
+        await mapLimit(creatorSubs, 8, async (sub) => {
+          await markTemporaryFailure(sub, now, {
+            analytics_needs_reauth: true,
+            insights_error: "Account disconnected or missing token",
+          });
+        });
+        skippedCreatorIds.add(creator.id);
+        await progress.recordSkipped(creatorSubs.length);
+        continue;
+      }
+
+      // Mirror Instagram skip behavior: if a creator is flagged needs_reconnect and
+      // was checked recently, skip API calls for this run and count them as skipped.
+      if (account.needs_reconnect === true) {
+        const lastCheckRaw =
+          (account.last_connection_check_at as string | undefined) ??
+          (account.updated_at as string | undefined);
+        const lastCheckMs = lastCheckRaw ? new Date(lastCheckRaw).getTime() : NaN;
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        if (!Number.isNaN(lastCheckMs) && Date.now() - lastCheckMs < oneDayMs) {
+          const creatorSubs = byCreator[creator.id] ?? [];
+          skippedRecentCount += creatorSubs.length;
+          await mapLimit(creatorSubs, 8, async (sub) => {
+            await markTemporaryFailure(sub, now, {
+              analytics_needs_reauth: true,
+            });
+          });
+          skippedCreatorIds.add(creator.id);
+          await progress.recordSkipped(creatorSubs.length);
+          continue;
+        }
+      }
+
+      let token = String(account.access_token);
+      const expiresAt = account.expires_at as string | undefined;
+      const isExpired = expiresAt && new Date(expiresAt) <= new Date();
+      if (isExpired && account.refresh_token) {
+        try {
+          const newTokens = await refreshAccessToken(String(account.refresh_token));
+          token = newTokens.access_token;
+          await supabaseAdmin
+            .from("creator_profiles")
+            .update({
+              youtube_account: {
+                ...account,
+                access_token: newTokens.access_token,
+                expires_at: newTokens.expires_at,
+                refresh_token: newTokens.refresh_token || account.refresh_token,
+                needs_reconnect: false,
+                last_connection_check_at: now,
+              },
+              updated_at: now,
+            })
+            .eq("id", creator.id);
+        } catch (e) {
+          await supabaseAdmin
+            .from("creator_profiles")
+            .update({
+              youtube_account: {
+                ...account,
+                needs_reconnect: true,
+                last_connection_check_at: now,
+                updated_at: now,
+              },
+              updated_at: now,
+            })
+            .eq("id", creator.id);
+
+          // Mark submissions as temporary failure since we discovered token refresh failed
+          const creatorSubs = byCreator[creator.id] ?? [];
+          skippedRecentCount += creatorSubs.length;
+          await mapLimit(creatorSubs, 8, async (sub) => {
+            await markTemporaryFailure(sub, now, {
+              analytics_needs_reauth: true,
+              insights_error: "Token refresh failed",
+            });
+          });
+          skippedCreatorIds.add(creator.id);
+          await progress.recordSkipped(creatorSubs.length);
+          continue;
+        }
+      }
+      tokenMap.set(creator.id, token);
+    }
+
+    const batchToProcess = batch.filter(
+      (sub) => !skippedCreatorIds.has(sub.creator_id)
+    );
+
+    const prefetchBasic = scope === "basic" || isYouTubeAllLikeScope(scope);
+    const basicByCreator = new Map<string, Map<string, PrefetchedBasic>>();
+
+    if (prefetchBasic) {
+      await mapLimit(Object.keys(byCreator), 4, async (creatorId) => {
+        const token = tokenMap.get(creatorId);
+        if (!token) return;
+        const subs = byCreator[creatorId];
+        const videoIds = subs
+          .map((s) => extractYoutubeId(s.content_link))
+          .filter((id): id is string => !!id);
+        const statsMap = await fetchYouTubeBasicStatsByVideoId(token, videoIds);
+        basicByCreator.set(creatorId, statsMap);
+      });
+    }
+
+    let cancelCached: { at: number; cancelled: boolean } | null = null;
+    const isRunCancelled = async (): Promise<boolean> => {
+      const t = Date.now();
+      if (cancelCached && t - cancelCached.at < 2000) {
+        return cancelCached.cancelled;
+      }
+      const { data } = await supabaseAdmin
+        .from("youtube_metrics_refresh_runs")
+        .select("status")
+        .eq("id", runId)
+        .maybeSingle();
+      const cancelled = !data || data.status !== "running";
+      cancelCached = { at: t, cancelled };
+      return cancelled;
+    };
+
+    if (await isRunCancelled()) {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
+    type BatchOutcome = {
+      ok: boolean;
+      auth: boolean;
+      failureType?: "temporary_failure" | "permanent_failure";
+      skipped?: boolean;
+      skippedRecent?: boolean;
+    };
+
+    const results = await mapLimit(batchToProcess, 5, async (sub): Promise<BatchOutcome> => {
+      if (await isRunCancelled()) {
+        return { ok: false, auth: false, skipped: true };
+      }
+      if (
+        shouldSkipRecentOkYouTubeRefresh({
+          scope,
+          insightsStatus: sub.insights_status,
+          otherStats: sub.other_stats,
+        })
+      ) {
+        await progress.recordSkipped(1);
+        return { ok: true, auth: false, skipped: true, skippedRecent: true };
+      }
+      const token = tokenMap.get(sub.creator_id);
+      if (!token) {
+        // Fallback for any creators who didn't even have a record in creators list
+        // Update DB so it turns yellow
+        await markTemporaryFailure(sub, now, {
+          analytics_needs_reauth: true,
+          insights_error: "Missing creator profile or token",
+        });
+        await progress.recordTemporaryFailure();
+        return {
+          ok: false,
+          auth: false,
+          failureType: "temporary_failure" as const,
+        };
+      }
+      const videoId = extractYoutubeId(sub.content_link);
+      let prefetched: PrefetchedBasic | null | undefined = undefined;
+      if (prefetchBasic && videoId) {
+        prefetched = basicByCreator.get(sub.creator_id)?.get(videoId) ?? null;
+      }
+      const res = await updateYouTubeSubmissionForScope(
+        supabaseAdmin,
+        sub,
+        token,
+        scope,
+        now,
+        {
+          ...(prefetchBasic ? { prefetchedBasic: prefetched } : {}),
+          metricsTarget: writeTarget,
+        }
+      );
+      if (res.ok) {
+        await progress.recordSuccess();
+      } else if (res.failureType === "permanent_failure") {
+        await progress.recordPermanentFailure();
+      } else {
+        await progress.recordTemporaryFailure();
+      }
+      return { ok: res.ok, auth: res.authError, failureType: res.failureType };
+    });
+
+    const cancelledMidBatch = await isRunCancelled();
+
+    let success = 0;
+    let tempFail = 0;
+    let permFail = 0;
+    let recentOkSkips = 0;
+    for (const r of results) {
+      if (r.skippedRecent) recentOkSkips += 1;
+      if (r.skipped) continue;
+      if (r.ok) {
+        success += 1;
+      } else if (r.failureType === "permanent_failure") {
+        permFail += 1;
+      } else {
+        tempFail += 1;
+      }
+    }
+    skippedRecentCount += recentOkSkips;
+
+    const reviewedInBatch = success + tempFail + permFail + skippedRecentCount;
+    await progress.awaitIdle();
+    await progress.finalize(batchIndex, now, {
+      // Include skipped so Processed reaches total_submissions for this batch.
+      processed: success + tempFail + permFail + skippedRecentCount,
+      reviewed: reviewedInBatch,
+      success,
+      temporaryFailure: tempFail,
+      permanentFailure: permFail,
+      skipped: skippedRecentCount,
+    });
+
+    if (cancelledMidBatch) {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+        reviewedCount: reviewedInBatch,
+        processedCount: success + tempFail + permFail + skippedRecentCount,
+        successCount: success,
+        permanentFailureCount: permFail,
+        temporaryFailureCount: tempFail,
+        skippedRecentCount,
+      });
+    }
+
+    return NextResponse.json({
+      hasMore,
+      nextCursor,
+      reviewedCount: reviewedInBatch,
+      processedCount: success + tempFail + permFail + skippedRecentCount,
+      successCount: success,
+      permanentFailureCount: permFail,
+      temporaryFailureCount: tempFail,
+      skippedRecentCount,
+    });
+  } catch (e) {
+    console.error("[youtube-metrics-refresh batch]", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Batch failed" },
+      { status: 500 }
+    );
+  }
+}

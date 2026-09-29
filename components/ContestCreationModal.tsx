@@ -231,7 +231,7 @@ export function ContestCreationModal({
                 ) : (
                   <>
                     <Plus className="mr-2 h-4 w-4" />
-                    Create New Contest
+                    Create New Campaign
                   </>
                 )}
               </Button>
@@ -252,7 +252,7 @@ export function ContestCreationModal({
           className={cn(
             "text-xl",
             isDark ? "text-white" : "text-gray-900"
-          )}>Create Contest</DialogTitle>
+          )}>Create Campaign</DialogTitle>
           <DialogDescription className="text-md">
             You have multiple drafts. Choose how you'd like to proceed.
           </DialogDescription>
@@ -345,7 +345,7 @@ export function ContestCreationModal({
               ) : (
                 <>
                   <Plus className="h-5 w-5" />
-                  Create New Contest
+                  Create New Campaign
                 </>
               )}
             </Button>

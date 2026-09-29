@@ -83,10 +83,15 @@ export default function OverviewAnalytics({
   const fetchOverviewData = async () => {
     try {
       setLoading(true);
-      const url =
-        activeFilter !== "all"
-          ? `/api/analytics/overview?status=${activeFilter}`
-          : "/api/analytics/overview";
+
+      let url = "/api/analytics/overview";
+      if (activeFilter !== "all") {
+        if (activeFilter === "not_rejected") {
+          url += "?notRejected=true";
+        } else {
+          url += `?status=${activeFilter}`;
+        }
+      }
 
       const response = await fetch(url);
 
@@ -171,7 +176,7 @@ export default function OverviewAnalytics({
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
-              Total Contests
+              Total Campaigns
             </CardTitle>
             <BarChart3
               className={cn(
@@ -303,7 +308,7 @@ export default function OverviewAnalytics({
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
-              Total Spent
+              Total Budget
             </CardTitle>
             <DollarSign
               className={cn(
@@ -406,7 +411,7 @@ export default function OverviewAnalytics({
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
-              Average Submissions Per Contest
+              Average Submissions Per Campaign
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -434,7 +439,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}
             >
-              Top Performing Contest
+              Top Performing Campaign
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -511,7 +516,7 @@ export default function OverviewAnalytics({
                         {platform}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {stats.contests} contests • {stats.submissions}{" "}
+                        {stats.contests} campaigns • {stats.submissions}{" "}
                         submissions
                       </p>
                     </div>
@@ -540,7 +545,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}
             >
-              Contest Type Performance
+              Campaign Type Performance
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -560,7 +565,7 @@ export default function OverviewAnalytics({
                       {type.replace("_", " ")}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {stats.count} contests • {stats.submissions} submissions
+                      {stats.count} campaigns • {stats.submissions} submissions
                     </p>
                   </div>
                   <div className="text-left sm:text-right w-full sm:w-auto">
@@ -572,7 +577,7 @@ export default function OverviewAnalytics({
                     >
                       {formatCurrencyFromCents(stats.spent)}
                     </p>
-                    <p className="text-sm text-muted-foreground">spent</p>
+                    <p className="text-sm text-muted-foreground">budget</p>
                   </div>
                 </div>
               ))}
@@ -632,7 +637,7 @@ export default function OverviewAnalytics({
                       >
                         {monthData.contests}
                       </p>
-                      <p className="text-muted-foreground">Contests</p>
+                      <p className="text-muted-foreground">Campaigns</p>
                     </div>
                     <div className="text-center">
                       <p
@@ -665,7 +670,7 @@ export default function OverviewAnalytics({
                       >
                         {formatCurrencyFromCents(monthData.spent)}
                       </p>
-                      <p className="text-muted-foreground">Spent</p>
+                      <p className="text-muted-foreground">Budget</p>
                     </div>
                   </div>
                 </div>

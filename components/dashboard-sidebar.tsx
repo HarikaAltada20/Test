@@ -27,21 +27,28 @@ import {
   Award,
   PlusCircle,
   Newspaper,
+  Star,
+  Flame,
 } from "lucide-react";
 import Link from "next/link";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
   collapsed?: boolean;
   onChatOpen: () => void;
+  onReviewOpen: () => void;
   mode?: "light" | "dark";
+  supportChatEnabled?: boolean;
 }
 
 export function DashboardSidebar({
   userRole = "advertiser",
   onChatOpen,
+  onReviewOpen,
   collapsed = false,
   mode,
+  supportChatEnabled = true,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
@@ -49,6 +56,15 @@ export function DashboardSidebar({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [isOthersDropdownOpen, setIsOthersDropdownOpen] = useState(false);
+  const [navigatingLink, setNavigatingLink] = useState<string | null>(null);
+
+  const handleNavigation = (href: string) => {
+    setNavigatingLink(href);
+  };
+
+  useEffect(() => {
+    setNavigatingLink(null);
+  }, [pathname]);
   const isDark = mode === "dark";
 
   // Auto-open Others dropdown if current path matches any dropdown item
@@ -56,6 +72,7 @@ export function DashboardSidebar({
     if (userRole === "admin") {
       const othersDropdownItems = [
         "/dashboard/admin/manual-entry",
+        "/dashboard/admin/ratings",
         "/dashboard/admin/others",
       ];
       const shouldBeOpen = othersDropdownItems.some((href) =>
@@ -98,10 +115,10 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
-      name: "Contests",
+      name: "Campaigns",
       href: "/dashboard/contests",
       icon: Trophy,
-      description: "Manage your contests",
+      description: "Create/Manage Campaigns",
     },
     {
       name: "Dashboard",
@@ -136,6 +153,7 @@ export function DashboardSidebar({
       icon: LayoutDashboard,
       description: "Admin overview",
     },
+  
     {
       name: "Users",
       href: "/dashboard/admin/users",
@@ -143,22 +161,34 @@ export function DashboardSidebar({
       description: "Manage all users",
     },
     {
-      name: "All Contests",
+      name: "All Campaigns",
       href: "/dashboard/admin/contests",
       icon: Trophy,
       description: "Manage all contests",
     },
     {
-      name: "Contest Moderation",
+      name: "Campaign Moderation",
       href: "/dashboard/admin/contest-moderation",
       icon: Shield,
-      description: "Review & approve contests",
+      description: "Review & approve campaigns",
+    },
+    {
+      name: "Analytics",
+      href: "/dashboard/admin/analytics",
+      icon: BarChart,
+      description: "Platform performance",
     },
     {
       name: "Leaderboard",
       href: "/dashboard/admin/leaderboard",
       icon: Award,
       description: "Top creators",
+    },
+    {
+      name: "Daily Challenge",
+      href: "/dashboard/daily-challenge",
+      icon: Flame,
+      description: "Competition overview",
     },
     {
       name: "Withdrawal Requests",
@@ -193,6 +223,12 @@ export function DashboardSidebar({
       icon: PlusCircle,
       description: "Credit coins or cash to users",
     },
+    {
+      name: "Rating",
+      href: "/dashboard/admin/ratings",
+      icon: Star,
+      description: "View user reviews and ratings",
+    },
   ];
 
   const creatorLinks = [
@@ -203,7 +239,7 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
-      name: "Opportunities",
+      name: "Campaigns",
       href: "/dashboard/opportunities",
       icon: Trophy,
       description: "Available contests",
@@ -226,6 +262,12 @@ export function DashboardSidebar({
       href: "/dashboard/leaderboard",
       icon: Award,
       description: "Top creators",
+    },
+    {
+      name: "Daily Challenge",
+      href: "/dashboard/daily-challenge",
+      icon: Flame,
+      description: "Daily competition engine",
     },
     {
       name: "Wallet",
@@ -335,6 +377,7 @@ export function DashboardSidebar({
                       <Link
                         key={link.href}
                         href={link.href}
+                        onClick={() => handleNavigation(link.href)}
                         className={cn(
                           "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
                           "border border-transparent",
@@ -380,7 +423,7 @@ export function DashboardSidebar({
                               : "hsl(var(--primary))",
                           }}
                         >
-                          <link.icon
+                           <link.icon
                             className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")}
                           />
                         </div>
@@ -412,6 +455,9 @@ export function DashboardSidebar({
                                 {link.description}
                               </div>
                             </div>
+                            {navigatingLink === link.href ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
                             <ChevronRight
                               className={cn(
                                 "h-4 w-4 transition-all duration-200",
@@ -425,6 +471,7 @@ export function DashboardSidebar({
                                   : "hsl(var(--muted-foreground))",
                               }}
                             />
+                          )}
                           </>
                         )}
                       </Link>
@@ -453,6 +500,10 @@ export function DashboardSidebar({
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
                               ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
+                              ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
                                 ? activeBg
@@ -463,6 +514,10 @@ export function DashboardSidebar({
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
                               ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
+                              ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
                                 ? activeBorder
@@ -472,6 +527,10 @@ export function DashboardSidebar({
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
+                              ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others")
@@ -484,6 +543,10 @@ export function DashboardSidebar({
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
+                              ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others");
@@ -499,6 +562,10 @@ export function DashboardSidebar({
                               pathname === "/dashboard/admin/manual-entry" ||
                               pathname.startsWith(
                                 "/dashboard/admin/manual-entry",
+                              ) ||
+                              pathname === "/dashboard/admin/ratings" ||
+                              pathname.startsWith(
+                                "/dashboard/admin/ratings",
                               ) ||
                               pathname === "/dashboard/admin/others" ||
                               pathname.startsWith("/dashboard/admin/others");
@@ -522,6 +589,10 @@ export function DashboardSidebar({
                                 pathname === "/dashboard/admin/manual-entry" ||
                                 pathname.startsWith(
                                   "/dashboard/admin/manual-entry",
+                                ) ||
+                                pathname === "/dashboard/admin/ratings" ||
+                                pathname.startsWith(
+                                  "/dashboard/admin/ratings",
                                 ) ||
                                 pathname === "/dashboard/admin/others" ||
                                 pathname.startsWith("/dashboard/admin/others")
@@ -548,6 +619,10 @@ export function DashboardSidebar({
                                       pathname.startsWith(
                                         "/dashboard/admin/manual-entry",
                                       ) ||
+                                      pathname === "/dashboard/admin/ratings" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/ratings",
+                                      ) ||
                                       pathname === "/dashboard/admin/others" ||
                                       pathname.startsWith(
                                         "/dashboard/admin/others",
@@ -569,6 +644,10 @@ export function DashboardSidebar({
                                         "/dashboard/admin/manual-entry" ||
                                       pathname.startsWith(
                                         "/dashboard/admin/manual-entry",
+                                      ) ||
+                                      pathname === "/dashboard/admin/ratings" ||
+                                      pathname.startsWith(
+                                        "/dashboard/admin/ratings",
                                       ) ||
                                       pathname === "/dashboard/admin/others" ||
                                       pathname.startsWith(
@@ -601,6 +680,7 @@ export function DashboardSidebar({
                                 <Link
                                   key={item.href}
                                   href={item.href}
+                                  onClick={() => handleNavigation(item.href)}
                                   className={cn(
                                     "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
                                     "border border-transparent",
@@ -675,13 +755,17 @@ export function DashboardSidebar({
                                       {item.description}
                                     </div>
                                   </div>
-                                  {isItemActive && (
-                                    <ChevronRight
-                                      className="h-4 w-4 transition-all duration-200 translate-x-0.5"
-                                      style={{
-                                        color: isDark ? "#C9A7FF" : "#4A00BE",
-                                      }}
-                                    />
+                                  {navigatingLink === item.href ? (
+                                    <ButtonLoadingSpinner />
+                                  ) : (
+                                    isItemActive && (
+                                      <ChevronRight
+                                        className="h-4 w-4 transition-all duration-200 translate-x-0.5"
+                                        style={{
+                                          color: isDark ? "#C9A7FF" : "#4A00BE",
+                                        }}
+                                      />
+                                    )
                                   )}
                                 </Link>
                               );
@@ -724,10 +808,21 @@ export function DashboardSidebar({
                     </div>
                   </div>
                   <button
-                    onClick={onChatOpen}
-                    className="w-full rounded-xl bg-purple-600 text-white py-2 transition hover:bg-purple-700"
+                    onClick={supportChatEnabled ? onChatOpen : undefined}
+                    disabled={!supportChatEnabled}
+                    title={
+                      supportChatEnabled
+                        ? "Chat with support"
+                        : "Support chat is unavailable for your account"
+                    }
+                    className={cn(
+                      "w-full rounded-xl py-2 transition text-white",
+                      supportChatEnabled
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-gray-400 cursor-not-allowed opacity-70",
+                    )}
                   >
-                    Chat with Us
+                    {supportChatEnabled ? "Chat with Us" : "Chat unavailable"}
                   </button>
 
                   {/* Show Book a Call only for advertisers */}
@@ -736,6 +831,7 @@ export function DashboardSidebar({
                       href="https://calendly.com/guptavishesh2/30min"
                       target="_blank"
                       rel="noopener noreferrer"
+                      title="Book a free 30-min call with our founder"
                       className={cn(
                         "block w-full rounded-xl text-white py-2 text-center transition",
                         isDark
@@ -743,19 +839,43 @@ export function DashboardSidebar({
                           : "bg-black hover:bg-gray-800",
                       )}
                     >
-                      Book a Call
+                      Book a Call with the Founder
                     </a>
+                  )}
+
+                  {/* Review Button - Show for all user roles except admin */}
+                  {(userRole === "advertiser" || userRole === "creator") && (
+                    <button
+                      onClick={onReviewOpen}
+                      className={cn(
+                        "flex items-center justify-center gap-2 w-full rounded-xl py-2 text-center transition",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                          : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white",
+                      )}
+                    >
+                      {/* <Star className="h-4 w-4" /> */}
+                      Leave a Review
+                    </button>
                   )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3">
                   <button
-                    onClick={onChatOpen}
+                    onClick={supportChatEnabled ? onChatOpen : undefined}
+                    disabled={!supportChatEnabled}
+                    title={
+                      supportChatEnabled
+                        ? "Chat with support"
+                        : "Support chat unavailable"
+                    }
                     className={cn(
                       "rounded-full text-white w-10 h-10 flex items-center justify-center",
-                      isDark
-                        ? "bg-purple-700 hover:bg-purple-600"
-                        : "bg-[#7F39EC] hover:bg-purple-700",
+                      supportChatEnabled
+                        ? isDark
+                          ? "bg-purple-700 hover:bg-purple-600"
+                          : "bg-[#7F39EC] hover:bg-purple-700"
+                        : "bg-gray-400 cursor-not-allowed opacity-70",
                     )}
                   >
                     <MessageCircle size={18} />
@@ -772,10 +892,26 @@ export function DashboardSidebar({
                         href="https://calendly.com/guptavishesh2/30min"
                         target="_blank"
                         rel="noopener noreferrer"
+                        title="Book a Call with the Founder"
                       >
                         <Phone size={18} className="text-white" />
                       </a>
                     </div>
+                  )}
+
+                  {/* Review Button - Show for all user roles except admin */}
+                  {(userRole === "advertiser" || userRole === "creator") && (
+                    <button
+                      onClick={onReviewOpen}
+                      className={cn(
+                        "rounded-full w-10 h-10 flex items-center justify-center",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                          : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700",
+                      )}
+                    >
+                      <Star size={18} className="text-white" />
+                    </button>
                   )}
                 </div>
               )}

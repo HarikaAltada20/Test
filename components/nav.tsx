@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -35,6 +36,7 @@ import {
   ChevronDown,
   Zap,
   Star,
+  Home,
 } from "lucide-react";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
@@ -43,6 +45,7 @@ import { useClientAuth } from "@/hooks/use-client-auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { subscriptionPlans, PRODUCT_IDS } from "@/constants/subscriptionPlans";
+import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
@@ -60,7 +63,21 @@ export function Nav({
   subscriptionPlan,
 }: NavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { logout } = useClientAuth();
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [creatorsLoading, setCreatorsLoading] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [quickLinkLoading, setQuickLinkLoading] = useState(false);
+  const [homeLoading, setHomeLoading] = useState(false);
+
+  // Warm auth routes so Sign In / Get Started do not wait on first compile/RSC fetch.
+  useEffect(() => {
+    if (user) return;
+    router.prefetch("/auth/signin");
+    router.prefetch("/auth/signup");
+  }, [router, user]);
 
   const handleSignOut = async () => {
     try {
@@ -97,10 +114,11 @@ export function Nav({
         : "/dashboard/profile";
   const quickLinkLabel =
     userType === "advertiser"
-      ? "Contests"
+      ? "Campaigns"
       : userType === "creator"
-        ? "Opportunities"
+        ? "Campaigns"
         : "Profile";
+  const marketingHomeHref = user ? MARKETING_HOME_AS_GUEST : "/";
   const QuickLinkIcon =
     userType === "advertiser"
       ? Trophy
@@ -108,11 +126,21 @@ export function Nav({
         ? Trophy
         : User;
   const [open, setOpen] = useState(false);
-  
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  
+  const handleNavigation = () => {
+    setIsNavigating(true);
+  };
+
+  const handleSignInNavigation = () => {
+    setIsSigningIn(true);
+  };
+
   useEffect(() => {
     setOpen(false);
+    setIsNavigating(false);
+    setIsSigningIn(false);
   }, [pathname]);
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
@@ -142,7 +170,7 @@ export function Nav({
             {/* Enhanced Logo Section */}
             <div className="flex items-center">
               <Link
-                href="/"
+                href={marketingHomeHref}
                 className="group flex items-center transition-all duration-300"
               >
                 <div className="relative">
@@ -169,37 +197,49 @@ export function Nav({
             {/* Center Navigation - Desktop */}
             <div className="hidden md:flex items-center space-x-2">
               <nav className="flex items-center md:ml-20 space-x-1">
-                <Link
-                  href="/brands"
+                <button
+                  onClick={() => {
+                    setBrandsLoading(true);
+                    window.location.href = '/brands';
+                  }}
+                  disabled={brandsLoading}
                   className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
+                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
                     pathname === "/brands"
                       ? "text-purple-400"
-                      : "text-slate-300 hover:text-purple-400"
+                      : "text-slate-300 hover:text-purple-400",
+                    brandsLoading && "opacity-70 cursor-not-allowed"
                   )}
                 >
-                  <div className="flex items-center gap-2">
+                  {brandsLoading ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
                     <Crown className="h-4 w-4 text-purple-400 shrink-0" />
-                    <span>For Brands</span>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 to-purple-600/0 group-hover:from-violet-600/10 group-hover:to-purple-600/10 rounded-xl transition-all duration-300" />
-                </Link>
+                  )}
+                  For Brands
+                </button>
 
-                <Link
-                  href="/creators"
+                <button
+                  onClick={() => {
+                    setCreatorsLoading(true);
+                    window.location.href = '/creators';
+                  }}
+                  disabled={creatorsLoading}
                   className={cn(
-                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
+                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl flex items-center gap-2",
                     pathname === "/creators"
                       ? "text-orange-400"
-                      : "text-slate-300 hover:text-orange-400"
+                      : "text-slate-300 hover:text-orange-400",
+                    creatorsLoading && "opacity-70 cursor-not-allowed"
                   )}
                 >
-                  <div className="flex items-center gap-2">
+                  {creatorsLoading ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
                     <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
-                    <span>For Creators</span>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 group-hover:from-amber-600/10 group-hover:to-orange-600/10 rounded-xl transition-all duration-300" />
-                </Link>
+                  )}
+                  For Creators
+                </button>
               </nav>
             </div>
 
@@ -274,31 +314,93 @@ export function Nav({
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link href={quickLinkHref} className="flex items-center">
-                          <QuickLinkIcon className="mr-2 h-4 w-4" />
-                          {quickLinkLabel}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
-                      >
-                        <Link href="/dashboard" className="flex items-center">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          Dashboard
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
-                      >
-                        <Link
-                          href="/dashboard/settings"
-                          className="flex items-center"
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setQuickLinkLoading(true);
+                            window.location.href = quickLinkHref;
+                          }}
+                          disabled={quickLinkLoading}
+                          className="flex w-full items-center"
                         >
-                          <Settings className="mr-2 h-4 w-4" />
+                          {quickLinkLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <QuickLinkIcon className="mr-2 h-4 w-4" />
+                          )}
+                          {quickLinkLabel}
+                        </button>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        asChild
+                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDashboardLoading(true);
+                            window.location.href = "/dashboard";
+                          }}
+                          disabled={dashboardLoading}
+                          className="flex w-full items-center"
+                        >
+                          {dashboardLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                          )}
+                          Dashboard
+                        </button>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        asChild
+                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setHomeLoading(true);
+                            window.location.href = MARKETING_HOME_AS_GUEST;
+                          }}
+                          disabled={homeLoading}
+                          className="flex w-full items-center"
+                        >
+                          {homeLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <Home className="mr-2 h-4 w-4" />
+                          )}
+                          Home
+                        </button>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        asChild
+                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSettingsLoading(true);
+                            window.location.href = "/dashboard/settings";
+                          }}
+                          disabled={settingsLoading}
+                          className="flex w-full items-center"
+                        >
+                          {settingsLoading ? (
+                            <ButtonLoadingSpinner />
+                          ) : (
+                            <Settings className="mr-2 h-4 w-4" />
+                          )}
                           Settings
-                        </Link>
+                        </button>
                       </DropdownMenuItem>
                       {userType === "advertiser" &&
                         subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
@@ -332,33 +434,41 @@ export function Nav({
               ) : (
                 <>
                   {/* Enhanced Sign In Button */}
-                  <Link href="/auth/signin" className="hidden sm:block">
+                  <Link
+                    href="/auth/signin"
+                    className="hidden sm:block"
+                    onClick={handleSignInNavigation}
+                  >
                     <Button
                       variant="outline"
                       aria-label="Sign in"
+                      disabled={isSigningIn || isNavigating}
                       className={cn(
-                        "hidden md:flex px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
+                        "hidden md:flex items-center gap-2 px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
                         pathname === "/creators"
                           ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
-                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
+                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white",
+                        (isSigningIn || isNavigating) && "opacity-70 cursor-not-allowed"
                       )}
                     >
+                      {isSigningIn ? <ButtonLoadingSpinner /> : null}
                       Sign In
                     </Button>
                   </Link>
 
-                  <Link href="/auth/signup">
+                  <Link href="/auth/signup" onClick={handleNavigation}>
                     <Button
+                      disabled={isNavigating || isSigningIn}
                       className={cn(
-                        "hidden md:flex px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
+                        "hidden md:flex items-center gap-2 px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
                         pathname === "/creators"
                           ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
-                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
+                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90",
+                        (isNavigating || isSigningIn) && "opacity-70 cursor-not-allowed"
                       )}
                     >
-                      {/* Scan line */}
                       <div className="scan-line"></div>
-
+                      {isNavigating ? <ButtonLoadingSpinner /> : null}
                       <span className="relative z-10">Get Started</span>
                     </Button>
                   </Link>
@@ -393,7 +503,7 @@ export function Nav({
                       <div className="px-4 pb-6">
                         {/* Mobile Logo */}
                         <Link
-                          href="/"
+                          href={marketingHomeHref}
                           className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15"
                         >
                           <Image
@@ -406,30 +516,48 @@ export function Nav({
 
                         {/* Mobile Navigation Links */}
                         <nav className="space-y-2 mb-8">
-                          <Link
-                            href="/brands"
+                          <button
+                            onClick={() => {
+                              setBrandsLoading(true);
+                              window.location.href = '/brands';
+                            }}
+                            disabled={brandsLoading}
                             className={cn(
-                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200",
+                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
                               pathname === "/brands"
                                 ? "text-white bg-white/5 border-l-2 border-purple-500"
-                                : "text-slate-200 hover:text-white hover:bg-white/5"
+                                : "text-slate-200 hover:text-white hover:bg-white/5",
+                              brandsLoading && "opacity-70 cursor-not-allowed"
                             )}
                           >
-                            <Crown className="h-4 w-4 text-purple-400 shrink-0" />
-                            For Brands
-                          </Link>
-                          <Link
-                            href="/creators"
+                            {brandsLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <Crown className="h-4 w-4 text-purple-400 shrink-0" />
+                            )}
+                            {brandsLoading ? "Loading..." : "For Brands"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCreatorsLoading(true);
+                              window.location.href = '/creators';
+                            }}
+                            disabled={creatorsLoading}
                             className={cn(
-                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200",
+                              "flex items-center gap-3 text-base font-semibold px-4 py-3 rounded-xl transition-all duration-200 w-full",
                               pathname === "/creators"
                                 ? "text-white bg-white/5 border-l-2 border-orange-400"
-                                : "text-slate-200 hover:text-white hover:bg-white/5"
+                                : "text-slate-200 hover:text-white hover:bg-white/5",
+                              creatorsLoading && "opacity-70 cursor-not-allowed"
                             )}
                           >
-                            <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
-                            For Creators
-                          </Link>
+                            {creatorsLoading ? (
+                              <ButtonLoadingSpinner />
+                            ) : (
+                              <Sparkles className="h-4 w-4 text-orange-400 shrink-0" />
+                            )}
+                            {creatorsLoading ? "Loading..." : "For Creators"}
+                          </button>
                         </nav>
 
                         {/* Mobile User Section or Auth */}
@@ -476,6 +604,13 @@ export function Nav({
                               Dashboard
                             </Link>
                             <Link
+                              href={MARKETING_HOME_AS_GUEST}
+                              className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
+                            >
+                              <Home className="h-5 w-5" />
+                              Home
+                            </Link>
+                            <Link
                               href="/dashboard/settings"
                               className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
                             >
@@ -492,21 +627,32 @@ export function Nav({
                           </div>
                         ) : (
                           <div className="space-y-4 border-t border-violet-400/20 pt-6">
-                            <Link href="/auth/signin">
+                            <Link href="/auth/signin" onClick={handleSignInNavigation}>
                               <Button
                                 variant="outline"
-                                className="w-full bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10"
+                                disabled={isSigningIn || isNavigating}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10",
+                                  (isSigningIn || isNavigating) && "opacity-70 cursor-not-allowed"
+                                )}
                               >
+                                {isSigningIn ? <ButtonLoadingSpinner /> : null}
                                 Sign In
                               </Button>
                             </Link>
 
-                            <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
-                              <Link href="/auth/signup">
-                                {/* <Zap className="mr-2 h-4 w-4" /> */}
+                            <Link href="/auth/signup" onClick={handleNavigation}>
+                              <Button
+                                disabled={isNavigating || isSigningIn}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25",
+                                  (isNavigating || isSigningIn) && "opacity-70 cursor-not-allowed"
+                                )}
+                              >
+                                {isNavigating ? <ButtonLoadingSpinner /> : null}
                                 Get Started
-                              </Link>
-                            </Button>
+                              </Button>
+                            </Link>
                           </div>
                         )}
                       </div>

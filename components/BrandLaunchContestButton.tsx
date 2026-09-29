@@ -16,7 +16,7 @@ export default function BrandLaunchContestButton() {
             }}
         >
             <Rocket className="mr-3 h-5 w-5" />
-            <span className="relative z-10">Launch a Contest</span>
+            <span className="relative z-10">Launch a Campaign</span>
             <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-2" />
         </Button>
     );

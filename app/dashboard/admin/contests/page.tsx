@@ -1,39 +1,12 @@
 import React, { Suspense } from "react";
-import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { ContestListClient } from "../../contests/ContestListClient";
-import { getAllContestsWithCalculatedBudgets } from "@/lib/contest-service";
+import { ContestsListLoader } from "../../contests/ContestsListLoader";
 import { verifyAdminAccess } from "@/utils/admin-auth";
-
-// Define the type for a contest in the admin view
-export type AdminContest = {
-  id: string;
-  title: string | null;
-  platform: string | null;
-  contest_type: string | null;
-  created_at: string;
-  moderation_status: string;
-  status: string;
-  start_date: string | null;
-  end_date: string | null;
-  live_submission_count: number | null;
-  total_prize_money_sortable: number | null;
-  contest_based_details: {
-    leaderboard_contest?: {
-      total_prize?: number;
-    };
-    cpm_contest?: {
-      total_budget?: number;
-    };
-  } | null;
-  thumbnail_url: string | null;
-  advertiser_name: string; // Added for admin view
-};
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export const revalidate = 0;
 
 export default async function AdminContestsPage() {
-  // Verify admin access
   const { isAdmin, error } = await verifyAdminAccess();
 
   if (!isAdmin) {
@@ -41,47 +14,15 @@ export default async function AdminContestsPage() {
     redirect("/dashboard");
   }
 
-  const supabase = await createClient();
-
-  try {
-    // Admin users see all contests from all brands with calculated budgets
-    const contestsWithCalculatedBudgets =
-      await getAllContestsWithCalculatedBudgets(supabase);
-
-    const typedContests = (contestsWithCalculatedBudgets || []).map(
-      (contest) => ({
-        ...contest,
-        advertiser_name:
-          (contest.advertiser_profiles as any)?.company_name || "Unknown Brand",
-      })
-    ) as any[];
-
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              All Contests (Admin)
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Admin view - showing all contests from all brands on the platform
-            </p>
-          </div>
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-[76vh] w-full">
+          <PageLoadingSpinner mode="light" />
         </div>
-        <Suspense fallback={<div>Loading contests...</div>}>
-          <ContestListClient
-            initialContests={typedContests}
-            isAdminView={true}
-          />
-        </Suspense>
-      </div>
-    );
-  } catch (error) {
-    console.error("Error fetching admin contests:", error);
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Error loading contests</p>
-      </div>
-    );
-  }
+      }
+    >
+      <ContestsListLoader isAdminView />
+    </Suspense>
+  );
 }

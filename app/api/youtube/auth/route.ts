@@ -1,16 +1,16 @@
 import { createOAuthClient, getAuthUrl } from '@/lib/youtube-api';
+import { setOAuthReturnToCookie } from '@/lib/oauth-return-to';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto'; // Import crypto for generating random state
 
 export async function GET(request: NextRequest) {
   try {
+    const returnTo = request.nextUrl.searchParams.get('returnTo');
     const origin = new URL(request.url).origin;
     // Always use the same redirect URI for both web and mobile (like Instagram)
     // The mobile callback route will handle redirecting to the API callback
     const redirectUri = `${origin}/api/youtube/callback`;
     const oauth2Client = await createOAuthClient(redirectUri);
-    
-    console.log('YouTube auth: redirectUri:', redirectUri);
 
     // Generate a secure random state value
     const state = crypto.randomBytes(16).toString('hex');
@@ -21,9 +21,7 @@ export async function GET(request: NextRequest) {
       include_granted_scopes: false,
     });
     
-    // Log the generated URL for debugging
-    console.log('YouTube OAuth URL generated:', authUrl.substring(0, 200) + '...');
-    console.log('Contains prompt=consent:', authUrl.includes('prompt=consent'));
+    console.log("YouTube auth: initiating OAuth flow");
 
     // Create a response object to set the cookie
     const response = NextResponse.redirect(authUrl);
@@ -37,13 +35,14 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 15     // Expire after 15 minutes
     });
 
+    setOAuthReturnToCookie(response, returnTo);
+
     return response; // Return the response with the cookie set
 
   } catch (error) {
     console.error('Error initiating YouTube OAuth:', error);
     const errorUrl = new URL('/dashboard/settings', request.url);
     errorUrl.searchParams.set('error', 'youtube_auth_failed');
-    errorUrl.searchParams.set('message', error instanceof Error ? error.message : 'Failed to initiate YouTube authentication');
     // Don't set the cookie on error
     return NextResponse.redirect(errorUrl);
   }

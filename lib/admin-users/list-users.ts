@@ -1,0 +1,237 @@
+import { createAdminClient } from "@/utils/supabase/admin";
+
+const USERS_SELECT = `
+  *,
+  advertiser_profiles (
+    id,
+    company_name,
+    website_url,
+    total_money_spent,
+    total_contests_run,
+    available_deposit_balance,
+    withdrawable_balance,
+    subscription_info
+  )
+`;
+
+const CREATOR_PROFILES_SELECT = `
+  id,
+  youtube_account,
+  instagram_account,
+  tiktok_account,
+  twitter_account,
+  total_contests_participated,
+  total_contests_won,
+  total_views,
+  total_money_won,
+  withdrawable_balance,
+  total_submissions_made,
+  total_submissions_won,
+  date_of_birth,
+  gender,
+  country,
+  state,
+  city,
+  address,
+  languages,
+  categories,
+  subcategories,
+  interests,
+  trust_score_metrics,
+  avg_quality_score,
+  best_quality_score,
+  quality_score_sum,
+  scored_verified_count,
+  quality_score_counts
+`;
+
+export type AdminUserCounts = {
+  all: number;
+  advertisers: number;
+  creators: number;
+};
+
+async function fetchCreatorProfilesForUserIds(
+  userIds: string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const map = new Map<string, Record<string, unknown>>();
+  if (userIds.length === 0) return map;
+
+  const db = createAdminClient();
+  // Keep batches small — large `.in()` lists overflow HTTP headers (UUID × N).
+  const CHUNK = 50;
+  const CONCURRENCY = 4;
+  const chunks: string[][] = [];
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    chunks.push(userIds.slice(i, i + CHUNK));
+  }
+
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const results = await Promise.all(
+      chunks.slice(i, i + CONCURRENCY).map((ids) =>
+        db
+          .from("creator_profiles")
+          .select(CREATOR_PROFILES_SELECT)
+          .in("id", ids),
+      ),
+    );
+
+    for (const { data, error } of results) {
+      if (error) {
+        console.error("Error fetching creator profiles:", error);
+        continue;
+      }
+
+      for (const profile of data ?? []) {
+        map.set(profile.id, profile);
+      }
+    }
+  }
+
+  return map;
+}
+
+function mergeUsersWithCreatorProfiles(
+  users: Record<string, unknown>[],
+  creatorProfilesMap: Map<string, Record<string, unknown>>,
+) {
+  return users.map((user) => ({
+    ...user,
+    creator_profiles: creatorProfilesMap.get(String(user.id)) ?? null,
+  }));
+}
+
+export async function getAdminUserCounts(): Promise<AdminUserCounts> {
+  const db = createAdminClient();
+  const [allRes, advertisersRes, creatorsRes] = await Promise.all([
+    db.from("users").select("id", { count: "exact", head: true }),
+    db
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("user_type", "advertiser"),
+    db
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("user_type", "creator"),
+  ]);
+
+  return {
+    all: allRes.count ?? 0,
+    advertisers: advertisersRes.count ?? 0,
+    creators: creatorsRes.count ?? 0,
+  };
+}
+
+export async function listAdminUsersPaginated(options: {
+  offset: number;
+  limit: number;
+  includeCounts?: boolean;
+}) {
+  const db = createAdminClient();
+  const offset = Math.max(0, options.offset);
+  const limit = Math.min(Math.max(1, options.limit), 2000);
+
+  // PostgREST/Supabase returns at most 1000 rows per request.
+  const POSTGREST_MAX = 1000;
+  let userRows: Record<string, unknown>[] = [];
+  let total = 0;
+  let fetched = 0;
+
+  while (fetched < limit) {
+    const chunkLimit = Math.min(POSTGREST_MAX, limit - fetched);
+    const chunkStart = offset + fetched;
+    const chunkEnd = chunkStart + chunkLimit - 1;
+
+    const { data: users, error, count } = await db
+      .from("users")
+      .select(USERS_SELECT, { count: fetched === 0 ? "exact" : undefined })
+      .order("created_at", { ascending: false })
+      .range(chunkStart, chunkEnd);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (fetched === 0 && count != null) {
+      total = count;
+    }
+
+    const chunk = (users ?? []) as Record<string, unknown>[];
+    userRows = userRows.concat(chunk);
+    fetched += chunk.length;
+
+    if (chunk.length < chunkLimit) break;
+  }
+
+  const userIds = userRows.map((user) => String(user.id));
+  const creatorProfilesMap = await fetchCreatorProfilesForUserIds(userIds);
+
+  const items = mergeUsersWithCreatorProfiles(userRows, creatorProfilesMap);
+
+  const result: {
+    items: typeof items;
+    total: number;
+    offset: number;
+    limit: number;
+    counts?: AdminUserCounts;
+  } = {
+    items,
+    total: total || items.length,
+    offset,
+    limit,
+  };
+
+  if (options.includeCounts) {
+    result.counts = await getAdminUserCounts();
+  }
+
+  return result;
+}
+
+/** Legacy full load for callers that still need every user in one response. */
+export async function listAllAdminUsers() {
+  const db = createAdminClient();
+  const CHUNK = 1000;
+  let users: Record<string, unknown>[] = [];
+  let usersFrom = 0;
+
+  while (true) {
+    const { data: chunk, error } = await db
+      .from("users")
+      .select(USERS_SELECT)
+      .order("created_at", { ascending: false })
+      .range(usersFrom, usersFrom + CHUNK - 1);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    users = users.concat((chunk ?? []) as Record<string, unknown>[]);
+    if (!chunk || chunk.length < CHUNK) break;
+    usersFrom += CHUNK;
+  }
+
+  let creatorProfiles: Record<string, unknown>[] = [];
+  let profilesFrom = 0;
+  while (true) {
+    const { data: profileChunk, error: creatorProfilesError } = await db
+      .from("creator_profiles")
+      .select(CREATOR_PROFILES_SELECT)
+      .range(profilesFrom, profilesFrom + CHUNK - 1);
+
+    if (creatorProfilesError) {
+      console.error("Error fetching creator profiles:", creatorProfilesError);
+      break;
+    }
+
+    creatorProfiles = creatorProfiles.concat(profileChunk ?? []);
+    if (!profileChunk || profileChunk.length < CHUNK) break;
+    profilesFrom += CHUNK;
+  }
+
+  const creatorProfilesMap = new Map(
+    creatorProfiles.map((profile) => [String(profile.id), profile]),
+  );
+
+  return mergeUsersWithCreatorProfiles(users, creatorProfilesMap);
+}

@@ -2,23 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { processContestPaymentV2, PaymentDetails } from '@/lib/payment-utils';
 import { canCreateNewContest } from '@/lib/contest-utils';
+import {
+  assertClientPaymentMatchesExpected,
+  ContestPaymentValidationError,
+  resolveExpectedContestPayment,
+} from '@/lib/contest-payment-validation';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { contestId, amount, paymentMethod, commissionPercentage, walletAmount, changeType, isIncrease, isDecrease } = body;
+    const { contestId, amount, paymentMethod, commissionPercentage, isIncrease, isDecrease } = body;
     
-    // Validate inputs
-    if (!contestId || !amount || amount <= 0) {
+    if (!contestId) {
       return NextResponse.json(
-        { error: 'Invalid contest ID or amount' },
-        { status: 400 }
-      );
-    }
-
-    if (!commissionPercentage || commissionPercentage < 0) {
-      return NextResponse.json(
-        { error: 'Invalid commission percentage' },
+        { error: 'Invalid contest ID' },
         { status: 400 }
       );
     }
@@ -30,7 +27,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user from session
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
@@ -41,7 +37,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user is an advertiser
     const { data: profile, error: profileError } = await supabase
       .from('advertiser_profiles')
       .select('id, available_deposit_balance')
@@ -55,10 +50,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify contest belongs to the user and get current contest status
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('id, advertiser_id, title, contest_based_details, payment_details')
+      .select('id, advertiser_id, title, contest_type, contest_based_details, payment_details')
       .eq('id', contestId)
       .eq('advertiser_id', user.id)
       .single();
@@ -70,15 +64,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine if this is initial payment or budget change
+    let expectedPayment;
+    try {
+      expectedPayment = await resolveExpectedContestPayment(contest, user.id, {
+        isIncrease: Boolean(isIncrease),
+        isDecrease: Boolean(isDecrease),
+      });
+    } catch (error) {
+      if (error instanceof ContestPaymentValidationError) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
+
+    assertClientPaymentMatchesExpected(
+      amount,
+      commissionPercentage,
+      expectedPayment,
+    );
+
+    const { prizePoolInCents, commissionPercentage: serverCommission } =
+      expectedPayment;
+
     const existingPaymentDetails = contest.payment_details as PaymentDetails | null;
-    const budgetChangeType = isIncrease ? 'increase' : isDecrease ? 'decrease' : undefined;
+    const budgetChangeType = expectedPayment.changeType;
     const isInitialPayment = !existingPaymentDetails || existingPaymentDetails.payment_status !== 'completed';
 
-    // SECURITY: Check active contest limits for initial payments only
-    // Budget changes don't count against limits since contest is already paid for
     if (isInitialPayment) {
-      // Get user's current plan features using new subscription system
       const { getUserPlanFeatures } = await import('@/lib/subscription-utils');
       const planFeatures = await getUserPlanFeatures(user.id);
 
@@ -90,8 +102,6 @@ export async function POST(request: NextRequest) {
       }
 
       const maxActiveContests = planFeatures.maxActiveContests;
-
-      // Check if user can create/pay for this contest
       const canCreate = await canCreateNewContest(user.id, maxActiveContests);
       
       if (!canCreate.canCreate) {
@@ -107,35 +117,21 @@ export async function POST(request: NextRequest) {
             details: {
               currentActiveContests: canCreate.currentCount,
               maxActiveContests: maxActiveContests,
-              planName: 'Current Plan' // We could fetch this if needed ()
+              planName: 'Current Plan'
             }
           },
           { status: 400 }
         );
       }
-
-      console.log(`✅ Active contest limit check passed for user ${user.id}:`, {
-        currentCount: canCreate.currentCount,
-        maxAllowed: maxActiveContests,
-        contestId: contestId
-      });
-    } else {
-      console.log(`ℹ️ Skipping active contest limit check for budget change (contest ${contestId})`);
     }
 
-    // Calculate prize pool from total amount (working backwards from commission)
-    const totalAmountInCents = Math.round(amount * 100);
-    const commissionRate = commissionPercentage / 100;
-    const prizePoolInCents = Math.round(totalAmountInCents / (1 + commissionRate));
-
-    // Use the new payment processing function
     const paymentResult = await processContestPaymentV2(
       user.id,
       contestId,
       prizePoolInCents,
-      commissionPercentage,
+      serverCommission,
       `Contest payment for "${contest.title}" (ID: ${contestId})`,
-      paymentMethod !== 'stripe', // useWalletFirst
+      paymentMethod !== 'stripe',
       existingPaymentDetails || undefined,
       budgetChangeType
     );
@@ -147,7 +143,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store the updated payment details in the contest
     if (paymentResult.paymentDetails) {
       const { error: updateError } = await supabase
         .from('contests')
@@ -164,19 +159,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Format response based on payment method
-    const response: any = {
+    const response: Record<string, unknown> = {
       success: true,
       paymentMethod: paymentResult.paymentMethod,
       paymentDetails: paymentResult.paymentDetails
     };
 
     if (paymentResult.amountFromWallet && paymentResult.amountFromWallet > 0) {
-      response.amountFromWallet = paymentResult.amountFromWallet / 100; // Convert to dollars
+      response.amountFromWallet = paymentResult.amountFromWallet / 100;
     }
 
     if (paymentResult.amountFromStripe && paymentResult.amountFromStripe > 0) {
-      response.amountFromStripe = paymentResult.amountFromStripe / 100; // Convert to dollars
+      response.amountFromStripe = paymentResult.amountFromStripe / 100;
     }
 
     if (paymentResult.paymentIntent) {
@@ -193,4 +187,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}

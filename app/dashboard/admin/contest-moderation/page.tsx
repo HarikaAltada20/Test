@@ -70,10 +70,10 @@ export default async function ContestModerationPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Contest Moderation
+              Campaign Moderation
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Review and approve contests submitted by brands
+              Review and approve campaigns submitted by brands
             </p>
           </div>
         </div>
@@ -87,6 +87,6 @@ export default async function ContestModerationPage() {
     );
   } catch (error) {
     console.error("Error in contest moderation page:", error);
-    return <div>Error loading contest moderation page</div>;
+    return <div>Error loading campaign moderation page</div>;
   }
 }

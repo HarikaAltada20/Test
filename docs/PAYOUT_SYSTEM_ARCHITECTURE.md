@@ -179,7 +179,7 @@ SELECT * FROM payout_jobs WHERE status = 'error';
 
 ### Environment Variables
 ```env
-CRON_SECRET=T4zLg6xWvR7nY9sKbQfA8hC1eU3jM5dP0iB2oG6kVZ7xYJqD
+CRON_SECRET=your_long_random_cron_secret
 ```
 
 ### QStash Configuration

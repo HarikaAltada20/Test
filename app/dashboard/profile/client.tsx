@@ -44,6 +44,10 @@ import {
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
+import { CreatorStatsCard } from "@/components/CreatorStatsCard";
+import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
+import type { TrustScoreMetrics } from "@/lib/trust-score";
+import type { CreatorQualityMetrics } from "@/lib/quality-score";
 // import PhoneInput from "react-phone-number-input";
 // import "react-phone-number-input/style.css";
 import { Country, State, City } from "country-state-city";
@@ -88,7 +92,11 @@ interface CreatorProfile {
   total_contests_participated: number;
   total_contests_won: number;
   total_money_won: number;
+  total_views?: number;
   withdrawable_balance: number;
+  trust_score_metrics?: unknown;
+  avg_quality_score?: number | null;
+  best_quality_score?: number | null;
   phone_number?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
@@ -127,9 +135,9 @@ interface AdvertiserProfile {
 
 interface EmailChangeLog {
   id: string;
-  old_email: string;
-  new_email: string;
-  changed_at: string;
+  old_email: string | null;
+  new_email: string | null;
+  created_at: string;
 }
 
 export default function ProfilePage({
@@ -150,6 +158,10 @@ export default function ProfilePage({
   const [referrer, setReferrer] = useState<string | null>(null);
   const [hasNetworkError, setHasNetworkError] = useState(false);
   const [hasReceivedProfileBonus, setHasReceivedProfileBonus] = useState(false);
+  const [trustMetrics, setTrustMetrics] = useState<TrustScoreMetrics | null>(null);
+  const [qualityMetrics, setQualityMetrics] = useState<CreatorQualityMetrics | null>(null);
+  const [creatorStatsEarningsCents, setCreatorStatsEarningsCents] = useState(0);
+  const [creatorStatsViews, setCreatorStatsViews] = useState(0);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -352,9 +364,9 @@ export default function ProfilePage({
         try {
           const { data: logs, error: logsError } = await supabase
             .from("email_change_logs")
-            .select("id, old_email, new_email, changed_at")
+            .select("id, old_email, new_email, created_at")
             .eq("user_id", userData.id)
-            .order("changed_at", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(5);
 
           if (!logsError && logs) {
@@ -374,6 +386,11 @@ export default function ProfilePage({
 
             if (!profileError && profile) {
               setCreatorProfile(profile as CreatorProfile);
+              const stats = getCreatorStatsFromProfile(profile);
+              setTrustMetrics(stats.trustMetrics);
+              setQualityMetrics(stats.qualityMetrics);
+              setCreatorStatsEarningsCents(stats.totalEarningsCents);
+              setCreatorStatsViews(stats.totalViews);
               // Initialize the new profile fields
               // setEditedPhone(profile.phone_number || "");
               setEditedDateOfBirth(profile.date_of_birth || "");
@@ -1838,6 +1855,102 @@ export default function ProfilePage({
           Manage your Profile Information
         </p>
       </div>
+      {userData.user_type === "creator" && (
+        <CreatorStatsCard
+          trustMetrics={trustMetrics}
+          qualityMetrics={qualityMetrics}
+          totalEarningsCents={creatorStatsEarningsCents}
+          totalViews={creatorStatsViews}
+          loading={isLoading}
+          isDark={isDark}
+        />
+      )}
+      {creatorProfile && (
+        <div
+          className={cn(
+            "rounded-2xl shadow-lg px-2 pb-5",
+            isDark ? "bg-[#180438]" : "bg-white"
+          )}
+        >
+          <CardHeader className="mb-3">
+            <CardTitle
+              className={cn(
+                "text-xl font-semibold",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Creator Profile
+            </CardTitle>
+            <CardDescription className="text-md">
+              Your creator statistics
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
+              <div className="relative w-full">
+                <label
+                  htmlFor="floating"
+                  className={cn(
+                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                    isDark
+                      ? "bg-[#180438] text-[#8A8A8A]"
+                      : "bg-white text-gray-500"
+                  )}
+                >
+                  Campaigns Participated
+                </label>
+                <div
+                  className={cn(
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
+                    {creatorProfile.total_contests_participated}
+                  </p>
+                </div>
+              </div>
+              <div className="relative w-full">
+                <label
+                  htmlFor="floating"
+                  className={cn(
+                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                    isDark
+                      ? "bg-[#180438] text-[#8A8A8A]"
+                      : "bg-white text-gray-500"
+                  )}
+                >
+                  Campaigns Won
+                </label>
+                <div
+                  className={cn(
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
+                    {creatorProfile.total_contests_won}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </div>
+      )}
       <div>
         <div
           className={cn(
@@ -2138,7 +2251,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -2196,7 +2309,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -2284,7 +2397,7 @@ export default function ProfilePage({
                 Personal Information
               </CardTitle>
               <CardDescription className="mt-2 text-md">
-                Complete your profile to get contests matched to your country,
+                Complete your profile to get campaigns matched to your country,
                 categories, subcategories, and interests. Click "Save Changes"
                 to save all updates and receive a $0.50 bonus.
               </CardDescription>
@@ -3628,7 +3741,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3660,7 +3773,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3701,7 +3814,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3742,7 +3855,7 @@ export default function ProfilePage({
               </label>
               <div
                 className={cn(
-                  "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                  "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                   isDark
                     ? "text-[#8A8A8A] border-[#8A8A8A]"
                     : "border border-gray-300 text-gray-500"
@@ -3771,193 +3884,6 @@ export default function ProfilePage({
           </div>
         </CardContent>
       </div>
-
-      {creatorProfile && (
-        <div
-          className={cn(
-            "rounded-2xl shadow-lg px-2 pb-5",
-            isDark ? "bg-[#180438]" : "bg-white"
-          )}
-        >
-          <CardHeader className="mb-3">
-            <CardTitle
-              className={cn(
-                "text-xl font-semibold",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Creator Profile
-            </CardTitle>
-            <CardDescription className="text-md">
-              Your creator statistics
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Contests Participated
-                </label>
-                <div
-                  className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {creatorProfile.total_contests_participated}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Contests Participated
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                    {creatorProfile.total_contests_participated}
-                  </p>
-                </div>
-              </div> */}
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Contests Won
-                </label>
-                <div
-                  className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {creatorProfile.total_contests_won}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Contests Won
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
-                    {creatorProfile.total_contests_won}
-                  </p>
-                </div>
-              </div> */}
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Total Money Won
-                </label>
-                <div
-                  className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {formatMoney(creatorProfile.total_money_won)}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Total Money Won
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                    {formatMoney(creatorProfile.total_money_won)}
-                  </p>
-                </div>
-              </div> */}
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Withdrawable Balance
-                </label>
-                <div
-                  className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {formatMoney(creatorProfile.withdrawable_balance)}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Withdrawable Balance
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
-                    {formatMoney(creatorProfile.withdrawable_balance)}
-                  </p>
-                </div>
-              </div> */}
-            </div>
-          </CardContent>
-        </div>
-      )}
 
       {advertiserProfile && (
         <div
@@ -4198,7 +4124,7 @@ export default function ProfilePage({
                       className={cn(
                         "peer block w-full rounded-lg border px-3 pt-5 pb-2 text-[14px] focus:outline-none focus:ring-1 focus:border-purple-500 cursor-default",
                         isDark
-                          ? "bg-[#180438] text-white border-gray-300 text-white"
+                          ? "bg-[#180438] text-white border-gray-300"
                           : "bg-gray-50 text-[#1A1A1A]"
                       )}
                     />
@@ -4264,7 +4190,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4317,11 +4243,11 @@ export default function ProfilePage({
                       : "bg-white text-gray-500"
                   )}
                 >
-                  Contests Run
+                  Campaigns Run
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4362,7 +4288,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4402,7 +4328,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"
@@ -4442,7 +4368,7 @@ export default function ProfilePage({
                 </label>
                 <div
                   className={cn(
-                    "p-4 rounded-lg min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
                     isDark
                       ? "text-[#8A8A8A] border-[#8A8A8A]"
                       : "border border-gray-300 text-gray-500"

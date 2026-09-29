@@ -1,6 +1,6 @@
 /**
  * Solana Payment Request API
- * Creates a payment request for Phantom Wallet USDC/USDT top-up
+ * Creates a payment request for Solana USDC/USDT wallet top-up
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,6 +12,7 @@ import {
   PAYMENT_EXPIRATION_HOURS,
   isWalletConfigured,
 } from '@/lib/solana-utils';
+import { SOLANA_TOP_UP_MIN_AMOUNT } from '@/constants/subscriptionPlans';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,9 +27,9 @@ export async function POST(request: NextRequest) {
     const { amount, tokenType } = await request.json();
 
     // Validate input
-    if (!amount || amount <= 0) {
+    if (!amount || amount < SOLANA_TOP_UP_MIN_AMOUNT) {
       return NextResponse.json(
-        { error: 'Invalid amount. Must be greater than 0.' },
+        { error: `Minimum top-up amount is $${SOLANA_TOP_UP_MIN_AMOUNT.toFixed(2)}` },
         { status: 400 }
       );
     }
@@ -165,10 +166,10 @@ export async function POST(request: NextRequest) {
         walletAddress: PHANTOM_WALLET_ADDRESS,
         expiresAt: expiresAt.toISOString(),
         instructions: {
-          step1: 'Open your Phantom Wallet app',
-          step2: `Send exactly $${(amountInCents / 100).toFixed(2)} ${tokenType} to the wallet address below`,
-          step3: 'Include the memo exactly as shown (case-sensitive)',
-          step4: 'Your balance will be updated within 1-2 minutes after payment confirmation',
+          step1: `Open your crypto wallet and send exactly $${(amountInCents / 100).toFixed(2)} ${tokenType} via the Solana network only`,
+          step2: `Send the crypto to this wallet address: ${PHANTOM_WALLET_ADDRESS}`,
+          step3: 'After sending, continue to verify your transaction',
+          step4: 'Your balance will be updated within 1-2 minutes after payment verification',
         },
       },
     });

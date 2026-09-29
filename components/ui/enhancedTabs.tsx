@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "@/lib/utils";
 
 export interface Tab {
   id: string;
@@ -13,6 +14,10 @@ interface EnhancedTabsProps {
   className?: string;
   isDark?: boolean;
   light?: boolean;
+  /** Compact card-style segmentation for high-level workspace tabs. */
+  variant?: "default" | "cards";
+  /** When false, tabs use natural width — wrap in overflow-x-auto for long lists */
+  fillWidth?: boolean;
 }
 
 export function EnhancedTabs({
@@ -22,6 +27,8 @@ export function EnhancedTabs({
   className = "",
   isDark = false,
   light = false,
+  variant = "default",
+  fillWidth = true,
 }: EnhancedTabsProps) {
   const getTabClasses = (tab: Tab, index: number) => {
     const isActive = activeTab === tab.id;
@@ -45,8 +52,11 @@ export function EnhancedTabs({
       hoverRoundedClasses = "hover";
     }
 
-    const baseClasses = `flex items-center justify-center gap-2 
-  flex-1 px-4 sm:px-6 py-2 sm:py-3.5 font-medium transition-all duration-200`;
+    const widthClasses = fillWidth
+      ? "flex-1 min-w-0 whitespace-nowrap"
+      : "shrink-0 flex-none whitespace-nowrap px-3 sm:px-4";
+    const baseClasses = `flex items-center justify-center gap-1 min-[480px]:gap-2 
+  ${fillWidth ? "px-1.5 min-[375px]:px-2.5 min-[480px]:px-4 sm:px-6 py-2 sm:py-3.5" : "py-2 sm:py-2.5"} ${widthClasses} font-medium text-[11px] min-[375px]:text-xs min-[480px]:text-sm sm:text-[0.95rem] transition-all duration-200`;
 
     if (isActive) {
       return `${baseClasses} ${activeRoundedClasses} bg-[#662EBD] text-white shadow-sm`;
@@ -67,11 +77,67 @@ export function EnhancedTabs({
     ? "bg-[#E4E4E4]"
     : "bg-[#E4E4E4]";
 
+  if (variant === "cards") {
+    return (
+      <div
+        className={cn(
+          "grid w-full grid-cols-3 gap-1 rounded-xl border p-1.5",
+          isDark
+            ? "border-white/10 bg-slate-950/45"
+            : "border-slate-200/80 bg-slate-100/80",
+          className,
+        )}
+        role="group"
+        aria-label="User type"
+      >
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onTabChange(tab.id)}
+              className={cn(
+                "flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors duration-200 sm:px-3 sm:text-sm",
+                isActive
+                  ? "bg-[#662EBD] text-white shadow-sm"
+                  : isDark
+                    ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-white hover:text-slate-950",
+              )}
+            >
+              <span className="truncate">{tab.label}</span>
+              {typeof tab.count === "number" && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums sm:text-[11px]",
+                    isActive
+                      ? "bg-white/15 text-white"
+                      : isDark
+                        ? "bg-white/10 text-slate-300"
+                        : "bg-slate-200/80 text-slate-600",
+                  )}
+                >
+                  {tab.count.toLocaleString()}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
-    <div className={`${containerBg} rounded-full flex ${className}`}>
+    <div
+      className={`${containerBg} rounded-full flex flex-nowrap ${fillWidth ? "w-full" : "w-max max-w-none"} ${className}`}
+    >
       {tabs.map((tab, index) => (
         <button
           key={tab.id}
+          type="button"
           onClick={() => onTabChange(tab.id)}
           className={getTabClasses(tab, index)}
         >

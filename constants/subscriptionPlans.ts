@@ -106,7 +106,6 @@ export const subscriptionPlans = [
     name: 'BUILDER',
     displayName: 'Builder Plan',
     price: 25000, // $250.00/month in cents
-    trialDays: 30, // 30-day free trial
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {
@@ -192,6 +191,9 @@ export const HIGH_BUDGET_THRESHOLD = Infinity; // No upper limit - removed $1000
 export const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
 export const MAX_PRIZE_PER_WINNER = Infinity  // No upper limit - removed $1000 restriction
 
+// Milestone contest: minimum payout per milestone tier (see MILESTONE_CONTEST_GUIDE)
+export const MIN_MILESTONE_PAYOUT_CENTS = 10 // $0.10
+
 // CPM Rate Limits (per 1000 views)
 export const MIN_CPM_RATE = 0.1  // $0.10 per 1000 views
 export const MAX_CPM_RATE = 100  // $100.00 per 1000 views
@@ -231,6 +233,9 @@ export const DEFAULT_WINNER_COUNT = 3;
 
 // --- Form Limits and Placeholders ---
 // Wallet top-up limits
+export const WALLET_TOP_UP_MIN_AMOUNT = 1;
+/** Lower minimum for Solana USDC/USDT top-ups (useful for testing). */
+export const SOLANA_TOP_UP_MIN_AMOUNT = 0.1;
 export const WALLET_TOP_UP_MAX_AMOUNT = 10000; // $100.00 maximum top-up
 
 // Form placeholder values (in dollars for display)

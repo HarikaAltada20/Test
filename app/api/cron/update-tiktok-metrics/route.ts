@@ -1,0 +1,316 @@
+import { NextResponse } from "next/server";
+import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
+import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
+import {
+  isContestEligibleForScheduledMetricsRefresh,
+  isPostContestMetricsLocked,
+  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
+} from "@/lib/contest-metrics-refresh-eligibility";
+import { bumpContestLastMetricsUpdated } from "@/lib/contest-last-metrics-updated";
+import { updateVideoPlatformCpmContestBudgets } from "@/lib/cpm-contest-budget-cron";
+
+// Extract TikTok video ID from a content link
+function extractTikTokVideoId(contentLink: string): string | null {
+  if (!contentLink) return null;
+
+  // Match standard TikTok video URL: https://www.tiktok.com/@username/video/1234567890
+  const match = contentLink.match(/video\/(\d+)/);
+  if (match) return match[1];
+
+  return null;
+}
+
+function getBaseUrlFromRequest(request: Request): string {
+  try {
+    const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+    const xfProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    if (xfHost && xfProto) return `${xfProto}://${xfHost}`;
+    const u = new URL(request.url);
+    return u.origin;
+  } catch {
+    const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+    return url.replace(/\/$/, "");
+  }
+}
+
+async function updateCpmContestBudgets(
+  supabaseAdmin: any,
+  contestId?: string,
+): Promise<void> {
+  await updateVideoPlatformCpmContestBudgets(supabaseAdmin, {
+    platform: "tiktok",
+    contestId,
+    eligibility: "refresh",
+    logPrefix: "[TikTok Cron]",
+  });
+}
+
+export async function GET(request: Request) {
+  // Verify CRON secret
+  const authHeader = request.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const supabaseAdmin = createAdminSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  console.log("[TikTok Cron] Job triggered. Checking authorization...");
+
+  try {
+    // Check if this is a contest-specific refresh
+    const url = new URL(request.url);
+    const contestId = url.searchParams.get("contestId");
+    const isContestSpecific = !!contestId;
+
+    // Determine active contests
+    let activeIds: string[] | undefined = undefined;
+    if (isContestSpecific) {
+      const { data: c } = await supabaseAdmin
+        .from("contests")
+        .select("id, views_locked_at, post_contest_status")
+        .eq("id", contestId)
+        .single();
+      if (!c || !isContestEligibleForScheduledMetricsRefresh(c)) {
+        const locked = c && isPostContestMetricsLocked(c.post_contest_status);
+        return NextResponse.json({
+          message: locked
+            ? `Contest ${contestId} is locked for review; nothing to update`
+            : `Contest ${contestId} is finalized or not found; nothing to update`,
+        });
+      }
+    } else {
+      // For non-contest-specific, get all active TikTok contests
+      const { data: activeContests } = await supabaseAdmin
+        .from("contests")
+        .select("id, post_contest_status, views_locked_at")
+        .eq("platform", "tiktok")
+        .is("views_locked_at", null)
+        .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
+      const eligibleContests = (activeContests || []).filter(
+        isContestEligibleForScheduledMetricsRefresh,
+      );
+      activeIds = eligibleContests.map((c: any) => c.id);
+      console.log(`[TikTok Cron] Found ${activeIds.length} active TikTok contests.`);
+      if (!activeIds.length) {
+        return NextResponse.json({
+          message: "No active TikTok contests to update",
+        });
+      }
+    }
+
+    const dryRun = url.searchParams.get("dryRun") === "1";
+
+    if (dryRun) {
+      const contestIdsToCheck = contestId ? [contestId] : (activeIds ?? []);
+      let submissionCount = 0;
+      if (contestIdsToCheck.length) {
+        const { count } = await supabaseAdmin
+          .from("submissions")
+          .select("id", { count: "exact", head: true })
+          .in("contest_id", contestIdsToCheck)
+          .in("status", ["verified", "pending"])
+          .eq("platform", "tiktok")
+          .not("content_link", "is", null);
+        submissionCount = count ?? 0;
+      }
+      return NextResponse.json({
+        message: "Dry run — no TikTok API calls, queue jobs, or DB writes",
+        dryRun: true,
+        queueEnabled: isTikTokMetricsQueueEnabled(),
+        activeContestCount: contestIdsToCheck.length,
+        activeContestIds: contestIdsToCheck,
+        submissionCount,
+      });
+    }
+
+    // NEW: If queue is enabled, enqueue for each contest instead of monolithic update (Same as Instagram)
+    if (isTikTokMetricsQueueEnabled()) {
+      const baseUrl = getBaseUrlFromRequest(request);
+      const contestIdsToEnqueue = contestId ? [contestId] : (activeIds ?? []);
+      
+      console.log(`[TikTok Cron] Queue enabled. Enqueueing ${contestIdsToEnqueue.length} contest(s).`);
+      
+      const results: Array<{ id: string; runId?: string; alreadyActive?: boolean }> = [];
+      for (const cid of contestIdsToEnqueue) {
+        try {
+          const res = await fetch(
+            `${baseUrl.replace(/\/$/, "")}/api/contests/${cid}/tiktok-metrics-refresh/enqueue`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
+              },
+            }
+          );
+          const data = await res.json().catch(() => ({}));
+          results.push({ id: cid, runId: data.runId, alreadyActive: data.alreadyActive });
+        } catch (e) {
+          console.warn(`[TikTok Cron] Enqueue for ${cid} failed:`, e);
+        }
+      }
+      
+      return NextResponse.json({
+        message: "TikTok metrics refresh enqueued for contest(s)",
+        queueEnabled: true,
+        results,
+      });
+    }
+
+    console.log("[TikTok Cron] Fetching TikTok submissions to update...");
+
+    // Fetch TikTok submissions to update
+    let submissionsQuery = supabaseAdmin
+      .from("submissions")
+      .select(
+        "id, creator_id, content_link, views, contest_id, created_at, other_stats, video_id",
+      )
+      .in("status", ["verified", "pending"])
+      .eq("platform", "tiktok")
+      .not("content_link", "is", null);
+
+    if (isContestSpecific) {
+      submissionsQuery = submissionsQuery.eq("contest_id", contestId);
+      console.log(
+        `[TikTok Cron] Contest-specific metrics update for contest: ${contestId}`,
+      );
+    } else if (activeIds && activeIds.length) {
+      submissionsQuery = submissionsQuery.in("contest_id", activeIds);
+    }
+
+    const { data: submissions, error: submissionError } =
+      await submissionsQuery;
+
+    if (submissionError) {
+      console.error(`[TikTok Cron] Submission fetch failed: ${submissionError.message}`);
+      throw new Error(`Submission fetch failed: ${submissionError.message}`);
+    }
+
+    console.log(`[TikTok Cron] Found ${submissions?.length || 0} submissions for this query.`);
+
+    if (!submissions?.length) {
+      console.log("[TikTok Cron] Returning early: No submissions found.");
+      return NextResponse.json({
+        message: `No TikTok submissions to update${
+          isContestSpecific ? ` for contest ${contestId}` : ""
+        }`,
+        dryRun,
+        activeContestCount: activeIds?.length ?? (isContestSpecific ? 1 : 0),
+      });
+    }
+
+    if (dryRun) {
+      const contestIdsInSubmissions = [
+        ...new Set(submissions.map((s) => s.contest_id)),
+      ];
+      return NextResponse.json({
+        message: "Dry run — no TikTok API calls or DB writes",
+        dryRun: true,
+        activeContestCount: activeIds?.length ?? 1,
+        activeContestIds: activeIds ?? [contestId],
+        submissionCount: submissions.length,
+        contestIdsWithSubmissions: contestIdsInSubmissions,
+      });
+    }
+
+    // Group submissions by creator
+    const submissionsByCreator = submissions.reduce(
+      (acc, sub) => {
+        // Use video_id column if available, otherwise extract from content_link
+        const videoId = sub.video_id || extractTikTokVideoId(sub.content_link);
+        if (videoId) {
+          if (!acc[sub.creator_id]) acc[sub.creator_id] = [];
+          acc[sub.creator_id].push({ ...sub, video_id: videoId });
+        }
+        return acc;
+      },
+      {} as Record<string, any[]>,
+    );
+
+    const creatorIds = Object.keys(submissionsByCreator);
+    console.log(`[TikTok Cron] Unique creator IDs with valid video links: ${creatorIds.length}`);
+
+    if (!creatorIds.length) {
+      console.log("[TikTok Cron] Returning early: No valid video IDs found in submissions.");
+      await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
+      return NextResponse.json({
+        message: "No valid TikTok video IDs found",
+      });
+    }
+
+    // Fetch creators with TikTok accounts
+    const { data: creators, error: creatorsError } = await supabaseAdmin
+      .from("creator_profiles")
+      .select("id, tiktok_account")
+      .in("id", creatorIds)
+      .not("tiktok_account", "is", null);
+
+    if (creatorsError)
+      throw new Error(`Creator fetch failed: ${creatorsError.message}`);
+    if (!creators?.length) {
+      console.log("[TikTok Cron] No connected TikTok accounts found to process.");
+      await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
+      return NextResponse.json({
+        message: "No connected TikTok accounts found",
+      });
+    }
+
+    console.log(`[TikTok Cron] Processing ${creators.length} creators with connected TikTok accounts.`);
+
+    let totalSyncedSubmissions = 0;
+    const contestIdsTouched = new Set<string>();
+
+    for (const creator of creators) {
+      const subs = submissionsByCreator[creator.id] || [];
+      console.log(
+        `[TikTok Refresh] Display API sync for creator: ${creator.id} (${subs.length} submissions)`,
+      );
+      const result = await syncCreatorTikTokDisplayMetrics(
+        supabaseAdmin,
+        creator.id,
+        subs,
+      );
+
+      if (result.success) {
+        totalSyncedSubmissions += result.videosSynced || 0;
+        if (result.videosSynced && result.videosSynced > 0) {
+          for (const sub of subs) {
+            if (sub.contest_id) contestIdsTouched.add(sub.contest_id);
+          }
+        }
+        console.log(
+          `[TikTok Refresh] Synced ${result.videosSynced} submission(s) for ${creator.id}`,
+        );
+      } else {
+        console.error(`[TikTok Refresh] Sync failed for ${creator.id}:`, result.error);
+      }
+    }
+
+    if (contestIdsTouched.size > 0) {
+      await bumpContestLastMetricsUpdated(supabaseAdmin, [...contestIdsTouched]);
+    }
+
+    // Update CPM contest budgets for TikTok contests
+    await updateCpmContestBudgets(
+      supabaseAdmin,
+      isContestSpecific ? contestId! : undefined,
+    );
+
+    return NextResponse.json({
+      message: `Updated ${totalSyncedSubmissions} TikTok submission(s) via Display API (Login Kit)`,
+      details: isContestSpecific
+        ? `Targeted contest ${contestId}`
+        : `Global TikTok refresh`,
+    });
+  } catch (error: any) {
+    console.error("[TikTok Cron] Job failed:", error);
+    return NextResponse.json(
+      { error: `TikTok cron job failed: ${error.message}` },
+      { status: 500 },
+    );
+  }
+}

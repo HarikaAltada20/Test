@@ -1,402 +1,34 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import {
-  Elements,
-  CardNumberElement,
-  CardExpiryElement,
-  CardCvcElement,
-  useElements,
-  useStripe,
-} from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EnhancedTabs, Tab } from "@/components/ui/enhancedTabs";
 import { toast } from "sonner";
-import { Loader2, CreditCard, DollarSign, Wallet } from "lucide-react";
+import {
+  Lock,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { PaymentAnimation } from "@/components/ui/payment-success-animation";
-import { WALLET_TOP_UP_MAX_AMOUNT } from "@/constants/subscriptionPlans";
+import { WALLET_TOP_UP_MAX_AMOUNT, WALLET_TOP_UP_MIN_AMOUNT } from "@/constants/subscriptionPlans";
 import { cn } from "@/lib/utils";
-import { SolanaPaymentModal } from "./SolanaPaymentModal";
-import { handleFrontendPaymentFailure as handlePaymentFailureUtil } from "@/lib/payment-utils-client";
-
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-);
+import { SolanaPaymentFlow, type SolanaTopUpSuccessResult } from "./SolanaPaymentModal";
+import { SolanaWalletProvider } from "@/components/solana/SolanaWalletProvider";
 
 interface WalletTopUpProps {
   currentBalance: number;
   onBalanceUpdate: (newBalance: number) => void;
+  onTopUpSuccess?: (
+    amountInCents: number,
+    newBalanceInCents: number,
+  ) => void;
   onClose?: () => void;
   onTransactionUpdate?: () => void;
   onProcessingChange?: (isProcessing: boolean) => void;
 }
 
-const CheckoutForm = ({
-  amount,
-  onSuccess,
-  onError,
-  onProcessingChange,
-}: {
-  amount: number;
-  onSuccess: () => void;
-  onError: (error: string) => void;
-  onProcessingChange?: (isProcessing: boolean) => void;
-}) => {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStep, setProcessingStep] = useState<
-    "idle" | "creating" | "confirming" | "polling"
-  >("idle");
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
-  const [cardNumberEmpty, setCardNumberEmpty] = useState(true);
-  const [cardExpiryEmpty, setCardExpiryEmpty] = useState(true);
-  const [cardCvcEmpty, setCardCvcEmpty] = useState(true);
-  const getInitialMode = (): "light" | "dark" => {
-    if (typeof document === "undefined") return "light";
-    const dataMode = document
-      .querySelector("[data-mode]")
-      ?.getAttribute("data-mode");
-    if (dataMode === "dark" || dataMode === "light") {
-      return dataMode;
-    }
-    if (document.documentElement.classList.contains("dark")) {
-      return "dark";
-    }
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches
-    ) {
-      return "dark";
-    }
-    return "light";
-  };
-
-  const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
-  // Read mode from data attribute and html class, respond to changes
-  useEffect(() => {
-    const readMode = (): "light" | "dark" => {
-      const el = document.querySelector("[data-mode]");
-      const attr = el?.getAttribute("data-mode");
-      if (attr === "dark" || attr === "light") return attr;
-      return document.documentElement.classList.contains("dark")
-        ? "dark"
-        : "light";
-    };
-
-    // Set immediately on mount to avoid any flicker
-    setMode(readMode());
-
-    // Watch for changes on either data-mode or html class
-    const observer = new MutationObserver(() => {
-      setMode(readMode());
-    });
-    const dataModeTarget = document.querySelector("[data-mode]");
-    if (dataModeTarget) {
-      observer.observe(dataModeTarget, {
-        attributes: true,
-        attributeFilter: ["data-mode"],
-      });
-    }
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    return () => observer.disconnect();
-  }, []);
-  const isDark = mode === "dark";
-  // Function to poll payment status
-  const pollPaymentStatus = async (paymentIntentId: string): Promise<void> => {
-    const maxAttempts = 30; // Poll for up to 30 seconds
-    const interval = 1000; // Poll every 1 second
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        console.log(
-          `🔄 Polling payment status (attempt ${attempt + 1}/${maxAttempts})`
-        );
-
-        const response = await fetch(
-          `/api/payments/status?payment_intent_id=${paymentIntentId}`
-        );
-        const data = await response.json();
-
-        console.log("📊 Payment status:", data);
-
-        if (data.status === "success") {
-          console.log("✅ Payment confirmed as successful");
-          onSuccess();
-          return;
-        } else if (data.status === "failed") {
-          console.log("❌ Payment confirmed as failed");
-          onError(data.message || "Payment failed");
-          return;
-        }
-
-        // If status is still 'pending', continue polling
-        console.log("⏳ Payment still pending, continuing to poll...");
-        await new Promise((resolve) => setTimeout(resolve, interval));
-      } catch (error) {
-        console.error("❌ Error polling payment status:", error);
-        // Continue polling on error (might be temporary network issue)
-      }
-    }
-
-    // If we've exhausted all attempts, consider it a timeout
-    console.log("⏰ Payment status polling timed out");
-    onError(
-      "Payment processing timed out. Please contact support if you were charged."
-    );
-  };
-
-  // Handle frontend payment failures (before Stripe confirmation)
-  const handleFrontendPaymentFailure = async (
-    paymentIntentId: string,
-    errorMessage: string
-  ) => {
-    try {
-      console.log(
-        "🔴 Handling frontend payment failure for payment intent:",
-        paymentIntentId
-      );
-
-      const success = await handlePaymentFailureUtil(
-        paymentIntentId,
-        errorMessage
-      );
-
-      if (success) {
-        console.log("✅ Payment failure status updated successfully");
-      } else {
-        console.warn(
-          "⚠️Failed to update payment failure status"
-        );
-      }
-    } catch (error: any) {
-      console.error("❌ Error updating payment failure status:", error);
-    
-    }
-  };
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setIsProcessing(true);
-    setProcessingStep("creating");
-    onProcessingChange?.(true);
-
-    try {
-      // Create payment intent
-      const response = await fetch("/api/payments/deposit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
-      });
-
-      const { clientSecret, paymentIntentId: piId } = await response.json();
-
-      if (!clientSecret) {
-        throw new Error("Failed to create payment intent");
-      }
-
-      console.log("💳 Payment intent created:", piId);
-
-      // Store payment intent ID for failure handling
-      setPaymentIntentId(piId);
-
-      // Confirm payment
-      setProcessingStep("confirming");
-      const { error: stripeError } = await stripe.confirmCardPayment(
-        clientSecret,
-        {
-          payment_method: {
-            card: elements.getElement(CardNumberElement)!,
-          },
-        }
-      );
-
-      if (stripeError) {
-        console.log("🔴 Stripe error detected:", stripeError.message);
-
-        // Handle frontend failure - update transaction status to failed
-        if (piId) {
-          console.log(
-            "📝 Updating transaction status to failed for payment intent:",
-            piId
-          );
-          await handleFrontendPaymentFailure(
-            piId,
-            stripeError.message || "Payment failed"
-          );
-        }
-
-        onError(stripeError.message || "Payment failed");
-      } else {
-        console.log("✅ Stripe payment confirmed, starting status polling...");
-        // Start polling for payment status instead of showing immediate success
-        setProcessingStep("polling");
-        await pollPaymentStatus(piId);
-      }
-    } catch (error) {
-      console.error("💥 Unexpected error in wallet top-up:", error);
-
-      // Handle unexpected failures
-      if (paymentIntentId) {
-        await handleFrontendPaymentFailure(
-          paymentIntentId,
-          "An unexpected error occurred"
-        );
-      }
-
-      onError("An unexpected error occurred");
-    }
-
-    setIsProcessing(false);
-    setProcessingStep("idle");
-    onProcessingChange?.(false);
-  };
-
-  const cardElementStyle = {
-    style: {
-      base: {
-        fontSize: "16px",
-        color: isDark ? "#E5E7EB" : "#111827",
-        iconColor: isDark ? "#9CA3AF" : "#6B7280",
-        "::placeholder": {
-          color: isDark ? "#6B7280" : "#9CA3AF",
-        },
-        padding: "12px",
-        border: "1px solid",
-        borderColor: isDark ? "#4B5563" : "#E5E7EB",
-        borderRadius: "6px",
-        backgroundColor: isDark ? "#06021D" : "#FFFFFF",
-      },
-      invalid: {
-        color: "#e53e3e",
-        borderColor: "#e53e3e",
-      },
-    },
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div
-        className={cn(
-          "p-4 border rounded-lg",
-          isDark
-            ? "border-gray-600 text-white"
-            : "bg-gray-50 border-gray-400 text-gray-600"
-        )}
-      >
-        <Label className="text-sm font-medium  mb-3 block">Card Details</Label>
-
-        {/* Card Number */}
-        <div className="mb-4">
-          <Label className="text-xs  mb-2 block">Card Number</Label>
-          <CardNumberElement
-            options={cardElementStyle}
-            className="w-full"
-            onChange={(event) => setCardNumberEmpty(event.empty)}
-          />
-        </div>
-
-        {/* Expiry and CVV in a row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <Label
-              className={cn(
-                "text-xs mb-2 block",
-                isDark ? "text-white" : "text-gray-600"
-              )}
-            >
-              Expiry Date
-            </Label>
-            <CardExpiryElement
-              options={cardElementStyle}
-              className="w-full"
-              onChange={(event) => setCardExpiryEmpty(event.empty)}
-            />
-          </div>
-          <div>
-            <Label
-              className={cn(
-                "text-xs mb-2 block",
-                isDark ? "text-white" : "text-gray-600"
-              )}
-            >
-              CVC
-            </Label>
-            <CardCvcElement
-              options={cardElementStyle}
-              className="w-full"
-              onChange={(event) => setCardCvcEmpty(event.empty)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={cn(
-          "flex items-center justify-between p-4 rounded-lg border",
-          isDark
-            ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-            : "border-gray-400 text-gray-700"
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <DollarSign className="h-5 w-5" />
-          <span className="font-medium">
-            Amount to charge: {formatDollarAmount(amount)}
-          </span>
-        </div>
-      </div>
-
-      <Button
-        type="submit"
-        disabled={
-          !stripe ||
-          cardNumberEmpty ||
-          cardExpiryEmpty ||
-          cardCvcEmpty ||
-          isProcessing
-        }
-        loading={isProcessing}
-        loadingText={
-          processingStep === "creating"
-            ? "Creating payment..."
-            : processingStep === "confirming"
-            ? "Confirming payment..."
-            : processingStep === "polling"
-            ? "Verifying payment..."
-            : "Processing..."
-        }
-        className={cn(
-          "w-full",
-          isDark
-            ? "bg-[#7F39EC] py-3 text-white"
-            : " bg-[#D9C0FF61] text-[#7F39EC] "
-        )}
-        size="lg"
-      >
-        <CreditCard className="mr-2 h-4 w-4" />
-        Add {formatDollarAmount(amount)} to Wallet
-      </Button>
-    </form>
-  );
-};
-
-// Helper function to format dollar amounts (user input is already in dollars)
 const formatDollarAmount = (amount: number): string => {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -406,21 +38,7 @@ const formatDollarAmount = (amount: number): string => {
   }).format(amount);
 };
 
-export function WalletTopUp({
-  currentBalance,
-  onBalanceUpdate,
-  onClose,
-  onTransactionUpdate,
-  onProcessingChange,
-}: WalletTopUpProps) {
-  const [amount, setAmount] = useState<number>(50); // Default $50
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [showAnimation, setShowAnimation] = useState(false);
-  const [animationType, setAnimationType] = useState<"success" | "failure">(
-    "success"
-  );
-  const [animationAmount, setAnimationAmount] = useState<number>(0);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+function useDashboardMode(): "light" | "dark" {
   const getInitialMode = (): "light" | "dark" => {
     if (typeof document === "undefined") return "light";
     const dataMode = document
@@ -443,7 +61,7 @@ export function WalletTopUp({
   };
 
   const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
-  // Read mode from data attribute and html class, respond to changes
+
   useEffect(() => {
     const readMode = (): "light" | "dark" => {
       const el = document.querySelector("[data-mode]");
@@ -454,10 +72,8 @@ export function WalletTopUp({
         : "light";
     };
 
-    // Set immediately on mount to avoid any flicker
     setMode(readMode());
 
-    // Watch for changes on either data-mode or html class
     const observer = new MutationObserver(() => {
       setMode(readMode());
     });
@@ -475,84 +91,26 @@ export function WalletTopUp({
 
     return () => observer.disconnect();
   }, []);
-  const [showSolanaModal, setShowSolanaModal] = useState(false);
+
+  return mode;
+}
+
+export function WalletTopUp({
+  currentBalance,
+  onBalanceUpdate,
+  onTopUpSuccess,
+  onClose,
+  onTransactionUpdate,
+  onProcessingChange,
+}: WalletTopUpProps) {
+  const [amount, setAmount] = useState<number>(50);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [showSolanaFlow, setShowSolanaFlow] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"stripe" | "solana">(
-    "stripe"
+    "stripe",
   );
 
-  const handleSuccess = async () => {
-    console.log("🎉 WalletTopUp: Payment success callback triggered");
-
-    // Store the amount for animation and close payment form
-    setAnimationAmount(amount);
-    setAnimationType("success");
-    setShowPaymentForm(false);
-
-    // Show success animation
-    setShowAnimation(true);
-
-    // Wait a moment for webhook to process, then refresh balance
-    setTimeout(async () => {
-      try {
-        console.log(
-          "🔄 WalletTopUp: Fetching updated balance after payment..."
-        );
-        const response = await fetch("/api/payments/balance");
-        const data = await response.json();
-
-        if (data.balance !== undefined) {
-          console.log("💰 WalletTopUp: Updating balance to:", data.balance);
-          onBalanceUpdate(data.balance);
-        }
-      } catch (error) {
-        console.error("❌ WalletTopUp: Error fetching balance:", error);
-      }
-
-      // Refresh transaction history
-      if (onTransactionUpdate) {
-        console.log("🔄 WalletTopUp: Refreshing transaction history...");
-        onTransactionUpdate();
-      }
-    }, 2000); // Wait 2 seconds for webhook to process
-  };
-
-  const handleError = (error: string) => {
-    console.log("❌ WalletTopUp: Payment error:", error);
-
-    // Store error details for animation
-    setAnimationAmount(amount);
-    setAnimationType("failure");
-    setErrorMessage(error);
-    setShowPaymentForm(false); // Close payment form but keep modal open
-
-    // Show failure animation
-    setShowAnimation(true);
-
-    // Refresh transaction history even on failure to show failed transaction
-    if (onTransactionUpdate) {
-      console.log(
-        "🔄 WalletTopUp: Refreshing transaction history after failure..."
-      );
-      setTimeout(() => {
-        onTransactionUpdate();
-      }, 1000); // Small delay to allow webhook processing
-    }
-  };
-
-  const handleAnimationComplete = () => {
-    setShowAnimation(false);
-
-    if (animationType === "success") {
-      // On success: show success toast and close the modal
-      toast.success("Payment successful! Your wallet has been topped up.");
-      onClose?.(); // Close the modal/dialog
-    } else {
-      // On failure: show error toast but keep modal open for retry
-      toast.error(`Payment failed: ${errorMessage}`);
-      // Don't close the modal - user can retry
-    }
-  };
-
+  const isDark = useDashboardMode() === "dark";
   const predefinedAmounts = [25, 50, 100, 200, 500];
 
   const paymentTabs: Tab[] = [
@@ -560,9 +118,9 @@ export function WalletTopUp({
       id: "stripe",
       label: (
         <>
-          <CreditCard className="h-4 w-4" />
+          <ShieldCheck className="h-4 w-4" />
           <span className="text-xs sm:text-sm leading-tight whitespace-normal">
-            Credit Card
+            Stripe
           </span>
         </>
       ),
@@ -580,264 +138,414 @@ export function WalletTopUp({
     },
   ];
 
-  const handleSolanaSuccess = (newBalance: number) => {
-    toast.success("Solana payment received! Your balance has been updated.");
-    onBalanceUpdate(newBalance);
-    setShowSolanaModal(false);
+  const handleTabChange = (id: string) => {
+    setPaymentMethod(id as "stripe" | "solana");
+    setShowSolanaFlow(false);
+  };
 
-    // Refresh transaction history
-    if (onTransactionUpdate) {
-      onTransactionUpdate();
+  const isBelowMinimum =
+    Number.isFinite(amount) && amount > 0 && amount < WALLET_TOP_UP_MIN_AMOUNT;
+
+  const handleStripeCheckout = async () => {
+    if (!amount || amount < WALLET_TOP_UP_MIN_AMOUNT) {
+      toast.error(`Minimum top-up amount is $${WALLET_TOP_UP_MIN_AMOUNT}`);
+      return;
+    }
+
+    if (amount > WALLET_TOP_UP_MAX_AMOUNT) {
+      toast.error(
+        `Maximum top-up amount is $${WALLET_TOP_UP_MAX_AMOUNT.toLocaleString()}`,
+      );
+      return;
+    }
+
+    setIsRedirecting(true);
+    onProcessingChange?.(true);
+
+    try {
+      const response = await fetch("/api/payments/deposit/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        throw new Error(data.error || "Failed to start secure checkout");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      console.error("Wallet top-up checkout error:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to start secure checkout",
+      );
+      setIsRedirecting(false);
+      onProcessingChange?.(false);
     }
   };
 
-  const isDark = mode === "dark";
+  const handleSolanaSuccess = (result: SolanaTopUpSuccessResult) => {
+    if (onTopUpSuccess) {
+      onTopUpSuccess(result.amountInCents, result.newBalanceCents);
+    } else {
+      onBalanceUpdate(result.newBalanceCents);
+    }
+    setShowSolanaFlow(false);
+    onTransactionUpdate?.();
+    onClose?.();
+  };
 
-  return (
+  const amountSelector = (
     <>
-      <div >
-        <div className="mb-6">
-          <CardTitle
-            className={cn(
-              "flex items-center gap-2",
-              isDark ? "text-white" : "text-gray-800"
-            )}
-          >
-            Top Up Wallet
-          </CardTitle>
-        </div>
-
-        <EnhancedTabs
-          tabs={paymentTabs}
-          activeTab={paymentMethod}
-          onTabChange={(id) => setPaymentMethod(id as "stripe" | "solana")}
-          isDark={isDark}
-          light={!isDark}
-          className="w-full mb-6"
-        />
-
-        <div className="space-y-6">
-          <div
-            className={cn(
-              "p-4 rounded-lg border",
-              isDark ? "border-gray-600" : "border-gray-400"
-            )}
-          >
-            <div className="flex items-start sm:items-center justify-between gap-2">
-              <span
-                className={cn(
-                  "text-md font-medium",
-                  isDark ? "text-white" : "text-gray-600"
-                )}
-              >
-                Current Balance
-              </span>
-              <span
-                className={cn(
-                  "text-lg sm:text-xl font-bold",
-                  isDark ? "text-white" : "text-gray-600"
-                )}
-              >
-                {formatCurrencyFromCents(currentBalance)}
-              </span>
-            </div>
-          </div>
-
-          {paymentMethod === "stripe" ? (
-            <div className="mt-0 space-y-4">
-              {!showPaymentForm ? (
-                <div className="space-y-4">
-                  <div className="space-y-4">
-                    <Label
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark ? "text-white" : "text-gray-600"
-                      )}
-                    >
-                      Quick amounts
-                    </Label>
-                    <div
-                      className={cn(
-                        "grid grid-cols-2 sm:grid-cols-3 gap-3",
-                        isDark ? "text-white" : "text-gray-600"
-                      )}
-                    >
-                      {predefinedAmounts.map((presetAmount) => (
-                        <Button
-                          className={cn(
-                            "border",
-                            amount === presetAmount
-                              ? "text-white"
-                              : isDark
-                              ? "text-white border-gray-500"
-                              : "text-[#4A00BE] border-[#4A00BE]"
-                          )}
-                          key={presetAmount}
-                          variant={
-                            amount === presetAmount ? "default" : "outline"
-                          }
-                          size="sm"
-                          onClick={() => setAmount(presetAmount)}
-                        >
-                          ${presetAmount}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <Label
-                      htmlFor="custom-amount"
-                      className={cn(isDark ? "text-white" : "text-gray-600")}
-                    >
-                      Or enter custom amount
-                    </Label>
-                    <Input
-                      id="custom-amount"
-                      type="number"
-                      min="1"
-                      max={WALLET_TOP_UP_MAX_AMOUNT}
-                      value={amount}
-                      onChange={(e) => setAmount(Number(e.target.value))}
-                      placeholder="Enter amount"
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                    />
-                  </div>
-
-                  <button
-                    onClick={() => setShowPaymentForm(true)}
-                    className={cn(
-                      "w-full rounded-full",
-                      isDark
-                        ? "bg-[#7F39EC] py-3 text-white"
-                        : " bg-[#D9C0FF61] py-3.5 text-[#7F39EC] "
-                    )}
-                    disabled={!amount || amount < 1}
-                  >
-                    Proceed to Payment
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3
-                      className={cn(
-                        "font-medium",
-                        isDark ? "text-white" : "text-gray-600"
-                      )}
-                    >
-                      Complete Payment
-                    </h3>
-                    <Button
-                      className={cn(
-                        "text-[#4A00BE] border border-[#4A00BE]",
-                        isDark
-                          ? "text-white border-gray-600"
-                          : "text-[#4A00BE] border-[#4A00BE]"
-                      )}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowPaymentForm(false)}
-                    >
-                      Back
-                    </Button>
-                  </div>
-
-                  <Elements stripe={stripePromise}>
-                    <CheckoutForm
-                      amount={amount}
-                      onSuccess={handleSuccess}
-                      onError={handleError}
-                      onProcessingChange={onProcessingChange}
-                    />
-                  </Elements>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="mt-0 space-y-4">
-              <div className="text-center py-6 sm:py-8 px-2 space-y-4">
-                <div className="text-4xl sm:text-5xl mb-4">💳</div>
-                <h3
-                  className={cn(
-                    "text-lg font-semibold",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}
-                >
-                  Pay with Solana
-                </h3>
-                <p
-                  className={cn(
-                    "text-sm max-w-md mx-auto",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}
-                >
-                  Top up your wallet instantly using USDC or USDT on the Solana
-                  blockchain. Fast, secure, and with low transaction fees.
-                </p>
-                <div className="flex flex-col gap-2 max-w-xs mx-auto">
-                  <div
-                    className={cn(
-                      "flex items-center gap-2 text-sm",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}
-                  >
-                    <span className="text-green-500">✓</span>
-                    <span>Instant processing (1-2 minutes)</span>
-                  </div>
-                  <div
-                    className={cn(
-                      "flex items-center gap-2 text-sm",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}
-                  >
-                    <span className="text-green-500">✓</span>
-                    <span>Low transaction fees</span>
-                  </div>
-                  <div
-                    className={cn(
-                      "flex items-center gap-2 text-sm",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}
-                  >
-                    <span className="text-green-500">✓</span>
-                    <span>Support for USDC & USDT</span>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => setShowSolanaModal(true)}
-                  className="bg-[#7F39EC] hover:bg-[#6929D1] mt-4"
-                  size="lg"
-                >
-                  <Wallet className="mr-2 h-4 w-4" />
-                  Pay with Phantom Wallet
-                </Button>
-              </div>
-            </div>
+      <div className="space-y-4">
+        <Label
+          className={cn(
+            "text-sm font-medium",
+            isDark ? "text-white" : "text-gray-700",
           )}
+        >
+          Quick amounts
+        </Label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {predefinedAmounts.map((presetAmount) => (
+            <Button
+              className={cn(
+                "border font-semibold",
+                amount === presetAmount
+                  ? "bg-[#7F39EC] hover:bg-[#6929D1] text-white border-[#7F39EC]"
+                  : isDark
+                    ? "text-white border-gray-600 bg-transparent hover:bg-white/5"
+                    : "text-[#4A00BE] border-[#4A00BE] bg-white hover:bg-purple-50",
+              )}
+              key={presetAmount}
+              variant={amount === presetAmount ? "default" : "outline"}
+              size="sm"
+              onClick={() => setAmount(presetAmount)}
+            >
+              ${presetAmount}
+            </Button>
+          ))}
         </div>
       </div>
 
-      {/* Solana Payment Modal */}
-      <SolanaPaymentModal
-        isOpen={showSolanaModal}
-        onClose={() => setShowSolanaModal(false)}
-        onSuccess={handleSolanaSuccess}
+      <div className="space-y-2">
+        <Label
+          htmlFor="custom-amount"
+          className={cn(isDark ? "text-white" : "text-gray-700")}
+        >
+          Or enter custom amount
+        </Label>
+        <Input
+          id="custom-amount"
+          type="number"
+          min={WALLET_TOP_UP_MIN_AMOUNT}
+          max={WALLET_TOP_UP_MAX_AMOUNT}
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(Number(e.target.value))}
+          placeholder="Enter amount"
+          className={cn(
+            isBelowMinimum && "border-red-500 focus-visible:ring-red-500",
+            isDark
+              ? "bg-[#06021D] border-gray-600 text-white"
+              : "bg-white text-black border-gray-300",
+          )}
+        />
+        {isBelowMinimum ? (
+          <p className="text-sm text-red-500 font-medium">
+            Minimum top-up is ${WALLET_TOP_UP_MIN_AMOUNT}. Please enter at least
+            $1.00.
+          </p>
+        ) : (
+          <p
+            className={cn(
+              "text-xs",
+              isDark ? "text-gray-400" : "text-gray-500",
+            )}
+          >
+            Minimum ${WALLET_TOP_UP_MIN_AMOUNT}.00
+          </p>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="space-y-5">
+      <EnhancedTabs
+        tabs={paymentTabs}
+        activeTab={paymentMethod}
+        onTabChange={handleTabChange}
         isDark={isDark}
+        light={!isDark}
+        className="w-full"
       />
 
-      {/* Payment Animation Overlay */}
-      <PaymentAnimation
-        isVisible={showAnimation}
-        type={animationType}
-        amount={animationAmount}
-        error={errorMessage}
-        onComplete={handleAnimationComplete}
-      />
-    </>
+      <p
+        className={cn(
+          "text-xs -mt-2",
+          isDark ? "text-gray-400" : "text-gray-500",
+        )}
+      >
+        {paymentMethod === "stripe"
+          ? "Pay with Stripe — debit card, credit card, UPI, and other local methods where available."
+          : "Pay with any crypto wallet on the Solana network using USDC or USDT."}
+      </p>
+
+      <div
+        className={cn(
+          "p-4 rounded-xl border",
+          isDark
+            ? "border-gray-600 bg-[#0F0A27]/60"
+            : "border-gray-200 bg-gray-50/80 shadow-sm",
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span
+            className={cn(
+              "text-sm font-medium",
+              isDark ? "text-gray-300" : "text-gray-600",
+            )}
+          >
+            Current Balance
+          </span>
+          <span
+            className={cn(
+              "text-xl font-bold tabular-nums",
+              isDark ? "text-white" : "text-gray-900",
+            )}
+          >
+            {formatCurrencyFromCents(currentBalance)}
+          </span>
+        </div>
+      </div>
+
+      {paymentMethod === "stripe" ? (
+        <div className="space-y-4">
+          {amountSelector}
+
+          <div
+            className={cn(
+              "rounded-lg border p-3 flex gap-3 items-start",
+              isDark
+                ? "border-[#2F2754] bg-[#120A30]/80"
+                : "border-purple-100 bg-purple-50/60",
+            )}
+          >
+            <ShieldCheck
+              className={cn(
+                "h-5 w-5 shrink-0 mt-0.5",
+                isDark ? "text-green-400" : "text-green-600",
+              )}
+            />
+            <div className="space-y-1">
+              <p
+                className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-white" : "text-gray-900",
+                )}
+              >
+                Secured by Stripe
+              </p>
+              <p
+                className={cn(
+                  "text-xs leading-relaxed",
+                  isDark ? "text-gray-400" : "text-gray-600",
+                )}
+              >
+                You&apos;ll pay on Stripe&apos;s secure checkout. Use debit card,
+                credit card, UPI, or other methods supported in your region.
+                Payment details never touch our servers.
+              </p>
+            </div>
+          </div>
+
+          <div
+            className={cn(
+              "flex items-center justify-between rounded-lg border px-4 py-3",
+              isDark ? "border-gray-600" : "border-gray-200",
+            )}
+          >
+            <span
+              className={cn(
+                "text-sm font-medium",
+                isDark ? "text-gray-300" : "text-gray-600",
+              )}
+            >
+              Amount to add
+            </span>
+            <span
+              className={cn(
+                "text-lg font-bold tabular-nums",
+                isDark ? "text-white" : "text-gray-900",
+              )}
+            >
+              {formatDollarAmount(amount || 0)}
+            </span>
+          </div>
+
+          {isRedirecting && (
+            <div
+              className={cn(
+                "flex items-start gap-3 rounded-xl border px-4 py-3",
+                isDark
+                  ? "border-[#7F39EC]/30 bg-[#7F39EC]/10"
+                  : "border-[#7F39EC]/20 bg-gradient-to-r from-[#7F39EC]/5 to-purple-50",
+              )}
+            >
+              <div
+                className={cn(
+                  "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                  isDark ? "bg-[#7F39EC]/25" : "bg-[#7F39EC]/15",
+                )}
+              >
+                <ShieldCheck
+                  className={cn(
+                    "h-4 w-4",
+                    isDark ? "text-[#C4A8FF]" : "text-[#7F39EC]",
+                  )}
+                />
+              </div>
+              <div className="space-y-0.5">
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-[#E8DEFF]" : "text-[#5B21B6]",
+                  )}
+                >
+                  Opening secure checkout
+                </p>
+                <p
+                  className={cn(
+                    "text-xs leading-relaxed",
+                    isDark ? "text-gray-400" : "text-gray-500",
+                  )}
+                >
+                  You&apos;ll be redirected to Stripe to complete your payment
+                  safely.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <Button
+            onClick={handleStripeCheckout}
+            disabled={!amount || amount < WALLET_TOP_UP_MIN_AMOUNT}
+            loading={isRedirecting}
+            loadingText="Opening secure checkout..."
+            className={cn(
+              "w-full bg-[#7F39EC] hover:bg-[#6929D1] text-white py-6 text-base font-semibold",
+              isRedirecting && "disabled:opacity-100",
+            )}
+            size="lg"
+          >
+            <Lock className="mr-2 h-4 w-4" />
+            Continue to secure checkout
+          </Button>
+
+          <p
+            className={cn(
+              "text-[11px] text-center",
+              isDark ? "text-gray-500" : "text-gray-400",
+            )}
+          >
+            Secured by Stripe · Encrypted payment processing
+          </p>
+        </div>
+      ) : showSolanaFlow ? (
+        <SolanaWalletProvider>
+          <SolanaPaymentFlow
+            isDark={isDark}
+            onSuccess={handleSolanaSuccess}
+            onCancel={() => setShowSolanaFlow(false)}
+          />
+        </SolanaWalletProvider>
+      ) : (
+        <div className="space-y-4">
+          <div
+            className={cn(
+              "rounded-xl border p-5 text-center space-y-3",
+              isDark
+                ? "border-[#2F2754] bg-[#110927]/50"
+                : "border-gray-200 bg-white",
+            )}
+          >
+            <div
+              className={cn(
+                "mx-auto flex h-12 w-12 items-center justify-center rounded-full",
+                isDark ? "bg-[#7F39EC]/20" : "bg-purple-100",
+              )}
+            >
+              <Wallet
+                className={cn(
+                  "h-6 w-6",
+                  isDark ? "text-purple-300" : "text-[#7F39EC]",
+                )}
+              />
+            </div>
+            <h3
+              className={cn(
+                "text-lg font-semibold",
+                isDark ? "text-white" : "text-gray-900",
+              )}
+            >
+              Pay with Solana
+            </h3>
+            <p
+              className={cn(
+                "text-sm max-w-md mx-auto leading-relaxed",
+                isDark ? "text-gray-300" : "text-gray-600",
+              )}
+            >
+              Pay with any crypto wallet on the Solana network. Top up using
+              USDC or USDT on Solana mainnet — Phantom, Trust Wallet, MetaMask,
+              and others.
+            </p>
+            <ul
+              className={cn(
+                "text-sm space-y-1.5 text-left max-w-xs mx-auto",
+                isDark ? "text-gray-300" : "text-gray-600",
+              )}
+            >
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                Instant processing (1–2 minutes)
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                Low transaction fees
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                USDC &amp; USDT supported
+              </li>
+            </ul>
+          </div>
+
+          <Button
+            onClick={() => setShowSolanaFlow(true)}
+            className="w-full bg-[#7F39EC] hover:bg-[#6929D1] text-white py-6 text-base font-semibold"
+            size="lg"
+          >
+            <Wallet className="mr-2 h-4 w-4" />
+            Continue with Solana (USDC/USDT)
+          </Button>
+
+          <p
+            className={cn(
+              "text-[11px] text-center",
+              isDark ? "text-gray-500" : "text-gray-400",
+            )}
+          >
+            Solana mainnet · USDC or USDT only · Verify amount and token before
+            sending
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,0 +1,670 @@
+/**
+ * POST: Batch worker for Instagram insights refresh.
+ * Called by the processor with fromQueue, runId, batchIndex, batchSize, totalBatches, cursor.
+ * Worker does NOT set run.status = 'completed'; it returns hasMore and nextCursor.
+ */
+
+import { NextResponse } from "next/server";
+import dayjs from "dayjs";
+import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import {
+  refreshToken,
+  fetchInsights,
+  mergeInstagramStats,
+  isTokenExpiring,
+  type InstagramAccount,
+  type SubmissionForInsights,
+  type FetchInsightsResult,
+} from "@/lib/instagram-insights";
+import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-log";
+import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
+import {
+  isMetricsTargetMismatch,
+  type MetricsRefreshTarget,
+} from "@/lib/post-campaign-enqueue-guards";
+import { createMetricsRefreshRunProgressWriter } from "@/lib/metrics-refresh-run-progress";
+
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let idx = 0;
+  const workers = Array.from({ length: Math.max(1, limit) }, async () => {
+    while (true) {
+      const current = idx++;
+      if (current >= items.length) return;
+      results[current] = await fn(items[current]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    const fromQueue = request.headers.get("X-From-Queue") === "1" || request.headers.get("x-from-queue") === "1";
+    const auth = request.headers.get("Authorization");
+    if (!fromQueue || !cronSecret || auth !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id: contestId } = await params;
+    if (!contestId) {
+      return NextResponse.json({ error: "Contest ID required" }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const runId = body.runId as string | undefined;
+    const batchIndex = typeof body.batchIndex === "number" ? body.batchIndex : 0;
+    const batchSize =
+      typeof body.batchSize === "number" && Number.isFinite(body.batchSize)
+        ? Math.max(1, Math.min(25, Math.floor(body.batchSize)))
+        : 25;
+    const cursor = body.cursor as { last_insights_update: string | null; id: string } | undefined;
+    const metricsTarget: MetricsRefreshTarget =
+      body?.metricsTarget === "post_campaign" ? "post_campaign" : "submissions";
+    const isPostCampaignTarget = metricsTarget === "post_campaign";
+
+    if (!runId) {
+      return NextResponse.json({ error: "runId required" }, { status: 400 });
+    }
+
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data: run, error: runError } = await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .select("id, status, started_at, metrics_target")
+      .eq("id", runId)
+      .single();
+
+    if (runError || !run) {
+      return NextResponse.json({ error: "Run not found" }, { status: 404 });
+    }
+    if (run.status !== "running") {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: run.status === "cancelled",
+        runStatus: run.status,
+      });
+    }
+
+    if (isMetricsTargetMismatch(run.metrics_target, metricsTarget)) {
+      console.error(
+        "[instagram-insights-refresh batch] metrics_target mismatch",
+        {
+          runId,
+          contestId,
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target,
+        },
+      );
+      return NextResponse.json(
+        {
+          error: "metrics_target mismatch between job and run",
+          jobTarget: metricsTarget,
+          runTarget: run.metrics_target ?? "submissions",
+        },
+        { status: 409 },
+      );
+    }
+
+    console.info("[instagram-insights-refresh batch] start", {
+      contestId,
+      runId,
+      batchIndex,
+      metricsTarget,
+    });
+
+    // Heartbeat so long-running batches are not treated as stale mid-work.
+    await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", runId)
+      .eq("status", "running");
+
+    const { data: contest } = await supabaseAdmin
+      .from("contests")
+      .select("id, views_locked_at, post_contest_status")
+      .eq("id", contestId)
+      .maybeSingle();
+
+    if (!contest) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("instagram_insights_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest not found",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
+    if (
+      !isPostCampaignTarget &&
+      !isContestEligibleForScheduledMetricsRefresh(contest)
+    ) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("instagram_insights_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest locked for review or finalized",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
+    const runStartedAt = run.started_at;
+
+    let query = isPostCampaignTarget
+      ? supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .select(
+            "submission_id, creator_id, video_id, views, other_stats, last_insights_update, insights_status",
+          )
+          .eq("contest_id", contestId)
+          .ilike("platform", "%instagram%")
+          .neq("status", "rejected")
+          .not("video_id", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .or(
+            `last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`,
+          )
+          .order("last_insights_update", { ascending: true, nullsFirst: true })
+          .order("submission_id", { ascending: true })
+          .limit(batchSize + 1)
+      : supabaseAdmin
+          .from("submissions")
+          .select(
+            "id, creator_id, video_id, views, other_stats, last_insights_update, insights_status",
+          )
+          .eq("contest_id", contestId)
+          .eq("platform", "instagram")
+          .neq("status", "rejected")
+          .not("video_id", "is", null)
+          .or(insightsRefreshInsightsStatusOrFilter())
+          .or(
+            `last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`,
+          )
+          .order("last_insights_update", { ascending: true, nullsFirst: true })
+          .order("id", { ascending: true })
+          .limit(batchSize + 1);
+
+    if (cursor && cursor.id) {
+      const idCol = isPostCampaignTarget ? "submission_id" : "id";
+      if (cursor.last_insights_update == null) {
+        query = query.or(
+          `and(last_insights_update.is.null,${idCol}.gt.${cursor.id}),last_insights_update.not.is.null`,
+        );
+      } else {
+        query = query.or(
+          `last_insights_update.gt.${cursor.last_insights_update},and(last_insights_update.eq.${cursor.last_insights_update},${idCol}.gt.${cursor.id})`,
+        );
+      }
+    }
+
+    const { data: rows, error: selectError } = await query;
+
+    if (selectError) {
+      console.error("[instagram-insights-refresh batch] select error:", selectError);
+      return NextResponse.json({ error: "Batch select failed" }, { status: 500 });
+    }
+
+    type BatchRow = {
+      id: string;
+      creator_id: string;
+      video_id: string | null;
+      views: number | null;
+      other_stats: Record<string, unknown> | null;
+      last_insights_update: string | null;
+      insights_status: string | null;
+    };
+
+    const normalizedRows: BatchRow[] = (rows ?? []).map((row: any) => ({
+      id: isPostCampaignTarget ? row.submission_id : row.id,
+      creator_id: row.creator_id,
+      video_id: row.video_id,
+      views: row.views,
+      other_stats: row.other_stats,
+      last_insights_update: row.last_insights_update,
+      insights_status: row.insights_status,
+    }));
+
+    const batch: BatchRow[] = normalizedRows.slice(0, batchSize);
+    const hasMore = normalizedRows.length > batchSize;
+    const lastRow = batch[batch.length - 1];
+    const nextCursor =
+      lastRow && hasMore
+        ? { last_insights_update: lastRow.last_insights_update ?? null, id: lastRow.id }
+        : undefined;
+
+    if (batch.length === 0) {
+      return NextResponse.json({
+        hasMore: false,
+        nextCursor: undefined,
+        reviewedCount: 0,
+        processedCount: 0,
+        successCount: 0,
+        permanentFailureCount: 0,
+        temporaryFailureCount: 0,
+        skippedRecentCount: 0,
+      });
+    }
+
+    const creatorIds = [...new Set(batch.map((r) => r.creator_id))];
+    const { data: creators } = await supabaseAdmin
+      .from("creator_profiles")
+      .select("id, instagram_account")
+      .in("id", creatorIds)
+      .not("instagram_account", "is", null);
+
+    const creatorsById = new Map<string | number, { id: string; instagram_account: InstagramAccount }>();
+    for (const c of creators ?? []) {
+      const acc = (c as { instagram_account?: unknown }).instagram_account;
+      if (acc && typeof acc === "object" && "access_token" in acc) {
+        creatorsById.set(c.id, c as { id: string; instagram_account: InstagramAccount });
+      }
+    }
+
+    const submissionsByCreator = batch.reduce<Record<string, BatchRow[]>>((acc, row) => {
+      const cid = row.creator_id;
+      if (!acc[cid]) acc[cid] = [];
+      acc[cid].push(row);
+      return acc;
+    }, {});
+
+    let skippedRecentCount = 0;
+    const now = new Date().toISOString();
+    const { data: progressBaseRow } = await supabaseAdmin
+      .from("instagram_insights_refresh_runs")
+      .select(
+        "processed_submissions, success_count, permanent_failure_count, temporary_failure_count, skipped_recent_count, reviewed_count",
+      )
+      .eq("id", runId)
+      .single();
+    const progress = createMetricsRefreshRunProgressWriter({
+      supabase: supabaseAdmin,
+      table: "instagram_insights_refresh_runs",
+      runId,
+      base: {
+        processed_submissions: progressBaseRow?.processed_submissions ?? 0,
+        reviewed_count: progressBaseRow?.reviewed_count ?? 0,
+        success_count: progressBaseRow?.success_count ?? 0,
+        temporary_failure_count:
+          progressBaseRow?.temporary_failure_count ?? 0,
+        permanent_failure_count:
+          progressBaseRow?.permanent_failure_count ?? 0,
+        skipped_recent_count: progressBaseRow?.skipped_recent_count ?? 0,
+      },
+    });
+    const tokenUpdatesByCreator = new Map<string, InstagramAccount>();
+    const submissionUpdates: Array<{
+      id: string;
+      views: number;
+      other_stats: Record<string, unknown>;
+      last_insights_update: string;
+      insights_status: string;
+      previous_insights_status: string | null;
+    }> = [];
+    const creatorNeedsReconnect = new Set<string>();
+
+    const creatorIdList = Object.keys(submissionsByCreator);
+    const usageAccumulator: MetaGraphUsageAccumulator = {};
+
+    let cancelCached: { at: number; cancelled: boolean } | null = null;
+    const isRunCancelled = async (): Promise<boolean> => {
+      const t = Date.now();
+      if (cancelCached && t - cancelCached.at < 2000) {
+        return cancelCached.cancelled;
+      }
+      const { data } = await supabaseAdmin
+        .from("instagram_insights_refresh_runs")
+        .select("status")
+        .eq("id", runId)
+        .maybeSingle();
+      const cancelled = !data || data.status !== "running";
+      cancelCached = { at: t, cancelled };
+      return cancelled;
+    };
+
+    await mapLimit(creatorIdList, 3, async (creatorId) => {
+      if (await isRunCancelled()) return;
+      const creator = creatorsById.get(creatorId);
+      const allSubsForCreator = submissionsByCreator[creatorId] as BatchRow[];
+
+      // Creator has no valid Instagram account: mark all their submissions as temporary_failure (no API calls).
+      if (!creator) {
+        allSubsForCreator.forEach((sub) => {
+          submissionUpdates.push({
+            id: sub.id,
+            views: sub.views ?? 0,
+            other_stats: (sub.other_stats as Record<string, unknown>) || {},
+            last_insights_update: now,
+            insights_status: "temporary_failure",
+            previous_insights_status: sub.insights_status ?? null,
+          });
+        });
+        return;
+      }
+
+      const account = creator.instagram_account;
+      if (
+        !account?.access_token ||
+        (account.account_type !== "BUSINESS" &&
+          account.account_type !== "MEDIA_CREATOR")
+      ) {
+        allSubsForCreator.forEach((sub) => {
+          submissionUpdates.push({
+            id: sub.id,
+            views: sub.views ?? 0,
+            other_stats: (sub.other_stats as Record<string, unknown>) || {},
+            last_insights_update: now,
+            insights_status: "temporary_failure",
+            previous_insights_status: sub.insights_status ?? null,
+          });
+        });
+        return;
+      }
+
+      // needs_reconnect: skip if last attempt was < 1 day ago; else attempt again. Set last_connection_check_at on attempt.
+      if (account.needs_reconnect) {
+        const lastCheck = account.last_connection_check_at
+          ? dayjs(account.last_connection_check_at)
+          : null;
+        const oneDayAgo = dayjs().subtract(1, "day");
+        if (lastCheck && lastCheck.isAfter(oneDayAgo)) {
+          // Skip: mark all their submissions as temporary_failure without calling API.
+          skippedRecentCount += allSubsForCreator.length;
+          allSubsForCreator.forEach((sub) => {
+            submissionUpdates.push({
+              id: sub.id,
+              views: sub.views ?? 0,
+              other_stats: (sub.other_stats as Record<string, unknown>) || {},
+              last_insights_update: now,
+              insights_status: "temporary_failure",
+              previous_insights_status: sub.insights_status ?? null,
+            });
+          });
+          return;
+        }
+      }
+
+      let accessToken = account.access_token;
+      if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
+        const refreshResult = await refreshToken(
+          creatorId,
+          accessToken,
+          usageAccumulator
+        );
+        if (!refreshResult) {
+          // Post-campaign: still attempt insights with current token (same Graph path as submissions).
+          // Submissions path: mark temporary_failure and skip.
+          if (!isPostCampaignTarget) {
+            creatorNeedsReconnect.add(creatorId);
+            allSubsForCreator.forEach((sub) => {
+              submissionUpdates.push({
+                id: sub.id,
+                views: sub.views ?? 0,
+                other_stats: (sub.other_stats as Record<string, unknown>) || {},
+                last_insights_update: now,
+                insights_status: "temporary_failure",
+                previous_insights_status: sub.insights_status ?? null,
+              });
+            });
+            return;
+          }
+          creatorNeedsReconnect.add(creatorId);
+        } else {
+          accessToken = refreshResult.access_token;
+          const expirySeconds = refreshResult.expires_in ?? 3600;
+          tokenUpdatesByCreator.set(creatorId, {
+            ...account,
+            access_token: refreshResult.access_token,
+            token_expiry: dayjs().add(expirySeconds, "second").toISOString(),
+            last_connection_check_at: now,
+          });
+        }
+      }
+
+      const subs = submissionsByCreator[creatorId] as Array<{
+        id: string;
+        creator_id: string;
+        video_id: string;
+        views: number | null;
+        other_stats: Record<string, unknown> | null;
+        last_insights_update: string | null;
+        insights_status: string | null;
+      }>;
+
+      await mapLimit(subs, 4, async (sub) => {
+        const submission: SubmissionForInsights = {
+          id: sub.id,
+          creator_id: sub.creator_id,
+          video_id: sub.video_id!,
+          views: sub.views,
+          other_stats: sub.other_stats ?? undefined,
+        };
+        const result: FetchInsightsResult = await fetchInsights(
+          submission,
+          accessToken,
+          usageAccumulator
+        );
+        const previousStatus = sub.insights_status ?? null;
+
+        if (result.kind === "success") {
+          const { views, stats } = result;
+          const prevOther =
+            ((sub.other_stats as Record<string, unknown>) || {}) as Record<
+              string,
+              unknown
+            >;
+          const prevIg =
+            prevOther.instagram &&
+            typeof prevOther.instagram === "object" &&
+            !Array.isArray(prevOther.instagram)
+              ? (prevOther.instagram as Record<string, unknown>)
+              : {};
+          submissionUpdates.push({
+            id: sub.id,
+            views,
+            other_stats: {
+              ...prevOther,
+              instagram: mergeInstagramStats(prevIg, stats),
+            },
+            last_insights_update: now,
+            insights_status: "ok",
+            previous_insights_status: previousStatus,
+          });
+        } else {
+          if (result.classification === "permanent_media") {
+            submissionUpdates.push({
+              id: sub.id,
+              views: sub.views ?? 0,
+              other_stats: (sub.other_stats as Record<string, unknown>) || {},
+              last_insights_update: now,
+              insights_status: "permanent_failure",
+              previous_insights_status: previousStatus,
+            });
+          } else if (result.classification === "account_token") {
+            creatorNeedsReconnect.add(creatorId);
+            submissionUpdates.push({
+              id: sub.id,
+              views: sub.views ?? 0,
+              other_stats: (sub.other_stats as Record<string, unknown>) || {},
+              last_insights_update: now,
+              insights_status: "temporary_failure",
+              previous_insights_status: previousStatus,
+            });
+          } else {
+            submissionUpdates.push({
+              id: sub.id,
+              views: sub.views ?? 0,
+              other_stats: (sub.other_stats as Record<string, unknown>) || {},
+              last_insights_update: now,
+              insights_status: "temporary_failure",
+              previous_insights_status: previousStatus,
+            });
+          }
+        }
+      });
+    });
+
+    // Write submission updates; only count as processed when a row was actually updated. Count transitions for success/permanent/temporary.
+    // We update by id only: the batch was already selected with last_insights_update < runStartedAt (or null), and we have one active run per contest, so no need to re-check last_insights_update here (that check was causing 0 rows updated when timestamps or concurrency made the condition fail).
+    type UpdateResult = { updated: boolean; newStatus: string; previousStatus: string | null };
+    const updateResults: UpdateResult[] = await mapLimit(submissionUpdates, 10, async (up) => {
+      if (isPostCampaignTarget) {
+        const { data, error } = await supabaseAdmin
+          .from("post_campaign_submission_metrics")
+          .update({
+            views: up.views,
+            other_stats: up.other_stats,
+            last_insights_update: up.last_insights_update,
+            insights_status: up.insights_status,
+            updated_at: now,
+          })
+          .eq("submission_id", up.id)
+          .select("submission_id")
+          .maybeSingle();
+        const updated = !error && data != null;
+        if (updated) await progress.addProcessed(1);
+        return {
+          updated,
+          newStatus: up.insights_status,
+          previousStatus: up.previous_insights_status,
+        };
+      }
+      const { data, error } = await supabaseAdmin
+        .from("submissions")
+        .update({
+          views: up.views,
+          other_stats: up.other_stats,
+          last_insights_update: up.last_insights_update,
+          insights_status: up.insights_status,
+          updated_at: now,
+        })
+        .eq("id", up.id)
+        .select("id")
+        .maybeSingle();
+      const updated = !error && data != null;
+      if (updated) await progress.addProcessed(1);
+      return {
+        updated,
+        newStatus: up.insights_status,
+        previousStatus: up.previous_insights_status,
+      };
+    });
+
+    let processedInBatch = 0;
+    let successTransitions = 0;
+    let permanentTransitions = 0;
+    let temporaryTransitions = 0;
+    for (const r of updateResults) {
+      if (!r.updated) continue;
+      processedInBatch += 1;
+      if (r.newStatus === "ok" && r.previousStatus !== "ok") successTransitions += 1;
+      else if (r.newStatus === "permanent_failure" && r.previousStatus !== "permanent_failure") permanentTransitions += 1;
+      else if (r.newStatus === "temporary_failure" && r.previousStatus !== "temporary_failure") temporaryTransitions += 1;
+    }
+
+    await mapLimit([...tokenUpdatesByCreator.entries()], 5, async ([creatorId, newAccount]) => {
+      await supabaseAdmin
+        .from("creator_profiles")
+        .update({
+          instagram_account: newAccount,
+          updated_at: now,
+        })
+        .eq("id", creatorId);
+    });
+
+    await mapLimit([...creatorNeedsReconnect.values()], 5, async (creatorId) => {
+      const creator = creatorsById.get(creatorId);
+      if (!creator) return;
+      const acc = {
+        ...creator.instagram_account,
+        needs_reconnect: true,
+        last_connection_check_at: now,
+      };
+      await supabaseAdmin
+        .from("creator_profiles")
+        .update({ instagram_account: acc, updated_at: now })
+        .eq("id", creatorId);
+    });
+
+    const reviewedInBatch = batch.length;
+    await progress.awaitIdle();
+    await progress.finalize(batchIndex, now, {
+      processed: processedInBatch,
+      reviewed: reviewedInBatch,
+      success: successTransitions,
+      temporaryFailure: temporaryTransitions,
+      permanentFailure: permanentTransitions,
+      skipped: skippedRecentCount,
+    });
+
+    if (await isRunCancelled()) {
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+        reviewedCount: reviewedInBatch,
+        processedCount: processedInBatch,
+        successCount: successTransitions,
+        permanentFailureCount: permanentTransitions,
+        temporaryFailureCount: temporaryTransitions,
+        skippedRecentCount,
+      });
+    }
+
+    await insertMetaGraphUsageLogRow({
+      source: "instagram_insights_batch",
+      contestId,
+      runId,
+      batchIndex,
+      accumulator: usageAccumulator,
+    });
+
+    return NextResponse.json({
+      hasMore,
+      nextCursor,
+      reviewedCount: reviewedInBatch,
+      processedCount: processedInBatch,
+      successCount: successTransitions,
+      permanentFailureCount: permanentTransitions,
+      temporaryFailureCount: temporaryTransitions,
+      skippedRecentCount,
+    });
+  } catch (e) {
+    console.error("[instagram-insights-refresh batch]", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Batch failed" },
+      { status: 500 }
+    );
+  }
+}

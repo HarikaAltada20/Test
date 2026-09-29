@@ -125,6 +125,7 @@ export async function rapidApiRequest<T = any>(
   let lastError: unknown;
   let keyIndex = rotationIndex;
   let attempts = 0;
+  const timeoutMs = Number(process.env.RAPIDAPI_TIMEOUT_MS ?? 30000);
 
   while (attempts < RAPIDAPI_KEYS.length) {
     const apiKey = RAPIDAPI_KEYS[keyIndex];
@@ -163,6 +164,8 @@ export async function rapidApiRequest<T = any>(
         ...requestConfig,
         url,
         headers: requestHeaders,
+        // Prevent requests from hanging indefinitely (RapidAPI sometimes stalls).
+        timeout: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000,
       });
       rotationIndex = keyIndex;
       return response;
@@ -197,17 +200,44 @@ export async function rapidApiRequest<T = any>(
       }
       
       // Don't retry on subscription errors - fail immediately
+      // 403 "not subscribed" is usually tied to the specific RapidAPI key/account.
+      // Rotate through all configured keys before failing (same idea as 429).
       if (isSubscriptionError(error)) {
-        console.error(
-          `[rapidApiClient] RapidAPI key #${keyIndex} subscription error - API key not subscribed to Twitter API. Not retrying.`
+        attempts++;
+        if (attempts >= RAPIDAPI_KEYS.length) {
+          console.error(
+            `[rapidApiClient] All ${RAPIDAPI_KEYS.length} RapidAPI key(s) returned subscription/auth 403 for this API. Subscribe at https://rapidapi.com or add a subscribed key.`
+          );
+          throw error;
+        }
+        console.warn(
+          `[rapidApiClient] RapidAPI key #${keyIndex} subscription/auth error; trying next key`
         );
-        throw error;
+        keyIndex = (keyIndex + 1) % RAPIDAPI_KEYS.length;
+        rotationIndex = keyIndex;
+        continue;
       }
-      
-      // Only retry on rate limit errors
+
+      // Retry on rate limits and network timeouts (try next key).
       if (isRateLimitError(error)) {
         console.warn(
           `[rapidApiClient] RapidAPI key #${keyIndex} rate-limited; trying next key`
+        );
+        attempts++;
+        keyIndex = (keyIndex + 1) % RAPIDAPI_KEYS.length;
+        rotationIndex = keyIndex;
+        continue;
+      }
+
+      const message = (error as any)?.message ? String((error as any).message) : "";
+      const isTimeout =
+        (error as any)?.code === "ECONNABORTED" ||
+        (error as any)?.code === "ETIMEDOUT" ||
+        message.toLowerCase().includes("timeout");
+
+      if (isTimeout) {
+        console.warn(
+          `[rapidApiClient] RapidAPI request timed out; trying next key (keyIndex=${keyIndex})`
         );
         attempts++;
         keyIndex = (keyIndex + 1) % RAPIDAPI_KEYS.length;

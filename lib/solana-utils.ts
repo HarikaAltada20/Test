@@ -20,20 +20,33 @@ import bs58 from 'bs58';
 // Production: mainnet-beta (set NEXT_PUBLIC_SOLANA_NETWORK=devnet for testing)
 export const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
 
-// RPC endpoint
+// RPC endpoint (client must use NEXT_PUBLIC_* — server-only vars are not available in the browser)
 export const SOLANA_RPC_ENDPOINT =
   process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT ||
   (SOLANA_NETWORK === 'mainnet-beta'
-    ? 'https://api.mainnet-beta.solana.com'
+    ? 'https://solana-rpc.publicnode.com'
     : 'https://api.devnet.solana.com');
 
-// Helius API key for enhanced RPC (optional)
+// Helius API keys (server + optional client copy for wallet pay in browser)
 export const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
+export const NEXT_PUBLIC_HELIUS_API_KEY =
+  process.env.NEXT_PUBLIC_HELIUS_API_KEY;
+
+function heliusRpcUrl(apiKey: string): string {
+  const subdomain = SOLANA_NETWORK === 'devnet' ? 'devnet' : 'mainnet';
+  return `https://${subdomain}.helius-rpc.com/?api-key=${apiKey}`;
+}
 
 // Enhanced RPC endpoint if Helius is configured
 export const getRpcEndpoint = () => {
-  if (HELIUS_API_KEY) {
-    return `https://rpc${SOLANA_NETWORK === 'devnet' ? '-devnet' : ''}.helius.xyz/?api-key=${HELIUS_API_KEY}`;
+  if (NEXT_PUBLIC_HELIUS_API_KEY) {
+    return heliusRpcUrl(NEXT_PUBLIC_HELIUS_API_KEY);
+  }
+  if (typeof window === 'undefined' && HELIUS_API_KEY) {
+    return heliusRpcUrl(HELIUS_API_KEY);
+  }
+  if (typeof window === 'undefined' && process.env.SOLANA_RPC_ENDPOINT) {
+    return process.env.SOLANA_RPC_ENDPOINT;
   }
   return SOLANA_RPC_ENDPOINT;
 };
@@ -59,6 +72,9 @@ export const getTokenMintAddress = (tokenType: 'USDC' | 'USDT'): string => {
     SOLANA_NETWORK === 'mainnet-beta' ? 'mainnet' : 'devnet'
   ];
 };
+
+/** USDC and USDT use 6 decimals on Solana mainnet and devnet. */
+export const getStablecoinDecimals = (_tokenType: 'USDC' | 'USDT'): number => 6;
 
 // Payment request expiration time (24 hours)
 export const PAYMENT_EXPIRATION_HOURS = 24;

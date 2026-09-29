@@ -54,6 +54,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
   const [currentSubscription, setCurrentSubscription] =
     useState<UserSubscription | null>(null);
   const [currentPlan, setCurrentPlan] = useState<SubscriptionPlan | null>(null);
+  const [hasEverHadPaidSubscription, setHasEverHadPaidSubscription] =
+    useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [selectedTargetPlan, setSelectedTargetPlan] =
@@ -113,6 +115,15 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
       // Fetch basic subscription data
       const subscriptionResponse = await fetch("/api/subscriptions/current");
       const subscriptionResult = await subscriptionResponse.json();
+
+      // Lifetime paid-plan flag (may be present even when there is no current subscription)
+      if ("hasEverHadPaidSubscription" in subscriptionResult) {
+        setHasEverHadPaidSubscription(
+          Boolean(subscriptionResult.hasEverHadPaidSubscription)
+        );
+      } else {
+        setHasEverHadPaidSubscription(false);
+      }
 
       if (subscriptionResponse.ok) {
         setCurrentSubscription(subscriptionResult.subscription);
@@ -438,6 +449,12 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
   };
 
   const isEligibleForTrial = (plan: SubscriptionPlan) => {
+    // Once a user has ever had ANY paid subscription (even discounted to $0),
+    // they are no longer eligible for plan-level free trials.
+    if (hasEverHadPaidSubscription) {
+      return false;
+    }
+
     // Only new users (no subscription) or users on free plans are eligible for trials
     if (!isOnFreePlan()) {
       return false;

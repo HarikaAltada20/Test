@@ -1,7 +1,23 @@
-import { createClient } from "@/utils/supabase/server";
+﻿import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import AdminDashboardClient from "./AdminDashboardClient";
+import { resolveContestPoolBudgetCents } from "@/lib/video-platform-campaigns";
+import {
+  countUniqueCreatorsFromSeries,
+  getCachedAdminDashboardData,
+  sumStatusGrowthTotals,
+} from "@/lib/admin-dashboard-graph-cache";
+import {
+  addDaysToDateKey,
+  formatGrowthDayLabel,
+  formatGrowthWeekLabel,
+  getGrowthDayKey,
+  getGrowthMonthKey,
+  getGrowthWeekKey,
+  getGrowthYearKey,
+} from "@/lib/admin-date-range";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -21,134 +37,82 @@ export default async function AdminDashboardPage({
     Promise.resolve({} as Record<string, string | undefined>));
   const contestTypeFilter = (resolvedSearch?.["type"] as string) || "all";
 
-  type GrowthPoint = {
-    label: string;
-    all: number;
-    creators: number;
-    brands: number;
-    admins: number;
-  };
-  type GrowthPointWithDate = GrowthPoint & { date: string };
+  type CountGrowthPoint = { label: string; all: number };
+  type CountGrowthPointWithDate = CountGrowthPoint & { date: string };
 
-  function getStartOfWeek(d: Date) {
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.getFullYear(), d.getMonth(), diff);
-  }
-
-  function buildUserGrowth(
-    users: { created_at: string; user_type: string }[],
-  ): {
-    byDay: GrowthPoint[];
-    byWeek: GrowthPoint[];
-    byMonth: GrowthPoint[];
-    byYear: GrowthPoint[];
-    byDayFull: GrowthPointWithDate[];
+  function buildCountGrowth(records: { created_at: string }[]): {
+    byDay: CountGrowthPoint[];
+    byWeek: CountGrowthPoint[];
+    byMonth: CountGrowthPoint[];
+    byYear: CountGrowthPoint[];
+    byDayFull: CountGrowthPointWithDate[];
   } {
     const now = new Date();
     const twoYearsAgo = new Date(now);
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
 
-    const byDayMap: Record<
-      string,
-      { all: number; creators: number; brands: number; admins: number }
-    > = {};
-    const byWeekMap: Record<
-      string,
-      { all: number; creators: number; brands: number; admins: number }
-    > = {};
-    const byMonthMap: Record<
-      string,
-      { all: number; creators: number; brands: number; admins: number }
-    > = {};
-    const byYearMap: Record<
-      string,
-      { all: number; creators: number; brands: number; admins: number }
-    > = {};
+    const byDayMap: Record<string, number> = {};
+    const byWeekMap: Record<string, number> = {};
+    const byMonthMap: Record<string, number> = {};
+    const byYearMap: Record<string, number> = {};
 
-    for (const u of users) {
-      const d = new Date(u.created_at);
+    for (const record of records) {
+      const d = new Date(record.created_at);
       if (d < twoYearsAgo) continue;
-      const isCreator = u.user_type === "creator";
-      const isBrand = u.user_type === "advertiser";
-      const isAdmin = u.user_type === "admin";
 
-      const dayKey = d.toISOString().slice(0, 10);
-      const weekStart = getStartOfWeek(d);
-      const weekKey = weekStart.toISOString().slice(0, 10);
-      const monthKey = d.toISOString().slice(0, 7);
-      const yearKey = String(d.getFullYear());
+      const dayKey = getGrowthDayKey(d);
+      const weekKey = getGrowthWeekKey(d);
+      const monthKey = getGrowthMonthKey(d);
+      const yearKey = getGrowthYearKey(d);
 
-      if (!byDayMap[dayKey])
-        byDayMap[dayKey] = { all: 0, creators: 0, brands: 0, admins: 0 };
-      byDayMap[dayKey].all++;
-      if (isCreator) byDayMap[dayKey].creators++;
-      if (isBrand) byDayMap[dayKey].brands++;
-      if (isAdmin) byDayMap[dayKey].admins++;
-
-      if (!byWeekMap[weekKey])
-        byWeekMap[weekKey] = { all: 0, creators: 0, brands: 0, admins: 0 };
-      byWeekMap[weekKey].all++;
-      if (isCreator) byWeekMap[weekKey].creators++;
-      if (isBrand) byWeekMap[weekKey].brands++;
-      if (isAdmin) byWeekMap[weekKey].admins++;
-
-      if (!byMonthMap[monthKey])
-        byMonthMap[monthKey] = { all: 0, creators: 0, brands: 0, admins: 0 };
-      byMonthMap[monthKey].all++;
-      if (isCreator) byMonthMap[monthKey].creators++;
-      if (isBrand) byMonthMap[monthKey].brands++;
-      if (isAdmin) byMonthMap[monthKey].admins++;
-
-      if (!byYearMap[yearKey])
-        byYearMap[yearKey] = { all: 0, creators: 0, brands: 0, admins: 0 };
-      byYearMap[yearKey].all++;
-      if (isCreator) byYearMap[yearKey].creators++;
-      if (isBrand) byYearMap[yearKey].brands++;
-      if (isAdmin) byYearMap[yearKey].admins++;
+      byDayMap[dayKey] = (byDayMap[dayKey] || 0) + 1;
+      byWeekMap[weekKey] = (byWeekMap[weekKey] || 0) + 1;
+      byMonthMap[monthKey] = (byMonthMap[monthKey] || 0) + 1;
+      byYearMap[yearKey] = (byYearMap[yearKey] || 0) + 1;
     }
 
-    const toGrowthPoint = (
+    const toCountPoint = (
       key: string,
-      m: Record<string, { all: number; creators: number; brands: number; admins: number }>,
-    ): GrowthPoint => {
-      const v = m[key] || { all: 0, creators: 0, brands: 0, admins: 0 };
-      return { label: key, all: v.all, creators: v.creators, brands: v.brands, admins: v.admins };
-    };
+      m: Record<string, number>,
+    ): CountGrowthPoint => ({
+      label: key,
+      all: m[key] || 0,
+    });
 
-    const byDay: GrowthPoint[] = [];
+    const byDay: CountGrowthPoint[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const pt = toGrowthPoint(key, byDayMap);
-      pt.label = d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = getGrowthDayKey(d);
+      const pt = toCountPoint(key, byDayMap);
+      pt.label = formatGrowthDayLabel(key);
       byDay.push(pt);
     }
 
-    const byWeek: GrowthPoint[] = [];
+    const byWeek: CountGrowthPoint[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now);
-      d.setDate(d.getDate() - i * 7);
-      const weekStart = getStartOfWeek(d);
-      const key = weekStart.toISOString().slice(0, 10);
-      const pt = toGrowthPoint(key, byWeekMap);
-      pt.label = weekStart.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
+      d.setUTCDate(d.getUTCDate() - i * 7);
+      const key = getGrowthWeekKey(d);
+      const pt = toCountPoint(key, byWeekMap);
+      pt.label = formatGrowthWeekLabel(key);
       byWeek.push(pt);
     }
 
-    // Use UTC months so keys match aggregation (created_at is bucketed by UTC month).
-    // Local-date iteration + toISOString() shifts keys in some timezones (e.g. Aug → "2024-07"), so August showed 0.
-    const byMonth: GrowthPoint[] = [];
+    const byMonth: CountGrowthPoint[] = [];
     const monthShort: string[] = [
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
     ];
     for (let i = 11; i >= 0; i--) {
       const y = now.getUTCFullYear();
@@ -158,64 +122,70 @@ export default async function AdminDashboardPage({
       const key = `${year}-${String(month + 1).padStart(2, "0")}`;
       const label = `${monthShort[month]} '${String(year).slice(-2)}`;
       byMonth.push({
-        ...toGrowthPoint(key, byMonthMap),
+        ...toCountPoint(key, byMonthMap),
         label,
       });
     }
 
-    const byYear: GrowthPoint[] = [];
-    const yearStart = now.getFullYear() - 4;
-    for (let y = yearStart; y <= now.getFullYear(); y++) {
+    const byYear: CountGrowthPoint[] = [];
+    const yearStart = now.getUTCFullYear() - 4;
+    for (let y = yearStart; y <= now.getUTCFullYear(); y++) {
       const key = String(y);
-      const v = byYearMap[key] || { all: 0, creators: 0, brands: 0, admins: 0 };
       byYear.push({
         label: key,
-        all: v.all,
-        creators: v.creators,
-        brands: v.brands,
-        admins: v.admins,
+        all: byYearMap[key] || 0,
       });
     }
 
-    // Full daily series for date range filter (every UTC day from 2 years ago to now)
-    const byDayFull: GrowthPointWithDate[] = [];
-    const walk = new Date(twoYearsAgo);
-    walk.setUTCHours(0, 0, 0, 0);
-    const nowEnd = new Date(now);
-    nowEnd.setUTCHours(23, 59, 59, 999);
-    while (walk <= nowEnd) {
-      const key = walk.toISOString().slice(0, 10);
-      const pt = toGrowthPoint(key, byDayMap);
+    const byDayFull: CountGrowthPointWithDate[] = [];
+    let walkKey = getGrowthDayKey(twoYearsAgo);
+    const endKey = getGrowthDayKey(now);
+    while (walkKey <= endKey) {
+      const pt = toCountPoint(walkKey, byDayMap);
       byDayFull.push({
         ...pt,
-        date: key,
-        label: walk.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        }),
+        date: walkKey,
+        label: formatGrowthDayLabel(walkKey),
       });
-      walk.setUTCDate(walk.getUTCDate() + 1);
+      if (walkKey === endKey) break;
+      walkKey = addDaysToDateKey(walkKey);
     }
 
     return { byDay, byWeek, byMonth, byYear, byDayFull };
   }
 
   try {
-    // Fetch platform-wide statistics for admin
-    // Use count-only queries for users to avoid Supabase's default 1000-row limit
+    const dashboardDataPromise = getCachedAdminDashboardData(contestTypeFilter);
+    const adminSupabase = createAdminClient();
+
+    // Fetch all contests in chunks to avoid 1000-row limit
+    let allContests: any[] = [];
+    const CHUNK_CONTEST = 1000;
+    let contestRangeFrom = 0;
+    while (true) {
+      const { data: chunk, error: contestError } = await adminSupabase
+        .from("contests_with_status")
+        .select(
+          "id, contest_type, contest_based_details, created_at, moderation_status, status, post_contest_status, payment_details",
+        )
+        .order("id", { ascending: true })
+        .range(contestRangeFrom, contestRangeFrom + CHUNK_CONTEST - 1);
+
+      if (contestError) {
+        throw new Error(`Failed to fetch contests: ${contestError.message}`);
+      }
+      if (!chunk || chunk.length === 0) break;
+      allContests = allContests.concat(chunk);
+      if (chunk.length < CHUNK_CONTEST) break;
+      contestRangeFrom += CHUNK_CONTEST;
+    }
+
+    // Fetch other platform-wide statistics for admin
     const [
-      { data: allContests },
-      { data: allSubmissions },
       { count: totalUsersCount },
       { count: totalCreatorsCount },
       { count: totalBrandsCount },
     ] = await Promise.all([
-      supabase
-        .from("contests_with_status")
-        .select(
-          "id, contest_type, contest_based_details, created_at, moderation_status, status, post_contest_status, payment_details",
-        ),
-      supabase.from("submissions").select("id, views, status, contest_id"),
       supabase.from("users").select("*", { count: "exact", head: true }),
       supabase
         .from("users")
@@ -226,26 +196,6 @@ export default async function AdminDashboardPage({
         .select("*", { count: "exact", head: true })
         .eq("user_type", "advertiser"),
     ]);
-
-    // Supabase returns max 1000 rows per request; fetch users for growth in chunks so graph shows all users (e.g. 1022+)
-    const twoYearsAgoIso = new Date(
-      Date.now() - 2 * 365 * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    const CHUNK = 1000;
-    let usersForGrowth: { created_at: string; user_type: string }[] = [];
-    let rangeFrom = 0;
-    while (true) {
-      const { data: chunk, error } = await supabase
-        .from("users")
-        .select("created_at, user_type")
-        .gte("created_at", twoYearsAgoIso)
-        .order("created_at", { ascending: true })
-        .range(rangeFrom, rangeFrom + CHUNK - 1);
-      if (error) break;
-      usersForGrowth = usersForGrowth.concat(chunk || []);
-      if (!chunk || chunk.length < CHUNK) break;
-      rangeFrom += CHUNK;
-    }
 
     // Apply optional contest type filter
     const contests = (allContests || []).filter((c: any) =>
@@ -295,72 +245,37 @@ export default async function AdminDashboardPage({
           c.post_contest_status !== "payouts_processed",
       ).length || 0;
 
-    const submissions = allSubmissions || [];
-    const contestIdSet = new Set(contests.map((c: any) => c.id));
-    const filteredSubmissions =
-      contestTypeFilter === "all"
-        ? submissions
-        : submissions.filter((s: any) => contestIdSet.has(s.contest_id));
+    const {
+      userGrowth,
+      submissionGrowth,
+      viewsGrowth,
+      submissionCreatorsByDay,
+    } = await dashboardDataPromise;
 
-    const totalViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) => sum + (sub.views || 0),
-        0,
-      ) || 0;
-    const totalVerifiedViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "verified" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalPaidViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "paid" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalRejectedViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "rejected" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
-    const totalPendingViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum + (sub.status === "pending" ? sub.views || 0 : 0),
-        0,
-      ) || 0;
+    // Derive submission/view KPIs from the same RPC aggregates as the charts
+    // (other_stats-aware views, ~2y window) — no per-row submission scan.
+    const submissionTotals = sumStatusGrowthTotals(submissionGrowth);
+    const viewTotals = sumStatusGrowthTotals(viewsGrowth);
+    const totalSubmissions = submissionTotals.all;
+    const verifiedSubmissions = submissionTotals.verified;
+    const pendingSubmissions = submissionTotals.pending;
+    const rejectedSubmissions = submissionTotals.rejected;
+    const paidSubmissions = submissionTotals.paid;
+    const totalViews = viewTotals.all;
+    const totalVerifiedViews = viewTotals.verified;
+    const totalPaidViews = viewTotals.paid;
+    const totalRejectedViews = viewTotals.rejected;
+    const totalPendingViews = viewTotals.pending;
     const totalExpectedViews =
-      filteredSubmissions.reduce(
-        (sum: number, sub: any) =>
-          sum +
-          (sub.status === "pending" ||
-          sub.status === "verified" ||
-          sub.status === "paid"
-            ? sub.views || 0
-            : 0),
-        0,
-      ) || 0;
-
-    const totalSubmissions = filteredSubmissions.length;
-    const verifiedSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "verified",
-    ).length;
-    const pendingSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "pending",
-    ).length;
-    const rejectedSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "rejected",
-    ).length;
-    const paidSubmissions = filteredSubmissions.filter(
-      (s: any) => s.status === "paid",
-    ).length;
+      viewTotals.pending + viewTotals.verified + viewTotals.paid;
+    const uniqueCreators = countUniqueCreatorsFromSeries(
+      submissionCreatorsByDay,
+    );
     const totalUsers = totalUsersCount ?? 0;
     const totalCreators = totalCreatorsCount ?? 0;
     const totalBrands = totalBrandsCount ?? 0;
 
-    const userGrowth = buildUserGrowth(usersForGrowth || []);
+    const contestGrowth = buildCountGrowth(contests);
 
     const parsePayment = (pd: any) => {
       if (!pd) return null as any;
@@ -416,6 +331,18 @@ export default async function AdminDashboardPage({
       if (c.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
+      if (c.contest_type === "milestone") {
+        return (
+          sum +
+          resolveContestPoolBudgetCents("milestone", details, c.platform)
+        );
+      }
+      if (c.contest_type === "dual_rewards") {
+        return (
+          sum +
+          resolveContestPoolBudgetCents("dual_rewards", details, c.platform)
+        );
+      }
       return sum;
     }, 0);
 
@@ -431,6 +358,18 @@ export default async function AdminDashboardPage({
       }
       if (c.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
         return sum + (details.cpm_contest.total_budget || 0);
+      }
+      if (c.contest_type === "milestone") {
+        return (
+          sum +
+          resolveContestPoolBudgetCents("milestone", details, c.platform)
+        );
+      }
+      if (c.contest_type === "dual_rewards") {
+        return (
+          sum +
+          resolveContestPoolBudgetCents("dual_rewards", details, c.platform)
+        );
       }
       return sum;
     }, 0);
@@ -473,6 +412,14 @@ export default async function AdminDashboardPage({
         details?.cpm_contest?.total_budget
       ) {
         base = details.cpm_contest.total_budget || 0;
+      } else if (c.contest_type === "milestone") {
+        base = resolveContestPoolBudgetCents("milestone", details, c.platform);
+      } else if (c.contest_type === "dual_rewards") {
+        base = resolveContestPoolBudgetCents(
+          "dual_rewards",
+          details,
+          c.platform,
+        );
       }
       const pd = parsePayment(c.payment_details);
       if (pd) {
@@ -510,6 +457,7 @@ export default async function AdminDashboardPage({
         pendingSubmissions={pendingSubmissions}
         rejectedSubmissions={rejectedSubmissions}
         paidSubmissions={paidSubmissions}
+        uniqueCreators={uniqueCreators}
         totalUsers={totalUsers}
         totalCreators={totalCreators}
         totalBrands={totalBrands}
@@ -522,6 +470,10 @@ export default async function AdminDashboardPage({
         totalMoneyInDraftNotPaid={totalMoneyInDraftNotPaid}
         contestTypeFilter={contestTypeFilter}
         userGrowth={userGrowth}
+        submissionGrowth={submissionGrowth}
+        viewsGrowth={viewsGrowth}
+        contestGrowth={contestGrowth}
+        submissionCreatorsByDay={submissionCreatorsByDay}
       />
     );
   } catch (error) {

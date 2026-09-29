@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -86,6 +86,7 @@ import {
 } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner";
+import { toast as appToast } from "@/hooks/use-toast";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
@@ -95,7 +96,6 @@ import { usePagination } from "@/hooks/use-pagination";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
-import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
 import { cn } from "@/lib/utils";
 
 const formatCoins = (coins: number | bigint = 0): string => {
@@ -137,10 +137,7 @@ export default function BillingClientPage({
     initialProfile
   );
   const [userData, setUserData] = useState<UserData | null>(initialUserData);
-  // Note: Cash transactions now handled by pagination hook
-  const [coinTransactions, setCoinTransactionsState] = useState<
-    CoinTransaction[]
-  >(initialCoinTransactions);
+  // Note: Cash transactions and coin transactions now handled by pagination hooks
   const [payoutMethods, setPayoutMethods] =
     useState<PayoutMethod[]>(initialPayoutMethods);
   const [withdrawalRequests, setWithdrawalRequests] = useState<
@@ -154,12 +151,12 @@ export default function BillingClientPage({
   >(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+  const processedTopUpRef = useRef<string | null>(null);
 
   // Modal States
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
-  const [isPhantomModalOpen, setIsPhantomModalOpen] = useState(false);
   const [currentPayoutMethod, setCurrentPayoutMethod] =
     useState<PayoutMethod | null>(null);
   const [activeTabModal, setActiveTabModal] = useState<"cash" | "coins">(
@@ -191,6 +188,12 @@ export default function BillingClientPage({
   const [bankCountry, setBankCountry] = useState("IN");
   const [bankSortCode, setBankSortCode] = useState("");
   const [bankRoutingNumber, setBankRoutingNumber] = useState("");
+  const [pausedPayoutMethodTypes, setPausedPayoutMethodTypes] = useState<
+    string[]
+  >([]);
+  const [enabledPayoutMethodTypes, setEnabledPayoutMethodTypes] = useState<
+    string[]
+  >(["crypto", "upi", "bank_transfer"]);
   // Initialize mode state with proper detection to prevent flash
   const [mode, setMode] = useState<"light" | "dark">(() => {
     // Check if we're in browser environment
@@ -348,27 +351,19 @@ export default function BillingClientPage({
   }, [mode]);
 
   // Pagination for coin transactions (client-side)
-  const [coinPage, setCoinPage] = useState(1);
-  const [coinLimit, setCoinLimit] = useState(25);
-
-  const totalCoinTransactions = coinTransactions.length;
-  const coinTotalPages =
-    totalCoinTransactions > 0
-      ? Math.ceil(totalCoinTransactions / coinLimit)
-      : 0;
-  const coinHasNextPage = coinPage < coinTotalPages;
-  const coinHasPreviousPage = coinPage > 1;
-
-  const paginatedCoinTransactions = useMemo(
-    () =>
-      coinTransactions.slice((coinPage - 1) * coinLimit, coinPage * coinLimit),
-    [coinTransactions, coinPage, coinLimit]
-  );
-
-  // Reset coin page when data changes
-  useEffect(() => {
-    setCoinPage(1);
-  }, [totalCoinTransactions]);
+  // Pagination for coin transactions
+  const {
+    data: paginatedCoinTransactions,
+    pagination: coinPagination,
+    loading: coinTransactionsLoading,
+    error: coinTransactionsError,
+    setPage: setCoinPage,
+    setLimit: setCoinLimit,
+    refresh: refreshCoinTransactions,
+  } = usePagination<CoinTransaction>({
+    apiEndpoint: "/api/billing/coin-transactions",
+    initialLimit: 25,
+  });
 
   // Pagination for cash transactions
   const {
@@ -425,8 +420,7 @@ export default function BillingClientPage({
     setAuthUser(initialAuthUser);
     setProfile(initialProfile);
     setUserData(initialUserData);
-    // Note: Cash transactions now handled by pagination hook
-    setCoinTransactionsState(initialCoinTransactions);
+    // Note: Cash and coin transactions now handled by pagination hooks
     setPayoutMethods(initialPayoutMethods);
     setWithdrawalRequests(
       initialWithdrawalRequests.map((wr) => ({
@@ -446,6 +440,42 @@ export default function BillingClientPage({
     initialWithdrawalRequests,
     router,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payout-method-settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
+        setEnabledPayoutMethodTypes(
+          data.enabledMethodTypes || ["crypto", "upi", "bank_transfer"]
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPausedPayoutMethodTypes([]);
+          setEnabledPayoutMethodTypes([
+            "crypto",
+            "upi",
+            "bank_transfer",
+          ]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const PAYOUT_METHOD_LABELS: Record<string, string> = {
+    crypto: "Crypto",
+    upi: "UPI",
+    bank_transfer: "Bank transfer",
+    phantom: "Phantom",
+  };
+  const availablePayoutMethodsForWithdraw = payoutMethods.filter((m) =>
+    enabledPayoutMethodTypes.includes(m.method_type)
+  );
 
   // Reset form function
   const resetPayoutForm = () => {
@@ -883,6 +913,18 @@ export default function BillingClientPage({
     refreshCashTransactions();
   };
 
+  const handleWalletTopUpSuccess = (
+    amountInCents: number,
+    newBalanceInCents: number,
+  ) => {
+    appToast({
+      variant: "success",
+      title: "Wallet topped up",
+      description: `${formatCurrencyFromCents(amountInCents)} has been added to your cash balance and is ready for campaigns.`,
+    });
+    handleBalanceUpdate(newBalanceInCents);
+  };
+
   const handleCancelWithdrawal = async (
     requestId: string,
     amountToRestore: number,
@@ -974,10 +1016,86 @@ export default function BillingClientPage({
     }
   };
 
-  // Handle checkout success - with protection against infinite loops
+  // Handle wallet top-up return from Stripe Checkout
+  useEffect(() => {
+    const topup = searchParams.get("topup");
+    const sessionId = searchParams.get("session_id");
+
+    if (topup === "cancelled") {
+      const dedupeKey = "topup-cancelled";
+      if (processedTopUpRef.current === dedupeKey) return;
+      processedTopUpRef.current = dedupeKey;
+
+      appToast({
+        variant: "default",
+        title: "Top-up cancelled",
+        description: "No charge was made.",
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+
+    if (topup === "success" && sessionId) {
+      if (processedTopUpRef.current === sessionId) return;
+      processedTopUpRef.current = sessionId;
+
+      window.history.replaceState({}, "", window.location.pathname);
+
+      const refreshAfterTopUp = async () => {
+        try {
+          let amountInCents: number | null = null;
+
+          try {
+            const sessionResponse = await fetch(
+              `/api/payments/deposit/session?session_id=${encodeURIComponent(sessionId)}`,
+            );
+            const sessionData = await sessionResponse.json();
+            if (sessionResponse.ok && sessionData.amountInCents != null) {
+              amountInCents = sessionData.amountInCents;
+            }
+          } catch (sessionError) {
+            console.error("Error fetching top-up session details:", sessionError);
+          }
+
+          const formattedAmount =
+            amountInCents != null
+              ? formatCurrencyFromCents(amountInCents)
+              : null;
+
+          appToast({
+            variant: "success",
+            title: "Wallet topped up",
+            description: formattedAmount
+              ? `${formattedAmount} has been added to your cash balance and is ready for campaigns.`
+              : "Your top-up was successful. Your balance will update shortly.",
+          });
+
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const response = await fetch("/api/payments/balance");
+          const data = await response.json();
+          if (data.balance !== undefined) {
+            handleBalanceUpdate(data.balance);
+          }
+          refreshCashTransactions();
+        } catch (error) {
+          console.error("Error refreshing balance after top-up:", error);
+          window.location.reload();
+        }
+      };
+
+      refreshAfterTopUp();
+    }
+  }, [searchParams]);
+
+  // Handle subscription checkout success - with protection against infinite loops
   useEffect(() => {
     const success = searchParams.get("success");
+    const topup = searchParams.get("topup");
     const sessionId = searchParams.get("session_id");
+
+    if (topup) {
+      return;
+    }
 
     if (success === "true" && sessionId && !hasProcessedSuccess) {
       console.log("🎉 Payment successful, refreshing subscription data...");
@@ -1127,11 +1245,11 @@ export default function BillingClientPage({
             >
               <CardContent className="p-4 flex justify-between">
                 <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Contests Run</p>
+                  <p className="text-lg font-medium">Campaigns Run</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_run}
                   </p>
-                  <p className="text-md">Total contests created</p>
+                  <p className="text-md">Total campaigns created</p>
                 </div>
                 <div
                   className={cn(
@@ -1673,7 +1791,13 @@ export default function BillingClientPage({
             <CardHeader>
               <CardTitle>Coin Transaction History</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {coinTransactionsError && (
+                <div className="text-center text-red-500 p-4">
+                  Error loading transactions: {coinTransactionsError}
+                </div>
+              )}
+
               <Table>
                 <TableHeader
                   className={cn(
@@ -1692,7 +1816,16 @@ export default function BillingClientPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {coinTransactions.length === 0 ? (
+                  {coinTransactionsLoading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center text-muted-foreground h-32"
+                      >
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : paginatedCoinTransactions.length === 0 ? (
                     <TableRow>
                       <TableCell
                         colSpan={5}
@@ -1766,23 +1899,19 @@ export default function BillingClientPage({
                 </TableBody>
               </Table>
 
-              {coinTotalPages > 0 && (
-                <div className="mt-4">
-                  <PaginationControls
-                    page={coinPage}
-                    limit={coinLimit}
-                    total={totalCoinTransactions}
-                    totalPages={coinTotalPages}
-                    hasNextPage={coinHasNextPage}
-                    hasPreviousPage={coinHasPreviousPage}
-                    onPageChange={setCoinPage}
-                    onLimitChange={(limit) => {
-                      setCoinLimit(limit);
-                      setCoinPage(1);
-                    }}
-                    isDark={isDark}
-                  />
-                </div>
+              {!coinTransactionsLoading && coinPagination.totalPages > 0 && (
+                <PaginationControls
+                  page={coinPagination.page}
+                  limit={coinPagination.limit}
+                  total={coinPagination.total}
+                  totalPages={coinPagination.totalPages}
+                  hasNextPage={coinPagination.hasNextPage}
+                  hasPreviousPage={coinPagination.hasPreviousPage}
+                  onPageChange={setCoinPage}
+                  onLimitChange={setCoinLimit}
+                  loading={coinTransactionsLoading}
+                  isDark={isDark}
+                />
               )}
             </CardContent>
           </div>
@@ -2006,7 +2135,7 @@ export default function BillingClientPage({
               className="w-full"
             >
               {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-4 gap-2">
+                <TabsList className="grid w-full grid-cols-3 gap-2">
                   <TabsTrigger
                     value="upi"
                     className={cn(
@@ -2040,20 +2169,9 @@ export default function BillingClientPage({
                   >
                     Crypto
                   </TabsTrigger>
-                  <TabsTrigger
-                    value="phantom"
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                  >
-                    Phantom Wallet
-                  </TabsTrigger>
                 </TabsList>
               ) : (
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-1">
                   <TabsTrigger
                     value="crypto"
                     className={cn(
@@ -2064,17 +2182,6 @@ export default function BillingClientPage({
                     )}
                   >
                     Crypto
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="phantom"
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                  >
-                    Phantom Wallet
                   </TabsTrigger>
                 </TabsList>
               )}
@@ -2471,35 +2578,6 @@ export default function BillingClientPage({
                   as per Indian law.
                 </p>
               </TabsContent>
-
-              <TabsContent value="phantom" className="space-y-4">
-                <div className="text-center py-8">
-                  <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-                  <h3
-                    className={cn(
-                      "text-lg font-semibold mb-2",
-                      isDark ? "text-white" : "text-black"
-                    )}
-                  >
-                    Phantom Wallet
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Add your Phantom Wallet to receive USDC or USDT payouts via
-                    Solana network directly to your wallet.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      // Close current modal and open Phantom form
-                      setIsPayoutModalOpen(false);
-                      setIsPhantomModalOpen(true);
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700"
-                  >
-                    <Wallet className="mr-2 h-4 w-4" />
-                    Add Phantom Wallet
-                  </Button>
-                </div>
-              </TabsContent>
             </Tabs>
           </div>
           <DialogFooter>
@@ -2633,7 +2711,7 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[425px] w-[95vw] w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[425px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
               style={{
@@ -2761,15 +2839,26 @@ export default function BillingClientPage({
             >
               <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
               <Select
-                value={selectedWithdrawMethodId || ""}
+                value={
+                  selectedWithdrawMethodId &&
+                  availablePayoutMethodsForWithdraw.some(
+                    (m) => m.id === selectedWithdrawMethodId
+                  )
+                    ? selectedWithdrawMethodId
+                    : ""
+                }
                 onValueChange={setSelectedWithdrawMethodId}
-                disabled={isLoading || payoutMethods.length === 0}
+                disabled={
+                  isLoading ||
+                  payoutMethods.length === 0 ||
+                  availablePayoutMethodsForWithdraw.length === 0
+                }
               >
                 <SelectTrigger id="payoutMethodSelect">
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2780,7 +2869,7 @@ export default function BillingClientPage({
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => !m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2794,11 +2883,50 @@ export default function BillingClientPage({
                 </SelectContent>
               </Select>
             </div>
+            {pausedPayoutMethodTypes.length > 0 && (
+              <div
+                className={cn(
+                  "rounded-lg border p-3 text-sm",
+                  isDark
+                    ? "border-amber-800/50 bg-amber-950/30 text-amber-200"
+                    : "border-amber-200 bg-amber-50 text-amber-900"
+                )}
+              >
+                <p className="font-medium">
+                  Some payment methods are temporarily unavailable
+                </p>
+                <p className="mt-1">
+                  The following payment methods are not available for withdrawals
+                  right now:{" "}
+                  <span className="font-medium">
+                    {pausedPayoutMethodTypes
+                      .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                      .join(", ")}
+                  </span>
+                  . Please use one of the available methods
+                  {enabledPayoutMethodTypes.length > 0
+                    ? ` (e.g. ${enabledPayoutMethodTypes
+                        .slice(0, 3)
+                        .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                        .join(", ")})`
+                    : ""}
+                  .
+                </p>
+              </div>
+            )}
             {payoutMethods.length === 0 && (
               <p className="text-sm text-red-500">
                 You have no payout methods. Please add one first.
               </p>
             )}
+            {payoutMethods.length > 0 &&
+              availablePayoutMethodsForWithdraw.length === 0 && (
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  None of your payout methods are currently available for
+                  withdrawal. Please try again later or add another payment
+                  method.
+                </p>
+              )}
           </div>
           <DialogFooter>
             <Button
@@ -2819,7 +2947,8 @@ export default function BillingClientPage({
                     withdrawAmountCoins > (userData.coins || 0) ||
                     withdrawAmountCoins <= 0)) ||
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
-                (activeTabModal === "cash" && payoutMethods.length === 0)
+                (activeTabModal === "cash" &&
+                  availablePayoutMethodsForWithdraw.length === 0)
               }
             >
               Request Withdrawal
@@ -2848,7 +2977,12 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle
               className={cn(
@@ -2857,31 +2991,22 @@ export default function BillingClientPage({
               )}
             >
               Top Up Your Wallet
-              {isProcessingPayment && (
-                <span className="text-sm text-orange-600 font-normal">
-                  (Processing - Please wait)
-                </span>
-              )}
             </DialogTitle>
             <DialogDescription
               className={cn(
-                "flex flex-col gap-2",
-                isDark ? "text-white" : "text-gray-800"
+                "text-sm leading-relaxed",
+                isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
-              Add funds to your wallet balance for contest payments. Your wallet
-              balance can be used for all contest fees.
-              {isProcessingPayment && (
-                <span className="block mt-2 text-orange-600 text-sm">
-                  ⚠️ Please don't close this window while payment is processing
-                </span>
-              )}
+              Add funds for campaign payments. Pay via Stripe (debit, credit,
+              UPI, and more) or top up with Solana USDC/USDT.
             </DialogDescription>
           </DialogHeader>
           <div className="pt-4">
             <WalletTopUp
               currentBalance={profile?.available_deposit_balance || 0}
               onBalanceUpdate={handleBalanceUpdate}
+              onTopUpSuccess={handleWalletTopUpSuccess}
               onClose={() => setIsTopUpModalOpen(false)}
               onTransactionUpdate={() => {
                 // Refresh paginated transaction history
@@ -2893,56 +3018,6 @@ export default function BillingClientPage({
               onProcessingChange={setIsProcessingPayment}
             />
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Phantom Wallet Modal */}
-      <Dialog
-        open={isPhantomModalOpen}
-        onOpenChange={setIsPhantomModalOpen}
-        isdark={isDark}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogTitle
-            className={cn("sr-only", isDark ? "text-white" : "text-gray-800")}
-          >
-            Add Phantom Wallet
-          </DialogTitle>
-          <PhantomPayoutForm
-            onSave={async (details) => {
-              // Save Phantom Wallet payout method
-              setIsLoading(true);
-              try {
-                const { error } = await supabase.from("payout_methods").insert({
-                  user_id: authUser.id,
-                  method_type: "phantom",
-                  details,
-                  is_default: payoutMethods.length === 0, // Set as default if first method
-                  friendly_name: details.friendly_name || "Phantom Wallet",
-                });
-
-                if (error) throw error;
-
-                // Refresh payout methods
-                const { data: newMethods } = await supabase
-                  .from("payout_methods")
-                  .select("*")
-                  .eq("user_id", authUser.id)
-                  .order("created_at", { ascending: false });
-
-                setPayoutMethods(newMethods || []);
-                setIsPhantomModalOpen(false);
-                toast.success("Phantom Wallet added successfully!");
-              } catch (error: any) {
-                toast.error(error.message || "Failed to add Phantom Wallet");
-              } finally {
-                setIsLoading(false);
-              }
-            }}
-            onCancel={() => setIsPhantomModalOpen(false)}
-            isLoading={isLoading}
-            isDark={isDark}
-          />
         </DialogContent>
       </Dialog>
     </div>

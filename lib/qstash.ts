@@ -9,9 +9,155 @@
 
 import { Client, Receiver } from "@upstash/qstash";
 
+function sanitizeEnvValue(value: string | undefined): string {
+  if (!value?.trim()) return "";
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .split(/\s+#/)[0]
+    .trim()
+    .replace(/["']$/g, "");
+}
+
 function getBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
-  return url.replace(/\/$/, "");
+  const url = sanitizeEnvValue(process.env.NEXT_PUBLIC_APP_URL);
+  return (url || "http://localhost:3000").replace(/\/$/, "");
+}
+
+function getCronSecret(): string {
+  return sanitizeEnvValue(process.env.CRON_SECRET);
+}
+
+/**
+ * Authorize cron endpoints when no QStash signature is present.
+ * Production requires Bearer CRON_SECRET; local dev may run without it.
+ * Does not trust forgeable x-vercel-cron alone (use CRON_SECRET on Vercel Cron).
+ */
+export function authorizeCronBearerFallback(request: Request): boolean {
+  const cronSecret = getCronSecret();
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) {
+    return auth === `Bearer ${cronSecret}`;
+  }
+  return process.env.NODE_ENV === "development";
+}
+
+function getQStashAuthHeaders(): Record<string, string> | undefined {
+  const cronSecret = getCronSecret();
+  if (!cronSecret) return undefined;
+  return { Authorization: `Bearer ${cronSecret}` };
+}
+
+function getForwardedOrigin(request: Request): string | null {
+  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    request.headers.get("host")?.split(",")[0]?.trim();
+  if (!proto || !host) return null;
+  return `${proto}://${host}`;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of values) {
+    if (!v) continue;
+    const s = v.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+async function verifyQStashAgainstUrls(
+  receiver: Receiver,
+  signature: string,
+  rawBody: string,
+  urls: string[],
+): Promise<boolean> {
+  const bodies = uniqueStrings([
+    rawBody,
+    rawBody.trim(),
+    rawBody.trim() === "" ? "{}" : null,
+    rawBody.trim() === "{}" ? "" : null,
+  ]);
+
+  for (const url of urls) {
+    for (const body of bodies) {
+      try {
+        await receiver.verify({ signature, body, url });
+        return true;
+      } catch {
+        // try next body/url
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Public HTTPS origin for callbacks (QStash). Prefer the incoming request
+ * (Cloudflare tunnel / proxy) over NEXT_PUBLIC_APP_URL so the URL matches
+ * what the browser is actually using.
+ */
+export function resolvePublicBaseUrl(request?: Request): string {
+  if (request) {
+    const forwarded = getForwardedOrigin(request);
+    if (forwarded && !isLoopbackUrl(forwarded)) {
+      return forwarded.replace(/\/$/, "");
+    }
+    try {
+      const origin = new URL(request.url).origin;
+      if (!isLoopbackUrl(origin)) {
+        return origin.replace(/\/$/, "");
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return getBaseUrl().replace(/\/$/, "");
+}
+
+/**
+ * Base URL QStash will POST to. Uses NEXT_PUBLIC_APP_URL, then the incoming request origin.
+ */
+export function getQStashPublishBaseUrl(request?: Request): string {
+  const fromEnv = getBaseUrl().replace(/\/$/, "");
+  if (!isLoopbackUrl(fromEnv)) {
+    return fromEnv;
+  }
+
+  return resolvePublicBaseUrl(request);
+}
+
+export function resolveQstashBaseUrl(
+  explicit?: string,
+  request?: Request,
+): string {
+  if (explicit) {
+    const normalized = explicit.replace(/\/$/, "");
+    if (!isLoopbackUrl(normalized)) {
+      return normalized;
+    }
+  }
+  return getQStashPublishBaseUrl(request).replace(/\/$/, "");
+}
+
+/**
+ * Prefer the incoming request origin when running on localhost, even if
+ * NEXT_PUBLIC_APP_URL points at production. Used for direct delivery processor
+ * triggers during local development.
+ */
+export function resolveLocalAwareBaseUrl(request?: Request): string {
+  if (request) {
+    try {
+      return new URL(request.url).origin.replace(/\/$/, "");
+    } catch {
+      // fall through
+    }
+  }
+  return getQStashPublishBaseUrl(request);
 }
 
 /** QStash cannot deliver to localhost; detect loopback so callers can fall back to direct POST. */
@@ -49,7 +195,7 @@ function getQStashClient(): Client | null {
  * Call after enqueueing a job (or after enqueueing the next batch in the processor).
  */
 export async function triggerProcessMetricsQueue(
-  baseUrl?: string
+  baseUrl?: string,
 ): Promise<{ messageId?: string; error?: string }> {
   const client = getQStashClient();
   if (!client) {
@@ -75,11 +221,45 @@ export async function triggerProcessMetricsQueue(
 
 /**
  * Canonical URL for the process-metrics-queue endpoint (used when publishing and when verifying).
-
- * public URL, so we verify with this canonical URL so signature verification succeeds.
+ * Public URL, so we verify with this canonical URL so signature verification succeeds.
  */
 function getProcessMetricsQueueUrl(): string {
   return `${getBaseUrl()}/api/cron/process-metrics-queue`;
+}
+
+/** Canonical URL for the Instagram insights queue processor. */
+function getProcessInstagramInsightsQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-instagram-insights-queue`;
+}
+
+/** Canonical URL for the TikTok metrics queue processor. */
+function getProcessTikTokMetricsQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-tiktok-metrics-queue`;
+}
+
+/** Canonical URL for the YouTube metrics queue processor. */
+function getProcessYouTubeMetricsQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-youtube-metrics-queue`;
+}
+
+/** Canonical URL for the token refresh queue processor. */
+function getProcessTokenRefreshQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-token-refresh-queue`;
+}
+
+/** Canonical URL for the Instagram/YouTube video download queue processor. */
+function getProcessVideoDownloadQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-video-download-queue`;
+}
+
+/** Canonical URL for the bulk submission moderation queue processor. */
+function getProcessBulkVerifyQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-bulk-verify-queue`;
+}
+
+/** Canonical URL for the bulk payment queue processor. */
+function getProcessBulkPaymentQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-bulk-payment-queue`;
 }
 
 /**
@@ -89,7 +269,7 @@ function getProcessMetricsQueueUrl(): string {
  */
 export async function verifyQStashSignature(
   request: Request,
-  rawBody: string
+  rawBody: string,
 ): Promise<boolean> {
   const signature = request.headers.get("Upstash-Signature");
   if (!signature || typeof signature !== "string") return false;
@@ -101,14 +281,25 @@ export async function verifyQStashSignature(
       currentSigningKey: currentKey,
       nextSigningKey: nextKey,
     });
-    // Use canonical URL so verification works when request.url is localhost (e.g. ngrok → localhost)
-    const url = getProcessMetricsQueueUrl();
-    await receiver.verify({
-      signature,
-      body: rawBody,
-      url,
-    });
-    return true;
+    // Prefer verifying against the *public* URL QStash called.
+    // This supports Cloudflare Tunnel / proxies where request.url and NEXT_PUBLIC_APP_URL can differ.
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessMetricsQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-metrics-queue`
+        : null,
+      requestUrl ? `${requestUrl.origin}/api/cron/process-metrics-queue` : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
   } catch {
     return false;
   }
@@ -120,16 +311,1186 @@ export async function verifyQStashSignature(
  */
 export async function authorizeProcessMetricsQueue(
   request: Request,
-  rawBody: string
+  rawBody: string,
 ): Promise<boolean> {
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignature(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+/**
+ * Trigger the process-instagram-insights-queue endpoint via QStash.
+ */
+export async function triggerProcessInstagramInsightsQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-instagram-insights-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessInstagramInsightsQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-tiktok-metrics-queue endpoint via QStash.
+ */
+export async function triggerProcessTikTokMetricsQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-tiktok-metrics-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessTikTokMetricsQueue failed:", message);
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-youtube-metrics-queue endpoint via QStash.
+ */
+export async function triggerProcessYouTubeMetricsQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-youtube-metrics-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessYouTubeMetricsQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-bulk-verify-queue endpoint via QStash.
+ */
+export async function triggerProcessBulkVerifyQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-bulk-verify-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessBulkVerifyQueue failed:", message);
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-bulk-payment-queue endpoint via QStash.
+ */
+export async function triggerProcessBulkPaymentQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-bulk-payment-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessBulkPaymentQueue failed:", message);
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-token-refresh-queue endpoint via QStash.
+ */
+export async function triggerProcessTokenRefreshQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-token-refresh-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessTokenRefreshQueue failed:", message);
+    return { error: message };
+  }
+}
+
+/**
+ * Trigger the process-video-download-queue endpoint via QStash.
+ * Optional delay spaces IG/YT jobs so RapidAPI / Instagram are less likely to throttle.
+ */
+export async function triggerProcessVideoDownloadQueue(
+  baseUrl?: string,
+  options?: { delaySeconds?: number },
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-video-download-queue`;
+  if (isLoopbackUrl(url)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+  try {
+    const delaySeconds = Math.max(0, Math.floor(options?.delaySeconds ?? 0));
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+      ...(delaySeconds > 0 ? { delay: delaySeconds } : {}),
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerProcessVideoDownloadQueue failed:", message);
+    return { error: message };
+  }
+}
+
+function getProcessAdminNotificationDeliveryQueueUrl(): string {
+  return `${getQStashPublishBaseUrl()}/api/cron/process-admin-notification-delivery-queue`;
+}
+
+function getProcessAdminEmailDeliveryQueueUrl(): string {
+  return `${getQStashPublishBaseUrl()}/api/cron/process-admin-email-delivery-queue`;
+}
+
+/**
+ * Trigger the admin notification delivery queue processor via QStash.
+ */
+/**
+ * Trigger the admin email delivery queue processor via QStash.
+ */
+export async function triggerProcessAdminEmailDeliveryQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getQStashPublishBaseUrl()}/api/cron/process-admin-email-delivery-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+      headers: getQStashAuthHeaders(),
+    });
+    const messageId = (res as { messageId?: string }).messageId;
+    console.log("[qstash] triggered admin email delivery queue", {
+      messageId,
+      publishUrl: url,
+    });
+    return { messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessAdminEmailDeliveryQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+export async function triggerProcessAdminEmailDeliveryQueueDelayed(
+  baseUrl: string | undefined,
+  campaignId: string,
+  retryAt: Date,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/process-admin-email-delivery-queue`;
+  if (isLoopbackUrl(url)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+
+  const msUntil = retryAt.getTime() - Date.now();
+  const body = { campaignId };
+  const deduplicationId = `admin-email-delivery-${campaignId}-${retryAt.getTime()}`;
+
+  const publishOptions = {
+    url,
+    body,
+    method: "POST" as const,
+    deduplicationId,
+    retries: 5,
+    label: "admin-email-delivery-deferred",
+    headers: getQStashAuthHeaders(),
+  };
+
+  try {
+    const res =
+      msUntil <= 0
+        ? await client.publishJSON(publishOptions)
+        : await client.publishJSON({
+            ...publishOptions,
+            notBefore: Math.floor(retryAt.getTime() / 1000),
+          });
+    const messageId = (res as { messageId?: string }).messageId;
+    console.log("[qstash] scheduled admin email delivery", {
+      campaignId,
+      messageId,
+      publishUrl: url,
+      notBefore:
+        msUntil > 0 ? new Date(retryAt.getTime()).toISOString() : "immediate",
+    });
+    return { messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessAdminEmailDeliveryQueueDelayed failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+export async function triggerProcessAdminNotificationDeliveryQueue(
+  baseUrl?: string,
+  campaignId?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-admin-notification-delivery-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const body = campaignId ? { campaignId } : {};
+    const res = await client.publishJSON({
+      url,
+      body,
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessAdminNotificationDeliveryQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+async function verifyQStashSignatureAdminNotificationDelivery(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessAdminNotificationDeliveryQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-admin-notification-delivery-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-admin-notification-delivery-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+async function verifyQStashSignatureAdminEmailDelivery(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = sanitizeEnvValue(process.env.QSTASH_CURRENT_SIGNING_KEY);
+  const nextKey = sanitizeEnvValue(process.env.QSTASH_NEXT_SIGNING_KEY);
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessAdminEmailDeliveryQueueUrl(),
+      `${getBaseUrl()}/api/cron/process-admin-email-delivery-queue`,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-admin-email-delivery-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-admin-email-delivery-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-admin-notification-delivery-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessAdminNotificationDeliveryQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureAdminNotificationDelivery(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) return auth === `Bearer ${cronSecret}`;
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Authorize process-admin-email-delivery-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessAdminEmailDeliveryQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const cronSecret = getCronSecret();
+  const auth = request.headers.get("Authorization");
+  if (cronSecret && auth === `Bearer ${cronSecret}`) {
+    return true;
+  }
+
+  if (request.headers.get("Upstash-Signature")) {
+    const verified = await verifyQStashSignatureAdminEmailDelivery(
+      request,
+      rawBody,
+    );
+    if (!verified) {
+      console.warn("[qstash] admin email delivery signature rejected", {
+        forwardedOrigin: getForwardedOrigin(request),
+        bodyLength: rawBody.length,
+      });
+    }
+    return verified;
+  }
+
+  if (cronSecret) return false;
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Verify QStash signature for the Instagram processor URL (for use when request is to that endpoint).
+ */
+async function verifyQStashSignatureInstagram(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessInstagramInsightsQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-instagram-insights-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-instagram-insights-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-instagram-insights-queue: QStash signature (Instagram URL) or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessInstagramInsightsQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureInstagram(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+/**
+ * Verify QStash signature for the TikTok processor URL.
+ */
+export async function verifyQStashSignatureTikTok(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessTikTokMetricsQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-tiktok-metrics-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-tiktok-metrics-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-tiktok-metrics-queue: QStash signature (TikTok URL) or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessTikTokMetricsQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureTikTok(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+async function verifyQStashSignatureYouTube(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessYouTubeMetricsQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-youtube-metrics-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-youtube-metrics-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-youtube-metrics-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessYouTubeMetricsQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureYouTube(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+async function verifyQStashSignatureBulkVerify(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessBulkVerifyQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-bulk-verify-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-bulk-verify-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-bulk-verify-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessBulkVerifyQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureBulkVerify(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+async function verifyQStashSignatureBulkPayment(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessBulkPaymentQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-bulk-payment-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-bulk-payment-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-bulk-payment-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessBulkPaymentQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureBulkPayment(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+/**
+ * Authorize process-token-refresh-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessTokenRefreshQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (signature) {
+    const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+    const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+    if (!currentKey && !nextKey) return false;
+    try {
+      const receiver = new Receiver({
+        currentSigningKey: currentKey,
+        nextSigningKey: nextKey,
+      });
+      const forwardedOrigin = getForwardedOrigin(request);
+      const requestUrl = (() => {
+        try {
+          return new URL(request.url);
+        } catch {
+          return null;
+        }
+      })();
+      const candidates = uniqueStrings([
+        getProcessTokenRefreshQueueUrl(),
+        forwardedOrigin
+          ? `${forwardedOrigin}/api/cron/process-token-refresh-queue`
+          : null,
+        requestUrl
+          ? `${requestUrl.origin}/api/cron/process-token-refresh-queue`
+          : null,
+        requestUrl?.toString() ?? null,
+      ]);
+      return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+    } catch {
+      return false;
+    }
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+async function verifyQStashSignatureVideoDownload(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessVideoDownloadQueueUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-video-download-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-video-download-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/** Authorize process-video-download-queue: QStash signature or Bearer CRON_SECRET. */
+export async function authorizeProcessVideoDownloadQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureVideoDownload(request, rawBody);
+  }
+  return authorizeCronBearerFallback(request);
+}
+
+/** Canonical URL for the scheduled admin notifications processor. */
+export function getProcessScheduledNotificationsUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-scheduled-notifications`;
+}
+
+async function verifyQStashSignatureScheduledNotifications(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      requestUrl?.toString() ?? null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-scheduled-notifications`
+        : null,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-scheduled-notifications`
+        : null,
+      getProcessScheduledNotificationsUrl(),
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-scheduled-notifications: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessScheduledNotifications(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureScheduledNotifications(request, rawBody);
   }
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");
   if (cronSecret) {
     return auth === `Bearer ${cronSecret}`;
   }
-  // No CRON_SECRET and no QStash: allow for local dev (same as current behavior when secret unset)
-  return true;
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Schedule a one-shot QStash delivery for an admin notification campaign at scheduled_at.
+ */
+export async function scheduleAdminNotificationCampaign(
+  campaignId: string,
+  scheduledAt: Date,
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string; publishUrl?: string }> {
+  const client = getQStashClient();
+  if (!client) {
+    return { error: "QStash not configured" };
+  }
+  const origin = (baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "");
+  const publishUrl = `${origin}/api/cron/process-scheduled-notifications`;
+  if (isLoopbackUrl(publishUrl)) {
+    return {
+      error:
+        "Loopback URL; set NEXT_PUBLIC_APP_URL to your public tunnel",
+      publishUrl,
+    };
+  }
+
+  const deduplicationId = `admin-notification-campaign-${campaignId}-${scheduledAt.getTime()}`;
+  const msUntil = scheduledAt.getTime() - Date.now();
+  const body = { campaignId };
+
+  try {
+    let res: { messageId?: string };
+    if (msUntil <= 0) {
+      res = (await client.publishJSON({
+        url: publishUrl,
+        body,
+        method: "POST",
+        deduplicationId,
+        retries: 5,
+        label: "admin-notification-scheduled",
+      })) as { messageId?: string };
+    } else {
+      res = (await client.publishJSON({
+        url: publishUrl,
+        body,
+        method: "POST",
+        notBefore: Math.floor(scheduledAt.getTime() / 1000),
+        deduplicationId,
+        retries: 5,
+        label: "admin-notification-scheduled",
+      })) as { messageId?: string };
+    }
+    console.log("[qstash] scheduled admin notification", {
+      campaignId,
+      messageId: res.messageId,
+      publishUrl,
+      notBefore:
+        msUntil > 0
+          ? new Date(scheduledAt.getTime()).toISOString()
+          : "immediate",
+    });
+    return {
+      messageId: res.messageId,
+      publishUrl,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] scheduleAdminNotificationCampaign failed:",
+      message,
+      { campaignId, publishUrl },
+    );
+    return { error: message, publishUrl };
+  }
+}
+
+/** Cancel a pending QStash message when an admin cancels a scheduled campaign. */
+export async function cancelAdminNotificationQStashSchedule(
+  messageId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const client = getQStashClient();
+  if (!client) {
+    return { ok: false, error: "QStash not configured" };
+  }
+  try {
+    await client.messages.delete(messageId);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[qstash] cancelAdminNotificationQStashSchedule:", message);
+    return { ok: false, error: message };
+  }
+}
+
+function getProcessWarmUpSendsUrl(): string {
+  return `${getQStashPublishBaseUrl()}/api/cron/process-warm-up-sends`;
+}
+
+async function verifyQStashSignatureWarmUp(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = sanitizeEnvValue(process.env.QSTASH_CURRENT_SIGNING_KEY);
+  const nextKey = sanitizeEnvValue(process.env.QSTASH_NEXT_SIGNING_KEY);
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessWarmUpSendsUrl(),
+      `${getBaseUrl()}/api/cron/process-warm-up-sends`,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-warm-up-sends`
+        : null,
+      requestUrl ? `${requestUrl.origin}/api/cron/process-warm-up-sends` : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-warm-up-sends: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessWarmUpSends(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const cronSecret = getCronSecret();
+  const auth = request.headers.get("Authorization");
+  if (cronSecret && auth === `Bearer ${cronSecret}`) {
+    return true;
+  }
+
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureWarmUp(request, rawBody);
+  }
+
+  // Vercel Cron (legacy) or local dev
+  if (request.headers.get("x-vercel-cron")) return true;
+  if (cronSecret) return false;
+  return process.env.NODE_ENV === "development";
+}
+
+/** Stable QStash schedule id for contest_stats safety-net refresh. */
+export const REFRESH_STALE_CONTEST_STATS_SCHEDULE_ID =
+  "goviral-refresh-stale-contest-stats";
+
+/** Every 10 minutes. */
+export const REFRESH_STALE_CONTEST_STATS_CRON = "*/10 * * * *";
+
+function getRefreshStaleContestStatsUrl(baseUrl?: string): string {
+  return `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/refresh-stale-contest-stats`;
+}
+
+async function verifyQStashSignatureRefreshStaleContestStats(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getRefreshStaleContestStatsUrl(),
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/refresh-stale-contest-stats`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/refresh-stale-contest-stats`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize refresh-stale-contest-stats: QStash signature or Bearer CRON_SECRET.
+ * Do not trust bare `x-vercel-cron` (forgeable). Vercel Cron sends
+ * `Authorization: Bearer ${CRON_SECRET}` when CRON_SECRET is configured.
+ */
+export async function authorizeRefreshStaleContestStats(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureRefreshStaleContestStats(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret && auth === `Bearer ${cronSecret}`) {
+    return true;
+  }
+  if (cronSecret) return false;
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Upsert the recurring QStash schedule (every 10 min) for stale contest_stats refresh.
+ * Idempotent via fixed scheduleId — safe to call from metrics paths / manual trigger.
+ */
+export async function ensureRefreshStaleContestStatsSchedule(
+  baseUrl?: string,
+): Promise<{ scheduleId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+
+  const destination = getRefreshStaleContestStatsUrl(baseUrl);
+  if (isLoopbackUrl(destination)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+
+  try {
+    const res = await client.schedules.create({
+      destination,
+      cron: REFRESH_STALE_CONTEST_STATS_CRON,
+      scheduleId: REFRESH_STALE_CONTEST_STATS_SCHEDULE_ID,
+      method: "POST",
+      body: "{}",
+      headers: {
+        "Content-Type": "application/json",
+        ...getQStashAuthHeaders(),
+      },
+      retries: 2,
+      label: "refresh-stale-contest-stats",
+    });
+    return { scheduleId: res.scheduleId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] ensureRefreshStaleContestStatsSchedule failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/** One-shot trigger (manual / bootstrap). Prefer the recurring schedule for production. */
+export async function triggerRefreshStaleContestStats(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = getRefreshStaleContestStatsUrl(baseUrl);
+  if (isLoopbackUrl(url)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+      headers: getQStashAuthHeaders(),
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[qstash] triggerRefreshStaleContestStats failed:", message);
+    return { error: message };
+  }
+}
+
+let ensureStaleStatsSchedulePromise: Promise<void> | null = null;
+
+/**
+ * Fire-and-forget: create/update the QStash schedule once per process.
+ * Call from metrics paths so the schedule exists without a Vercel cron.
+ */
+export function ensureRefreshStaleContestStatsScheduleOnce(
+  baseUrl?: string,
+): void {
+  if (!isQStashEnabled()) return;
+  if (ensureStaleStatsSchedulePromise) return;
+  ensureStaleStatsSchedulePromise = ensureRefreshStaleContestStatsSchedule(
+    baseUrl,
+  )
+    .then((res) => {
+      if (res.scheduleId) {
+        console.log(
+          "[qstash] refresh-stale-contest-stats schedule ready:",
+          res.scheduleId,
+        );
+      } else if (res.error) {
+        // Allow retry on next process if destination URL was wrong at first call.
+        ensureStaleStatsSchedulePromise = null;
+        console.warn(
+          "[qstash] refresh-stale-contest-stats schedule not ready:",
+          res.error,
+        );
+      }
+    })
+    .catch((err) => {
+      ensureStaleStatsSchedulePromise = null;
+      console.warn(
+        "[qstash] refresh-stale-contest-stats schedule ensure error:",
+        err,
+      );
+    });
 }

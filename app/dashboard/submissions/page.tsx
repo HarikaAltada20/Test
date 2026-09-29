@@ -1,16 +1,16 @@
 import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import SubmissionsClient from "./SubmissionsClient";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { SubmissionWithContest } from "@/types/supabase";
+import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 
 export default async function SubmissionsPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   if (!user) {
     redirect("/auth/signin");
@@ -33,34 +33,49 @@ export default async function SubmissionsPage() {
     redirect("/dashboard");
   }
 
-  // Simplified query - get only basic submission data first
-  const { data: submissionsData, error: submissionsError } = await supabase
+  // Fetch only the first page via the paginated API-route handler logic.
+  // The client component loads remaining pages incrementally.
+  const PAGE_SIZE = 30;
+
+  const { data: submissionsData, error: submissionsError, count: totalCount } = await supabase
     .from("submissions")
-    .select("*")
+    .select(
+      "id, contest_id, creator_id, content_link, views, metadata, other_stats, created_at, status, earnings, last_insights_update, insights_status, platform, video_id, video_title, video_thumbnail_url, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, dual_rewards_payout, quality_score, quality_score_backfilled",
+      { count: "exact" },
+    )
     .eq("creator_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(PAGE_SIZE);
 
   if (submissionsError) {
     console.error("Error fetching submissions:", submissionsError.message);
     return (
-      // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
-      <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />
-      // </RouteGuard>
+      <SubmissionsClient
+        initialSubmissions={[]}
+        fetchError={submissionsError.message}
+        creatorStats={{
+          trustScorePct: null,
+          trustNumber: null,
+          avgQualityScore: null,
+          bestQualityScore: null,
+          totalQualityScore: null,
+        }}
+      />
     );
   }
 
   const submissionsToFormat = submissionsData || [];
 
-  // Get contest data using the simplest possible query
+  // Hydrate contest data for the first page only
   let contestsData: any[] = [];
   try {
     const contestIds = [...new Set(submissionsToFormat.map(sub => sub.contest_id).filter(Boolean))];
 
     if (contestIds.length > 0) {
-      // 1. Fetch Contest basic data
       const { data: fetchedContests, error: contestsError } = await supabase
         .from("contests")
-        .select("id, title, contest_type, contest_based_details, bonus_details, end_date, post_contest_status, thumbnail_url, platform, advertiser_id")
+        .select("id, title, contest_type, contest_format, contest_based_details, bonus_details, end_date, post_contest_status, thumbnail_url, platform, advertiser_id")
         .in("id", contestIds);
 
       if (contestsError) {
@@ -68,7 +83,6 @@ export default async function SubmissionsPage() {
       } else {
         contestsData = fetchedContests || [];
 
-        // 2. Fetch Advertiser Profiles safely
         const advertiserIds = [...new Set(contestsData.map(c => c.advertiser_id).filter(Boolean))];
         if (advertiserIds.length > 0) {
           const { data: profileData } = await supabase
@@ -90,7 +104,6 @@ export default async function SubmissionsPage() {
     console.error("Unexpected error in contest fetch:", error);
   }
 
-  // Create a map of contests for quick lookup
   const contestsMap = new Map();
   contestsData.forEach(contest => {
     contestsMap.set(contest.id, contest);
@@ -108,11 +121,36 @@ export default async function SubmissionsPage() {
       : 'Date N/A'
   }));
 
+  // Build the initial cursor for the client to continue pagination
+  const lastRow = submissionsToFormat[submissionsToFormat.length - 1];
+  const initialNextCursor =
+    submissionsToFormat.length === PAGE_SIZE && lastRow
+      ? { cursor: lastRow.created_at, cursor_id: lastRow.id }
+      : null;
+
+  const { data: creatorProfile } = await supabase
+    .from("creator_profiles")
+    .select(
+      "trust_score_metrics, avg_quality_score, best_quality_score, quality_score_sum, total_money_won, total_views",
+    )
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const profileStats = getCreatorStatsFromProfile(creatorProfile);
+  const creatorStats = {
+    trustScorePct: profileStats.trustMetrics.trust_score,
+    trustNumber: profileStats.trustMetrics.trust_number,
+    avgQualityScore: profileStats.qualityMetrics.avg_quality_score,
+    bestQualityScore: profileStats.qualityMetrics.best_quality_score,
+    totalQualityScore: profileStats.qualityMetrics.quality_score_sum,
+  };
+
   return (
-    // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
     <SubmissionsClient
       initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
+      creatorStats={creatorStats}
+      initialNextCursor={initialNextCursor}
+      totalCount={totalCount ?? undefined}
     />
-    // </RouteGuard>
   );
 }

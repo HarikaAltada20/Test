@@ -1,9 +1,44 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { shouldAllowLoggedInMarketingHome } from '@/constants/marketingHome'
+import type { MiddlewareUserProfile } from './utils/supabase/middleware'
 import { updateSession } from './utils/supabase/middleware'
+
+async function getLoggedInLandingPath(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string> {
+  const { data: userData } = await supabase
+    .from('users')
+    .select('user_type, username')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!userData?.username) return '/choose-username'
+  if (userData.user_type === 'admin') return '/dashboard/admin'
+  if (userData.user_type === 'advertiser') return '/dashboard/contests'
+  return '/dashboard/opportunities'
+}
+
+function loggedInLandingPathFromProfile(profile: MiddlewareUserProfile): string {
+  if (!profile.username) return '/choose-username'
+  if (profile.user_type === 'admin') return '/dashboard/admin'
+  if (profile.user_type === 'advertiser') return '/dashboard/contests'
+  return '/dashboard/opportunities'
+}
+
+async function resolveLoggedInLandingPath(
+  supabase: SupabaseClient,
+  userId: string,
+  profile: MiddlewareUserProfile | null
+): Promise<string> {
+  if (profile !== null) return loggedInLandingPathFromProfile(profile)
+  return getLoggedInLandingPath(supabase, userId)
+}
 
 export async function middleware(request: NextRequest) {
   // Session update and auth; returns response plus user/supabase to avoid duplicate getUser()
-  const { response, user, supabase } = await updateSession(request)
+  const { response, user, supabase, profile } = await updateSession(request)
   
   // If updateSession already redirected (e.g. unauthenticated on protected path), return that response
   const location = response.headers.get('Location')
@@ -12,28 +47,29 @@ export async function middleware(request: NextRequest) {
   // Then add route protection for authenticated users (reuse user/supabase from updateSession)
   const { pathname } = request.nextUrl
   
+  // Marketing home: send logged-in users straight to their workspace (unless ?guest=1)
+  if (
+    pathname === '/' &&
+    user &&
+    !shouldAllowLoggedInMarketingHome(request.nextUrl.searchParams)
+  ) {
+    const redirectPath = await resolveLoggedInLandingPath(
+      supabase,
+      user.id,
+      profile
+    )
+    return NextResponse.redirect(new URL(redirectPath, request.url))
+  }
+
   // Auth route protection - redirect logged-in users away from auth pages
   if (pathname.startsWith('/auth/')) {
     if (user) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('user_type, username')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      let redirectPath = '/choose-username'
-      if (userData?.username) {
-        if (userData.user_type === 'admin') {
-          redirectPath = '/dashboard/admin'
-        } else if (userData.user_type === 'advertiser') {
-          redirectPath = '/dashboard/contests'
-        } else {
-          redirectPath = '/dashboard/opportunities'
-        }
-      }
-
-      const redirectUrl = new URL(redirectPath, request.url)
-      return NextResponse.redirect(redirectUrl)
+      const redirectPath = await resolveLoggedInLandingPath(
+        supabase,
+        user.id,
+        profile
+      )
+      return NextResponse.redirect(new URL(redirectPath, request.url))
     }
   }
   
@@ -42,14 +78,19 @@ export async function middleware(request: NextRequest) {
     try {
       // If user is authenticated, check permissions (reuse user/supabase from updateSession)
       if (user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('user_type')
-          .eq('id', user.id)
-          .single()
+        let userType: string | null | undefined
+        if (profile !== null && profile.user_type != null) {
+          userType = profile.user_type
+        } else {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('user_type')
+            .eq('id', user.id)
+            .single()
+          userType = userData?.user_type ?? undefined
+        }
 
-        if (userData?.user_type) {
-          const userType = userData.user_type
+        if (userType) {
           
           // Keep /dashboard root accessible for non-admin users.
           // Only admins are redirected to the admin dashboard.
@@ -97,9 +138,63 @@ export async function middleware(request: NextRequest) {
           }
 
           if (userType === 'advertiser' && isAccessingCreatorRoute) {
-            const redirectUrl = new URL('/dashboard/contests', request.url)
-            redirectUrl.searchParams.set('error', 'unauthorized')
-            return NextResponse.redirect(redirectUrl)
+            // Own contest: send brands to the brand contest page (not the creator opportunity UI).
+            const opportunityContestMatch = pathname.match(
+              /^\/dashboard\/opportunities\/([^/]+)/
+            )
+            if (opportunityContestMatch?.[1]) {
+              const contestId = opportunityContestMatch[1]
+              const brandContestUrl = new URL(
+                `/dashboard/contests/${contestId}`,
+                request.url
+              )
+              const blockedFromCreatorUrl = new URL(
+                '/dashboard/contests',
+                request.url
+              )
+              blockedFromCreatorUrl.searchParams.set('creator_route', '1')
+              blockedFromCreatorUrl.searchParams.set('contest_id', contestId)
+
+              let ownsContest = false
+              try {
+                const { data: contestRow, error: contestLookupError } =
+                  await supabase
+                    .from('contests')
+                    .select('advertiser_id')
+                    .eq('id', contestId)
+                    .maybeSingle()
+                if (contestLookupError) {
+                  console.error(
+                    'Middleware contest ownership lookup failed:',
+                    contestLookupError
+                  )
+                  return NextResponse.redirect(blockedFromCreatorUrl)
+                }
+                ownsContest = contestRow?.advertiser_id === user.id
+              } catch (e) {
+                console.error(
+                  'Middleware contest ownership lookup threw:',
+                  e
+                )
+                return NextResponse.redirect(blockedFromCreatorUrl)
+              }
+
+              if (ownsContest) {
+                return NextResponse.redirect(brandContestUrl)
+              }
+              return NextResponse.redirect(blockedFromCreatorUrl)
+            } else {
+              const redirectUrl = new URL('/dashboard/contests', request.url)
+              redirectUrl.searchParams.set('creator_route', '1')
+              if (pathname.startsWith('/dashboard/opportunities')) {
+                redirectUrl.searchParams.set('creator_section', 'opportunities')
+              } else if (pathname.startsWith('/dashboard/submissions')) {
+                redirectUrl.searchParams.set('creator_section', 'submissions')
+              } else if (pathname.startsWith('/dashboard/earnings')) {
+                redirectUrl.searchParams.set('creator_section', 'earnings')
+              }
+              return NextResponse.redirect(redirectUrl)
+            }
           }
 
           // Admin route protection - only admins can access admin routes
@@ -131,6 +226,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
     '/dashboard/:path*',
     '/choose-username',
     '/auth/:path*'

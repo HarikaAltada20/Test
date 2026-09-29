@@ -13,13 +13,15 @@ import {
 import { cn } from "@/lib/utils";
 
 const LABELS: Record<string, string> = {
-  all: "All Contest Types",
+  all: "All Campaign Types",
   leaderboard: "Leaderboard",
   cpm: "CPM",
+  milestone: "Milestone",
+  dual_rewards: "Dual Rewards",
 };
 
 interface ContestTypeFilterProps {
-  value?: "all" | "leaderboard" | "cpm";
+  value?: "all" | "leaderboard" | "cpm" | "milestone" | "dual_rewards";
   onChange?: (value: string) => void;
 }
 
@@ -89,7 +91,7 @@ export default function ContestTypeFilter({
               : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
           )}
         >
-          <span className="truncate">{LABELS[value] ?? "Contest Type"}</span>
+          <span className="truncate">{LABELS[value] ?? "Campaign Type"}</span>
           <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
@@ -113,7 +115,7 @@ export default function ContestTypeFilter({
             </span>
           )}
           {value !== "all" && <span className="w-4" />}
-          All Contest Types
+          All Campaign Types
         </DropdownMenuItem>
         <DropdownMenuItem
           className={cn(
@@ -144,6 +146,36 @@ export default function ContestTypeFilter({
           )}
           {value !== "cpm" && <span className="w-4" />}
           CPM
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={cn(
+            "flex items-center gap-2 cursor-pointer font-medium",
+            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+          )}
+          onClick={() => onChange("milestone")}
+        >
+          {value === "milestone" && (
+            <span className="w-4 h-4 flex items-center justify-center text-xs">
+              ✓
+            </span>
+          )}
+          {value !== "milestone" && <span className="w-4" />}
+          Milestone
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={cn(
+            "flex items-center gap-2 cursor-pointer font-medium",
+            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+          )}
+          onClick={() => onChange("dual_rewards")}
+        >
+          {value === "dual_rewards" && (
+            <span className="w-4 h-4 flex items-center justify-center text-xs">
+              ✓
+            </span>
+          )}
+          {value !== "dual_rewards" && <span className="w-4" />}
+          Dual Rewards
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

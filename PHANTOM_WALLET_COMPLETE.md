@@ -30,12 +30,6 @@
 - ✅ **Transaction Logging** - Complete audit trail
 - ✅ **Error Handling** - Robust error management
 
-#### **5. Historical Data Fix**
-- ✅ **Refund Script** - One-time fix for old rejected withdrawals
-- ✅ **Admin API** - Safe admin interface for refunds
-- ✅ **Admin UI** - Easy-to-use refund button
-- ✅ **Package Script** - `npm run refund-old-withdrawals`
-
 ### 🚀 **How to Use:**
 
 #### **For Users:**
@@ -45,8 +39,7 @@
 
 #### **For Admins:**
 1. **Process Withdrawals** - Admin panel shows Phantom Wallet withdrawals
-2. **Refund Old Withdrawals** - Click "Refund Old Rejected Withdrawals" button
-3. **Monitor Transactions** - Full transaction history available
+2. **Monitor Transactions** - Full transaction history available
 
 ### 🔧 **Technical Details:**
 
@@ -58,9 +51,7 @@
 - `lib/solana-utils-no-memo.ts` - Transaction verification
 - `lib/solana-payout-utils.ts` - Payout utilities
 - `types/earnings.ts` - Type definitions
-- `app/api/admin/withdrawals/[id]/route.ts` - Refund logic
-- `app/api/admin/refund-old-withdrawals/route.ts` - Historical fix
-- `components/admin/RefundOldWithdrawalsButton.tsx` - Admin UI
+- `app/api/admin/withdrawals/[id]/route.ts` - Refund logic on reject/cancel
 
 #### **Database Tables:**
 - `solana_payment_requests` - Payment requests

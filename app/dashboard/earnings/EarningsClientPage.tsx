@@ -41,6 +41,7 @@ import {
 import {
   ArrowDownToLine,
   DollarSign,
+  Info,
   Trophy,
   Coins,
   Gift,
@@ -84,7 +85,13 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
-import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
+import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -151,7 +158,6 @@ export default function EarningsClientPage({
   // Modal States (same as before)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [isPhantomModalOpen, setIsPhantomModalOpen] = useState(false);
   const [currentPayoutMethod, setCurrentPayoutMethod] =
     useState<PayoutMethod | null>(null);
   const [selectedPayoutType, setSelectedPayoutType] =
@@ -195,6 +201,14 @@ export default function EarningsClientPage({
   // Coupon/code redemption
   const [redeemCode, setRedeemCode] = useState<string>("");
   const [isRedeeming, setIsRedeeming] = useState<boolean>(false);
+
+  // Payout method availability (admin can pause methods globally)
+  const [pausedPayoutMethodTypes, setPausedPayoutMethodTypes] = useState<string[]>([]);
+  const [enabledPayoutMethodTypes, setEnabledPayoutMethodTypes] = useState<string[]>([
+    "crypto",
+    "upi",
+    "bank_transfer",
+  ]);
 
   const getInitialMode = (): "light" | "dark" => {
     if (typeof document === "undefined") return "light";
@@ -338,6 +352,34 @@ export default function EarningsClientPage({
     router,
   ]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payout-method-settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
+        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer"]);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPausedPayoutMethodTypes([]);
+          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer"]);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const PAYOUT_METHOD_LABELS: Record<string, string> = {
+    crypto: "Crypto",
+    upi: "UPI",
+    bank_transfer: "Bank transfer",
+    phantom: "Phantom",
+  };
+  const availablePayoutMethodsForWithdraw = payoutMethods.filter((m) =>
+    enabledPayoutMethodTypes.includes(m.method_type)
+  );
+
   // Wallet format validation functions
   const validateWalletAddress = async () => {
     if (!cryptoAddress.trim()) {
@@ -472,14 +514,7 @@ export default function EarningsClientPage({
       if (bankBranchName.trim())
         bankDetails.branch_name = bankBranchName.trim();
       details = bankDetails;
-    } else if (selectedPayoutType === "phantom") {
-      // For Phantom Wallet, we'll use a separate form component
-      toast.error(
-        "Please use the dedicated Phantom Wallet form to add your wallet."
-      );
-      return;
     } else {
-      const exhaustiveCheck: never = selectedPayoutType;
       toast.error("Invalid payout method type selected.");
       return;
     }
@@ -623,9 +658,7 @@ export default function EarningsClientPage({
     ) {
       setPayoutCountry("IN");
     } else {
-      setPayoutCountry((prev) =>
-        prev === "IN" && method.method_type !== "phantom" ? "IN" : "OTHER"
-      );
+      setPayoutCountry("OTHER");
     }
     setPayoutFriendlyName(method.friendly_name || "");
 
@@ -824,6 +857,10 @@ export default function EarningsClientPage({
       setWithdrawAmountCoins(0);
       setSelectedWithdrawMethodId(null);
       setWithdrawalUserNotes("");
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(WITHDRAWAL_REVIEW_TRIGGER_EVENT));
+      }
     } else {
       console.error(
         "Withdrawal request RPC returned unexpected data:",
@@ -937,6 +974,12 @@ export default function EarningsClientPage({
   const totalReferrals =
     (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
 
+  const contestCashCents = profile.total_money_won ?? 0;
+  const affiliateEarningsCents = userData.affiliate_earnings ?? 0;
+  const otherEarningsCents = userData.other_earnings ?? 0;
+  const totalCashEarnedCents =
+    contestCashCents + affiliateEarningsCents + otherEarningsCents;
+
   // Filter withdrawal requests for display
   const cashWithdrawalRequests = withdrawalRequests.filter(
     (req) => req.amount_type === "cash"
@@ -955,7 +998,7 @@ export default function EarningsClientPage({
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        className="md:mx-16 mt-10 mb-10"
+        className="mt-10 mb-10"
         isDark={isDark}
         light={!isDark}
       />
@@ -986,9 +1029,55 @@ export default function EarningsClientPage({
                     isDark ? "text-white" : "text-black"
                   )}
                 >
-                  <p className="text-lg font-medium">Total Cash Won</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-lg font-medium">Total Cash Earned</p>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+                              isDark
+                                ? "text-white/80 focus-visible:ring-white/40"
+                                : "text-muted-foreground focus-visible:ring-[#4A00BE]/30"
+                            )}
+                            aria-label="How total cash earned is calculated"
+                          >
+                            <Info className="h-4 w-4 shrink-0" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="max-w-[280px] space-y-2 p-3 text-left"
+                        >
+                          <p className="text-xs leading-snug">
+                            <span className="font-medium">
+                              Contest & opportunity winnings
+                            </span>
+                            <span className="text-muted-foreground"> — </span>
+                            {formatCurrencyFromCents(contestCashCents)}
+                          </p>
+                          <p className="text-xs leading-snug">
+                            <span className="font-medium">
+                              Affiliate earnings
+                            </span>
+                            <span className="text-muted-foreground"> — </span>
+                            {formatCurrencyFromCents(affiliateEarningsCents)}
+                          </p>
+                          <p className="text-xs leading-snug">
+                            <span className="font-medium">
+                              Other earnings (bonuses, coupons, etc.)
+                            </span>
+                            <span className="text-muted-foreground"> — </span>
+                            {formatCurrencyFromCents(otherEarningsCents)}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(profile.total_money_won)}
+                    {formatCurrencyFromCents(totalCashEarnedCents)}
                   </p>
                   <p className="text-md">Lifetime cash earnings</p>
                 </div>
@@ -1073,11 +1162,11 @@ export default function EarningsClientPage({
                     isDark ? "text-white" : "text-black"
                   )}
                 >
-                  <p className="text-lg font-medium">Cash Contests Won</p>
+                  <p className="text-lg font-medium">Cash Campaigns Won</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_won}
                   </p>
-                  <p className="text-md">Total cash contest victories</p>
+                  <p className="text-md">Total cash campaign victories</p>
                 </div>
                 <div
                   className={cn(
@@ -1952,7 +2041,7 @@ export default function EarningsClientPage({
               className="w-full"
             >
               {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-4 gap-2">
+                <TabsList className="grid w-full grid-cols-3 gap-2">
                   <TabsTrigger
                     value="upi"
                     className={cn(
@@ -1986,20 +2075,9 @@ export default function EarningsClientPage({
                   >
                     Crypto
                   </TabsTrigger>
-                  <TabsTrigger
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                    value="phantom"
-                  >
-                    Phantom Wallet
-                  </TabsTrigger>
                 </TabsList>
               ) : (
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-1">
                   <TabsTrigger
                     value="crypto"
                     className={cn(
@@ -2010,17 +2088,6 @@ export default function EarningsClientPage({
                     )}
                   >
                     Crypto
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="phantom"
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                  >
-                    Phantom Wallet
                   </TabsTrigger>
                 </TabsList>
               )}
@@ -2419,35 +2486,6 @@ export default function EarningsClientPage({
                   as per Indian law.
                 </p>
               </TabsContent>
-
-              <TabsContent value="phantom" className="space-y-4">
-                <div className="text-center py-8">
-                  <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-                  <h3
-                    className={cn(
-                      "text-lg font-semibold mb-2",
-                      isDark ? "text-white" : "text-black"
-                    )}
-                  >
-                    Phantom Wallet
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Add your Phantom Wallet to receive USDC or USDT payouts via
-                    Solana network directly to your wallet.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      // Close current modal and open Phantom form
-                      setIsPayoutModalOpen(false);
-                      setIsPhantomModalOpen(true);
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700"
-                  >
-                    <Wallet className="mr-2 h-4 w-4" />
-                    Add Phantom Wallet
-                  </Button>
-                </div>
-              </TabsContent>
             </Tabs>
           </div>
           <DialogFooter className="sm:justify-between">
@@ -2698,9 +2736,20 @@ export default function EarningsClientPage({
                 Select Payout Method
               </Label>
               <Select
-                value={selectedWithdrawMethodId || ""}
+                value={
+                  selectedWithdrawMethodId &&
+                  availablePayoutMethodsForWithdraw.some(
+                    (m) => m.id === selectedWithdrawMethodId
+                  )
+                    ? selectedWithdrawMethodId
+                    : ""
+                }
                 onValueChange={setSelectedWithdrawMethodId}
-                disabled={isLoading || payoutMethods.length === 0}
+                disabled={
+                  isLoading ||
+                  payoutMethods.length === 0 ||
+                  availablePayoutMethodsForWithdraw.length === 0
+                }
               >
                 <SelectTrigger
                   id="payoutMethodSelect"
@@ -2711,7 +2760,7 @@ export default function EarningsClientPage({
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2722,7 +2771,7 @@ export default function EarningsClientPage({
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
-                  {payoutMethods
+                  {availablePayoutMethodsForWithdraw
                     .filter((m) => !m.is_default)
                     .map((method) => (
                       <SelectItem
@@ -2736,9 +2785,42 @@ export default function EarningsClientPage({
                 </SelectContent>
               </Select>
             </div>
+            {pausedPayoutMethodTypes.length > 0 && (
+              <div
+                className={cn(
+                  "rounded-lg border p-3 text-sm",
+                  isDark
+                    ? "border-amber-800/50 bg-amber-950/30 text-amber-200"
+                    : "border-amber-200 bg-amber-50 text-amber-900"
+                )}
+              >
+                <p className="font-medium">Some payment methods are temporarily unavailable</p>
+                <p className="mt-1">
+                  The following payment methods are not available for withdrawals right now:{" "}
+                  <span className="font-medium">
+                    {pausedPayoutMethodTypes
+                      .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                      .join(", ")}
+                  </span>
+                  . Please use one of the available methods
+                  {enabledPayoutMethodTypes.length > 0
+                    ? ` (e.g. ${enabledPayoutMethodTypes
+                        .slice(0, 3)
+                        .map((t) => PAYOUT_METHOD_LABELS[t] || t)
+                        .join(", ")})`
+                    : ""}
+                  .
+                </p>
+              </div>
+            )}
             {payoutMethods.length === 0 && (
               <p className="text-sm text-red-500">
                 You have no payout methods. Please add one first.
+              </p>
+            )}
+            {payoutMethods.length > 0 && availablePayoutMethodsForWithdraw.length === 0 && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                None of your payout methods are currently available for withdrawal. Please try again later or add another payment method.
               </p>
             )}
           </div>
@@ -2762,7 +2844,7 @@ export default function EarningsClientPage({
                     withdrawAmountCoins <= 0)) ||
                 // For coins, payoutMethod is optional, so don't disable if it's not selected and tab is coins
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
-                (activeTabModal === "cash" && payoutMethods.length === 0)
+                (activeTabModal === "cash" && availablePayoutMethodsForWithdraw.length === 0)
               }
               className={cn(
                 "w-full text-md rounded-full",
@@ -2787,51 +2869,6 @@ export default function EarningsClientPage({
               </Button>
             </DialogClose>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Phantom Wallet Modal */}
-      <Dialog
-        open={isPhantomModalOpen}
-        onOpenChange={setIsPhantomModalOpen}
-        isdark={isDark}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <PhantomPayoutForm
-            onSave={async (details) => {
-              // Save Phantom Wallet payout method
-              setIsLoading(true);
-              try {
-                const { error } = await supabase.from("payout_methods").insert({
-                  user_id: authUser.id,
-                  method_type: "phantom",
-                  details,
-                  is_default: payoutMethods.length === 0, // Set as default if first method
-                  friendly_name: details.friendly_name || "Phantom Wallet",
-                });
-
-                if (error) throw error;
-
-                // Refresh payout methods
-                const { data: newMethods } = await supabase
-                  .from("payout_methods")
-                  .select("*")
-                  .eq("user_id", authUser.id)
-                  .order("created_at", { ascending: false });
-
-                setPayoutMethods(newMethods || []);
-                setIsPhantomModalOpen(false);
-                toast.success("Phantom Wallet added successfully!");
-              } catch (error: any) {
-                toast.error(error.message || "Failed to add Phantom Wallet");
-              } finally {
-                setIsLoading(false);
-              }
-            }}
-            onCancel={() => setIsPhantomModalOpen(false)}
-            isLoading={isLoading}
-            isDark={isDark}
-          />
         </DialogContent>
       </Dialog>
     </div>

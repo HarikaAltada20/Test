@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import BillingClientPage from "./BillingClientPage";
 import { RouteGuard } from "@/components/guards/RouteGuard";
@@ -35,13 +36,10 @@ export default async function AdvertiserBillingServerPage({
     const resolvedSearchParams = await searchParams;
     const isReturningFromCheckout = resolvedSearchParams.success === 'true' && resolvedSearchParams.session_id;
 
-    const {
-        data: { user: authUser },
-        error: authError,
-    } = await supabase.auth.getUser();
+    const authUser = await getSessionUser(supabase);
 
-    if (authError || !authUser) {
-        console.error("Auth error or no user, redirecting to login:", authError);
+    if (!authUser) {
+        console.error("Auth error or no user, redirecting to login");
         redirect("/login");
     }
 
@@ -89,6 +87,8 @@ export default async function AdvertiserBillingServerPage({
         advertisers_referred: roleAndCoinsData.advertisers_referred || 0,
         creators_referred: roleAndCoinsData.creators_referred || 0,
         total_lifetime_coins_earned: roleAndCoinsData.total_lifetime_coins_earned || 0,
+        affiliate_earnings: 0,
+        other_earnings: 0,
     };
 
     // Fetch advertiser profile (money fields) - also with retry for checkout returns
@@ -169,17 +169,7 @@ export default async function AdvertiserBillingServerPage({
         remarks: tx.remarks,
     }));
 
-    // Fetch Coin Transactions
-    const { data: coinData, error: coinError } = await supabase
-        .from("coin_transactions")
-        .select("id, created_at, description, coins, status, type")
-        .eq("user_id", authUser.id)
-        .order("created_at", { ascending: false });
-
-    if (coinError) {
-        console.error("Error fetching coin transactions:", coinError);
-    }
-    const initialCoinTransactions: CoinTransaction[] = coinData || [];
+    // Coin transactions now handled by client-side pagination hook
 
     // Fetch Withdrawal Requests
     const { data: withdrawalRequestsData, error: withdrawalRequestsError } = await supabase
@@ -200,7 +190,7 @@ export default async function AdvertiserBillingServerPage({
                 initialProfile={initialProfile}
                 initialUserData={userData}
                 initialCashTransactions={initialCashTransactions}
-                initialCoinTransactions={initialCoinTransactions}
+                initialCoinTransactions={[]}
                 initialPayoutMethods={initialPayoutMethods}
                 initialWithdrawalRequests={initialWithdrawalRequests}
             />

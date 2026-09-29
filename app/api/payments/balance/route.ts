@@ -20,6 +20,22 @@ export async function GET(request: NextRequest) {
 
     console.log('👤 Balance API: User ID:', user.id);
 
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('user_type')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (userRow?.user_type === 'admin') {
+      return NextResponse.json(
+        {
+          error:
+            'Admin accounts do not have a wallet. Use pay-as-brand for brand campaigns.',
+        },
+        { status: 403 },
+      );
+    }
+
     // Get advertiser balance (already in cents from database)
     const balanceResult = await getAdvertiserDepositBalance(user.id);
     

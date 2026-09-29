@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
       user.id,
       transaction.amount,
       transactionSignature, // Use signature as payment intent ID
-      'phantom' // Specify payment method
+      'solana',
     );
 
     if (!balanceResult.success) {

@@ -28,18 +28,22 @@ const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process
 
 
 
-
-
-
-
-
-
 export async function POST(request: NextRequest) {
+  console.log('🔥🔥🔥 SUBSCRIPTION WEBHOOK CALLED!', {
+    timestamp: new Date().toISOString(),
+    method: request.method,
+    url: request.url
+  });
+
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get('stripe-signature');
 
-
+  console.log('📋 Subscription webhook details:', {
+    hasSignature: !!sig,
+    signatureLength: sig?.length,
+    bodyLength: body.length
+  });
 
   if (!sig) {
     console.error('No Stripe signature found');
@@ -725,6 +729,55 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       }
     }
 
+    // Decide if this new subscription should automatically cancel at the end of
+    // the first billing period (trial or one-time 100% coupon), unless it is
+    // explicitly configured as an "infinite free" coupon in Stripe metadata.
+    try {
+      const item = subscription.items?.data?.[0];
+      const price = item?.price;
+      const unitAmount: number = price?.unit_amount ?? 0;
+      const hasTrial = Boolean(subscription.trial_end);
+      const discount = subscription.discount as any | null;
+      const coupon = discount?.coupon as any | null;
+
+      const isInfiniteFreeCoupon =
+        coupon?.metadata?.infinite_free === "true" ||
+        coupon?.metadata?.infinite_free === "1";
+
+      let isFullDiscountCoupon = false;
+      if (coupon && unitAmount > 0) {
+        if (
+          typeof coupon.percent_off === "number" &&
+          coupon.percent_off === 100
+        ) {
+          isFullDiscountCoupon = true;
+        } else if (
+          typeof coupon.amount_off === "number" &&
+          coupon.amount_off >= unitAmount
+        ) {
+          isFullDiscountCoupon = true;
+        }
+      }
+
+      const shouldAutoCancel =
+        unitAmount > 0 && !isInfiniteFreeCoupon && (hasTrial || isFullDiscountCoupon);
+
+      if (shouldAutoCancel && !subscription.cancel_at_period_end) {
+        console.log(
+          `⚙️ Setting subscription ${subscription.id} to cancel at period end (trial/one-time free month).`
+        );
+        const updated = await stripe().subscriptions.update(subscription.id, {
+          cancel_at_period_end: true,
+        });
+        subscription.cancel_at_period_end = updated.cancel_at_period_end;
+      }
+    } catch (autoCancelError) {
+      console.error(
+        "❌ Error configuring auto-cancel behavior for subscription:",
+        autoCancelError
+      );
+    }
+
     // Handle period start/end with proper constraint logic
     const currentTime = new Date();
     const periodStart = safeTimestamp(subscription.current_period_start, true);
@@ -863,11 +916,36 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
     let productId, productName, priceAmount;
 
     if (priceError || !priceData || !priceData.products) {
-      console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription data`);
-      // Fallback to subscription data
-      productId = 'unknown';
-      productName = 'Unknown Product';
-      priceAmount = 0;
+      console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription constants fallback`);
+      console.log(`🔍 Available price IDs in constants:`, subscriptionPlans.map(p => ({
+        name: p.name,
+        monthlyId: p.prices?.monthly?.id,
+        yearlyId: p.prices?.yearly?.id
+      })));
+      
+      console.log(`🔍 Looking for price ID: ${activeSubscription.price_id}`);
+      console.log(`🔍 Found plan:`, subscriptionPlans.find(p => 
+        p.prices?.monthly?.id === activeSubscription.price_id || 
+        p.prices?.yearly?.id === activeSubscription.price_id)?.name || 'Not found');
+      
+      // Try to find plan by price ID in subscription constants
+      const plan = subscriptionPlans.find(p => 
+        p.prices?.monthly?.id === activeSubscription.price_id || 
+        p.prices?.yearly?.id === activeSubscription.price_id
+      );
+      
+      if (plan) {
+        productId = plan.id;
+        productName = plan.displayName || plan.name;
+        priceAmount = plan.price;
+        console.log(`✅ Found plan in constants: ${productId} (${productName}) - Amount: ${priceAmount} cents`);
+      } else {
+        // Final fallback
+        productId = 'unknown';
+        productName = 'Unknown Product';
+        priceAmount = 0;
+        console.log(`❌ Could not find plan for price ID ${activeSubscription.price_id} in constants either`);
+      }
     } else {
       productId = priceData.product_id;
       productName = (priceData.products as any).name;

@@ -8,12 +8,7 @@ type Schema$CommentThread = youtube_v3.Schema$CommentThread;
 // Flag to detect if we're running in a Node.js environment
 const isNode = typeof window === 'undefined';
 
-// Extract YouTube video ID from URL (works both client and server)
-export function extractYoutubeId(url: string) {
-  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([\w-]{11})(?:&\S+)?/i;
-  const match = url.match(regex);
-  return match ? match[1] : null;
-}
+export { extractYoutubeId } from "@/lib/youtube-url";
 
 // Since these functions use Node.js-specific modules, we'll only import them
 // and use them in a server context. Client components should use the API endpoints instead.

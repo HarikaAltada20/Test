@@ -1,6 +1,7 @@
 import React from "react";
 import EditContestClient from "../../../../contests/[id]/edit/client";
 import { createClient } from "@/utils/supabase/server";
+import { getSessionUser } from "@/utils/supabase/auth-server";
 import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 
@@ -23,15 +24,15 @@ export default async function AdminEditContestPage({
     }
 
     const supabase = await createClient();
-    const { data: user } = await supabase.auth.getUser();
+    const user = await getSessionUser(supabase);
     const datesOnly = resolvedSearchParams.dates === 'true';
 
-    if (!user?.user) {
+    if (!user) {
         redirect("/login");
     }
 
     return <EditContestClient
-        user={user?.user}
+        user={user}
         contestId={resolvedParams.id}
         datesOnly={datesOnly}
         isAdmin={true}

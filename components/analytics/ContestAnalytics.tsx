@@ -11,9 +11,10 @@ interface ContestAnalyticsProps {
   activeFilter?: string;
   onFilterChange?: (filter: string) => void;
   contentType?: "video" | "text_image";
-  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?: "all" | "leaderboard" | "cpm";
+  contestTypeFilter?: string;
+  analyticsQueryString: string;
 }
 
 interface Contest {
@@ -28,6 +29,12 @@ interface Contest {
   post_contest_status?: string;
   moderation_status?: string;
   contest_based_details?: any;
+  budgetTile?: {
+    mode: "filled" | "paid";
+    numeratorCents: number;
+    denominatorCents: number;
+    label: string;
+  } | null;
   submissions?: Array<{
     id: string;
     views: number;
@@ -54,6 +61,7 @@ export default function ContestAnalytics({
   videoPlatform = "all",
   twitterAnalytics = false,
   contestTypeFilter = "all",
+  analyticsQueryString,
 }: ContestAnalyticsProps) {
   const [contests, setContests] = useState<Contest[]>([]);
   const [filteredContests, setFilteredContests] = useState<Contest[]>([]);
@@ -63,37 +71,21 @@ export default function ContestAnalytics({
 
   useEffect(() => {
     fetchContests();
-  }, [
-    userId,
-    activeFilter,
-    contentType,
-    videoPlatform,
-    twitterAnalytics,
-    contestTypeFilter,
-  ]);
+  }, [analyticsQueryString]);
 
   const fetchContests = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (activeFilter && activeFilter !== "all") params.set("status", activeFilter);
-      params.set("contentType", contentType);
-      params.set("videoPlatform", videoPlatform);
-      params.set("twitter", twitterAnalytics ? "true" : "false");
-      if (contestTypeFilter && contestTypeFilter !== "all") {
-        params.set("type", contestTypeFilter);
-      }
-      const qs = params.toString();
-      const url = `/api/analytics/contests${qs ? `?${qs}` : ""}`;
+      const url = `/api/analytics/contests?${analyticsQueryString}`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch contests");
+      if (!res.ok) throw new Error("Failed to fetch campaigns");
       const json = await res.json();
       const list = json.contests || [];
       setContests(list);
       setFilteredContests(list);
     } catch (err) {
       console.error("Error fetching contests:", err);
-      setError("Failed to fetch contests");
+      setError("Failed to fetch campaigns");
       setContests([]);
       setFilteredContests([]);
     } finally {
@@ -104,33 +96,25 @@ export default function ContestAnalytics({
   const calculateSummaryStats = () => {
     // Use filtered contests for summary stats
     const totalSubmissions = filteredContests.reduce(
-      (sum, contest) => sum + (contest.submissions?.length || 0),
-      0
+      (sum, contest) =>
+        sum +
+        (contest.live_submission_count ??
+          contest.submissions?.length ??
+          0),
+      0,
     );
     const totalViews = filteredContests.reduce(
       (sum, contest) =>
         sum +
         (contest.submissions?.reduce(
           (subSum, sub) => subSum + (sub.views || 0),
-          0
+          0,
         ) || 0),
-      0
+      0,
     );
 
     const totalSpent = filteredContests.reduce((sum, contest) => {
-      const details = contest.contest_based_details;
-      if (
-        contest.contest_type === "leaderboard" &&
-        details?.leaderboard_contest?.total_prize
-      ) {
-        return sum + details.leaderboard_contest.total_prize;
-      } else if (
-        contest.contest_type === "cpm" &&
-        details?.cpm_contest?.total_budget
-      ) {
-        return sum + details.cpm_contest.total_budget;
-      }
-      return sum;
+      return sum + (contest.budgetTile?.numeratorCents ?? 0);
     }, 0);
 
     const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
@@ -184,7 +168,7 @@ export default function ContestAnalytics({
           <span
             className={cn(
               "text-xs sm:text-sm",
-              isDark ? "text-gray-300" : "text-gray-600"
+              isDark ? "text-gray-300" : "text-gray-600",
             )}
           >
             Showing stats based on:
@@ -192,31 +176,33 @@ export default function ContestAnalytics({
           <span
             className={cn(
               "px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium inline-flex shrink-0 w-fit",
-              isDark ? "bg-gray-800 text-gray-100" : "bg-gray-100 text-gray-800"
+              isDark
+                ? "bg-gray-800 text-gray-100"
+                : "bg-gray-100 text-gray-800",
             )}
           >
             {activeFilter === "all"
               ? "All Submissions"
               : activeFilter === "verifiedPaid"
-              ? "Verified + Paid Submissions"
-              : activeFilter === "verified"
-              ? "Verified Submissions"
-              : activeFilter === "paid"
-              ? "Paid Submissions"
-              : activeFilter === "pending"
-              ? "Pending Submissions"
-              : activeFilter === "rejected"
-              ? "Rejected Submissions"
-              : activeFilter}
+                ? "Verified + Paid Submissions"
+                : activeFilter === "verified"
+                  ? "Verified Submissions"
+                  : activeFilter === "paid"
+                    ? "Paid Submissions"
+                    : activeFilter === "pending"
+                      ? "Pending Submissions"
+                      : activeFilter === "rejected"
+                        ? "Rejected Submissions"
+                        : activeFilter}
           </span>
         </div>
         <div
           className={cn(
             "text-xs sm:text-sm whitespace-nowrap",
-            isDark ? "text-gray-300" : "text-gray-500"
+            isDark ? "text-gray-300" : "text-gray-500",
           )}
         >
-          {filteredContests.length} contest
+          {filteredContests.length} campaign
           {filteredContests.length !== 1 ? "s" : ""} found
         </div>
       </div>
@@ -225,15 +211,15 @@ export default function ContestAnalytics({
       {filteredContests.length === 0 ? (
         <div className="text-center py-12">
           <p className={cn("text-lg", isDark ? "text-white" : "text-gray-500")}>
-            No contests found for the selected filter.
+            No campaigns found for the selected filter.
           </p>
           <p
             className={cn(
               "text-sm mt-2",
-              isDark ? "text-gray-400" : "text-gray-500"
+              isDark ? "text-gray-400" : "text-gray-500",
             )}
           >
-            Create your first contest to get started!
+            Create your first campaign to get started!
           </p>
         </div>
       ) : (

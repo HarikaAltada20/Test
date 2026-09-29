@@ -32,14 +32,15 @@ import { cn } from "@/lib/utils";
 
 type SortBy =
   | "winnings"
-  | "affiliate_earnings"
+  | "affiliate_and_other_earnings"
   | "contests_won"
   | "verified_views"
   | "submissions_won"
   | "referrals"
   | "total_coins";
 
-type PlatformFilter = "all" | "youtube" | "instagram" | "twitter";
+type PlatformFilter = "all" | "youtube" | "instagram" | "twitter" | "tiktok";
+import { SiTiktok } from "react-icons/si";
 
 const formatNumber = (num: number): string => {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
@@ -73,6 +74,8 @@ type LeaderboardEntry = {
   platforms: {
     has_youtube: boolean;
     has_instagram: boolean;
+    has_twitter: boolean;
+    has_tiktok: boolean;
   };
 };
 
@@ -81,6 +84,7 @@ type SummaryStats = {
   instagramCreators?: number;
   youtubeCreators?: number;
   twitterCreators?: number;
+  tiktokCreators?: number;
   totalWinnings: number;
   totalAffiliateEarnings: number;
   totalViews: number;
@@ -123,6 +127,7 @@ export default function LeaderboardClient({
   const [avatarLoadErrors, setAvatarLoadErrors] = useState<
     Record<string, string>
   >({});
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Initialize mode state with proper detection to prevent flash
   const [mode, setMode] = useState<"light" | "dark">(() => {
     // Check if we're in browser environment
@@ -165,13 +170,13 @@ export default function LeaderboardClient({
       icon: <DollarSign className="w-4 h-4" />,
     },
     {
-      value: "affiliate_earnings",
-      label: "Affiliate & Additional Earnings",
-      icon: <TrendingUp className="w-4 h-4" />,
+      value: "affiliate_and_other_earnings",
+      label: "Affiliate & other earnings",
+      icon: <DollarSign className="w-4 h-4" />,
     },
     {
       value: "contests_won",
-      label: "Contests Won",
+      label: "Campaigns Won",
       icon: <Award className="w-4 h-4" />,
     },
     {
@@ -276,10 +281,19 @@ export default function LeaderboardClient({
       );
     };
   }, [mode]);
-  // Reset to page 1 when sortBy or platform changes
-  useEffect(() => {
+  const handleSortByChange = (value: SortBy) => {
+    setLoading(true);
+    setLeaders([]);
+    setSortBy(value);
     setCurrentPage(1);
-  }, [sortBy, platform]);
+  };
+
+  const handlePlatformChange = (value: PlatformFilter) => {
+    setLoading(true);
+    setLeaders([]);
+    setPlatform(value);
+    setCurrentPage(1);
+  };
 
   // Fetch static summary once on mount (always with platform="all")
   useEffect(() => {
@@ -287,11 +301,57 @@ export default function LeaderboardClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch leaderboard data
+  // Fetch leaderboard data; abort stale requests when filters change.
   useEffect(() => {
-    fetchLeaderboard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, platform, currentPage, limit]);
+    const controller = new AbortController();
+    let isActive = true;
+
+    const loadLeaderboard = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          sortBy,
+          platform,
+          page: currentPage.toString(),
+          limit: limit.toString(),
+        });
+        if (showAdminSummary) {
+          params.set("admin", "1");
+        }
+        const response = await fetch(`/api/creators/leaderboard?${params}`, {
+          signal: controller.signal,
+        });
+        const data = await response.json();
+
+        if (!isActive) return;
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to fetch leaderboard");
+        }
+
+        setLeaders(data.leaders || []);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotalItems(data.pagination?.totalItems || 0);
+        setSummary(data.summary || null);
+      } catch (err: any) {
+        if (!isActive || err?.name === "AbortError") return;
+        setError(err.message || "Failed to load leaderboard");
+        console.error("Error fetching leaderboard:", err);
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadLeaderboard();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [sortBy, platform, currentPage, limit, showAdminSummary, reloadNonce]);
 
   const fetchStaticSummary = async () => {
     try {
@@ -319,38 +379,6 @@ export default function LeaderboardClient({
     }
   };
 
-  const fetchLeaderboard = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({
-        sortBy,
-        platform,
-        page: currentPage.toString(),
-        limit: limit.toString(),
-      });
-      if (showAdminSummary) {
-        params.set("admin", "1");
-      }
-      const response = await fetch(`/api/creators/leaderboard?${params}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to fetch leaderboard");
-      }
-
-      setLeaders(data.leaders || []);
-      setTotalPages(data.pagination?.totalPages || 1);
-      setTotalItems(data.pagination?.totalItems || 0);
-      setSummary(data.summary || null);
-    } catch (err: any) {
-      setError(err.message || "Failed to load leaderboard");
-      console.error("Error fetching leaderboard:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const getUsernameToShow = (entry: LeaderboardEntry) => {
     return entry.username || entry.full_name || "Anonymous";
   };
@@ -359,8 +387,7 @@ export default function LeaderboardClient({
     switch (metric) {
       case "winnings":
         return formatMoney(entry.metrics.winnings);
-      case "affiliate_earnings":
-        // Return combined value for sorting/display purposes
+      case "affiliate_and_other_earnings":
         return formatMoney(
           (entry.metrics.affiliate_earnings || 0) +
             (entry.metrics.other_earnings || 0),
@@ -505,7 +532,8 @@ export default function LeaderboardClient({
                         Instagram
                       </span>
                       {(staticSummary.youtubeCreators !== undefined ||
-                        staticSummary.twitterCreators !== undefined) && (
+                        staticSummary.twitterCreators !== undefined ||
+                        staticSummary.tiktokCreators !== undefined) && (
                         <span
                           className={
                             isDark ? "text-violet-500" : "text-violet-400"
@@ -522,7 +550,8 @@ export default function LeaderboardClient({
                         <Youtube className="w-3 h-3 text-red-600" />
                         {staticSummary.youtubeCreators.toLocaleString()} YouTube
                       </span>
-                      {staticSummary.twitterCreators !== undefined && (
+                      {(staticSummary.twitterCreators !== undefined ||
+                        staticSummary.tiktokCreators !== undefined) && (
                         <span
                           className={
                             isDark ? "text-violet-500" : "text-violet-400"
@@ -534,9 +563,26 @@ export default function LeaderboardClient({
                     </>
                   )}
                   {staticSummary.twitterCreators !== undefined && (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <Twitter className="w-3 h-3 text-sky-500" />
+                        {staticSummary.twitterCreators.toLocaleString()} Twitter
+                      </span>
+                      {staticSummary.tiktokCreators !== undefined && (
+                        <span
+                          className={
+                            isDark ? "text-violet-500" : "text-violet-400"
+                          }
+                        >
+                          |
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {staticSummary.tiktokCreators !== undefined && (
                     <span className="flex items-center gap-1.5">
-                      <Twitter className="w-3 h-3 text-sky-500" />
-                      {staticSummary.twitterCreators.toLocaleString()} Twitter
+                      <SiTiktok className="w-3 h-3 text-black dark:text-white" />
+                      {staticSummary.tiktokCreators.toLocaleString()} TikTok
                     </span>
                   )}
                 </p>
@@ -564,7 +610,7 @@ export default function LeaderboardClient({
                   isDark ? "text-amber-300" : "text-amber-800",
                 )}
               >
-                Total Contests Won
+                Total Campaigns Won
               </CardTitle>
               <div
                 className={cn(
@@ -741,7 +787,7 @@ export default function LeaderboardClient({
         >
           <Tabs
             value={sortBy}
-            onValueChange={(value) => setSortBy(value as SortBy)}
+            onValueChange={(value) => handleSortByChange(value as SortBy)}
           >
             <TabsList className="flex gap-1.5 sm:gap-2.5 overflow-x-auto scrollbar-hide -mx-1 px-1">
               {sortOptions.map((option) => (
@@ -794,9 +840,9 @@ export default function LeaderboardClient({
             </h2>
             {sortBy !== "referrals" &&
               sortBy !== "total_coins" &&
-              sortBy !== "affiliate_earnings" &&
+              sortBy !== "affiliate_and_other_earnings" &&
               sortBy !== "verified_views" && (
-                <div className="flex items-center gap-1 sm:gap-1.5 sm:gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <div
                     className={cn(
                       "inline-flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl p-0.5 sm:p-1 overflow-x-auto whitespace-nowrap shadow-inner",
@@ -819,7 +865,7 @@ export default function LeaderboardClient({
                                 : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50",
                             )
                       }
-                      onClick={() => setPlatform("all")}
+                      onClick={() => handlePlatformChange("all")}
                     >
                       All
                     </Button>
@@ -837,7 +883,7 @@ export default function LeaderboardClient({
                                 : "text-red-600 hover:text-red-700 hover:bg-red-50",
                             )
                       }
-                      onClick={() => setPlatform("youtube")}
+                      onClick={() => handlePlatformChange("youtube")}
                     >
                       <Youtube className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
@@ -858,7 +904,7 @@ export default function LeaderboardClient({
                                 : "text-pink-600 hover:text-pink-700 hover:bg-pink-50",
                             )
                       }
-                      onClick={() => setPlatform("instagram")}
+                      onClick={() => handlePlatformChange("instagram")}
                     >
                       <Instagram className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
@@ -879,11 +925,32 @@ export default function LeaderboardClient({
                                 : "text-sky-600 hover:text-sky-700 hover:bg-sky-50",
                             )
                       }
-                      onClick={() => setPlatform("twitter")}
+                      onClick={() => handlePlatformChange("twitter")}
                     >
                       <Twitter className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
                         Twitter
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={platform === "tiktok" ? "default" : "ghost"}
+                      className={
+                        platform === "tiktok"
+                          ? "bg-gradient-to-r from-black to-gray-700 hover:from-gray-800 hover:to-black text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-gray-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          : cn(
+                              "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0",
+                              isDark
+                                ? "text-black hover:text-white hover:bg-black/20"
+                                : "text-black hover:text-gray-700 hover:bg-gray-100",
+                            )
+                      }
+                      onClick={() => handlePlatformChange("tiktok")}
+                    >
+                      <SiTiktok className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden sm:inline ml-1 sm:ml-1.5">
+                        TikTok
                       </span>
                     </Button>
                   </div>
@@ -934,8 +1001,8 @@ export default function LeaderboardClient({
                         sortBy === "contests_won" ||
                         sortBy === "submissions_won" ||
                         sortBy === "referrals" ||
-                        sortBy === "affiliate_earnings") && (
-                        <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                        sortBy === "affiliate_and_other_earnings") && (
+                        <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                           {sortBy === "winnings" && (
                             <>
                               <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
@@ -957,11 +1024,8 @@ export default function LeaderboardClient({
                               <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
                             </>
                           )}
-                          {sortBy === "affiliate_earnings" && (
-                            <>
-                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
-                              <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
-                            </>
+                          {sortBy === "affiliate_and_other_earnings" && (
+                            <Skeleton className="h-6 sm:h-7 w-28 sm:w-36 rounded-md" />
                           )}
                         </div>
                       )}
@@ -976,7 +1040,7 @@ export default function LeaderboardClient({
                 </div>
                 <p className="text-destructive font-semibold mb-4">{error}</p>
                 <Button
-                  onClick={fetchLeaderboard}
+                  onClick={() => setReloadNonce((nonce) => nonce + 1)}
                   variant="outline"
                   className="hover:bg-violet-50 hover:border-violet-400 hover:text-violet-600"
                 >
@@ -1117,7 +1181,7 @@ export default function LeaderboardClient({
                           {metricValue}
                         </div>
                         {sortBy === "winnings" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1152,7 +1216,7 @@ export default function LeaderboardClient({
                                     : "text-emerald-600",
                                 )}
                               >
-                                contests
+                                campaigns
                               </span>
                               <span
                                 className={cn(
@@ -1207,7 +1271,7 @@ export default function LeaderboardClient({
                           </div>
                         )}
                         {sortBy === "contests_won" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1236,13 +1300,13 @@ export default function LeaderboardClient({
                                   isDark ? "text-blue-300" : "text-blue-600",
                                 )}
                               >
-                                contests
+                                campaigns
                               </span>
                             </div>
                           </div>
                         )}
                         {sortBy === "submissions_won" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1324,7 +1388,7 @@ export default function LeaderboardClient({
                                     : "text-emerald-600",
                                 )}
                               >
-                                contests
+                                campaigns
                               </span>
                               <span
                                 className={cn(
@@ -1340,7 +1404,7 @@ export default function LeaderboardClient({
                           </div>
                         )}
                         {sortBy === "referrals" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1429,87 +1493,71 @@ export default function LeaderboardClient({
                             </div>
                           </div>
                         )}
-                        {sortBy === "affiliate_earnings" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                        {sortBy === "affiliate_and_other_earnings" && (
+                          <div className="mt-1.5 sm:mt-2 flex justify-end">
                             <div
                               className={cn(
-                                "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
+                                "inline-flex flex-col items-end gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg border max-w-[min(100vw-8rem,14rem)]",
                                 isDark
-                                  ? "bg-green-400/10 border border-green-400/30 hover:bg-green-400/20"
-                                  : "bg-green-50/80 border border-green-200/60 hover:bg-green-100/80",
+                                  ? "bg-violet-400/10 border-violet-400/25"
+                                  : "bg-violet-50/90 border-violet-200/70",
                               )}
                             >
-                              <TrendingUp
-                                className={cn(
-                                  "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-green-300" : "text-green-600",
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-green-300" : "text-green-700",
-                                )}
-                              >
-                                {formatMoney(
-                                  entry.metrics.affiliate_earnings || 0,
-                                )}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              >
-                                Affiliate
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              >
-                                A
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
-                                isDark
-                                  ? "bg-teal-400/10 border border-teal-400/30 hover:bg-teal-400/20"
-                                  : "bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80",
-                              )}
-                            >
-                              <DollarSign
-                                className={cn(
-                                  "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-teal-300" : "text-teal-600",
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-teal-300" : "text-teal-700",
-                                )}
-                              >
-                                {formatMoney(entry.metrics.other_earnings || 0)}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-teal-400" : "text-teal-600",
-                                )}
-                              >
-                                Other Earnings
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-teal-400" : "text-teal-600",
-                                )}
-                              >
-                                E
-                              </span>
+                              <div className="flex items-center gap-1 sm:gap-1.5 justify-end">
+                                <TrendingUp
+                                  className={cn(
+                                    "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
+                                    isDark ? "text-green-300" : "text-green-600",
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    "text-[10px] sm:text-xs font-bold tabular-nums",
+                                    isDark ? "text-green-200" : "text-green-800",
+                                  )}
+                                >
+                                  {formatMoney(
+                                    entry.metrics.affiliate_earnings || 0,
+                                  )}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-[10px] sm:text-[11px] font-medium truncate",
+                                    isDark ? "text-slate-400" : "text-slate-600",
+                                  )}
+                                >
+                                  Affiliate
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 sm:gap-1.5 justify-end">
+                                <DollarSign
+                                  className={cn(
+                                    "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
+                                    isDark ? "text-teal-300" : "text-teal-600",
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    "text-[10px] sm:text-xs font-bold tabular-nums",
+                                    isDark ? "text-teal-200" : "text-teal-800",
+                                  )}
+                                >
+                                  {formatMoney(
+                                    entry.metrics.other_earnings || 0,
+                                  )}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-[10px] sm:text-[11px] font-medium truncate text-right leading-tight",
+                                    isDark ? "text-slate-400" : "text-slate-600",
+                                  )}
+                                >
+                                  <span className="hidden sm:inline">
+                                    Bonuses / other
+                                  </span>
+                                  <span className="sm:hidden">Other</span>
+                                </span>
+                              </div>
                             </div>
                           </div>
                         )}

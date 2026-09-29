@@ -23,7 +23,8 @@ export function useClientAuth(options: ClientAuthOptions = {}) {
             if (!isMounted) return;
             setIsLoading(true);
 
-            const authResult = await checkClientAuth();
+            // checkClientAuth already retries once on refresh-token races.
+            const authResult = await checkClientAuth({ retryOnRefreshError: true });
 
             if (!isMounted) return;
 
@@ -33,7 +34,9 @@ export function useClientAuth(options: ClientAuthOptions = {}) {
 
             if (options.redirectTo) {
                 if (!authResult.isAuthenticated) {
-                    console.log(`useClientAuth: Not authenticated or error (${authResult.error?.message}). Redirecting to ${options.redirectTo}`);
+                    console.log(
+                        `useClientAuth: Not authenticated after retry (${authResult.error?.message ?? "no user"}). Redirecting to ${options.redirectTo}`
+                    );
                     router.push(options.redirectTo);
                     setIsLoading(false);
                     return;
@@ -81,4 +84,4 @@ export function useClientAuth(options: ClientAuthOptions = {}) {
         error,
         logout
     };
-} 
+}

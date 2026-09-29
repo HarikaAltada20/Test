@@ -19,6 +19,7 @@ import {
   DollarSign,
   Calendar,
 } from "lucide-react";
+import { SiTiktok } from "react-icons/si";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
@@ -27,9 +28,10 @@ interface CreatorAnalyticsProps {
   userId: string;
   activeFilter?: string;
   contentType?: "video" | "text_image";
-  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?: "all" | "leaderboard" | "cpm";
+  contestTypeFilter?: string;
+  analyticsQueryString: string;
 }
 
 interface CreatorData {
@@ -73,9 +75,11 @@ interface CreatorData {
     totalSubmissions: number;
     totalViews: number;
     totalEarnings: number;
+    totalPayoutsCents?: number;
     avgSubmissionsPerCreator: number;
     avgViewsPerCreator: number;
     avgEarningsPerCreator: number;
+    avgPayoutsPerCreator?: number;
   };
   demographics: {
     platformDemographics: Record<string, number>;
@@ -94,6 +98,8 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
     case "twitter":
     case "x":
       return <Twitter className={iconClass} />;
+    case "tiktok":
+      return <SiTiktok className={iconClass} />;
     default:
       return <div className={`${iconClass} bg-gray-400 rounded`}></div>;
   }
@@ -106,6 +112,7 @@ export default function CreatorAnalytics({
   videoPlatform = "all",
   twitterAnalytics = false,
   contestTypeFilter = "all",
+  analyticsQueryString,
 }: CreatorAnalyticsProps) {
   const [data, setData] = useState<CreatorData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,28 +122,12 @@ export default function CreatorAnalytics({
 
   useEffect(() => {
     fetchCreatorData();
-  }, [
-    userId,
-    activeFilter,
-    contentType,
-    videoPlatform,
-    twitterAnalytics,
-    contestTypeFilter,
-  ]);
+  }, [analyticsQueryString]);
 
   const fetchCreatorData = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (activeFilter !== "all") params.set("status", activeFilter);
-      params.set("contentType", contentType);
-      params.set("videoPlatform", videoPlatform);
-      params.set("twitter", twitterAnalytics ? "true" : "false");
-      if (contestTypeFilter && contestTypeFilter !== "all") {
-        params.set("type", contestTypeFilter);
-      }
-      const qs = params.toString();
-      const url = `/api/analytics/creators${qs ? `?${qs}` : ""}`;
+      const url = `/api/analytics/creators?${analyticsQueryString}`;
 
       const response = await fetch(url);
 
@@ -353,7 +344,9 @@ export default function CreatorAnalytics({
           </div>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrencyFromCents(summary.totalEarnings)}
+              {formatCurrencyFromCents(
+                summary.totalPayoutsCents ?? summary.totalEarnings,
+              )}
             </div>
             <p
               className={cn(
@@ -362,7 +355,10 @@ export default function CreatorAnalytics({
               )}
             >
               {formatCurrencyFromCents(
-                Math.round(summary.avgEarningsPerCreator * 100),
+                Math.round(
+                  (summary.avgPayoutsPerCreator ??
+                    summary.avgEarningsPerCreator) * 100,
+                ),
               )}{" "}
               per creator
             </p>
@@ -424,7 +420,7 @@ export default function CreatorAnalytics({
           )}
         >
           <CardHeader>
-            <CardTitle className="text-lg">Contest Type Preferences</CardTitle>
+            <CardTitle className="text-lg">Campaign Type Preferences</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -564,8 +560,27 @@ export default function CreatorAnalytics({
                           {(creator.submissionsYoutubeInstagram ?? 0) > 0 ||
                           (creator.submissionsTwitter ?? 0) > 0 ? (
                             <>
-                              {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
+                              {(creator.submissionsYoutubeInstagram ?? 0) >
+                                0 && (
                                 <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                                  {Array.isArray(creator.platforms) &&
+                                    creator.platforms.some((platform: string) => {
+                                      const normalized = platform
+                                        ?.toString()
+                                        .toLowerCase();
+                                      return (
+                                        normalized === "tiktok" ||
+                                        normalized === "tik_tok" ||
+                                        normalized === "tik-tok"
+                                      );
+                                    }) && (
+                                      <SiTiktok
+                                        className={cn(
+                                          "w-3 h-3 sm:w-5 sm:h-5",
+                                          isDark ? "text-white" : "text-black",
+                                        )}
+                                      />
+                                    )}
                                   {(creator.submissionsYoutube ?? 0) > 0 && (
                                     <Youtube
                                       className={cn(
@@ -590,8 +605,11 @@ export default function CreatorAnalytics({
                               )}
                               {(creator.submissionsTwitter ?? 0) > 0 && (
                                 <>
-                                  {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
-                                    <span className="text-muted-foreground/60">·</span>
+                                  {(creator.submissionsYoutubeInstagram ?? 0) >
+                                    0 && (
+                                    <span className="text-muted-foreground/60">
+                                      ·
+                                    </span>
                                   )}
                                   <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
                                     <Twitter
@@ -678,7 +696,7 @@ export default function CreatorAnalytics({
                     @{leaderboards.topByViews[0].creator.username}
                   </h3>
                   <p className="text-muted-foreground">
-                    Top performer across all contests
+                    Top performer across all campaigns
                   </p>
                   <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-2 text-sm">
                     <span className="flex items-center gap-1">
